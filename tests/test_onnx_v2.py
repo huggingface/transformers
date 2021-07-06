@@ -24,9 +24,8 @@ from transformers.models.gpt2 import GPT2OnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
 from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
-from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat
+from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat, validate_model_outputs
 from transformers.onnx.config import DEFAULT_ONNX_OPSET, OnnxConfigWithPast
-from transformers.onnx.convert import validate_model_outputs
 from transformers.onnx.utils import (
     compute_effective_axis_dimension,
     compute_serialized_parameters_size,
@@ -204,7 +203,7 @@ class OnnxExportTestCaseV2(TestCase):
     @slow
     @require_torch
     def test_pytorch_export_default(self):
-        from transformers.onnx.convert import convert_pytorch
+        from transformers.onnx import export
 
         for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_DEFAULT_MODELS:
             with self.subTest(name):
@@ -215,7 +214,7 @@ class OnnxExportTestCaseV2(TestCase):
                 onnx_config = onnx_config_class.default(model.config)
 
                 with NamedTemporaryFile("w") as output:
-                    onnx_inputs, onnx_outputs = convert_pytorch(
+                    onnx_inputs, onnx_outputs = export(
                         tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, Path(output.name)
                     )
 
@@ -227,7 +226,7 @@ class OnnxExportTestCaseV2(TestCase):
     @slow
     @require_torch
     def test_pytorch_export_with_past(self):
-        from transformers.onnx.convert import convert_pytorch
+        from transformers.onnx import export
 
         for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_WITH_PAST_MODELS:
             with self.subTest(name):
@@ -244,7 +243,7 @@ class OnnxExportTestCaseV2(TestCase):
 
                 with NamedTemporaryFile("w") as output:
                     output = Path(output.name)
-                    onnx_inputs, onnx_outputs = convert_pytorch(
+                    onnx_inputs, onnx_outputs = export(
                         tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, output
                     )
 

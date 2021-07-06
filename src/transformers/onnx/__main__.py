@@ -29,7 +29,7 @@ from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
 
 from .. import is_torch_available
 from ..utils import logging
-from .convert import convert_pytorch, validate_model_outputs
+from .convert import export, validate_model_outputs
 
 
 if is_torch_available():
@@ -142,7 +142,7 @@ def main():
             f"At least  {onnx_config.default_onnx_opset} is required."
         )
 
-    onnx_inputs, onnx_outputs = convert_pytorch(tokenizer, model, onnx_config, args.opset, args.output)
+    onnx_inputs, onnx_outputs = export(tokenizer, model, onnx_config, args.opset, args.output)
 
     validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol)
     logger.info(f"All good, model saved at: {args.output.as_posix()}")

@@ -62,7 +62,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
         )
 
 
-def convert_pytorch(
+def export(
     tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path
 ) -> Tuple[List[str], List[str]]:
     """
