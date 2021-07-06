@@ -112,6 +112,7 @@ Finally, we can run the example script to train the model:
     --max_duration_in_seconds="10.0" \
     --adam_beta1="0.9" \
     --adam_beta2="0.98" \
+    --pad_to_multiple_of="16384" \
     --push_to_hub
 ```
 
