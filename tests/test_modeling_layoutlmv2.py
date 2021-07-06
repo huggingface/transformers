@@ -185,7 +185,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (LayoutLMv2ForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = LayoutLMv2ModelTester(self)
