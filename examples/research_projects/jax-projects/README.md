@@ -841,40 +841,40 @@ To know more about how to train the Flax models on different devices (GPU, multi
 
 ## Talks
 
-Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large-scale language modeling and other great topics during our community event! Find the schedule, zoom links and calendar events below!
+3 days of talks around JAX / Flax, Transformers, large-scale language modeling and other great topics during our community event!
 
 ### Wednesday, June 30th
-- [Zoom link](https://us02web.zoom.us/j/89844071286?pwd=RzZaL1VPLzM0Um5kYzJRWVBFMmtRQT09)
-- [Add the event to your Gcal](https://bit.ly/2UTD5N2)
+- [Watch the talks on YouTube](https://www.youtube.com/watch?v=fuAyUQcVzTY)
+- [Chat history](https://docs.google.com/spreadsheets/d/1PZ5xYV2hVwlAVQSqDag65ympv5YNCSDmXyG-eWTaZ_o/edit?usp=sharing)
 
- Speaker        | Topic                           | Time                  | 
-|-------------|---------------------------------|------------------------|
-| Skye Wanderman-Milne, Google Brain | Intro to JAX on Cloud TPUs      | 6.00pm-6.45pm CEST / 9.00am-9.45am PST      | 
-| Marc van Zee, Google Brain | Introduction to Flax      | 6.45pm-7.30pm CEST / 9.45am-10.30am PST      | 
-| Pablo Castro, Google Brain | Using Jax & Flax for RL with the Dopamine library      | 7.30pm-8.00pm CEST / 10.30am-11.00am PST      | 
+ Speaker        | Topic                           | Time                  |  Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| Skye Wanderman-Milne, Google Brain | Intro to JAX on Cloud TPUs      | 6.00pm-6.45pm CEST / 9.00am-9.45am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=fuAyUQcVzTY) |
+| Marc van Zee, Google Brain | Introduction to Flax      | 6.45pm-7.30pm CEST / 9.45am-10.30am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/fuAyUQcVzTY?t=2569) |
+| Pablo Castro, Google Brain | Using Jax & Flax for RL with the Dopamine library      | 7.30pm-8.00pm CEST / 10.30am-11.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/fuAyUQcVzTY?t=5306) |
 
 ### Thursday, July 1st
-- [Zoom link](https://us02web.zoom.us/j/84443602508?pwd=NnZOMC84bXRBU3RaSHl3dTdBekIrZz09)
-- [Add the event to your Gcal](https://bit.ly/3x6vPM5)
+- [Watch the talks on YouTube](https://www.youtube.com/watch?v=__eG63ZP_5g)
+- [Chat history](https://docs.google.com/spreadsheets/d/1PZ5xYV2hVwlAVQSqDag65ympv5YNCSDmXyG-eWTaZ_o/edit#gid=1515796400)
 
- Speaker        | Topic                           | Time                  | 
-|-------------|---------------------------------|------------------------|
-| Suraj Patil & Patrick von Platen, Hugging Face | How to use JAX/Flax with Transformers      | 5.30pm-6.00pm CEST / 8.30am-9.00am PST      | 
-| Sabrina J. Mielke, Johns Hopkins University & HuggingFace | From stateful code to purified JAX: how to build your neural net framework | 6.00pm-6.30pm CEST / 9.00am-9.30am PST      | 
-| Mostafa Dehghani, Google Brain | Long Range Arena: Benchmarking Efficient Transformers      | 6.30pm-7.00pm CEST / 9.30am-10.00am PST      |
-| Rohan Anil, Google Brain | Scalable Second Order Optimization for Deep Learning      | 7.00pm-7.30pm CEST / 10.00am-10.30am PST      |
+ Speaker        | Topic                           | Time                  | Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| Suraj Patil & Patrick von Platen, Hugging Face | How to use JAX/Flax with Transformers      | 5.30pm-6.00pm CEST / 8.30am-9.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=__eG63ZP_5g) |
+| Sabrina J. Mielke, Johns Hopkins University & HuggingFace | From stateful code to purified JAX: how to build your neural net framework | 6.00pm-6.30pm CEST / 9.00am-9.30am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/__eG63ZP_5g?t=1576) |
+| Mostafa Dehghani, Google Brain | Long Range Arena: Benchmarking Efficient Transformers      | 6.30pm-7.00pm CEST / 9.30am-10.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/__eG63ZP_5g?t=3695) |
+| Rohan Anil, Google Brain | Scalable Second Order Optimization for Deep Learning      | 7.00pm-7.30pm CEST / 10.00am-10.30am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/__eG63ZP_5g?t=5285) |
 
 
 ### Friday, July 2nd
-- [Zoom link](https://us02web.zoom.us/j/83307589607?pwd=NnNCN1doQkZKcjVSMlZwVEc2aVgrZz09)
-- [Add the event to your Gcal](https://bit.ly/3y4pVLt)
+- [Watch the talks on YouTube](https://www.youtube.com/watch?v=ZCMOPkcTu3s)
+- [Chat history](https://docs.google.com/spreadsheets/d/1PZ5xYV2hVwlAVQSqDag65ympv5YNCSDmXyG-eWTaZ_o/edit#gid=1166061401)
 
- Speaker        | Topic                           | Time                  | 
-|-------------|---------------------------------|------------------------|
-| Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | 
-| Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 5.30pm-6.00 CEST / 8.30am-9.00 PST       | 
-| Iurii Kemaev, Soňa Mokrá, Junhyuk Oh, DeepMind | DeepMind JAX Ecosystem      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | 
-| Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | 
+ Speaker        | Topic                           | Time                  |  Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=ZCMOPkcTu3s) |
+| Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 5.30pm-6.00 CEST / 8.30am-9.00 PST       | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/ZCMOPkcTu3s?t=1803) |
+| Iurii Kemaev, Soňa Mokrá, Junhyuk Oh, DeepMind | DeepMind JAX Ecosystem      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/ZCMOPkcTu3s?t=3388) |
+| Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/ZCMOPkcTu3s?t=5095) |
 
 ### Talks & Speakers
 
