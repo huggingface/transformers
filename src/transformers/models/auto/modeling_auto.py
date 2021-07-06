@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("layoutlmv2", "LayoutLMv2Model"),
         ("beit", "BeitModel"),
         ("rembert", "RemBertModel"),
         ("visual_bert", "VisualBertModel"),

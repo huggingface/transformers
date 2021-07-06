@@ -137,6 +137,14 @@ except importlib_metadata.PackageNotFoundError:
     _datasets_available = False
 
 
+_detectron2_available = importlib.util.find_spec("detectron2") is not None
+try:
+    _detectron2_version = importlib_metadata.version("detectron2")
+    logger.debug(f"Successfully imported detectron2 version {_detectron2_version}")
+except importlib_metadata.PackageNotFoundError:
+    _detectron2_available = False
+
+
 _faiss_available = importlib.util.find_spec("faiss") is not None
 try:
     _faiss_version = importlib_metadata.version("faiss")
@@ -350,6 +358,10 @@ def is_torch_tpu_available():
 
 def is_datasets_available():
     return _datasets_available
+
+
+def is_detectron2_available():
+    return _detectron2_available
 
 
 def is_rjieba_available():
@@ -577,6 +589,14 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 
 
 # docstyle-ignore
+DETECTRON2_IMPORT_ERROR = """
+{0} requires the detectron2 library but it was not found in your environment. Yheckout the instructions on the
+installation page: hhttps://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones 
+that match your environment.
+"""
+
+
+# docstyle-ignore
 FLAX_IMPORT_ERROR = """
 {0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your environment.
@@ -626,6 +646,7 @@ VISION_IMPORT_ERROR = """
 BACKENDS_MAPPING = OrderedDict(
     [
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
+        ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),

@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING
 from . import dependency_versions_check
 from .file_utils import (
     _LazyModule,
+    is_detectron2_available,
     is_flax_available,
     is_sentencepiece_available,
     is_speech_available,
@@ -98,6 +99,7 @@ _import_structure = {
         "cached_path",
         "is_apex_available",
         "is_datasets_available",
+        "is_detectron2_available",
         "is_faiss_available",
         "is_flax_available",
         "is_psutil_available",
@@ -133,6 +135,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.layoutlmv2": ["LayoutLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config", "LayoutLMv2Tokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -337,6 +340,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -438,6 +442,22 @@ if is_timm_available() and is_vision_available():
             "DetrForSegmentation",
             "DetrModel",
             "DetrPreTrainedModel",
+        ]
+    )
+else:
+    from .utils import dummy_timm_objects
+
+    _import_structure["utils.dummy_timm_objects"] = [
+        name for name in dir(dummy_timm_objects) if not name.startswith("_")
+    ]
+
+# Detectron2-backed objects
+if is_detectron2_available():
+    _import_structure["models.layoutlmv2"].extend(
+        [
+            "LAYOUTLM_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LayoutLMv2Model",
+            "LayoutLMv2PreTrainedModel",
         ]
     )
 else:
@@ -1797,6 +1817,7 @@ if TYPE_CHECKING:
         cached_path,
         is_apex_available,
         is_datasets_available,
+        is_detectron2_available,
         is_faiss_available,
         is_flax_available,
         is_psutil_available,
@@ -1838,6 +1859,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.layoutlmv2 import LayoutLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config, LayoutLMv2Tokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2029,6 +2051,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.layoutlmv2 import LayoutLMv2TokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
