@@ -731,6 +731,7 @@ class FlaxMBartEncoder(nn.Module):
         )
         self.layers = FlaxMBartEncoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+        self.layer_norm = nn.LayerNorm(dtype=self.dtype)        
 
     def __call__(
         self,
@@ -762,11 +763,14 @@ class FlaxMBartEncoder(nn.Module):
             return_dict=return_dict,
         )
 
+        last_hidden_states = outputs[0]
+        last_hidden_states = self.layer_norm(last_hidden_states)
+
         if not return_dict:
-            return outputs
+            return (last_hidden_states,) + outputs[1:]
 
         return FlaxBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
+            last_hidden_state=last_hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -806,6 +810,7 @@ class FlaxMBartDecoder(nn.Module):
 
         self.layers = FlaxMBartDecoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+        self.layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
@@ -845,14 +850,16 @@ class FlaxMBartDecoder(nn.Module):
             return_dict=return_dict,
         )
 
-        if not return_dict:
-            return outputs
+        last_hidden_states = outputs[0]
+        last_hidden_states = self.layer_norm(last_hidden_states)
 
-        return FlaxBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=outputs.last_hidden_state,
+        if not return_dict:
+            return (last_hidden_states,) + outputs[1:]
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=last_hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
         )
 
 

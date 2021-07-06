@@ -454,7 +454,7 @@ class FlaxMBartModelIntegrationTest(unittest.TestCase):
             attention_mask=model_inputs.attention_mask,
             decoder_start_token_id=self.tokenizer.lang_code_to_id["ro_RO"],
             num_beams=2,
-        )
+        ).sequences
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
 
