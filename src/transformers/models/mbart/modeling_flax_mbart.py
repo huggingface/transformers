@@ -698,7 +698,6 @@ class FlaxMBartClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartEncoder with Bart->MBart
 class FlaxMBartEncoder(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -731,7 +730,7 @@ class FlaxMBartEncoder(nn.Module):
         )
         self.layers = FlaxMBartEncoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
-        self.layer_norm = nn.LayerNorm(dtype=self.dtype)        
+        self.layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
@@ -776,7 +775,6 @@ class FlaxMBartEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoder with Bart->MBart
 class FlaxMBartDecoder(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -856,7 +854,7 @@ class FlaxMBartDecoder(nn.Module):
         if not return_dict:
             return (last_hidden_states,) + outputs[1:]
 
-        return FlaxBaseModelOutput(
+        return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=last_hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
