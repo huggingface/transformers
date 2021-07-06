@@ -137,7 +137,7 @@ class TFDataCollatorForLanguageModeling:
 
     @tf.function()
     def encode_objects(self, examples: Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]) -> tf.data.Dataset:
-        if type(examples) == BatchEncoding:
+        if isinstance(examples, BatchEncoding):
             examples = examples.data
 
         if isinstance(examples, dict):
