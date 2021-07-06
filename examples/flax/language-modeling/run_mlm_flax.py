@@ -621,7 +621,7 @@ if __name__ == "__main__":
 
                 train_metrics = []
 
-            if cur_step % training_args.eval_steps == 0 and step > 0:
+            if cur_step % training_args.eval_steps == 0 and cur_step > 0:
                 # ======================== Evaluating ==============================
                 num_eval_samples = len(tokenized_datasets["validation"])
                 eval_samples_idx = jnp.arange(num_eval_samples)
@@ -651,7 +651,7 @@ if __name__ == "__main__":
                     cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
                     write_eval_metric(summary_writer, eval_metrics, cur_step)
 
-            if cur_step % training_args.save_steps == 0 and step > 0:
+            if cur_step % training_args.save_steps == 0 and cur_step > 0:
                 # save checkpoint after each epoch and push checkpoint to the hub
                 if jax.process_index() == 0:
                     params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
