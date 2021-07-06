@@ -31,15 +31,30 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "junnyu/roformer_chinese_small": "https://huggingface.co/junnyu/roformer_chinese_small/resolve/main/vocab.txt",
         "junnyu/roformer_chinese_base": "https://huggingface.co/junnyu/roformer_chinese_base/resolve/main/vocab.txt",
+        "junnyu/roformer_chinese_char_small": "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/vocab.txt",
+        "junnyu/roformer_chinese_char_base": "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/vocab.txt",
+        "junnyu/roformer_small_discriminator": "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/vocab.txt",
+        "junnyu/roformer_small_generator": "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/vocab.txt",
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"junnyu/roformer_chinese_small": 1536, "junnyu/roformer_chinese_base": 1536}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "junnyu/roformer_chinese_small": 1536,
+    "junnyu/roformer_chinese_base": 1536,
+    "junnyu/roformer_chinese_char_small": 512,
+    "junnyu/roformer_chinese_char_base": 512,
+    "junnyu/roformer_small_discriminator": 128,
+    "junnyu/roformer_small_generator": 128,
+}
 
 
 PRETRAINED_INIT_CONFIGURATION = {
     "junnyu/roformer_chinese_small": {"do_lower_case": True},
     "junnyu/roformer_chinese_base": {"do_lower_case": True},
+    "junnyu/roformer_chinese_char_small": {"do_lower_case": True},
+    "junnyu/roformer_chinese_char_base": {"do_lower_case": True},
+    "junnyu/roformer_small_discriminator": {"do_lower_case": True},
+    "junnyu/roformer_small_generator": {"do_lower_case": True},
 }
 
 
@@ -166,13 +181,8 @@ class RoFormerTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import rjieba
-        except ImportError:
-            raise ImportError(
-                "You need to install rjieba to use RoFormerTokenizer."
-                "See https://pypi.org/project/rjieba/ for installation."
-            )
+        import rjieba
+
         self.jieba = rjieba
 
     def get_vocab(self):

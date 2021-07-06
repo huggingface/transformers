@@ -315,6 +315,10 @@ def is_datasets_available():
     return _datasets_available
 
 
+def is_rjieba_available():
+    return importlib.util.find_spec("rjieba") is not None
+
+
 def is_psutil_available():
     return importlib.util.find_spec("psutil") is not None
 

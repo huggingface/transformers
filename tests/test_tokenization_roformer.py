@@ -13,27 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
 import unittest
 
 from transformers import RoFormerTokenizer, RoFormerTokenizerFast
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_rjieba, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
-
-
-def is_rjieba_available():
-    return importlib.util.find_spec("rjieba") is not None
-
-
-def require_rjieba(test_case):
-    """
-    Decorator marking a test that requires Jieba. These tests are skipped when Jieba isn't installed.
-    """
-    if not is_rjieba_available():
-        return unittest.skip("test requires rjieba")(test_case)
-    else:
-        return test_case
 
 
 @require_rjieba
@@ -79,6 +64,10 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
 
-    # due to custom pre_tokenize , char_to_token may be error
-    def test_alignement_methods(self):
+    # can't train new_tokenizer via Tokenizers lib
+    def test_training_new_tokenizer(self):
+        pass
+
+    # can't train new_tokenizer via Tokenizers lib
+    def test_training_new_tokenizer_with_special_tokens_change(self):
         pass
