@@ -60,8 +60,8 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer(self):
         tmpdirname_orig = self.tmpdirname
         # Here we want to test the 2 available tokenizers that use 2 different types of models: Unigram and WordLevel.
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+        for pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{self.rust_tokenizer_class.__name__} ({pretrained_name})"):
                 try:
                     self.tmpdirname = tempfile.mkdtemp()
                     tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -77,8 +77,8 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer_with_special_tokens_change(self):
         tmpdirname_orig = self.tmpdirname
         # Here we want to test the 2 available tokenizers that use 2 different types of models: Unigram and WordLevel.
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+        for pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{self.rust_tokenizer_class.__name__} ({pretrained_name})"):
                 try:
                     self.tmpdirname = tempfile.mkdtemp()
                     tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
