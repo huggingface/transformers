@@ -87,6 +87,10 @@ class ModelArguments:
             "Don't set if you want to train a model from scratch."
         },
     )
+    from_pt: bool = field(
+        default=True,
+        metadata={"help": "whether to load the text and vision model using PyTorch checkpoints."},
+    )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
@@ -332,6 +336,8 @@ def main():
         model_args.vision_model_name_or_path,
         seed=training_args.seed,
         dtype=getattr(jnp, model_args.dtype),
+        text_from_pt=model_args.from_pt,
+        vision_from_pt=model_args.from_pt,
     )
     config = model.config
     # set seed for torch dataloaders
