@@ -621,43 +621,43 @@ if __name__ == "__main__":
 
                 train_metrics = []
 
-        # ======================== Evaluating ==============================
-        num_eval_samples = len(tokenized_datasets["validation"])
-        eval_samples_idx = jnp.arange(num_eval_samples)
-        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+            if cur_step % training_args.eval_steps == 0 and cur_step > 0:
+                # ======================== Evaluating ==============================
+                num_eval_samples = len(tokenized_datasets["validation"])
+                eval_samples_idx = jnp.arange(num_eval_samples)
+                eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
-        eval_metrics = []
-        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
-            samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
-            model_inputs = data_collator(samples, pad_to_multiple_of=16)
+                eval_metrics = []
+                for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
+                    samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
+                    model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
-            # Model forward
-            model_inputs = shard(model_inputs.data)
-            metrics = p_eval_step(state.params, model_inputs)
-            eval_metrics.append(metrics)
+                    # Model forward
+                    model_inputs = shard(model_inputs.data)
+                    metrics = p_eval_step(state.params, model_inputs)
+                    eval_metrics.append(metrics)
 
-        # normalize eval metrics
-        eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
-        eval_normalizer = eval_metrics.pop("normalizer")
-        eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
+                # normalize eval metrics
+                eval_metrics = get_metrics(eval_metrics)
+                eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
+                eval_normalizer = eval_metrics.pop("normalizer")
+                eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
 
-        # Update progress bar
-        epochs.desc = (
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
-        )
+                # Update progress bar
+                epochs.desc = f"Step... ({cur_step} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
 
-        # Save metrics
-        if has_tensorboard and jax.process_index() == 0:
-            cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
-            write_eval_metric(summary_writer, eval_metrics, cur_step)
+                # Save metrics
+                if has_tensorboard and jax.process_index() == 0:
+                    cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
+                    write_eval_metric(summary_writer, eval_metrics, cur_step)
 
-        # save checkpoint after each epoch and push checkpoint to the hub
-        if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
-            model.save_pretrained(
-                training_args.output_dir,
-                params=params,
-                push_to_hub=training_args.push_to_hub,
-                commit_message=f"Saving weights and logs of epoch {epoch+1}",
-            )
+            if cur_step % training_args.save_steps == 0 and cur_step > 0:
+                # save checkpoint after each epoch and push checkpoint to the hub
+                if jax.process_index() == 0:
+                    params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+                    model.save_pretrained(
+                        training_args.output_dir,
+                        params=params,
+                        push_to_hub=training_args.push_to_hub,
+                        commit_message=f"Saving weights and logs of step {cur_step}",
+                    )

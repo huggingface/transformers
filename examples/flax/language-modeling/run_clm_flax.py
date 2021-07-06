@@ -587,45 +587,46 @@ def main():
 
                 train_metrics = []
 
-        # ======================== Evaluating ==============================
-        eval_metrics = []
-        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
-        eval_steps = len(eval_dataset) // eval_batch_size
-        for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
-            # Model forward
-            batch = next(eval_loader)
-            metrics = p_eval_step(state.params, batch)
-            eval_metrics.append(metrics)
+            if cur_step % training_args.eval_steps == 0 and cur_step > 0:
+                # ======================== Evaluating ==============================
+                eval_metrics = []
+                eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
+                eval_steps = len(eval_dataset) // eval_batch_size
+                for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
+                    # Model forward
+                    batch = next(eval_loader)
+                    metrics = p_eval_step(state.params, batch)
+                    eval_metrics.append(metrics)
 
-        # normalize eval metrics
-        eval_metrics = get_metrics(eval_metrics)
+                # normalize eval metrics
+                eval_metrics = get_metrics(eval_metrics)
+                eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
-        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+                try:
+                    eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
+                except OverflowError:
+                    eval_metrics["perplexity"] = float("inf")
 
-        try:
-            eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
-        except OverflowError:
-            eval_metrics["perplexity"] = float("inf")
+                # Print metrics and update progress bar
+                desc = f"Step... ({cur_step} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
+                epochs.write(desc)
+                epochs.desc = desc
 
-        # Print metrics and update progress bar
-        desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
-        epochs.write(desc)
-        epochs.desc = desc
+                # Save metrics
+                if has_tensorboard and jax.process_index() == 0:
+                    cur_step = epoch * (len(train_dataset) // train_batch_size)
+                    write_eval_metric(summary_writer, eval_metrics, cur_step)
 
-        # Save metrics
-        if has_tensorboard and jax.process_index() == 0:
-            cur_step = epoch * (len(train_dataset) // train_batch_size)
-            write_eval_metric(summary_writer, eval_metrics, cur_step)
-
-        # save checkpoint after each epoch and push checkpoint to the hub
-        if jax.process_index() == 0:
-            params = jax.device_get(unreplicate(state.params))
-            model.save_pretrained(
-                training_args.output_dir,
-                params=params,
-                push_to_hub=training_args.push_to_hub,
-                commit_message=f"Saving weights and logs of epoch {epoch+1}",
-            )
+            if cur_step % training_args.save_steps == 0 and cur_step > 0:
+                # save checkpoint after each epoch and push checkpoint to the hub
+                if jax.process_index() == 0:
+                    params = jax.device_get(unreplicate(state.params))
+                    model.save_pretrained(
+                        training_args.output_dir,
+                        params=params,
+                        push_to_hub=training_args.push_to_hub,
+                        commit_message=f"Saving weights and logs of step {cur_step}",
+                    )
 
 
 if __name__ == "__main__":

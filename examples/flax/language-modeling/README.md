@@ -141,6 +141,8 @@ Next we can run the example script to pretrain the model:
     --adam_beta1="0.9" \
     --adam_beta2="0.98" \
     --logging_steps="500" \
+    --save_steps="2500" \
+    --eval_steps="2500" \
     --push_to_hub
 ```
 
@@ -234,6 +236,8 @@ Next we can run the example script to pretrain the model:
     --overwrite_output_dir \
     --num_train_epochs="20" \
     --logging_steps="500" \
+    --save_steps="2500" \
+    --eval_steps="2500" \
     --push_to_hub
 ```
 
@@ -370,6 +374,8 @@ Next we can run the example script to pretrain the model:
     --overwrite_output_dir \
     --num_train_epochs="10" \
     --logging_steps="500" \
+    --save_steps="2500" \
+    --eval_steps="2500" \
     --push_to_hub
 ```
 
