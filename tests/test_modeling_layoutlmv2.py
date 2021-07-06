@@ -18,7 +18,7 @@
 import unittest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers.file_utils import is_torch_available, is_detectron2_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -34,6 +34,10 @@ if is_torch_available():
         LayoutLMv2Model,
     )
     from transformers.models.layoutlmv2.modeling_layoutlmv2 import LayoutLMv2_PRETRAINED_MODEL_ARCHIVE_LIST
+
+
+if is_detectron2_available():
+    from detectron2.structures.image_list import ImageList
 
 
 class LayoutLMv2ModelTester:
@@ -211,19 +215,60 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+def prepare_layoutlmv2_batch_inputs():
+    # Here we prepare a batch of 2 sequences to test a LayoutLMv2 forward pass on:
+    # fmt: off
+    input_ids = torch.tensor([[101,1019,1014,1016,1037,12849,4747,1004,14246,2278,5439,4524,5002,2930,2193,2930,4341,3208,1005,1055,2171,2848,11300,3531,102],[101,4070,4034,7020,1024,3058,1015,1013,2861,1013,6070,19274,2772,6205,27814,16147,16147,4343,2047,10283,10969,14389,1012,2338,102]],device=torch_device)  # noqa: E231
+    bbox = torch.tensor([[[0,0,0,0],[423,237,440,251],[427,272,441,287],[419,115,437,129],[961,885,992,912],[256,38,330,58],[256,38,330,58],[336,42,353,57],[360,39,401,56],[360,39,401,56],[411,39,471,59],[479,41,528,59],[533,39,630,60],[67,113,134,131],[141,115,209,132],[68,149,133,166],[141,149,187,164],[195,148,287,165],[195,148,287,165],[195,148,287,165],[295,148,349,165],[441,149,492,166],[497,149,546,164],[64,201,125,218],[1000,1000,1000,1000]],[[0,0,0,0],[662,150,754,166],[665,199,742,211],[519,213,554,228],[519,213,554,228],[134,433,187,454],[130,467,204,480],[130,467,204,480],[130,467,204,480],[130,467,204,480],[130,467,204,480],[314,469,376,482],[504,684,582,706],[941,825,973,900],[941,825,973,900],[941,825,973,900],[941,825,973,900],[610,749,652,765],[130,659,168,672],[176,657,237,672],[238,657,312,672],[443,653,628,672],[443,653,628,672],[716,301,825,317],[1000,1000,1000,1000]]],device=torch_device)  # noqa: E231
+    image = ImageList(torch.zeros(13, 3, 256, 256), 256)
+    attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],],device=torch_device)  # noqa: E231
+    token_type_ids = torch.tensor([[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],device=torch_device)  # noqa: E231
+    position_ids = token_type_ids
+    # labels (at the token level)
+    labels = torch.tensor([[-100,10,10,10,9,1,-100,7,7,-100,7,7,4,2,5,2,8,8,-100,-100,5,0,3,2,-100],[-100,12,12,12,-100,12,10,-100,-100,-100,-100,10,12,9,-100,-100,-100,10,10,10,9,12,-100,10,-100]],device=torch_device)  # noqa: E231
+    # fmt: on
+
+    return input_ids, bbox, image, attention_mask, token_type_ids, position_ids, labels
+
+
 @require_torch
 class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-        # TODO verify last hidden states
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
-
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+        (
+            input_ids,
+            bbox,
+            image,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            labels,
+        ) = prepare_layoutlmv2_batch_inputs()
+        
+        # forward pass
+        outputs = model(
+            input_ids=input_ids,
+            bbox=bbox,
+            image=image,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        expected_shape = torch.Size((1, len(input_ids), model.config.hidden_size))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+        
+        # test the sequence output on [0, :3, :3]
+        expected_slice = torch.tensor(
+            [[0.1785, -0.1947, -0.0425], [-0.3254, -0.2807, 0.2553], [-0.5391, -0.3322, 0.3364]],
+            device=torch_device,
+        )
+
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-3))
+
+        # test the pooled output on [1, :3]
+        expected_slice = torch.tensor([-0.6580, -0.0214, 0.8552], device=torch_device)
+
+        self.assertTrue(torch.allclose(outputs.pooler_output[1, :3], expected_slice, atol=1e-3))
