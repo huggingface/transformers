@@ -91,6 +91,9 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def tokenizer_en_ru(self):
         return FSMTTokenizer.from_pretrained("facebook/wmt19-en-ru")
 
+    def get_tokenizer_path_from_slow(self):
+        return ["facebook/wmt19-ru-en", "facebook/wmt19-en-ru"]
+
     def test_online_tokenizer_config(self):
         """this just tests that the online tokenizer files get correctly fetched and
         loaded via its tokenizer_config.json and it's not slow so it's run by normal CI
