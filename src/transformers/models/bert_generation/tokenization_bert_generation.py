@@ -31,11 +31,11 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "bert_for_seq_generation": "https://huggingface.co/google/bert_for_seq_generation_L-24_bbc_encoder/resolve/main/spiece.model",
+        "google/bert_for_seq_generation_L-24_bbc_encoder": "https://huggingface.co/google/bert_for_seq_generation_L-24_bbc_encoder/resolve/main/spiece.model",
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"bert_for_seq_generation": 512}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"google/bert_for_seq_generation_L-24_bbc_encoder": 512}
 
 
 class BertGenerationTokenizer(PreTrainedTokenizer):
