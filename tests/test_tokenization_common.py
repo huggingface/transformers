@@ -2387,7 +2387,7 @@ class TokenizerTesterMixin:
 
     def test_tokenization_python_rust_equals(self):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
@@ -2430,7 +2430,7 @@ class TokenizerTesterMixin:
 
     def test_num_special_tokens_to_add_equal(self):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
@@ -2450,7 +2450,7 @@ class TokenizerTesterMixin:
 
     def test_max_length_equal(self):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
@@ -2466,7 +2466,7 @@ class TokenizerTesterMixin:
 
     def test_special_tokens_map_equal(self):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
@@ -2621,7 +2621,7 @@ class TokenizerTesterMixin:
 
     def test_compare_pretokenized_inputs(self):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
@@ -2705,7 +2705,7 @@ class TokenizerTesterMixin:
 
     def test_create_token_type_ids(self):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
@@ -2729,7 +2729,7 @@ class TokenizerTesterMixin:
 
     def test_build_inputs_with_special_tokens(self):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
@@ -2768,7 +2768,7 @@ class TokenizerTesterMixin:
 
     def test_padding(self, max_length=50):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
@@ -2992,7 +2992,7 @@ class TokenizerTesterMixin:
 
     def test_padding_different_model_input_name(self):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
@@ -3166,7 +3166,7 @@ class TokenizerTesterMixin:
 
     def test_embeded_special_tokens(self):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
@@ -3239,7 +3239,7 @@ class TokenizerTesterMixin:
 
     def test_compare_prepare_for_model(self):
         if not self.test_rust_tokenizer or not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            # as we don't have a slow and a fast version, we can't compare the outputs between slow and fast versions
             return
 
         for pretrained_name, kwargs in self.tokenizers_list:
