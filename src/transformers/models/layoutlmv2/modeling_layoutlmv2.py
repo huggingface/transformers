@@ -589,7 +589,7 @@ class VisualBackbone(nn.Module):
         assert self.backbone.output_shape()[self.out_feature_key].channels == config.image_feature_pool_shape[2]
 
     def forward(self, images):
-        images_input = ((images if torch.istensor(images) else images.tensor) - self.pixel_mean) / self.pixel_std
+        images_input = ((images if torch.is_tensor(images) else images.tensor) - self.pixel_mean) / self.pixel_std
         features = self.backbone(images_input)
         features = features[self.out_feature_key]
         features = self.pool(features).flatten(start_dim=2).transpose(1, 2).contiguous()
@@ -733,6 +733,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         position_embeddings = self.embeddings.position_embeddings(position_ids)
         spatial_position_embeddings = self.embeddings._cal_spatial_position_embeddings(bbox)
         token_type_embeddings = self.embeddings.token_type_embeddings(token_type_ids)
+
         embeddings = words_embeddings + position_embeddings + spatial_position_embeddings + token_type_embeddings
         embeddings = self.embeddings.LayerNorm(embeddings)
         embeddings = self.embeddings.dropout(embeddings)
