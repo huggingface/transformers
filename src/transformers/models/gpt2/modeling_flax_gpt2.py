@@ -200,7 +200,7 @@ class FlaxGPT2Attention(nn.Module):
         attention_mask = combine_masks(attention_mask, causal_mask)
 
         dropout_rng = None
-        if not deterministic and self.config.attn_pdrop > 0.0:
+        if not deterministic:
             dropout_rng = self.make_rng("dropout")
 
         # During fast autoregressive decoding, we feed one position at a time,
@@ -425,8 +425,9 @@ class FlaxGPT2BlockCollection(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
+        block_cls = nn.remat(FlaxGPT2Block) if self.config.gradient_checkpointing else FlaxGPT2Block
         self.blocks = [
-            FlaxGPT2Block(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+            block_cls(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
         ]
 
     def __call__(
