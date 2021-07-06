@@ -1631,6 +1631,9 @@ if is_flax_available():
         ]
     )
     _import_structure["models.gpt2"].extend(["FlaxGPT2LMHeadModel", "FlaxGPT2Model", "FlaxGPT2PreTrainedModel"])
+    _import_structure["models.gpt_neo"].extend(
+        ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
+    )
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForMaskedLM",
@@ -3017,6 +3020,7 @@ if TYPE_CHECKING:
             FlaxElectraPreTrainedModel,
         )
         from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
+        from .models.gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel, FlaxGPTNeoPreTrainedModel
         from .models.roberta import (
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,
