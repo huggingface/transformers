@@ -40,6 +40,9 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # TODO replace nielsr by google
         return CanineTokenizer.from_pretrained("nielsr/canine-s")
 
+    def get_tokenizer_path_from_slow(self):
+        return ["nielsr/canine-s"]
+
     def get_tokenizer(self, **kwargs) -> CanineTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 

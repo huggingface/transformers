@@ -45,6 +45,9 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def t5_base_tokenizer(self):
         return ByT5Tokenizer.from_pretrained("google/byt5-small")
 
+    def get_tokenizer_path_from_slow(self):
+        return ["google/byt5-small"]
+
     def get_tokenizer(self, **kwargs) -> ByT5Tokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
