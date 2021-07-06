@@ -27,6 +27,7 @@ class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = TransfoXLTokenizer
     test_rust_tokenizer = False
     test_seq2seq = False
+    from_pretrained_vocab_key = "pretrained_vocab_file"
 
     def setUp(self):
         super().setUp()

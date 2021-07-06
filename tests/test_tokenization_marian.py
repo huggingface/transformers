@@ -50,6 +50,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MarianTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True
+    from_pretrained_vocab_key = "vocab"
 
     def setUp(self):
         super().setUp()
