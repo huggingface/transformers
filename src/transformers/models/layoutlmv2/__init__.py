@@ -22,7 +22,7 @@ from ...file_utils import _LazyModule, is_detectron2_available, is_tokenizers_av
 
 
 _import_structure = {
-    "configuration_layoutlmv2": ["LayoutLMv2Config", "LayoutLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP"],
+    "configuration_layoutlmv2": ["LayoutLMv2Config", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"],
     "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
 }
 
@@ -35,11 +35,11 @@ if is_detectron2_available():
         "LayoutLMv2Layer",
         "LayoutLMv2Model",
         "LayoutLMv2PreTrainedModel",
-        "LayoutLMv2_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_layoutlmv2 import LayoutLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
+    from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
     from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 
     if is_tokenizers_available():
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 
     if is_detectron2_available():
         from .modeling_layoutlmv2 import (
-            LayoutLMv2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMv2ForTokenClassification,
             LayoutLMv2Layer,
             LayoutLMv2Model,

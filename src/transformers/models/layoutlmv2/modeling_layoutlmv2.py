@@ -53,7 +53,7 @@ _CHECKPOINT_FOR_DOC = "microsoft/layoutlmv2-base-uncased"
 _CONFIG_FOR_DOC = "LayoutLMv2Config"
 _TOKENIZER_FOR_DOC = "LayoutLMv2Tokenizer"
 
-LayoutLMv2_PRETRAINED_MODEL_ARCHIVE_LIST = [
+LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/layoutlmv2-base-uncased",
     "microsoft/layoutlmv2-large-uncased",
     # See all LayoutLMv2 models at https://huggingface.co/models?filter=layoutlmv2
