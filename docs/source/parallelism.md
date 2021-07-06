@@ -239,7 +239,7 @@ Here it's important to see how DP rank 0 doesn't see GPU2 and DP rank 1 doesn't 
 Since each dimension requires at least 2 GPUs, here you'd need at least 4 GPUs.
 
 Implementations:
-- DeepSpeed
+- [DeepSpeed](https://github.com/microsoft/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 
 🤗 Transformers status: not yet implemented
@@ -256,7 +256,7 @@ This diagram is from a blog post [3D parallelism: Scaling to trillion-parameter 
 Since each dimension requires at least 2 GPUs, here you'd need at least 8 GPUs.
 
 Implementations:
-- DeepSpeed
+- [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeed also includes an even more efficient DP, which they call ZeRO-DP.
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 
 🤗 Transformers status: not yet implemented, since we have no PP and TP.
@@ -276,7 +276,7 @@ In addition, There are already fewer layers than normal due to PP and so the mem
 
 ZeRO stage 3 is not a good choice either for the same reason - more inter-node communications required.
 
-And since we have ZeRO, the other benefit is ZeRO-Offload, if CPU and/or NVMe memory are abundant.
+And since we have ZeRO, the other benefit is ZeRO-Offload, if CPU and/or NVMe memory are abundant. Since under ZeRO stage 1 we can offload optimizer states off GPU.
 
 🤗 Transformers status: not yet implemented, since we have no PP and TP.
 
