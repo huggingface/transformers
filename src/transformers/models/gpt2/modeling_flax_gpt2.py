@@ -200,7 +200,7 @@ class FlaxGPT2Attention(nn.Module):
         attention_mask = combine_masks(attention_mask, causal_mask)
 
         dropout_rng = None
-        if not deterministic:
+        if not deterministic and self.config.attn_pdrop > 0.0:
             dropout_rng = self.make_rng("dropout")
 
         # During fast autoregressive decoding, we feed one position at a time,
