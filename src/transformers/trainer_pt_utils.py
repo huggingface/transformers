@@ -28,6 +28,7 @@ from typing import Dict, Iterator, List, Optional, Union
 import numpy as np
 import torch
 from packaging import version
+from torch import nn
 from torch.utils.data.dataset import Dataset, IterableDataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
@@ -154,6 +155,7 @@ def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int]
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
         output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensor)
+        output_tensors = [t if len(t.shape) > 0 else t[None] for t in output_tensors]
         concat = torch.cat(output_tensors, dim=0)
 
         # truncate the dummy elements added by SequentialDistributedSampler
@@ -441,7 +443,7 @@ class LabelSmoother:
 
     def __call__(self, model_output, labels):
         logits = model_output["logits"] if isinstance(model_output, dict) else model_output[0]
-        log_probs = -torch.nn.functional.log_softmax(logits, dim=-1)
+        log_probs = -nn.functional.log_softmax(logits, dim=-1)
         if labels.dim() == log_probs.dim() - 1:
             labels = labels.unsqueeze(-1)
 
@@ -904,12 +906,12 @@ def log_metrics(self, split, metrics):
     if not self.is_world_process_zero():
         return
 
-    logger.info(f"***** {split} metrics *****")
+    print(f"***** {split} metrics *****")
     metrics_formatted = self.metrics_format(metrics)
     k_width = max(len(str(x)) for x in metrics_formatted.keys())
     v_width = max(len(str(x)) for x in metrics_formatted.values())
     for key in sorted(metrics_formatted.keys()):
-        logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
+        print(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
 
 
 def save_metrics(self, split, metrics, combined=True):

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import requests
+import yaml
 from huggingface_hub import HfApi
 
 from . import __version__
@@ -42,7 +43,30 @@ from .file_utils import (
 )
 from .training_args import ParallelMode
 from .utils import logging
+from .utils.modeling_auto_mapping import (
+    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+    MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+)
 
+
+TASK_MAPPING = {
+    "text-generation": MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    "fill-mask": MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+    "object-detection": MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
+    "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+    "text2text-generation": MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    "text-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    "table-question-answering": MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
+    "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+}
 
 logger = logging.get_logger(__name__)
 
@@ -246,9 +270,12 @@ should probably proofread and complete it, then remove this comment. -->
 
 TASK_TAG_TO_NAME_MAPPING = {
     "fill-mask": "Masked Language Modeling",
+    "image-classification": "Image Classification",
     "multiple-choice": "Multiple Choice",
+    "object-detection": "Object Detection",
     "question-answering": "Question Answering",
     "summarization": "Summarization",
+    "table-question-answering": "Table Question Answering",
     "text-classification": "Text Classification",
     "text-generation": "Causal Language Modeling",
     "text2text-generation": "Sequence-to-sequence Language Modeling",
@@ -281,15 +308,15 @@ def _listify(obj):
         return obj
 
 
-def _list_possibilities(name, tags):
-    if tags is None:
-        return ""
-    if isinstance(tags, str):
-        tags = [tags]
-    if len(tags) == 0:
-        return ""
-    name_tags = [f"- {tag}" for tag in tags]
-    return f"{name}:\n" + "\n".join(name_tags) + "\n"
+def _insert_values_as_list(metadata, name, values):
+    if values is None:
+        return metadata
+    if isinstance(values, str):
+        values = [values]
+    if len(values) == 0:
+        return metadata
+    metadata[name] = values
+    return metadata
 
 
 def infer_metric_tags_from_eval_results(eval_results):
@@ -304,6 +331,32 @@ def infer_metric_tags_from_eval_results(eval_results):
     return result
 
 
+def _insert_value(metadata, name, value):
+    if value is None:
+        return metadata
+    metadata[name] = value
+    return metadata
+
+
+def is_hf_dataset(dataset):
+    if not is_datasets_available():
+        return False
+
+    from datasets import Dataset
+
+    return isinstance(dataset, Dataset)
+
+
+def _get_mapping_values(mapping):
+    result = []
+    for v in mapping.values():
+        if isinstance(v, (tuple, list)):
+            result += list(v)
+        else:
+            result.append(v)
+    return result
+
+
 @dataclass
 class TrainingSummary:
     model_name: str
@@ -311,6 +364,7 @@ class TrainingSummary:
     license: Optional[str] = None
     tags: Optional[Union[str, List[str]]] = None
     finetuned_from: Optional[str] = None
+    tasks: Optional[Union[str, List[str]]] = None
     dataset: Optional[Union[str, List[str]]] = None
     dataset_tags: Optional[Union[str, List[str]]] = None
     dataset_args: Optional[Union[str, List[str]]] = None
@@ -320,7 +374,12 @@ class TrainingSummary:
 
     def __post_init__(self):
         # Infer default license from the checkpoint used, if possible.
-        if self.license is None and not is_offline_mode() and self.finetuned_from is not None:
+        if (
+            self.license is None
+            and not is_offline_mode()
+            and self.finetuned_from is not None
+            and len(self.finetuned_from) > 0
+        ):
             try:
                 model_info = HfApi().model_info(self.finetuned_from)
                 for tag in model_info.tags:
@@ -330,7 +389,7 @@ class TrainingSummary:
                 pass
 
     def create_model_index(self, metric_mapping):
-        model_index = f"model-index:\n- name: {self.model_name}\n"
+        model_index = {"name": self.model_name}
 
         # Dataset mapping tag -> name
         dataset_names = _listify(self.dataset)
@@ -342,7 +401,7 @@ class TrainingSummary:
         dataset_arg_mapping = {tag: arg for tag, arg in zip(dataset_tags, dataset_args)}
 
         task_mapping = {
-            tag: TASK_TAG_TO_NAME_MAPPING[tag] for tag in _listify(self.tags) if tag in TASK_TAG_TO_NAME_MAPPING
+            task: TASK_TAG_TO_NAME_MAPPING[task] for task in _listify(self.tasks) if task in TASK_TAG_TO_NAME_MAPPING
         }
 
         if len(task_mapping) == 0 and len(dataset_mapping) == 0:
@@ -351,42 +410,50 @@ class TrainingSummary:
             task_mapping = {None: None}
         if len(dataset_mapping) == 0:
             dataset_mapping = {None: None}
+
+        model_index["results"] = []
+
+        # One entry per dataset and per task
         all_possibilities = [(task_tag, ds_tag) for task_tag in task_mapping for ds_tag in dataset_mapping]
-
-        model_index += "  results:\n"
         for task_tag, ds_tag in all_possibilities:
-            result = ""
+            result = {}
             if task_tag is not None:
-                result += f"  - task:\n      name: {task_mapping[task_tag]}\n      type: {task_tag}\n"
+                result["task"] = {"name": task_mapping[task_tag], "type": task_tag}
+
             if ds_tag is not None:
-                prefix = "  - " if task_tag is None else "    "
-                result += f"{prefix}dataset:\n      name: {dataset_mapping[ds_tag]}\n      type: {ds_tag}\n"
+                result["dataset"] = {"name": dataset_mapping[ds_tag], "type": ds_tag}
                 if dataset_arg_mapping[ds_tag] is not None:
-                    result += f"      args: {dataset_arg_mapping[ds_tag]}\n"
+                    result["dataset"]["args"] = dataset_arg_mapping[ds_tag]
+
             if len(metric_mapping) > 0:
-                result += "    metrics:\n"
                 for metric_tag, metric_name in metric_mapping.items():
-                    value = self.eval_results[metric_name]
-                    result += f"      - name: {metric_name}\n        type: {metric_tag}\n        value: {value}\n"
+                    result["metric"] = {
+                        "name": metric_name,
+                        "type": metric_tag,
+                        "value": self.eval_results[metric_name],
+                    }
 
-            model_index += result
+            model_index["results"].append(result)
 
-        return model_index
+        return [model_index]
+
+    def create_metadata(self):
+        metric_mapping = infer_metric_tags_from_eval_results(self.eval_results)
+
+        metadata = {}
+        metadata = _insert_values_as_list(metadata, "language", self.language)
+        metadata = _insert_value(metadata, "license", self.license)
+        metadata = _insert_values_as_list(metadata, "tags", self.tags)
+        metadata = _insert_values_as_list(metadata, "datasets", self.dataset_tags)
+        metadata = _insert_values_as_list(metadata, "metrics", list(metric_mapping.keys()))
+        metadata["model_index"] = self.create_model_index(metric_mapping)
+
+        return metadata
 
     def to_model_card(self):
         model_card = ""
 
-        metric_mapping = infer_metric_tags_from_eval_results(self.eval_results)
-
-        # Metadata
-        metadata = ""
-        metadata += _list_possibilities("language", self.language)
-        if self.license is not None:
-            metadata += f"license: {self.license}\n"
-        metadata += _list_possibilities("tags", self.tags)
-        metadata += _list_possibilities("datasets", self.dataset_tags)
-        metadata += _list_possibilities("metrics", list(metric_mapping.keys()))
-        metadata += "\n" + self.create_model_index(metric_mapping)
+        metadata = yaml.dump(self.create_metadata(), sort_keys=False)
         if len(metadata) > 0:
             model_card = f"---\n{metadata}---\n"
 
@@ -405,6 +472,8 @@ class TrainingSummary:
         else:
             if isinstance(self.dataset, str):
                 model_card += f"the {self.dataset} dataset."
+            elif isinstance(self.dataset, (tuple, list)) and len(self.dataset) == 1:
+                model_card += f"the {self.dataset[0]} dataset."
             else:
                 model_card += (
                     ", ".join([f"the {ds}" for ds in self.dataset[:-1]]) + f" and the {self.dataset[-1]} datasets."
@@ -459,13 +528,50 @@ class TrainingSummary:
         tags=None,
         model_name=None,
         finetuned_from=None,
+        tasks=None,
         dataset_tags=None,
         dataset=None,
         dataset_args=None,
     ):
-        # TODO (Sylvain) Add a default for `pipeline-tag` inferred from the model.
+        # Infer default from dataset
+        one_dataset = trainer.train_dataset if trainer.train_dataset is not None else trainer.eval_dataset
+        if is_hf_dataset(one_dataset) and (dataset_tags is None or dataset_args is None):
+            default_tag = one_dataset.builder_name
+            # Those are not real datasets from the Hub so we exclude them.
+            if default_tag not in ["csv", "json", "pandas", "parquet", "text"]:
+                if dataset_tags is None:
+                    dataset_tags = [default_tag]
+                if dataset_args is None:
+                    dataset_args = [one_dataset.config_name]
+
+        if dataset is None and dataset_tags is not None:
+            dataset = dataset_tags
+
+        # Infer default finetuned_from
+        if (
+            finetuned_from is None
+            and hasattr(trainer.model.config, "_name_or_path")
+            and not os.path.isdir(trainer.model.config._name_or_path)
+        ):
+            finetuned_from = trainer.model.config._name_or_path
+
+        # Infer default task tag:
+        if tasks is None:
+            model_class_name = trainer.model.__class__.__name__
+            for task, mapping in TASK_MAPPING.items():
+                if model_class_name in _get_mapping_values(mapping):
+                    tasks = task
+
         if model_name is None:
             model_name = Path(trainer.args.output_dir).name
+
+        # Add `generated_from_trainer` to the tags
+        if tags is None:
+            tags = ["generated_from_trainer"]
+        elif isinstance(tags, str) and tags != "generated_from_trainer":
+            tags = [tags, "generated_from_trainer"]
+        elif "generated_from_trainer" not in tags:
+            tags.append("generated_from_trainer")
 
         _, eval_lines, eval_results = parse_log_history(trainer.state.log_history)
         hyperparameters = extract_hyperparameters_from_trainer(trainer)
@@ -476,6 +582,7 @@ class TrainingSummary:
             tags=tags,
             model_name=model_name,
             finetuned_from=finetuned_from,
+            tasks=tasks,
             dataset_tags=dataset_tags,
             dataset=dataset,
             dataset_args=dataset_args,
@@ -630,7 +737,7 @@ def extract_hyperparameters_from_trainer(trainer):
     if trainer.args.fp16:
         if trainer.use_amp:
             hyperparameters["mixed_precision_training"] = "Native AMP"
-        elif trainer._use_apex:
+        elif trainer.use_apex:
             hyperparameters["mixed_precision_training"] = f"Apex, opt level {trainer.args.fp16_opt_level}"
 
     if trainer.args.label_smoothing_factor != 0.0:

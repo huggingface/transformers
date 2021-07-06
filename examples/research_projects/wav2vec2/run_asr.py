@@ -9,8 +9,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Union
 import datasets
 import numpy as np
 import torch
-import torch.nn as nn
 from packaging import version
+from torch import nn
 
 import librosa
 from lang_trans import arabic
@@ -65,7 +65,7 @@ class ModelArguments:
 
 def configure_logger(model_args: ModelArguments, training_args: TrainingArguments):
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )

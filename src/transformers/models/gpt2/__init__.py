@@ -58,7 +58,7 @@ if is_tf_available():
     ]
 
 if is_flax_available():
-    _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2LMHeadModel", "FlaxGPT2Model"]
+    _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2LMHeadModel", "FlaxGPT2Model", "FlaxGPT2PreTrainedModel"]
 
 if TYPE_CHECKING:
     from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
@@ -90,7 +90,7 @@ if TYPE_CHECKING:
         )
 
     if is_flax_available():
-        from .modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
+        from .modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
 
 else:
     import importlib

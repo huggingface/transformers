@@ -24,7 +24,6 @@ import random
 import re
 import shutil
 import sys
-import tempfile
 import time
 import warnings
 from logging import StreamHandler
@@ -44,8 +43,6 @@ from .integrations import (  # isort: split
     is_ray_tune_available,
     run_hp_search_optuna,
     run_hp_search_ray,
-    deepspeed_init,
-    is_deepspeed_zero3_enabled,
 )
 
 import numpy as np
@@ -61,6 +58,7 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
+from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
@@ -265,7 +263,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: Union[PreTrainedModel, torch.nn.Module] = None,
+        model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
@@ -290,6 +288,10 @@ class Trainer:
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
         self._memory_tracker.start()
+
+        # set the correct log level depending on the node
+        log_level = args.get_process_log_level()
+        logging.set_verbosity(log_level)
 
         # force device and distributed setup init explicitly
         args._setup_devices
@@ -388,9 +390,12 @@ class Trainer:
         # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
         self._loggers_initialized = False
 
-        # Create output directory if needed
-        if self.is_world_process_zero():
+        # Create clone of distant repo and output directory if needed
+        if self.args.push_to_hub:
+            self.init_git_repo()
+        if self.args.should_save:
             os.makedirs(self.args.output_dir, exist_ok=True)
+
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
             raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
@@ -773,7 +778,7 @@ class Trainer:
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
-            decay_parameters = get_parameter_names(self.model, [torch.nn.LayerNorm])
+            decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
@@ -863,9 +868,9 @@ class Trainer:
             logger.info("Trial:", trial.params)
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
-            from transformers.integrations import DeepSpeedConfigHF
+            from transformers.deepspeed import HfDeepSpeedConfig
 
-            self.args.deepspeed_config_hf = DeepSpeedConfigHF(self.args)
+            self.args.hf_deepspeed_config = HfDeepSpeedConfig(self.args)
 
     def _report_to_hp_search(
         self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
@@ -894,7 +899,7 @@ class Trainer:
         with tune.checkpoint_dir(step=self.state.global_step) as checkpoint_dir:
             output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
             self.save_model(output_dir)
-            if self.is_world_process_zero():
+            if self.args.should_save:
                 self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
                 torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
@@ -934,7 +939,7 @@ class Trainer:
 
         # Multi-gpu training (should be after apex fp16 initialization)
         if self.args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
+            model = nn.DataParallel(model)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -971,7 +976,7 @@ class Trainer:
                 find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
             else:
                 find_unused_parameters = True
-            model = torch.nn.parallel.DistributedDataParallel(
+            model = nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
                 output_device=self.args.local_rank,
@@ -1289,7 +1294,7 @@ class Trainer:
                             model.clip_grad_norm_(args.max_grad_norm)
                         else:
                             # Revert to normal clipping otherwise, handling Apex or full precision
-                            torch.nn.utils.clip_grad_norm_(
+                            nn.utils.clip_grad_norm_(
                                 amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
                                 args.max_grad_norm,
                             )
@@ -1352,30 +1357,42 @@ class Trainer:
             logger.info(
                 f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
             )
-            # We load the model state dict on the CPU to avoid an OOM error.
-            state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME), map_location="cpu")
-            # If the model is on the GPU, it still works!
-            self._load_state_dict_in_model(state_dict)
+
+            best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
+            if os.path.exists(best_model_path):
+                # We load the model state dict on the CPU to avoid an OOM error.
+                state_dict = torch.load(best_model_path, map_location="cpu")
+                # If the model is on the GPU, it still works!
+                self._load_state_dict_in_model(state_dict)
+            else:
+                logger.warn(
+                    f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
+                    "on multiple nodes, you should activate `--save_on_each_node`."
+                )
 
             if self.deepspeed:
                 self.deepspeed.load_checkpoint(
                     self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
                 )
 
+        # add remaining tr_loss
+        self._total_loss_scalar += tr_loss.item()
+        train_loss = self._total_loss_scalar / self.state.global_step
+
         metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps)
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
-        self.log(metrics)
-
-        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
-        # add remaining tr_loss
-        self._total_loss_scalar += tr_loss.item()
+        metrics["train_loss"] = train_loss
 
         self.is_in_train = False
 
         self._memory_tracker.stop_and_update_metrics(metrics)
 
-        return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
+        self.log(metrics)
+
+        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
+
+        return TrainOutput(self.state.global_step, train_loss, metrics)
 
     def _load_state_dict_in_model(self, state_dict):
         load_result = self.model.load_state_dict(state_dict, strict=False)
@@ -1491,14 +1508,14 @@ class Trainer:
                 # Consolidate the state dict on all processed of dp_rank 0
                 opt_state_dict = self.optimizer.state_dict()
                 # Save it and the scheduler on the main process
-                if self.is_world_process_zero():
+                if self.args.should_save:
                     torch.save(opt_state_dict, os.path.join(output_dir, "optimizer.pt"))
                     with warnings.catch_warnings(record=True) as caught_warnings:
                         torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                     reissue_pt_warnings(caught_warnings)
                     if self.use_amp:
                         torch.save(self.scaler.state_dict(), os.path.join(output_dir, "scaler.pt"))
-        elif self.is_world_process_zero() and not self.deepspeed:
+        elif self.args.should_save and not self.deepspeed:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
             with warnings.catch_warnings(record=True) as caught_warnings:
@@ -1524,7 +1541,7 @@ class Trainer:
                 self.state.best_model_checkpoint = output_dir
 
         # Save the Trainer state
-        if self.is_world_process_zero():
+        if self.args.should_save:
             self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
 
         # Save RNG state in non-distributed training
@@ -1553,7 +1570,7 @@ class Trainer:
             torch.save(rng_states, os.path.join(output_dir, f"rng_state_{local_rank}.pth"))
 
         # Maybe delete some older checkpoints.
-        if self.is_world_process_zero():
+        if self.args.should_save:
             self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
 
     def _load_optimizer_and_scheduler(self, checkpoint):
@@ -1698,7 +1715,14 @@ class Trainer:
         """
         for k, v in inputs.items():
             if isinstance(v, torch.Tensor):
-                inputs[k] = v.to(self.args.device)
+                kwargs = dict(device=self.args.device)
+                if self.deepspeed and inputs[k].dtype != torch.int64:
+                    # NLP models inputs are int64 and those get adjusted to the right dtype of the
+                    # embedding. Other models such as wav2vec2's inputs are already float and thus
+                    # may need special handling to match the dtypes of the model
+                    kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
+
+                inputs[k] = v.to(**kwargs)
 
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
@@ -1815,19 +1839,19 @@ class Trainer:
         elif is_sagemaker_mp_enabled():
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             state_dict = self.model_wrapped.state_dict()
-            if self.is_world_process_zero():
+            if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
         elif (
             ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
         ):
             state_dict = self.model.state_dict()
 
-            if self.is_world_process_zero():
+            if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
         elif self.deepspeed:
 
             # this takes care of everything as long as we aren't under zero3
-            if self.is_world_process_zero():
+            if self.args.should_save:
                 self._save(output_dir)
 
             if is_deepspeed_zero3_enabled():
@@ -1835,7 +1859,7 @@ class Trainer:
                 # saved, so since under zero3 the file is bogus, simply delete it. The user should
                 # either user deepspeed checkpoint to resume or to recover full weights use
                 # zero_to_fp32.py stored in the checkpoint.
-                if self.is_world_process_zero():
+                if self.args.should_save:
                     file = os.path.join(output_dir, WEIGHTS_NAME)
                     if os.path.isfile(file):
                         # logger.info(f"deepspeed zero3: removing {file}, see zero_to_fp32.py to recover weights")
@@ -1846,7 +1870,7 @@ class Trainer:
                 # This must be called on all ranks
                 self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME)
 
-        elif self.is_world_process_zero():
+        elif self.args.should_save:
             self._save(output_dir)
 
     def _save_tpu(self, output_dir: Optional[str] = None):
@@ -1864,7 +1888,7 @@ class Trainer:
             if isinstance(unwrap_model(self.model), PreTrainedModel):
                 unwrap_model(self.model).save_pretrained(
                     output_dir,
-                    save_config=self.is_world_process_zero(),
+                    save_config=self.args.should_save,
                     state_dict=self.model.state_dict(),
                     save_function=xm.save,
                 )
@@ -1873,8 +1897,8 @@ class Trainer:
                 state_dict = self.model.state_dict()
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, save_config=self.is_world_process_zero(), save_function=xm.save)
-        if self.tokenizer is not None and self.is_world_process_zero():
+            self.model.save_pretrained(output_dir, save_config=self.args.should_save, save_function=xm.save)
+        if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
@@ -1944,7 +1968,7 @@ class Trainer:
         if len(checkpoints_sorted) <= self.args.save_total_limit:
             return
 
-        # If save_total_limit=1 with load_best_mode_at_end=True, we could end up deleting the last checkpoint, which
+        # If save_total_limit=1 with load_best_model_at_end=True, we could end up deleting the last checkpoint, which
         # we don't do to allow resuming.
         save_total_limit = self.args.save_total_limit
         if (
@@ -2416,6 +2440,27 @@ class Trainer:
         else:
             return 0
 
+    def init_git_repo(self):
+        """
+        Initializes a git repo in :obj:`self.args.push_to_hub_model_id`.
+        """
+        if not self.args.should_save:
+            return
+        use_auth_token = True if self.args.push_to_hub_token is None else self.args.push_to_hub_token
+        repo_url = PushToHubMixin._get_repo_url_from_name(
+            self.args.push_to_hub_model_id,
+            organization=self.args.push_to_hub_organization,
+            use_auth_token=use_auth_token,
+        )
+        self.repo = PushToHubMixin._create_or_get_repo(
+            self.args.output_dir, repo_url=repo_url, use_auth_token=use_auth_token
+        )
+
+        # By default, ignore the checkpoint folders
+        if not os.path.exists(os.path.join(self.args.output_dir, ".gitignore")):
+            with open(os.path.join(self.args.output_dir, ".gitignore"), "w", encoding="utf-8") as writer:
+                writer.writelines(["checkpoint-*/"])
+
     def create_model_card(
         self,
         language: Optional[str] = None,
@@ -2423,6 +2468,7 @@ class Trainer:
         tags: Optional[str] = None,
         model_name: Optional[str] = None,
         finetuned_from: Optional[str] = None,
+        tasks: Optional[str] = None,
         dataset_tags: Optional[Union[str, List[str]]] = None,
         dataset: Optional[Union[str, List[str]]] = None,
         dataset_args: Optional[Union[str, List[str]]] = None,
@@ -2434,6 +2480,7 @@ class Trainer:
             tags=tags,
             model_name=model_name,
             finetuned_from=finetuned_from,
+            tasks=tasks,
             dataset_tags=dataset_tags,
             dataset=dataset,
             dataset_args=dataset_args,
@@ -2442,78 +2489,30 @@ class Trainer:
         with open(os.path.join(self.args.output_dir, "README.md"), "w") as f:
             f.write(model_card)
 
-    def push_to_hub(
-        self,
-        repo_name: Optional[str] = None,
-        repo_url: Optional[str] = None,
-        commit_message: Optional[str] = "add model",
-        organization: Optional[str] = None,
-        private: bool = None,
-        use_auth_token: Optional[Union[bool, str]] = None,
-        **kwargs,
-    ):
+    def push_to_hub(self, commit_message: Optional[str] = "add model", **kwargs) -> str:
         """
-        Upload `self.model` to the 🤗 model hub.
+        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.push_to_hub_model_id`.
 
         Parameters:
-            repo_name (:obj:`str`, `optional`):
-                Repository name for your model or tokenizer in the hub. If not specified and :obj:`repo_url` is not
-                specified either, will default to the stem of :obj:`self.args.output_dir`.
-            repo_url (:obj:`str`, `optional`):
-                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
-                repository will be created in your namespace (unless you specify an :obj:`organization`) with
-                :obj:`repo_name`.
             commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
                 Message to commit while pushing.
-            organization (:obj:`str`, `optional`):
-                Organization in which you want to push your model or tokenizer (you must be a member of this
-                organization).
-            private (:obj:`bool`, `optional`):
-                Whether or not the repository created should be private (requires a paying subscription).
-            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
-                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
-                :obj:`True` if :obj:`repo_url` is not specified.
             kwargs:
                 Additional keyword arguments passed along to :meth:`~transformers.Trainer.create_model_card`.
 
         Returns:
             The url of the commit of your model in the given repository.
         """
+        if not self.args.should_save:
+            return
+
+        self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
+        self.save_model()
+
+        # Only push from one node.
         if not self.is_world_process_zero():
             return
 
-        if not isinstance(unwrap_model(self.model), PushToHubMixin):
-            raise ValueError(
-                "The `upload_model_to_hub` method only works for models that inherit from `PushToHubMixin` models."
-            )
-
-        if repo_url is None and repo_name is None:
-            repo_name = Path(self.args.output_dir).name
-
-        if repo_name is not None:
-            model_name = repo_name
-        elif repo_url is not None:
-            model_name = repo_url.split("/")[-1]
-        else:
-            model_name = None
-        self.create_model_card(model_name=model_name, **kwargs)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            shutil.copy(os.path.join(self.args.output_dir, "README.md"), os.path.join(tmp_dir, "README.md"))
-            unwrap_model(self.model).save_pretrained(tmp_dir)
-            if self.tokenizer is not None:
-                self.tokenizer.save_pretrained(tmp_dir)
-
-            return unwrap_model(self.model)._push_to_hub(
-                save_directory=tmp_dir,
-                repo_name=repo_name,
-                repo_url=repo_url,
-                commit_message=commit_message,
-                organization=organization,
-                private=private,
-                use_auth_token=use_auth_token,
-            )
+        return self.repo.push_to_hub(commit_message=commit_message)
 
     #
     # Deprecated code
