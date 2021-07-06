@@ -461,10 +461,10 @@ if is_detectron2_available():
         ]
     )
 else:
-    from .utils import dummy_timm_objects
+    from .utils import dummy_detectron2_objects
 
-    _import_structure["utils.dummy_timm_objects"] = [
-        name for name in dir(dummy_timm_objects) if not name.startswith("_")
+    _import_structure["utils.dummy_detectron2_objects"] = [
+        name for name in dir(dummy_detectron2_objects) if not name.startswith("_")
     ]
 
 # PyTorch-backed objects
@@ -1859,7 +1859,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.layoutlmv2 import LayoutLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config, LayoutLMv2Tokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1927,6 +1926,7 @@ if TYPE_CHECKING:
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
+    from .models.layoutlmv2 import LayoutLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config, LayoutLMv2Tokenizer
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
@@ -2051,7 +2051,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.layoutlmv2 import LayoutLMv2TokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2068,6 +2067,7 @@ if TYPE_CHECKING:
         from .models.gpt2 import GPT2TokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
+        from .models.layoutlmv2 import LayoutLMv2TokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast

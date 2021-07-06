@@ -15,7 +15,6 @@
 """ PyTorch LayoutLMv2 model. """
 
 
-
 import math
 import os
 
@@ -32,10 +31,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPooling,
-)
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import (
     PreTrainedModel,
     SequenceSummary,
@@ -749,7 +745,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-    ):   
+    ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

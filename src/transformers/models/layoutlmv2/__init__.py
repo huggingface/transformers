@@ -17,7 +17,9 @@
 # limitations under the License.
 
 from typing import TYPE_CHECKING
+
 from ...file_utils import _BaseLazyModule, is_detectron2_available, is_tokenizers_available
+
 
 _import_structure = {
     "configuration_layoutlmv2": ["LayoutLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config"],
