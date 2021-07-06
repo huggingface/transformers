@@ -43,6 +43,8 @@ The following is the brief description of the main concepts that will be describ
 
 Most users with just 2 GPUs already enjoy the increased training speed up thanks to DataParallel (DP) and DistributedDataParallel (DDP) that are almost trivial to use. This is a built-in feature of Pytorch.
 
+.. parallelism-zero-dp
+
 ## ZeRO Data Parallel
 
 ZeRO-powered data parallelism (ZeRO-DP) is described on the following diagram from this [blog post](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)
@@ -264,11 +266,9 @@ Implementations:
 
 ## DP+PP+TP+ZeRO
 
-DeepSpeed provides a variation on DP which is more scalable than normal DP.
+One of the main features of DeepSpeed is ZeRO, which is a super-scalable extension of DP. It has already been discussed in :ref:`parallelism-zero-dp`. Normally it's a standalone feature that doesn't require PP or TP. But it can be combined with PP and TP.
 
-To allow the number of workers to scale beyond Tensor and Pipeline Parallelism without sacrificing compute efficiency, ZeRO-powered data parallelism (ZeRO-DP). ZeRO-DP not only improves memory efficiency further via optimizer state partition, but also allows scaling to arbitrarily large number of GPUs with minimal communication overhead by exploiting topology aware mapping. (adapted from this [blog post](https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/).)
-
-ZeRO-DP typically enables only ZeRO stage 1 (optimizer sharding).
+When ZeRO-DP is combined with PP (and optinally TP) it typically enables only ZeRO stage 1 (optimizer sharding).
 
 While it's theoretically possible to use ZeRO stage 2 (gradient sharding) with Pipeline Parallelism, it will have bad performance impacts. There would need to be an additional reduce-scatter collective for every micro-batch to aggregate the gradients before sharding, which adds a potentially significant communication overhead. By nature of Pipeline Parallelism, small micro-batches are used and instead the focus is on trying to balance arithmetic intensity (micro-batch size) with minimizing the Pipeline bubble (number of micro-batches). Therefore those communication costs are going to hurt.
 
@@ -277,6 +277,9 @@ In addition, There are already fewer layers than normal due to PP and so the mem
 ZeRO stage 3 is not a good choice either for the same reason - more inter-node communications required.
 
 And since we have ZeRO, the other benefit is ZeRO-Offload, if CPU and/or NVMe memory are abundant. Since under ZeRO stage 1 we can offload optimizer states off GPU.
+
+Implementations:
+- [Megatron-DeepSpeed](https://github.com/microsoft/Megatron-DeepSpeed)
 
 🤗 Transformers status: not yet implemented, since we have no PP and TP.
 
@@ -300,8 +303,8 @@ and they are working on Pipeline Parallelism. I guess ZeRO-DP is Sample+Paramete
 
 The significance of this framework is that it takes resources like (1) GPU/TPU/CPU vs. (2) RAM/DRAM vs. (3) fast-intra-connect/slow-inter-connect and it automatically optimizes all these  algorithmically deciding which parallelisation to use where.
 
-On very important aspect is that FlexFlow is designed for optimizing DNN parallelizations for models with static and fixed workload, since models with dynamic behavior may prefer different parallelization strategies across iterations.
+One very important aspect is that FlexFlow is designed for optimizing DNN parallelizations for models with static and fixed workloads, since models with dynamic behavior may prefer different parallelization strategies across iterations.
 
-So the promise is very attractive - it runs say a 30min simulation on the cluster of choice and it comes up with the best strategy to utilise this specific environment. If you add/remove/replace any parts it'll run and re-optimize the plan for that. And then you can train. A different setup will have its own custom optimization.
+So the promise is very attractive - it runs a 30min simulation on the cluster of choice and it comes up with the best strategy to utilise this specific environment. If you add/remove/replace any parts it'll run and re-optimize the plan for that. And then you can train. A different setup will have its own custom optimization.
 
 🤗 Transformers status: not yet integrated. We already have our models FX-trace-able via [transformers.utils.fx](https://github.com/huggingface/transformers/blob/master/src/transformers/utils/fx.py), which is a prerequisite for FlexFlow, so someone needs to figure out what needs to be done to make FlexFlow work with our models.
