@@ -731,7 +731,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 logger.info("Building the model")
                 self(self.dummy_inputs)
 
-                return
+                return lm_head().get_output_embeddings()
 
         return None  # Overwrite for models with output embeddings
 

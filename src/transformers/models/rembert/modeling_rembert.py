@@ -351,6 +351,7 @@ class RemBertSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RemBert
 class RemBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -400,6 +401,7 @@ class RemBertAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->RemBert
 class RemBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -415,6 +417,7 @@ class RemBertIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->RemBert
 class RemBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

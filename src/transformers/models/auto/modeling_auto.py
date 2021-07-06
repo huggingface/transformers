@@ -239,7 +239,6 @@ from ..reformer.modeling_reformer import (
 )
 
 # Add modeling imports here
-# Add modeling imports here
 from ..rembert.modeling_rembert import (
     RemBertForCausalLM,
     RemBertForMaskedLM,

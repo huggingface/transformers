@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "rembert-large": "https://huggingface.co/rembert-large/resolve/main/config.json",
+    "rembert-large": "https://huggingface.co/iwontbecreative/rembert/resolve/main/config.json",
     # See all RemBERT models at https://huggingface.co/models?filter=rembert
 }
 
@@ -30,7 +30,7 @@ class RemBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.RemBertModel`. It is used to
     instantiate an RemBERT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the RemBERT architecture.
+    configuration with the defaults will yield a similar configuration to that of the remert-large architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
