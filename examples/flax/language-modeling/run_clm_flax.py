@@ -84,6 +84,10 @@ class ModelArguments:
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={"help": "gradient_checkpointing"},
+    )
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
@@ -322,6 +326,8 @@ def main():
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
+    
+    config.gradient_checkpointing = model_args.gradient_checkpointing
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
