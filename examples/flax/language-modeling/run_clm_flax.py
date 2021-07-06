@@ -609,7 +609,7 @@ def main():
                     eval_metrics["perplexity"] = float("inf")
 
                 # Print metrics and update progress bar
-                desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
+                desc = f"Epoch... ({cur_step} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
                 epochs.write(desc)
                 epochs.desc = desc
 
@@ -626,7 +626,7 @@ def main():
                         training_args.output_dir,
                         params=params,
                         push_to_hub=training_args.push_to_hub,
-                        commit_message=f"Saving weights and logs of epoch {epoch+1}",
+                        commit_message=f"Saving weights and logs of step {cur_step}",
                     )
 
 
