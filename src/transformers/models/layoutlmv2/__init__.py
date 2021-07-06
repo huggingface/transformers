@@ -22,7 +22,7 @@ from ...file_utils import _LazyModule, is_detectron2_available, is_tokenizers_av
 
 
 _import_structure = {
-    "configuration_layoutlmv2": ["LayoutLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config"],
+    "configuration_layoutlmv2": ["LayoutLMv2Config", "LayoutLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP"],
     "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
 }
 
@@ -31,10 +31,10 @@ if is_tokenizers_available():
 
 if is_detectron2_available():
     _import_structure["modeling_layoutlmv2"] = [
-        "LayoutLMv2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LayoutLMv2Layer",
         "LayoutLMv2Model",
         "LayoutLMv2PreTrainedModel",
+        "LayoutLMv2_PRETRAINED_MODEL_ARCHIVE_LIST",
     ]
 
 if TYPE_CHECKING:

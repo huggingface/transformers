@@ -16,17 +16,14 @@
 
 
 import math
-import os
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_detectron2_available,
@@ -35,19 +32,19 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
 from ...utils import logging
 from .configuration_layoutlmv2 import LayoutLMv2Config
-from .detectron2_config import add_layoutlmv2_config
 
 
 if is_detectron2_available():
     import detectron2
     from detectron2.modeling import META_ARCH_REGISTRY
+
+    from .detectron2_config import add_layoutlmv2_config
 
 
 logger = logging.get_logger(__name__)
@@ -180,7 +177,7 @@ class LayoutLMv2SelfAttention(nn.Module):
         if self.has_spatial_attention_bias:
             attention_scores += rel_2d_pos
         attention_scores = attention_scores.float().masked_fill_(attention_mask.to(torch.bool), float("-inf"))
-        attention_probs = F.softmax(attention_scores, dim=-1, dtype=torch.float32).type_as(value_layer)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).type_as(value_layer)
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
@@ -381,7 +378,7 @@ class LayoutLMv2Encoder(nn.Module):
             num_buckets=self.rel_pos_bins,
             max_distance=self.max_rel_pos,
         )
-        rel_pos = F.one_hot(rel_pos, num_classes=self.rel_pos_onehot_size).type_as(hidden_states)
+        rel_pos = nn.functional.one_hot(rel_pos, num_classes=self.rel_pos_onehot_size).type_as(hidden_states)
         rel_pos = self.rel_pos_bias(rel_pos).permute(0, 3, 1, 2)
         rel_pos = rel_pos.contiguous()
         return rel_pos
@@ -401,8 +398,8 @@ class LayoutLMv2Encoder(nn.Module):
             num_buckets=self.rel_2d_pos_bins,
             max_distance=self.max_rel_2d_pos,
         )
-        rel_pos_x = F.one_hot(rel_pos_x, num_classes=self.rel_2d_pos_onehot_size).type_as(hidden_states)
-        rel_pos_y = F.one_hot(rel_pos_y, num_classes=self.rel_2d_pos_onehot_size).type_as(hidden_states)
+        rel_pos_x = nn.functional.one_hot(rel_pos_x, num_classes=self.rel_2d_pos_onehot_size).type_as(hidden_states)
+        rel_pos_y = nn.functional.one_hot(rel_pos_y, num_classes=self.rel_2d_pos_onehot_size).type_as(hidden_states)
         rel_pos_x = self.rel_pos_x_bias(rel_pos_x).permute(0, 3, 1, 2)
         rel_pos_y = self.rel_pos_y_bias(rel_pos_y).permute(0, 3, 1, 2)
         rel_pos_x = rel_pos_x.contiguous()
@@ -506,7 +503,7 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, LayoutLMv2LayerNorm):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -599,14 +596,15 @@ class VisualBackbone(nn.Module):
 
 
 LAYOUTLMV2_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.LayoutLMv2Config`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 LAYOUTLMV2_INPUTS_DOCSTRING = r"""
@@ -614,18 +612,21 @@ LAYOUTLMV2_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.LayoutLMv2Tokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.LayoutLMv2Tokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        
-        bbox
-            ...
+
+        bbox (:obj:`torch.LongTensor` of shape :obj:`({0}, 4)`, `optional`):
+            Bounding boxes of each input sequence tokens. Selected in the range ``[0,
+            config.max_2d_position_embeddings-1]``. Each bounding box should be a normalized version in (x0, y0, x1,
+            y1) format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and
+            (x1, y1) represents the position of the lower right corner.
 
         image
             ...
-        
+
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
@@ -642,8 +643,8 @@ LAYOUTLMV2_INPUTS_DOCSTRING = r"""
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
@@ -666,7 +667,7 @@ LAYOUTLMV2_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+
 class LayoutLMv2Pooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -748,12 +749,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         return embeddings
 
     @add_start_docstrings_to_model_forward(LAYOUTLMV2_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -768,6 +764,20 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Examples::
+
+            >>> from transformers import LayoutLMv2Tokenizer, LayoutLMv2Model
+
+            >>> tokenizer = LayoutLMv2Tokenizer.from_pretrained('microsoft/layoutlmv2-base-uncased')
+            >>> model = LayoutLMv2Model.from_pretrained('microsoft/layoutlmv2-base-uncased')
+
+            >>> inputs = tokenizer(..., padding="max_length", return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
