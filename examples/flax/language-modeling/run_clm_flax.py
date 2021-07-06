@@ -598,10 +598,9 @@ def main():
                     metrics = p_eval_step(state.params, batch)
                     eval_metrics.append(metrics)
 
-                    # normalize eval metrics
-                    eval_metrics = get_metrics(eval_metrics)
-
-                    eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+                # normalize eval metrics
+                eval_metrics = get_metrics(eval_metrics)
+                eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
                 try:
                     eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
