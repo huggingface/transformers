@@ -33,7 +33,7 @@ if is_torch_available():
         LayoutLMv2ForTokenClassification,
         LayoutLMv2Model,
     )
-    from transformers.models.layoutlmv2.modeling_layoutlmv2 import LayoutLMv2_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.layoutlmv2.modeling_layoutlmv2 import LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_detectron2_available():
@@ -210,7 +210,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LayoutLMv2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = LayoutLMv2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
