@@ -137,7 +137,7 @@ class TFDataCollatorForLanguageModeling:
 
     @tf.function()
     def encode_objects(self, examples: Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]) -> tf.data.Dataset:
-        if isinstance(examples, BatchEncoding):
+        if type(examples) == BatchEncoding:
             examples = examples.data
 
         if isinstance(examples, dict):
@@ -172,7 +172,6 @@ class TFDataCollatorForLanguageModeling:
         else:
             return examples.to_tensor(0)
 
-    @tf.function
     def __call__(self, examples: tf.data.Dataset, is_ragged=False) -> tf.data.Dataset:
         if is_ragged:
             examples = examples.batch(self.batch_size).map(self.square_ragged_tensors).unbatch()
