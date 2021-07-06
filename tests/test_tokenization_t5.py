@@ -268,7 +268,9 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_special_tokens_initialization(self):
         for pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{self.tokenizer_class.__name__} and {self.rust_tokenizer_class.__name__} ({pretrained_name})"):
+            with self.subTest(
+                f"{self.tokenizer_class.__name__} and {self.rust_tokenizer_class.__name__} ({pretrained_name})"
+            ):
 
                 added_tokens = [f"<extra_id_{i}>" for i in range(100)] + [AddedToken("<special>", lstrip=True)]
 

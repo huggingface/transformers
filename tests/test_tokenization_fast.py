@@ -39,9 +39,9 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokenizer = PreTrainedTokenizerFast.from_pretrained("robot-test/dummy-tokenizer-fast")
         tokenizer.save_pretrained(self.tmpdirname)
-    
+
     def get_tokenizer_path_from_rust(self):
-            return ["robot-test/dummy-tokenizer-fast"]
+        return ["robot-test/dummy-tokenizer-fast"]
 
     def test_pretrained_model_lists(self):
         # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any

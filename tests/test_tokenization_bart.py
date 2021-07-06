@@ -154,7 +154,9 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
 
     def test_embeded_special_tokens(self):
         for pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{self.tokenizer_class.__name__} and {self.rust_tokenizer_class.__name__} ({pretrained_name})"):
+            with self.subTest(
+                f"{self.tokenizer_class.__name__} and {self.rust_tokenizer_class.__name__} ({pretrained_name})"
+            ):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 sentence = "A, <mask> AllenNLP sentence."
