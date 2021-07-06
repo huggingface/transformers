@@ -524,7 +524,7 @@ if __name__ == "__main__":
             learning_rate=linear_decay_lr_schedule_fn,
             b1=training_args.adam_beta1,
             b2=training_args.adam_beta2,
-            eps=1e-8,
+            eps=training_args.adam_epsilon,
             weight_decay=training_args.weight_decay,
             mask=decay_mask_fn,
         )
