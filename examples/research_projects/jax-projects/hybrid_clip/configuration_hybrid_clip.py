@@ -25,31 +25,58 @@ class HybridCLIPConfig(PretrainedConfig):
             Dimentionality of text and vision projection layers.
         kwargs (`optional`):
             Dictionary of keyword arguments.
+
+    Examples::
+
+        >>> from transformers import BertConfig, CLIPConfig, HybridCLIPConfig, FlaxHybridCLIP
+
+        >>> # Initializing a BERT and CLIP configuration
+        >>> config_text = BertConfig()
+        >>> config_vision = CLIPConfig()
+
+        >>> config = HybridCLIPConfig.from_text_vision_configs(config_text, config_vision, projection_dim=512)
+
+        >>> # Initializing a BERT and CLIPVision model
+        >>> model = EncoderDecoderModel(config=config)
+
+        >>> # Accessing the model configuration
+        >>> config_text = model.config.text_config
+        >>> config_vision  = model.config.vision_config
+
+        >>> # Saving the model, including its configuration
+        >>> model.save_pretrained('my-model')
+
+        >>> # loading model and config from pretrained folder
+        >>> encoder_decoder_config = HybridCLIPConfig.from_pretrained('my-model')
+        >>> model = FlaxHybridCLIP.from_pretrained('my-model', config=encoder_decoder_config)
     """
 
     model_type = "hybrid-clip"
     is_composition = True
 
-    def __init__(self, text_config_dict, vision_config_dict, projection_dim=512, **kwargs):
+    def __init__(self, projection_dim=512, **kwargs):
         super().__init__(**kwargs)
 
-        if text_config_dict is None:
-            raise ValueError("`text_config_dict` can not be `None`.")
+        if "text_config" not in kwargs:
+            raise ValueError("`text_config` can not be `None`.")
 
-        if vision_config_dict is None:
-            raise ValueError("`vision_config_dict` can not be `None`.")
+        if "vision_config" not in kwargs:
+            raise ValueError("`vision_config` can not be `None`.")
 
-        text_model_type = text_config_dict.pop("model_type")
-        vision_model_type = vision_config_dict.pop("model_type")
+        text_config = kwargs.pop("text_config")
+        vision_config = kwargs.pop("vision_config")
+
+        text_model_type = text_config.pop("model_type")
+        vision_model_type = vision_config.pop("model_type")
 
         from transformers import AutoConfig
 
-        self.text_config = AutoConfig.for_model(text_model_type, **text_config_dict)
+        self.text_config = AutoConfig.for_model(text_model_type, **text_config)
 
         if vision_model_type == "clip":
-            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config_dict).vision_config
+            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config).vision_config
         else:
-            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config_dict)
+            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config)
 
         self.projection_dim = projection_dim
         self.initializer_factor = 1.0
@@ -64,7 +91,7 @@ class HybridCLIPConfig(PretrainedConfig):
             :class:`HybridCLIPConfig`: An instance of a configuration object
         """
 
-        return cls(text_config_dict=text_config.to_dict(), vision_config_dict=vision_config.to_dict(), **kwargs)
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
