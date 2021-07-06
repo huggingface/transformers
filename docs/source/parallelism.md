@@ -276,7 +276,7 @@ In addition, There are already fewer layers than normal due to PP and so the mem
 
 ZeRO stage 3 is not a good choice either for the same reason - more inter-node communications required.
 
-And since we have ZeRO, the other benefit is ZeRO-Offload, if CPU and/or NVMe memory are abundant. Since under ZeRO stage 1 we can offload optimizer states off GPU.
+And since we have ZeRO, the other benefit is ZeRO-Offload. Since this is stage 1 optimizer states can be offloaded to CPU.
 
 Implementations:
 - [Megatron-DeepSpeed](https://github.com/microsoft/Megatron-DeepSpeed)
