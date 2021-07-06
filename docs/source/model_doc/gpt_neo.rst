@@ -71,3 +71,16 @@ GPTNeoForSequenceClassification
 
 .. autoclass:: transformers.GPTNeoForSequenceClassification
     :members: forward
+
+FlaxGPTNeoModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxGPTNeoModel
+    :members: __call__
+
+
+FlaxGPTNeoForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxGPTNeoForCausalLM
+    :members: __call__
