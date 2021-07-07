@@ -253,6 +253,19 @@ def main():
         if extension == "txt":
             extension = "text"
         raw_datasets = load_dataset(extension, data_files=data_files)
+        # If no validation data is there, validation_split_percentage will be used to divide the dataset.
+        if "validation" not in raw_datasets.keys():
+            raw_datasets["validation"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[:{args.validation_split_percentage}%]",
+            )
+            raw_datasets["train"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[{args.validation_split_percentage}%:]",
+            )
+
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
