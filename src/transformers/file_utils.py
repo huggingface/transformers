@@ -1884,6 +1884,8 @@ class _LazyModule(ModuleType):
         self.__file__ = module_file
         self.__path__ = [os.path.dirname(module_file)]
         self._objects = {} if extra_objects is None else extra_objects
+        self._name = name
+        self._import_structure = import_structure
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
@@ -1905,6 +1907,9 @@ class _LazyModule(ModuleType):
 
     def _get_module(self, module_name: str):
         return importlib.import_module("." + module_name, self.__name__)
+
+    def __reduce__(self):
+        return (self.__class__, (self._name, self._import_structure))
 
 
 def copy_func(f):
