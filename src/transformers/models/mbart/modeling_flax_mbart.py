@@ -975,6 +975,7 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
             decoder_position_ids,
         )["params"]
 
+    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartPreTrainedModel.init_cache with Bart->MBart
     def init_cache(self, batch_size, max_length, encoder_outputs):
         r"""
         Args:
