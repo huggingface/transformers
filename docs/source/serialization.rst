@@ -31,9 +31,9 @@ using Hugging Face Transformers and ONNX Runtime
 Configuration-based approach
 -----------------------------------------------------------------------------------------------------------------------
 
-Transformers v4.9.0 introduces a new package: ``transformers.onnx``. This package allows converting checkpoints
-to an ONNX graph by leveraging configuration objects. These configuration objects come ready made for a
-number of model architectures, and are made to be easily extendable to other architectures.
+Transformers v4.9.0 introduces a new package: ``transformers.onnx``. This package allows converting checkpoints to an
+ONNX graph by leveraging configuration objects. These configuration objects come ready made for a number of model
+architectures, and are made to be easily extendable to other architectures.
 
 Ready-made configurations include the following models:
 
@@ -46,12 +46,12 @@ Ready-made configurations include the following models:
 - T5
 - XLM-RoBERTa
 
-This conversion is handled with the PyTorch version of models - it, therefore, requires PyTorch to be installed.
-If you would like to be able to convert from TensorFlow, please let us know by opening an issue.
+This conversion is handled with the PyTorch version of models - it, therefore, requires PyTorch to be installed. If you
+would like to be able to convert from TensorFlow, please let us know by opening an issue.
 
 .. note::
-    The models showcased here are close to fully feature complete, but do lack some features that are currently
-    in development. Namely, the ability to handle the past key values for decoder models is currently in the works.
+    The models showcased here are close to fully feature complete, but do lack some features that are currently in
+    development. Namely, the ability to handle the past key values for decoder models is currently in the works.
 
 
 Converting an ONNX model using the ``transformers.onnx`` package
@@ -84,8 +84,8 @@ Exporting a checkpoint using a ready-made configuration can be done as follows:
 
     python -m transformers.onnx -f pytorch --model=bert-base-cased onnx/bert-base-cased/
 
-This exports an ONNX graph of the mentioned checkpoint. Here it is `bert-base-cased`, but it can be any model from
-the hub, or a local path.
+This exports an ONNX graph of the mentioned checkpoint. Here it is `bert-base-cased`, but it can be any model from the
+hub, or a local path.
 
 It will be exported under ``onnx/bert-base-cased``. You should see similar logs:
 
@@ -105,9 +105,9 @@ It will be exported under ``onnx/bert-base-cased``. You should see similar logs:
 Implementing a custom configuration for an unsupported architecture
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Let's take a look at the changes necessary to add a custom configuration for an unsupported architecture. Firstly,
-we will need a custom ONNX configuration object that details the model inputs and outputs. The BERT ONNX configuration
-is visible below:
+Let's take a look at the changes necessary to add a custom configuration for an unsupported architecture. Firstly, we
+will need a custom ONNX configuration object that details the model inputs and outputs. The BERT ONNX configuration is
+visible below:
 
 .. code-block::
 
@@ -126,14 +126,14 @@ is visible below:
 
 Let's understand what's happening here. This configuration has two properties: the inputs, and the outputs.
 
-The inputs return a dictionary, where each key corresponds to an expected input, and each value indicates the axis
-of that input.
+The inputs return a dictionary, where each key corresponds to an expected input, and each value indicates the axis of
+that input.
 
 For BERT, there are three necessary inputs. These three inputs are of similar shape, which is made up of two
 dimensions: the batch is the first dimension, and the second is the sequence.
 
-The outputs return a similar dictionary, where, once again, each key corresponds to an expected output, and each
-value indicates the axis of that output.
+The outputs return a similar dictionary, where, once again, each key corresponds to an expected output, and each value
+indicates the axis of that output.
 
 Once this is done, a single step remains: adding this configuration object to the initialisation of the model class,
 and to the general ``transformers`` initialisation.

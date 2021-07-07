@@ -14,7 +14,7 @@
 
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Callable, Tuple, Union
+from typing import Callable, Tuple
 
 from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.auto import AutoTokenizer
@@ -66,16 +66,12 @@ def get_model_from_features(features: str, model: str):
 
     """
     if features not in FEATURES_TO_AUTOMODELS:
-        raise KeyError(
-            f"Unknown feature: {features}." f"Possible values are {list(FEATURES_TO_AUTOMODELS.values())}"
-            )
+        raise KeyError(f"Unknown feature: {features}." f"Possible values are {list(FEATURES_TO_AUTOMODELS.values())}")
 
     return FEATURES_TO_AUTOMODELS[features].from_pretrained(model)
 
 
-def check_supported_model_or_raise(
-    model: PreTrainedModel, features: str = "default"
-) -> Tuple[str, Callable]:
+def check_supported_model_or_raise(model: PreTrainedModel, features: str = "default") -> Tuple[str, Callable]:
     """
     Check whether or not the model has the requested features
 

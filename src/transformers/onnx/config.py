@@ -89,6 +89,7 @@ class OnnxConfig(ABC):
     def default_batch_size(self) -> int:
         """
         The default batch size to use if no other indication
+
         Returns:
             Integer > 0
         """
@@ -99,6 +100,7 @@ class OnnxConfig(ABC):
     def default_sequence_length(self) -> int:
         """
         The default sequence length to use if no other indication
+
         Returns:
             Integer > 0
         """

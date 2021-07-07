@@ -177,15 +177,15 @@ if is_torch_available():
     )
 
     PYTORCH_EXPORT_DEFAULT_MODELS = {
-        # ("ALBERT", "albert-base-v2", AlbertModel, AlbertConfig, AlbertOnnxConfig),
-        # ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
-        # ("BERT", "bert-base-cased", BertModel, BertConfig, BertOnnxConfig),
-        # ("DistilBERT", "distilbert-base-cased", DistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
-        # ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
-        # # ("LongFormer", "longformer-base-4096", LongformerModel, LongformerConfig, LongformerOnnxConfig),
-        # ("Roberta", "roberta-base", RobertaModel, RobertaConfig, RobertaOnnxConfig),
-        # ("XLM-Roberta", "roberta-base", XLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
-        # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig)
+        ("ALBERT", "albert-base-v2", AlbertModel, AlbertConfig, AlbertOnnxConfig),
+        ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
+        ("BERT", "bert-base-cased", BertModel, BertConfig, BertOnnxConfig),
+        ("DistilBERT", "distilbert-base-cased", DistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
+        ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
+        # ("LongFormer", "longformer-base-4096", LongformerModel, LongformerConfig, LongformerOnnxConfig),
+        ("Roberta", "roberta-base", RobertaModel, RobertaConfig, RobertaOnnxConfig),
+        ("XLM-Roberta", "roberta-base", XLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
+        ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig),
     }
 
     PYTORCH_EXPORT_WITH_PAST_MODELS = {
@@ -243,9 +243,7 @@ class OnnxExportTestCaseV2(TestCase):
 
                 with NamedTemporaryFile("w") as output:
                     output = Path(output.name)
-                    onnx_inputs, onnx_outputs = export(
-                        tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, output
-                    )
+                    onnx_inputs, onnx_outputs = export(tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, output)
 
                     try:
                         validate_model_outputs(onnx_config, tokenizer, model, output, onnx_outputs, 1e-5)
