@@ -13,8 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Wav2Vec2 model configuration """
+from collections import OrderedDict
+from typing import Any, Mapping, Optional
+
+from transformers import PreTrainedTokenizer, TensorType
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -256,3 +261,41 @@ class Wav2Vec2Config(PretrainedConfig):
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
+
+
+class Wav2Vec2OnnxConfig(OnnxConfigWithPast):
+    DEFAULT_FIXED_SEQUENCE = 1024
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return {
+            "input_values": {0: "batch", 1: "sequence"},
+            "attention_mask": {0: "batch", 1: "sequence"},
+        }
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        return {
+            "last_hidden_state": {0: "batch", 1: "sequence"},
+            "extract_features": {0: "batch", 1: "sequence"},
+        }
+
+    @property
+    def default_sequence_length(self) -> int:
+        return Wav2Vec2OnnxConfig.DEFAULT_FIXED_SEQUENCE
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+        encodings = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+        ordered_encodings = OrderedDict({})
+
+        # Replace input_ids with input_values
+        ordered_encodings["input_values"] = encodings["input_ids"].long()
+        ordered_encodings["attention_mask"] = encodings["attention_mask"]
+        return ordered_encodings
