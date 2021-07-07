@@ -1571,9 +1571,8 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
             )
 
         # Shift the indices to the right to keep also the first token above the threshold
-        sorted_indices_to_remove = tf.roll(sorted_indices_to_remove, 1, axis=-1)
         sorted_indices_to_remove = tf.concat(
-            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, 1:]],
+            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, :-1]],
             -1,
         )
         # scatter sorted tensors to original indexing
