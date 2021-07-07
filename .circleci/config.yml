@@ -490,6 +490,18 @@ jobs:
                   cluster: $GKE_CLUSTER
                   perform-login: true
             - *delete_gke_jobs
+    
+    test_git_ci:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        resource_class: small
+        parallelism: 1
+        steps:
+            - checkout
+            - run: pip install --upgrade pip
+            - run: pip install GitPython
+            - run: python utils/git_diff.py
 
 workflow_filters: &workflow_filters
     filters:
