@@ -54,13 +54,13 @@ from ..electra.modeling_flax_electra import (
     FlaxElectraModel,
 )
 from ..gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
+from ..gpt_neo.modeling_flax_gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel
 from ..mbart.modeling_flax_mbart import (
     FlaxMBartForConditionalGeneration,
     FlaxMBartForQuestionAnswering,
     FlaxMBartForSequenceClassification,
     FlaxMBartModel,
 )
-from ..gpt_neo.modeling_flax_gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel
 from ..roberta.modeling_flax_roberta import (
     FlaxRobertaForMaskedLM,
     FlaxRobertaForMultipleChoice,
@@ -80,8 +80,8 @@ from .configuration_auto import (
     CLIPConfig,
     ElectraConfig,
     GPT2Config,
-    MBartConfig,
     GPTNeoConfig,
+    MBartConfig,
     RobertaConfig,
     T5Config,
     ViTConfig,

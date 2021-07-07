@@ -561,6 +561,33 @@ class FlaxGPTNeoModel:
         requires_backends(cls, ["flax"])
 
 
+class FlaxGPTNeoPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxMBartForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxMBartForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
 class FlaxMBartForSequenceClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
@@ -579,7 +606,7 @@ class FlaxMBartModel:
         requires_backends(cls, ["flax"])
 
 
-class FlaxGPTNeoPreTrainedModel:
+class FlaxMBartPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
