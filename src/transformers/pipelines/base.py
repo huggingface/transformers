@@ -136,7 +136,8 @@ def infer_framework_load_model(
                 model = model_class.from_pretrained(model, **kwargs)
                 # Stop loading on the first successful load.
                 break
-            except (OSError, ValueError):
+            except (OSError, ValueError) as err:
+                logger.warning(f"Failed to load {model} with {model_class.__name__}: {err}")
                 continue
 
         if isinstance(model, str):
