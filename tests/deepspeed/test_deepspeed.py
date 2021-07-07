@@ -25,7 +25,6 @@ from parameterized import parameterized
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStderr,
@@ -40,7 +39,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from transformers.trainer_utils import set_seed
+from transformers.trainer_utils import get_last_checkpoint, set_seed
 
 
 tests_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
@@ -715,8 +714,6 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
-
-
 
     def test_config_object(self):
         # test that we can switch from zero2 to zero3 in the same process for example
