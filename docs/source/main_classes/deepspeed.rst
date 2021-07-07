@@ -1537,13 +1537,14 @@ weights just run:
 
     python zero_to_fp32.py . pytorch_model.bin
 
-The script will automatically handle either ZeRO-2 or ZeRO-3 checkpoint.
+This is it. ``pytorch_model.bin`` will now contain the full fp32 model weights consolidated from multiple GPUs.
+
+The script will automatically be able to handle either a ZeRO-2 or ZeRO-3 checkpoint.
 
 ``python zero_to_fp32.py -h`` will give you usage details.
 
-If you have multiple DeepSpeed checkpoint sub-folders, pick the one you know to have the desired weights.
-
-This is it. ``pytorch_model.bin`` will now contain the full fp32 model weights consolidated from multiple GPUs.
+The script will auto-discover the deepspeed sub-folder using the contents of the file ``latest``, which in the current
+example will contain ``global_step1``.
 
 Note: currently the script requires 2x general RAM of the final fp32 model weights.
 
