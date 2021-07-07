@@ -588,7 +588,12 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    model = FlaxT5ForConditionalGeneration(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+    if model_args.model_name_or_path:
+        model = FlaxT5ForConditionalGeneration.from_pretrained(
+            model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+        )
+    else:
+        model = FlaxT5ForConditionalGeneration(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
     # Data collator
     # This one will take care of randomly masking the tokens.
