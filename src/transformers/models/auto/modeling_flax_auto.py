@@ -60,6 +60,7 @@ from ..mbart.modeling_flax_mbart import (
     FlaxMBartForSequenceClassification,
     FlaxMBartModel,
 )
+from ..gpt_neo.modeling_flax_gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel
 from ..roberta.modeling_flax_roberta import (
     FlaxRobertaForMaskedLM,
     FlaxRobertaForMultipleChoice,
@@ -80,6 +81,7 @@ from .configuration_auto import (
     ElectraConfig,
     GPT2Config,
     MBartConfig,
+    GPTNeoConfig,
     RobertaConfig,
     T5Config,
     ViTConfig,
@@ -98,6 +100,7 @@ FLAX_MODEL_MAPPING = OrderedDict(
         (BigBirdConfig, FlaxBigBirdModel),
         (BartConfig, FlaxBartModel),
         (GPT2Config, FlaxGPT2Model),
+        (GPTNeoConfig, FlaxGPTNeoModel),
         (ElectraConfig, FlaxElectraModel),
         (CLIPConfig, FlaxCLIPModel),
         (ViTConfig, FlaxViTModel),
@@ -151,7 +154,8 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-        (GPT2Config, FlaxGPT2LMHeadModel)
+        (GPT2Config, FlaxGPT2LMHeadModel),
+        (GPTNeoConfig, FlaxGPTNeoForCausalLM),
     ]
 )
 

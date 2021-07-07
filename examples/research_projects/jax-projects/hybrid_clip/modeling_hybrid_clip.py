@@ -123,7 +123,7 @@ class FlaxHybridCLIPModule(nn.Module):
 
 
 class FlaxHybridCLIP(FlaxPreTrainedModel):
-    config: HybridCLIPConfig
+    config_class = HybridCLIPConfig
     module_class = FlaxHybridCLIPModule
 
     def __init__(
@@ -304,6 +304,58 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
         *model_args,
         **kwargs,
     ) -> FlaxPreTrainedModel:
+        """
+        Params:
+            text_model_name_or_path (:obj: `str`, `optional`):
+                Information necessary to initiate the text model. Can be either:
+
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
+                    - A path to a `directory` containing model weights saved using
+                      :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                    - A path or url to a `PyTorch checkpoint folder` (e.g, ``./pt_model``). In
+                      this case, ``from_pt`` should be set to :obj:`True` and a configuration object should be provided
+                      as ``config`` argument. This loading path is slower than converting the PyTorch checkpoint in
+                      a Flax model using the provided conversion scripts and loading the Flax model afterwards.
+
+            vision_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+                Information necessary to initiate the vision model. Can be either:
+
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
+                    - A path to a `directory` containing model weights saved using
+                      :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                    - A path or url to a `PyTorch checkpoint folder` (e.g, ``./pt_model``). In
+                      this case, ``from_pt`` should be set to :obj:`True` and a configuration object should be provided
+                      as ``config`` argument. This loading path is slower than converting the PyTorch checkpoint in
+                      a Flax model using the provided conversion scripts and loading the Flax model afterwards.
+
+            model_args (remaining positional arguments, `optional`):
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+
+            kwargs (remaining dictionary of keyword arguments, `optional`):
+                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
+                :obj:`output_attentions=True`).
+
+                - To update the text configuration, use the prefix `text_` for each configuration parameter.
+                - To update the vision configuration, use the prefix `vision_` for each configuration parameter.
+                - To update the parent model configuration, do not use a prefix for each configuration parameter.
+
+                Behaves differently depending on whether a :obj:`config` is provided or automatically loaded.
+
+        Example::
+
+            >>> from transformers import FlaxHybridCLIP
+            >>> # initialize a model from pretrained BERT and CLIP models. Note that the projection layers will be randomly initialized.
+            >>> # If using CLIP's vision model the vision projection layer will be initialized using pre-trained weights
+            >>> model = FlaxHybridCLIP.from_text_vision_pretrained('bert-base-uncased', 'openai/clip-vit-base-patch32')
+            >>> # saving model after fine-tuning
+            >>> model.save_pretrained("./bert-clip")
+            >>> # load fine-tuned model
+            >>> model = FlaxHybridCLIP.from_pretrained("./bert-clip")
+        """
 
         kwargs_text = {
             argument[len("text_") :]: value for argument, value in kwargs.items() if argument.startswith("text_")
@@ -333,9 +385,7 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
                 text_config = AutoConfig.from_pretrained(text_model_name_or_path)
                 kwargs_text["config"] = text_config
 
-            text_model = FlaxAutoModel.from_pretrained(
-                text_model_name_or_path, *model_args, from_pt=True, **kwargs_text
-            )
+            text_model = FlaxAutoModel.from_pretrained(text_model_name_or_path, *model_args, **kwargs_text)
 
         vision_model = kwargs_vision.pop("model", None)
         if vision_model is None:

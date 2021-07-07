@@ -14,16 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Training a CLIP like dual encoder models using text and vision encoders in the library.
+Pre-training/Fine-tuning ViT for image classification .
 
-The script can be used to train CLIP like models for languages other than english by using
-a text encoder pre-trained in the desired language. Currently this script support the following vision
-and text models:
-Vision models: ViT(https://huggingface.co/models?filter=vit), CLIP (https://huggingface.co/models?filter=clip)
-Text models: BERT, ROBERTa (https://huggingface.co/models?filter=masked-lm)
+Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
+https://huggingface.co/models?filter=vit
 """
 
-import json
 import logging
 import os
 import sys
@@ -32,11 +28,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+# for dataset and preprocessing
 import torch
-from torchvision.datasets import VisionDataset
-from torchvision.io import ImageReadMode, read_image
-from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
-from torchvision.transforms.functional import InterpolationMode
+import torchvision
+import torchvision.transforms as transforms
 from tqdm import tqdm
 
 import jax
@@ -46,27 +41,24 @@ import transformers
 from flax import jax_utils
 from flax.jax_utils import unreplicate
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, shard, shard_prng_key
-from modeling_hybrid_clip import FlaxHybridCLIP
-from transformers import AutoTokenizer, HfArgumentParser, TrainingArguments, is_tensorboard_available, set_seed
+from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
+from transformers import (
+    CONFIG_MAPPING,
+    FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    AutoConfig,
+    FlaxAutoModelForImageClassification,
+    HfArgumentParser,
+    TrainingArguments,
+    is_tensorboard_available,
+    set_seed,
+)
 
 
 logger = logging.getLogger(__name__)
 
-# Cache the result
-has_tensorboard = is_tensorboard_available()
-if has_tensorboard:
-    try:
-        from flax.metrics.tensorboard import SummaryWriter
-    except ImportError as ie:
-        has_tensorboard = False
-        print(f"Unable to display metrics through TensorBoard because some package are not installed: {ie}")
 
-else:
-    print(
-        "Unable to display metrics through TensorBoard because the package is not installed: "
-        "Please run pip install tensorboard to enable."
-    )
+MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 @dataclass
@@ -75,34 +67,22 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
 
-    text_model_name_or_path: str = field(
+    model_name_or_path: Optional[str] = field(
+        default=None,
         metadata={
-            "help": "The text model checkpoint for weights initialization."
+            "help": "The model checkpoint for weights initialization."
             "Don't set if you want to train a model from scratch."
         },
     )
-    vision_model_name_or_path: str = field(
-        metadata={
-            "help": "The vision model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
-        },
-    )
-    from_pt: bool = field(
-        default=True,
-        metadata={"help": "whether to load the text and vision model using PyTorch checkpoints."},
+    model_type: Optional[str] = field(
+        default=None,
+        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
-    )
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
-    )
-    use_fast_tokenizer: bool = field(
-        default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
     )
     dtype: Optional[str] = field(
         default="float32",
@@ -118,21 +98,13 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    data_dir: Optional[str] = field(default=None, metadata={"help": "The data directory containing input files."})
-    train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a jsonlines file)."}
+    train_dir: str = field(
+        metadata={"help": "Path to the root training directory which contains one subdirectory per class."}
     )
-    validation_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
+    validation_dir: str = field(
+        metadata={"help": "Path to the root validation directory which contains one subdirectory per class."},
     )
-    max_seq_length: Optional[int] = field(
-        default=72,
-        metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
-        },
-    )
+    image_size: Optional[int] = field(default=224, metadata={"help": " The size (resolution) of each image."})
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
@@ -150,101 +122,10 @@ class DataTrainingArguments:
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
-    overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
-    )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-
-    def __post_init__(self):
-        if self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
-        else:
-            if self.train_file is not None:
-                extension = self.train_file.split(".")[-1]
-                assert extension == "json", "`train_file` should be a json file."
-            if self.validation_file is not None:
-                extension = self.validation_file.split(".")[-1]
-                assert extension == "json", "`validation_file` should be a json file."
-
-
-# We use torchvision for faster image pre-processing.
-# We need to ensure faster processing speed as it can become a bottleneck on TPU
-class Transform(torch.nn.Module):
-    def __init__(self, image_size):
-        super().__init__()
-        self.transforms = torch.nn.Sequential(
-            Resize([image_size], interpolation=InterpolationMode.BICUBIC),
-            CenterCrop(image_size),
-            ConvertImageDtype(torch.float),
-            Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad():
-            x = self.transforms(x)
-        return x
-
-
-class ImageTextDataset(VisionDataset):
-    """
-    Dtaset for loading image-text data for tasks like CLIP training, Image Captioning.
-
-    Args:
-        root: (string): The root path where the dataset is stored
-        file_path: (string): Path to the file containing the image_paths and associated captions.
-            The expected format is jsonlines where each line is a json object containing to keys.
-            `image_path`: The path to the image.
-            `captions`: An `array` of captions.
-        transform (callable, optional): A function/transform that  takes in an PIL image
-            and returns a transformed version. E.g, ``transforms.ToTensor``
-        target_transform (callable, optional): A function/transform that takes in the
-            target and transforms it.
-        transforms (callable, optional): A function/transform that takes input sample and its target as entry
-            and returns a transformed version.
-    """
-
-    def __init__(
-        self,
-        root: str,
-        file_path: str,
-        captions_per_image=2,
-        transform: Optional[Callable] = None,
-        target_transform: Optional[Callable] = None,
-        transforms: Optional[Callable] = None,
-    ):
-        super().__init__(root, transforms, transform, target_transform)
-
-        with open(file_path, "r") as f:
-            examples = [json.loads(line) for line in f.readlines()]
-
-        self.captions = []
-        self.image_paths = []
-
-        for example in examples:
-            self.captions.extend(example["captions"][:captions_per_image])
-            self.image_paths.extend([example["image_path"]] * captions_per_image)
-
-    def _load_image(self, idx: int):
-        path = self.image_paths[idx]
-        return read_image(path, mode=ImageReadMode.RGB)
-
-    def _load_target(self, idx):
-        return self.captions[idx]
-
-    def __getitem__(self, index: int):
-        image = self._load_image(index)
-        target = self._load_target(index)
-
-        if self.transforms is not None:
-            image, target = self.transforms(image, target)
-
-        return image, target
-
-    def __len__(self) -> int:
-        return len(self.captions)
 
 
 class TrainState(train_state.TrainState):
@@ -282,6 +163,10 @@ def create_learning_rate_fn(
 
 
 def main():
+    # See all possible arguments in src/transformers/training_args.py
+    # or by passing the --help flag to this script.
+    # We now keep distinct sets of args, for a cleaner separation of concerns.
+
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
@@ -317,50 +202,65 @@ def main():
     # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info(f"Training/evaluation parameters {training_args}")
 
-    if model_args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
-        )
-    elif model_args.text_model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.text_model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
-        )
-    else:
-        raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
-            "You can do it from another script, save it, and load it from here, using --tokenizer_name."
-        )
-
-    model = FlaxHybridCLIP.from_text_vision_pretrained(
-        model_args.text_model_name_or_path,
-        model_args.vision_model_name_or_path,
-        seed=training_args.seed,
-        dtype=getattr(jnp, model_args.dtype),
-        text_from_pt=model_args.from_pt,
-        vision_from_pt=model_args.from_pt,
-    )
-    config = model.config
-    # set seed for torch dataloaders
+    # set seed for random transforms and torch dataloaders
     set_seed(training_args.seed)
 
-    # Initialize torchvision transforms and jit them for faster processing
-    preprocess = Transform(config.vision_config.image_size)
-    preprocess = torch.jit.script(preprocess)
-
-    # Initialize the image-text dataset
-    train_dataset = ImageTextDataset(
-        data_args.data_dir,
-        data_args.train_file,
-        captions_per_image=2,
-        transform=preprocess,
+    # Initialize datasets and pre-processing transforms
+    # We use torchvision here for faster pre-processing
+    # Note that here we are using some default pre-processing, for maximum accuray
+    # one should tune this part and carefully select what transformations to use.
+    normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    train_dataset = torchvision.datasets.ImageFolder(
+        data_args.train_dir,
+        transforms.Compose(
+            [
+                transforms.RandomResizedCrop(data_args.image_size),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize,
+            ]
+        ),
     )
 
-    eval_dataset = ImageTextDataset(
-        data_args.data_dir,
-        data_args.validation_file,
-        captions_per_image=1,
-        transform=preprocess,
+    eval_dataset = torchvision.datasets.ImageFolder(
+        data_args.validation_dir,
+        transforms.Compose(
+            [
+                transforms.Resize(data_args.image_size),
+                transforms.CenterCrop(data_args.image_size),
+                transforms.ToTensor(),
+                normalize,
+            ]
+        ),
     )
+
+    # Load pretrained model and tokenizer
+    if model_args.config_name:
+        config = AutoConfig.from_pretrained(
+            model_args.config_name,
+            num_labels=len(train_dataset.classes),
+            image_size=data_args.image_size,
+            cache_dir=model_args.cache_dir,
+        )
+    elif model_args.model_name_or_path:
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path,
+            num_labels=len(train_dataset.classes),
+            image_size=data_args.image_size,
+            cache_dir=model_args.cache_dir,
+        )
+    else:
+        config = CONFIG_MAPPING[model_args.model_type]()
+        logger.warning("You are instantiating a new config instance from scratch.")
+
+    if model_args.model_name_or_path:
+        model = FlaxAutoModelForImageClassification.from_pretrained(
+            model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+        )
+    else:
+        model = FlaxAutoModelForImageClassification.from_config(
+            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+        )
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
@@ -369,17 +269,12 @@ def main():
     steps_per_epoch = len(train_dataset) // train_batch_size
     total_train_steps = steps_per_epoch * num_epochs
 
-    # Use collate function to tokenizer the text and convert the processed images to numpy
     def collate_fn(examples):
-        pixel_values = torch.stack([example[0] for example in examples]).permute(0, 2, 3, 1).numpy()
-        captions = [example[1] for example in examples]
-        inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", return_tensors="np")
+        pixel_values = torch.stack([example[0] for example in examples])
+        labels = torch.tensor([example[1] for example in examples])
 
-        batch = {
-            "pixel_values": pixel_values,
-            "input_ids": inputs["input_ids"],
-            "attention_mask": inputs["attention_mask"],
-        }
+        batch = {"pixel_values": pixel_values, "labels": labels}
+        batch = {k: v.numpy() for k, v in batch.items()}
 
         return batch
 
@@ -405,8 +300,22 @@ def main():
     )
 
     # Enable tensorboard only on the master node
+    has_tensorboard = is_tensorboard_available()
     if has_tensorboard and jax.process_index() == 0:
-        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+        try:
+            from flax.metrics.tensorboard import SummaryWriter
+
+            summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
+        except ImportError as ie:
+            has_tensorboard = False
+            logger.warning(
+                f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+            )
+    else:
+        logger.warning(
+            "Unable to display metrics through TensorBoard because the package is not installed: "
+            "Please run pip install tensorboard to enable."
+        )
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
@@ -433,23 +342,18 @@ def main():
     # Setup train state
     state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw, dropout_rng=dropout_rng)
 
-    def cross_entropy(logits, axis):
-        logprobs = jax.nn.log_softmax(logits, axis=axis)
-        nll = jnp.diag(logprobs)
-        ce = -jnp.mean(nll)
-        return ce
-
-    def clip_loss(similarity):
-        loss = (cross_entropy(similarity, axis=0) + cross_entropy(similarity, axis=1)) / 2
-        return loss
+    def loss_fn(logits, labels):
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1]))
+        return loss.mean()
 
     # Define gradient update step fn
     def train_step(state, batch):
         dropout_rng, new_dropout_rng = jax.random.split(state.dropout_rng)
 
         def compute_loss(params):
+            labels = batch.pop("labels")
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-            loss = clip_loss(logits)
+            loss = loss_fn(logits, labels)
             return loss
 
         grad_fn = jax.value_and_grad(compute_loss)
@@ -465,11 +369,13 @@ def main():
 
     # Define eval fn
     def eval_step(params, batch):
+        labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
-        loss = clip_loss(logits)
+        loss = loss_fn(logits, labels)
 
         # summarize metrics
-        metrics = {"loss": loss}
+        accuracy = (jnp.argmax(logits, axis=-1) == labels).mean()
+        metrics = {"loss": loss, "accuracy": accuracy}
         metrics = jax.lax.pmean(metrics, axis_name="batch")
         return metrics
 
@@ -488,9 +394,6 @@ def main():
     logger.info(f"  Total optimization steps = {total_train_steps}")
 
     train_time = 0
-    # Create sampling rng
-    rng, input_rng = jax.random.split(rng)
-
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:
         # ======================== Training ================================
@@ -533,12 +436,14 @@ def main():
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
-
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
         # Print metrics and update progress bar
         eval_step_progress_bar.close()
-        desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']})"
+        desc = (
+            f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {round(eval_metrics['loss'].item(), 4)} | "
+            f"Eval Accuracy: {round(eval_metrics['accuracy'].item(), 4)})"
+        )
         epochs.write(desc)
         epochs.desc = desc
 
@@ -549,7 +454,7 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(unreplicate(state.params))
+            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(
                 training_args.output_dir,
                 params=params,

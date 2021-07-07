@@ -543,7 +543,7 @@ class FlaxGPT2PreTrainedModel:
         requires_backends(cls, ["flax"])
 
 
-class FlaxMBartForConditionalGeneration:
+class FlaxGPTNeoForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -552,7 +552,7 @@ class FlaxMBartForConditionalGeneration:
         requires_backends(cls, ["flax"])
 
 
-class FlaxMBartForQuestionAnswering:
+class FlaxGPTNeoModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -579,7 +579,7 @@ class FlaxMBartModel:
         requires_backends(cls, ["flax"])
 
 
-class FlaxMBartPreTrainedModel:
+class FlaxGPTNeoPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
