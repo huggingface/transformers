@@ -1110,7 +1110,8 @@ class Trainer:
         else:
             # see __init__. max_steps is set when the dataset has no __len__
             max_steps = args.max_steps
-            num_train_epochs = int(args.num_train_epochs)
+            # Setting a very large number of epochs so we go as many times as necessary over the iterator.
+            num_train_epochs = sys.maxsize
             num_update_steps_per_epoch = max_steps
             num_train_samples = args.max_steps * total_train_batch_size
 
