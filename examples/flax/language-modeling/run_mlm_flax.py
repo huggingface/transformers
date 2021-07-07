@@ -478,7 +478,14 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    model = FlaxAutoModelForMaskedLM.from_config(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+    if model_args.model_name_or_path:
+        model = FlaxAutoModelForMaskedLM.from_pretrained(
+            model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+        )
+    else:
+        model = FlaxAutoModelForMaskedLM.from_config(
+            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+        )
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
