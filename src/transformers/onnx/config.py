@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
 from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
@@ -83,6 +84,25 @@ class OnnxConfig(ABC):
             return {"use_cache": False}
 
         return None
+
+    @property
+    def default_batch_size(self) -> int:
+        """
+        The default batch size to use if no other indication
+        Returns:
+            Integer > 0
+        """
+        # Using 2 avoid ONNX making assumption about single sample batch
+        return OnnxConfig.DEFAULT_FIXED_BATCH
+
+    @property
+    def default_sequence_length(self) -> int:
+        """
+        The default sequence length to use if no other indication
+        Returns:
+            Integer > 0
+        """
+        return OnnxConfig.DEFAULT_FIXED_SEQUENCE
 
     @property
     def default_onnx_opset(self) -> int:
@@ -184,18 +204,18 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
     ) -> Mapping[str, Any]:
         # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
         batch_size = compute_effective_axis_dimension(
-            batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
+            batch_size, fixed_dimension=self.default_batch_size, num_token_to_add=0
         )
 
         # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
         token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
 
         # When use_past the caching mechanism requires inputs to be only 1 single token
-        fixed_sequence_length = 1 if self.use_past else OnnxConfig.DEFAULT_FIXED_SEQUENCE
+        fixed_sequence_length = 1 if self.use_past else self.default_sequence_length
         seq_length = compute_effective_axis_dimension(
             seq_length, fixed_dimension=fixed_sequence_length, num_token_to_add=token_to_add
         )
 
         # Generate dummy inputs according to compute batch and sequence
         dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
-        return dict(tokenizer(dummy_input, return_tensors=framework))
+        return OrderedDict(dict(tokenizer(dummy_input, return_tensors=framework)))
