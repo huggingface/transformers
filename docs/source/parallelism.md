@@ -19,20 +19,20 @@ limitations under the License.
 
 ## Parallelism overview
 
-In the modern machine learning the various approaches to Parallelism are used to:
+In the modern machine learning the various approaches to parallelism are used to:
 1. fit very large models onto limited hardware - e.g. t5-11b is 45GB in just model params
 2. significantly speed up training - finish training that would take a year in hours
 
 We will first discuss in depth various 1D parallelism techniques and their pros and cons and then look at how they can be combined into 2D and 3D parallelism to enable an even faster training and to support even bigger models. Various other powerful alternative approaches will be presented.
 
-While the main concepts most likely will apply to any other framework, this article is focused on Pytorch-based implementations.
+While the main concepts most likely will apply to any other framework, this article is focused on PyTorch-based implementations.
 
 
 ## Concepts
 
 The following is the brief description of the main concepts that will be described later in depth in this document.
 
-1. DataParallel (DP) - the same setup is replicated multiple times, and each being fed a slice of the data - the processing is done in parallel and all setups are synchronized at the end of each training step.
+1. DataParallel (DP) - the same setup is replicated multiple times, and each being fed a slice of the data. The processing is done in parallel and all setups are synchronized at the end of each training step.
 2. TensorParallel (TP) - each tensor is split up into multiple chunks, so instead of having the whole tensor reside on a single gpu, each shard of the tensor resides on its designated gpu. During processing each shard gets processed separately and in parallel on different GPUs and the results are synced at the end of the step. This is what one may call horizontal parallelism, as the splitting happens on horizontal level.
 3. PipelineParallel (PP) - the model is split up vertically (layer-level) across multiple GPUs, so that only one or several layers of the model are places on a single gpu. Each gpu processes in parallel different stages of the pipeline and working on a small chunk of the batch.
 4. Zero Redundancy Optimizer (ZeRO) - Also performs sharding of the tensors somewhat similar to TP, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model does't need to be modified. It also supports various offloading techniques to compensate for limited GPU memory.
@@ -115,7 +115,7 @@ To me this sounds like an efficient group backpacking weight distribution strate
 
 Now each night they all share what they have with others and get from others what the don't have, and in the morning they pack up their allocated type of gear and continue on their way. This is Sharded DDP / Zero DP.
 
-Compare this strategy to the simple one where each person has to carry their own tent, stove and axe, which would be far more inefficient. This is DataParallel in Pytorch.
+Compare this strategy to the simple one where each person has to carry their own tent, stove and axe, which would be far more inefficient. This is DataParallel (DP and DDP) in Pytorch.
 
 While reading the literature on this topic you may encounter the following synonyms: Sharded, Partitioned.
 
@@ -146,7 +146,7 @@ Now while data travels from layer 0 to 1, 1 to 2 and 2 to 3 this is just the nor
 Then layers 4 to 5 to 6 to 7 are as a normal model would have and when the 7th layer completes we often need to send the data back to layer 0 where the labels are (or alternatively send the labels to the the last layer). Now the loss can be computed and the optimizer can do its work.
 
 Problems:
-- the main deficiency and why this one is called "naive" MP, is that all but one GPU is idle at any given moment. So if 4 GPUs are used - it's almost identical to quadrupling the amount of memory of a single GPU, and ignoring the rest of the hardware. Plus there is the overhead of copying the data between devices. So 4x 6GB cards will be able to accommodate the same size as 1x 24GB card using naive MP, except the latter will complete the training faster, since it doesn't have the data copying overhead. But, say, if you have 40GB cards and need to fit a 45GB model you can with 4x 40GB cards (but barely because of the gradient and optimizer states)
+- the main deficiency and why this one is called "naive" MP, is that all but one GPU is idle at any given moment. So if 4 GPUs are used, it's almost identical to quadrupling the amount of memory of a single GPU, and ignoring the rest of the hardware. Plus there is the overhead of copying the data between devices. So 4x 6GB cards will be able to accommodate the same size as 1x 24GB card using naive MP, except the latter will complete the training faster, since it doesn't have the data copying overhead. But, say, if you have 40GB cards and need to fit a 45GB model you can with 4x 40GB cards (but barely because of the gradient and optimizer states)
 - shared embeddings may need to get copied back and forth between GPUs.
 
 Pipeline Parallel (PP) is almost identical to a naive MP, but it solves the GPU idling problem, by chunking the incoming batch into micro-batches and artificially creating a pipeline, which allows different GPUs to concurrently participate in the computation process.
@@ -155,7 +155,7 @@ The following illustration from the [GPipe paper](https://ai.googleblog.com/2019
 
 ![mp-pp](imgs/parallelism-gpipe-bubble.png)
 
-It's easy to see from the bottom diagram how PP has less dead zones, where GPUs are idle. The idle parts are referred to as the "buble".
+It's easy to see from the bottom diagram how PP has less dead zones, where GPUs are idle. The idle parts are referred to as the "bubble".
 
 Both parts of the diagram show a parallelism that is of degree 4. That is 4 GPUs are participating in the pipeline. So there is the forward path of 4 pipe stages F0, F1, F2 and F3 and then the return reverse order backward path of B3, B2, B1 and B0.
 
