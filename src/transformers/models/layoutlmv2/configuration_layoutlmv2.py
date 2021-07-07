@@ -70,8 +70,33 @@ class LayoutLMv2Config(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
-        ...
+        max_2d_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
+            The maximum value that the 2D position embedding might ever used. Typically set this to something large
+            just in case (e.g., 1024).
+        max_rel_pos (:obj:`int`, `optional`, defaults to 128):
             ...
+        rel_pos_bins (:obj:`int`, `optional`, defaults to 32):
+            ...
+        fast_qkv (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to use a single matrix for the queries, keys, values in the self-attention layers.
+        max_rel_2d_pos (:obj:`int`, `optional`, defaults to 256):
+            ...
+        rel_2d_pos_bins (:obj:`int`, `optional`, defaults to 64):
+            ...
+        convert_sync_batchnorm (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            ...
+        image_feature_pool_shape (:obj:`List[int]`, `optional`, defaults to [7, 7, 256]):
+            The shape of the average-pooled feature map.
+        coordinate_size (:obj:`int`, `optional`, defaults to 128):
+            ...
+        shape_size (:obj:`int`, `optional`, defaults to 128):
+            ...
+        has_relative_attention_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to use a relative attention bias.
+        has_spatial_attention_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to use a spatial attention bias.
+        has_visual_segment_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to add visual segment embeddings.
 
         Example::
 

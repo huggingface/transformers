@@ -30,12 +30,7 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, TokenClassifierOutput
-from ...modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...utils import logging
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
@@ -196,25 +191,6 @@ class LayoutLMv2Attention(nn.Module):
         super().__init__()
         self.self = LayoutLMv2SelfAttention(config)
         self.output = LayoutLMv2SelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -713,28 +689,27 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
+    def _calc_text_embeddings(self, input_ids, bbox, position_ids, token_type_ids, inputs_embeds=None):
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
 
-    def _calc_text_embeddings(self, input_ids, bbox, position_ids, token_type_ids):
-        seq_length = input_ids.size(1)
+        seq_length = input_shape[1]
+
         if position_ids is None:
             position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
 
-        words_embeddings = self.embeddings.word_embeddings(input_ids)
+        if inputs_embeds is None:
+            inputs_embeds = self.embeddings.word_embeddings(input_ids)
         position_embeddings = self.embeddings.position_embeddings(position_ids)
         spatial_position_embeddings = self.embeddings._cal_spatial_position_embeddings(bbox)
         token_type_embeddings = self.embeddings.token_type_embeddings(token_type_ids)
 
-        embeddings = words_embeddings + position_embeddings + spatial_position_embeddings + token_type_embeddings
+        embeddings = inputs_embeds + position_embeddings + spatial_position_embeddings + token_type_embeddings
         embeddings = self.embeddings.LayerNorm(embeddings)
         embeddings = self.embeddings.dropout(embeddings)
         return embeddings
@@ -848,9 +823,9 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         if position_ids is None:
             seq_length = input_shape[1]
             position_ids = self.embeddings.position_ids[:, :seq_length]
-            position_ids = position_ids.expand_as(input_ids)
+            position_ids = position_ids.expand(input_shape)
 
-        visual_position_ids = torch.arange(0, visual_shape[1], dtype=torch.long, device=input_ids.device).repeat(
+        visual_position_ids = torch.arange(0, visual_shape[1], dtype=torch.long, device=device).repeat(
             input_shape[0], 1
         )
         final_position_ids = torch.cat([position_ids, visual_position_ids], dim=1)
@@ -863,6 +838,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
             bbox=bbox,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
         )
 
         visual_emb = self._calc_img_embeddings(
@@ -982,7 +958,12 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        seq_length = input_ids.size(1)
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
         sequence_output, _ = outputs[0][:, :seq_length], outputs[0][:, seq_length:]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
