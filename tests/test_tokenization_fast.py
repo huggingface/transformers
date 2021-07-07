@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import concurrent.futures
 import shutil
 import tempfile
 import unittest
@@ -90,3 +91,21 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
                     # is restored
                     shutil.rmtree(self.tmpdirname)
                     self.tmpdirname = tmpdirname_orig
+
+
+@require_tokenizers
+class ReduceMutableBorrowTests(unittest.TestCase):
+    def test_async_share_tokenizer(self):
+        tokenizer = PreTrainedTokenizerFast.from_pretrained("gpt2")
+        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        text = "The Matrix is a 1999 science fiction action film."
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(self.fetch, tokenizer, text) for i in range(10)]
+            return_value = [future.result() for future in futures]
+            self.assertEqual(
+                return_value, [[464, 24936, 318, 257, 7358, 3783, 10165, 2223, 2646, 13] for i in range(10)]
+            )
+
+    def fetch(self, tokenizer, text):
+        return tokenizer.encode(text, truncation="longest_first", padding="longest")
