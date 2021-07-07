@@ -16,6 +16,15 @@
 from git import Repo
 
 repo = Repo(".")
-print(repo.merge_base(repo.refs.master, repo.head))
-print(repo.refs.master.commit)
-print(repo.head.commit)
+branching_commits = repo.merge_base(repo.refs.master, repo.head)
+
+for commit in branching_commits:
+    print(f"Branching commit: {branching_commits[0]}")
+
+print(f"Master is at {repo.refs.master.commit}")
+print(f"Current head is at {repo.head.commit}")
+
+print("### DIFF ###")
+for commit in branching_commits:
+    for diff_obj in branching_commit.diff(repo.head.commit):
+        print(diff_obj.change_type, diff_obj.a_path, diff_obj.b_path, diff_obj)
