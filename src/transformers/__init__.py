@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING
 # Check the dependencies satisfy the minimal versions required.
 from . import dependency_versions_check
 from .file_utils import (
-    _BaseLazyModule,
+    _LazyModule,
     is_flax_available,
     is_sentencepiece_available,
     is_speech_available,
@@ -2861,26 +2861,7 @@ if TYPE_CHECKING:
         from .utils.dummy_flax_objects import *
 
 else:
-    import importlib
-    import os
     import sys
-
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-        def __getattr__(self, name: str):
-            # Special handling for the version, which is a constant from this module and not imported in a submodule.
-            if name == "__version__":
-                return __version__
-            return super().__getattr__(name)
 
     sys.modules[__name__] = _LazyModule(__name__, _import_structure)
 
