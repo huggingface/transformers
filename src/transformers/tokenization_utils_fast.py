@@ -339,21 +339,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
         """
         _truncation = self._tokenizer.truncation
+        _padding = self._tokenizer.padding
         # Set truncation and padding on the backend tokenizer
         if truncation_strategy == TruncationStrategy.DO_NOT_TRUNCATE:
             if _truncation is not None:
                 self._tokenizer.no_truncation()
-        elif truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
-
+        else:
             target = {"max_length": max_length, "stride": stride, "strategy": truncation_strategy.value}
             if _truncation != target:
                 self._tokenizer.enable_truncation(**target)
 
-        _padding = self._tokenizer.padding
-        if truncation_strategy == PaddingStrategy.DO_NOT_PAD:
+        if padding_strategy == PaddingStrategy.DO_NOT_PAD:
             if _padding is not None:
                 self._tokenizer.no_padding()
-        elif padding_strategy != PaddingStrategy.DO_NOT_PAD:
+        else:
             length = max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None
             target = {
                 "length": length,
