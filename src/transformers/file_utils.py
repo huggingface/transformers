@@ -1872,7 +1872,7 @@ class _LazyModule(ModuleType):
 
     # Very heavily inspired by optuna.integration._IntegrationModule
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
-    def __init__(self, name, module_file, import_structure, version=None):
+    def __init__(self, name, module_file, import_structure, extra_objects=None):
         super().__init__(name)
         self._modules = set(import_structure.keys())
         self._class_to_module = {}
@@ -1883,17 +1883,15 @@ class _LazyModule(ModuleType):
         self.__all__ = list(import_structure.keys()) + sum(import_structure.values(), [])
         self.__file__ = module_file
         self.__path__ = [os.path.dirname(module_file)]
-        self._has_version = version is not None
-        if self._has_version:
-            self.__version__ = version
+        self._objects = {} if extra_objects is None else extra_objects
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
         return super().__dir__() + self.__all__
 
     def __getattr__(self, name: str) -> Any:
-        if name == "__version__" and self._has_version:
-            return self.__version__
+        if name in self._objects:
+            return self._objects[name]
         if name in self._modules:
             value = self._get_module(name)
         elif name in self._class_to_module.keys():

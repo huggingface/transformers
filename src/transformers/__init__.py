@@ -3060,7 +3060,9 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, version=__version__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, extra_objects={"__version__": __version__}
+    )
 
 
 if not is_tf_available() and not is_torch_available() and not is_flax_available():

@@ -76,4 +76,22 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    class _MT5LazyModule(_LazyModule):
+        """
+        Module class that surfaces all objects but only performs associated imports when the objects are requested.
+        """
+
+        def __getattr__(self, name):
+            if name == "MT5Tokenizer":
+                return MT5Tokenizer
+            elif name == "MT5TokenizerFast":
+                return MT5TokenizerFast
+            else:
+                return super().__getattr__(name)
+
+    sys.modules[__name__] = _MT5LazyModule(
+        __name__,
+        globals()["__file__"],
+        _import_structure,
+        extra_objects={"MT5Tokenizer": MT5Tokenizer, "MT5TokenizerFast": MT5TokenizerFast},
+    )
