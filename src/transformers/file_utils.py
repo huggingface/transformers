@@ -34,7 +34,7 @@ from contextlib import contextmanager
 from dataclasses import fields
 from enum import Enum
 from functools import partial, wraps
-from hashlib import sha256
+from hashlib import sha1, sha256
 from pathlib import Path
 from types import ModuleType
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
@@ -1280,6 +1280,74 @@ def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
                     cached_models.append((url, etag, size_MB))
 
     return cached_models
+
+
+def fsck_etags(cache_dir: Union[str, Path] = None):
+    """
+    Use the stored etags to verify all the cache data is consistent.
+
+    Note that this detects data corruption but is not cryptographically secure.
+
+    Args:
+        cache_dir (:obj:`Union[str, Path]`, `optional`):
+            The cache directory to search for models within. Will default to the transformers cache if unset.
+
+    Returns:
+        bool: True if all metadata in cache represents its data correctly
+    """
+    if cache_dir is None:
+        cache_dir = TRANSFORMERS_CACHE
+    elif isinstance(cache_dir, Path):
+        cache_dir = str(cache_dir)
+
+    status = True
+
+    for meta_name in os.listdir(cache_dir):
+        if meta_name.endswith(".json"):
+
+            meta_path = os.path.join(cache_dir, meta_name)
+            lock_path = meta_path[: meta_path.rfind(".")] + ".lock"
+
+            with FileLock(lock_path):
+                with open(meta_path, encoding="utf-8") as meta_file:
+                    metadata = json.load(meta_file)
+
+                url = metadata["url"]
+                etag = metadata["etag"]
+                file_name = url_to_filename(url, etag)
+                file_path = os.path.join(cache_dir, file_name)
+
+                calculated_etag = None
+
+                if os.path.exists(file_path) and file_name + ".json" == meta_name:
+
+                    file_size = os.path.getsize(file_path)
+                    git_pfx = "blob " + str(file_size) + "\0"
+
+                    for hasher in sha256(), sha1(git_pfx.encode("utf-8")):
+
+                        with open(file_path, "rb") as file:
+                            chunk = file.read(1048576)
+                            while chunk:
+                                hasher.update(chunk)
+                                chunk = file.read(1048576)
+
+                        calculated_etag = '"' + hasher.hexdigest() + '"'
+                        if calculated_etag == etag:
+                            break
+
+                if calculated_etag != etag:
+                    status = False
+                    logger.error(f"{url} {etag} FAILED checksum: renaming to .corrupt")
+
+                    for path in meta_path, file_path, lock_path:
+                        if os.path.exists(path):
+                            os.rename(path, path + ".corrupt")
+
+                    logger.warning(f"-> {file_path}.corrupt")
+                else:
+                    logger.info(f"{url} {etag}: ok")
+    return status
 
 
 def cached_path(
