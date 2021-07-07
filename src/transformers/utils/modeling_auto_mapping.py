@@ -183,6 +183,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         ("RemBertConfig", "RemBertForSequenceClassification"),
+        ("LayoutLMv2Config", "LayoutLMv2ForSequenceClassification"),
         ("CanineConfig", "CanineForSequenceClassification"),
         ("RoFormerConfig", "RoFormerForSequenceClassification"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForSequenceClassification"),

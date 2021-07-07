@@ -173,7 +173,11 @@ from ..layoutlm.modeling_layoutlm import (
     LayoutLMForTokenClassification,
     LayoutLMModel,
 )
-from ..layoutlmv2.modeling_layoutlmv2 import LayoutLMv2ForTokenClassification, LayoutLMv2ForSequenceClassification, LayoutLMv2Model
+from ..layoutlmv2.modeling_layoutlmv2 import (
+    LayoutLMv2ForSequenceClassification,
+    LayoutLMv2ForTokenClassification,
+    LayoutLMv2Model,
+)
 from ..led.modeling_led import (
     LEDForConditionalGeneration,
     LEDForQuestionAnswering,

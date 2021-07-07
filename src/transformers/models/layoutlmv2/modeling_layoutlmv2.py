@@ -29,7 +29,12 @@ from ...file_utils import (
     is_detectron2_available,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput, TokenClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    SequenceClassifierOutput,
+    TokenClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...utils import logging
 from .configuration_layoutlmv2 import LayoutLMv2Config
@@ -894,9 +899,10 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    LayoutLMv2 Model with a sequence classification head on top (a linear layer on top of the concatenation of the final hidden state
-    of the [CLS] token, average-pooled initial visual embeddings and average-pooled final visual embeddings, e.g. for
-    document image classification tasks such as the `RVL-CDIP <https://www.cs.cmu.edu/~aharley/rvl-cdip/>`__ dataset.
+    LayoutLMv2 Model with a sequence classification head on top (a linear layer on top of the concatenation of the
+    final hidden state of the [CLS] token, average-pooled initial visual embeddings and average-pooled final visual
+    embeddings, e.g. for document image classification tasks such as the `RVL-CDIP
+    <https://www.cs.cmu.edu/~aharley/rvl-cdip/>`__ dataset.
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
@@ -906,7 +912,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         self.num_labels = config.num_labels
         self.layoutlmv2 = LayoutLMv2Model(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size*3, config.num_labels)
+        self.classifier = nn.Linear(config.hidden_size * 3, config.num_labels)
 
         self.init_weights()
 
@@ -959,7 +965,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
             input_shape = inputs_embeds.size()[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-        
+
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         visual_shape = list(input_shape)
@@ -999,17 +1005,17 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
             dim=-1,
         ).view(-1, bbox.size(-1))
         visual_bbox = visual_bbox.repeat(final_shape[0], 1, 1)
-        
+
         visual_position_ids = torch.arange(0, visual_shape[1], dtype=torch.long, device=device).repeat(
             input_shape[0], 1
         )
-        
+
         initial_image_embeddings = self.layoutlmv2._calc_img_embeddings(
             image=image,
             bbox=visual_bbox,
             position_ids=visual_position_ids,
         )
-        
+
         outputs = self.layoutlmv2(
             input_ids=input_ids,
             bbox=bbox,
@@ -1030,14 +1036,16 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 
         seq_length = input_shape[1]
         sequence_output, final_image_embeddings = outputs[0][:, :seq_length], outputs[0][:, seq_length:]
-        
-        cls_final_output = sequence_output[:,0,:]
+
+        cls_final_output = sequence_output[:, 0, :]
 
         # average-pool the visual embeddings
         pooled_initial_image_embeddings = initial_image_embeddings.mean(dim=1)
         pooled_final_image_embeddings = final_image_embeddings.mean(dim=1)
         # concatenate with cls_final_output
-        sequence_output = torch.cat([cls_final_output, pooled_initial_image_embeddings, pooled_final_image_embeddings], dim=1)
+        sequence_output = torch.cat(
+            [cls_final_output, pooled_initial_image_embeddings, pooled_final_image_embeddings], dim=1
+        )
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 
@@ -1065,9 +1073,10 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    LayoutLMv2 Model with a token classification head on top (a linear layer on top of the above the text part of the hidden states) 
-    e.g. for sequence labeling (information extraction) tasks such as `FUNSD <https://guillaumejaume.github.io/FUNSD/>`__, 
-    `SROIE <https://rrc.cvc.uab.es/?ch=13>`__ and `CORD <https://github.com/clovaai/cord>`__.
+    LayoutLMv2 Model with a token classification head on top (a linear layer on top of the above the text part of the
+    hidden states) e.g. for sequence labeling (information extraction) tasks such as `FUNSD
+    <https://guillaumejaume.github.io/FUNSD/>`__, `SROIE <https://rrc.cvc.uab.es/?ch=13>`__ and `CORD
+    <https://github.com/clovaai/cord>`__.
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
@@ -1140,7 +1149,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
             input_shape = inputs_embeds.size()[:-1]
 
         seq_length = input_shape[1]
-        # only take the text part of the output representations 
+        # only take the text part of the output representations
         sequence_output = outputs[0][:, :seq_length]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
