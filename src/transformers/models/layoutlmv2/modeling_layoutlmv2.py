@@ -20,7 +20,7 @@ import math
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -29,7 +29,7 @@ from ...file_utils import (
     is_detectron2_available,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, TokenClassifierOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...utils import logging
 from .configuration_layoutlmv2 import LayoutLMv2Config
@@ -894,9 +894,180 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    LayoutLMv2 Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
-    for sequence labeling (information extraction) tasks such as the `FUNSD
-    <https://guillaumejaume.github.io/FUNSD/>`__ dataset and the `SROIE <https://rrc.cvc.uab.es/?ch=13>`__ dataset.
+    LayoutLMv2 Model with a sequence classification head on top (a linear layer on top of the concatenation of the final hidden state
+    of the [CLS] token, average-pooled initial visual embeddings and average-pooled final visual embeddings, e.g. for
+    document image classification tasks such as the `RVL-CDIP <https://www.cs.cmu.edu/~aharley/rvl-cdip/>`__ dataset.
+    """,
+    LAYOUTLMV2_START_DOCSTRING,
+)
+class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.layoutlmv2 = LayoutLMv2Model(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size*3, config.num_labels)
+
+        self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.layoutlmv2.embeddings.word_embeddings
+
+    @add_start_docstrings_to_model_forward(LAYOUTLMV2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        bbox=None,
+        image=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+            >>> from transformers import LayoutLMv2Tokenizer, LayoutLMv2ForSequenceClassification
+
+            >>> ...
+
+            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
+            ...                 labels=sequence_labels)
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        visual_shape = list(input_shape)
+        visual_shape[1] = self.config.image_feature_pool_shape[0] * self.config.image_feature_pool_shape[1]
+        visual_shape = torch.Size(visual_shape)
+        final_shape = list(input_shape)
+        final_shape[1] += visual_shape[1]
+        final_shape = torch.Size(final_shape)
+
+        visual_bbox_x = (
+            torch.arange(
+                0,
+                1000 * (self.config.image_feature_pool_shape[1] + 1),
+                1000,
+                device=device,
+                dtype=bbox.dtype,
+            )
+            // self.config.image_feature_pool_shape[1]
+        )
+        visual_bbox_y = (
+            torch.arange(
+                0,
+                1000 * (self.config.image_feature_pool_shape[0] + 1),
+                1000,
+                device=device,
+                dtype=bbox.dtype,
+            )
+            // self.config.image_feature_pool_shape[0]
+        )
+        visual_bbox = torch.stack(
+            [
+                visual_bbox_x[:-1].repeat(self.config.image_feature_pool_shape[0], 1),
+                visual_bbox_y[:-1].repeat(self.config.image_feature_pool_shape[1], 1).transpose(0, 1),
+                visual_bbox_x[1:].repeat(self.config.image_feature_pool_shape[0], 1),
+                visual_bbox_y[1:].repeat(self.config.image_feature_pool_shape[1], 1).transpose(0, 1),
+            ],
+            dim=-1,
+        ).view(-1, bbox.size(-1))
+        visual_bbox = visual_bbox.repeat(final_shape[0], 1, 1)
+        
+        visual_position_ids = torch.arange(0, visual_shape[1], dtype=torch.long, device=device).repeat(
+            input_shape[0], 1
+        )
+        
+        initial_image_embeddings = self.layoutlmv2._calc_img_embeddings(
+            image=image,
+            bbox=visual_bbox,
+            position_ids=visual_position_ids,
+        )
+        
+        outputs = self.layoutlmv2(
+            input_ids=input_ids,
+            bbox=bbox,
+            image=image,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
+        sequence_output, final_image_embeddings = outputs[0][:, :seq_length], outputs[0][:, seq_length:]
+        
+        cls_final_output = sequence_output[:,0,:]
+
+        # average-pool the visual embeddings
+        pooled_initial_image_embeddings = initial_image_embeddings.mean(dim=1)
+        pooled_final_image_embeddings = final_image_embeddings.mean(dim=1)
+        # concatenate with cls_final_output
+        sequence_output = torch.cat([cls_final_output, pooled_initial_image_embeddings, pooled_final_image_embeddings], dim=1)
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output)
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    LayoutLMv2 Model with a token classification head on top (a linear layer on top of the above the text part of the hidden states) 
+    e.g. for sequence labeling (information extraction) tasks such as `FUNSD <https://guillaumejaume.github.io/FUNSD/>`__, 
+    `SROIE <https://rrc.cvc.uab.es/?ch=13>`__ and `CORD <https://github.com/clovaai/cord>`__.
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
@@ -969,7 +1140,8 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
             input_shape = inputs_embeds.size()[:-1]
 
         seq_length = input_shape[1]
-        sequence_output, _ = outputs[0][:, :seq_length], outputs[0][:, seq_length:]
+        # only take the text part of the output representations 
+        sequence_output = outputs[0][:, :seq_length]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 

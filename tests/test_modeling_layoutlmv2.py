@@ -27,7 +27,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     import torch
 
-    from transformers import LayoutLMv2Config, LayoutLMv2ForTokenClassification, LayoutLMv2Model
+    from transformers import LayoutLMv2Config, LayoutLMv2ForSequenceClassification, LayoutLMv2ForTokenClassification, LayoutLMv2Model
     from transformers.models.layoutlmv2.modeling_layoutlmv2 import LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -166,6 +166,23 @@ class LayoutLMv2ModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
+    def create_and_check_for_sequence_classification(
+        self, config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
+    ):
+        config.num_labels = self.num_labels
+        model = LayoutLMv2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            bbox=bbox,
+            image=image,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=sequence_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+    
     def create_and_check_for_token_classification(
         self, config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
     ):
@@ -237,6 +254,10 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+    
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
@@ -354,22 +375,21 @@ def prepare_layoutlmv2_batch_inputs():
     # fmt: off
     input_ids = torch.tensor([[101,1019,1014,1016,1037,12849,4747,1004,14246,2278,5439,4524,5002,2930,2193,2930,4341,3208,1005,1055,2171,2848,11300,3531,102],[101,4070,4034,7020,1024,3058,1015,1013,2861,1013,6070,19274,2772,6205,27814,16147,16147,4343,2047,10283,10969,14389,1012,2338,102]],device=torch_device)  # noqa: E231
     bbox = torch.tensor([[[0,0,0,0],[423,237,440,251],[427,272,441,287],[419,115,437,129],[961,885,992,912],[256,38,330,58],[256,38,330,58],[336,42,353,57],[360,39,401,56],[360,39,401,56],[411,39,471,59],[479,41,528,59],[533,39,630,60],[67,113,134,131],[141,115,209,132],[68,149,133,166],[141,149,187,164],[195,148,287,165],[195,148,287,165],[195,148,287,165],[295,148,349,165],[441,149,492,166],[497,149,546,164],[64,201,125,218],[1000,1000,1000,1000]],[[0,0,0,0],[662,150,754,166],[665,199,742,211],[519,213,554,228],[519,213,554,228],[134,433,187,454],[130,467,204,480],[130,467,204,480],[130,467,204,480],[130,467,204,480],[130,467,204,480],[314,469,376,482],[504,684,582,706],[941,825,973,900],[941,825,973,900],[941,825,973,900],[941,825,973,900],[610,749,652,765],[130,659,168,672],[176,657,237,672],[238,657,312,672],[443,653,628,672],[443,653,628,672],[716,301,825,317],[1000,1000,1000,1000]]],device=torch_device)  # noqa: E231
-    image = torch.randn((2,3,224,224))
+    image = ImageList(torch.randn((2,3,224,224)), image_sizes=[(224,224), (224,224)])
     attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],],device=torch_device)  # noqa: E231
     token_type_ids = torch.tensor([[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],device=torch_device)  # noqa: E231
-    position_ids = token_type_ids
     # labels (at the token level)
     labels = torch.tensor([[-100,10,10,10,9,1,-100,7,7,-100,7,7,4,2,5,2,8,8,-100,-100,5,0,3,2,-100],[-100,12,12,12,-100,12,10,-100,-100,-100,-100,10,12,9,-100,-100,-100,10,10,10,9,12,-100,10,-100]],device=torch_device)  # noqa: E231
     # fmt: on
 
-    return input_ids, bbox, image, attention_mask, token_type_ids, position_ids, labels
+    return input_ids, bbox, image, attention_mask, token_type_ids, labels
 
 
 @require_torch
 class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased").to(torch_device)
 
         (
             input_ids,
@@ -377,7 +397,6 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
             image,
             attention_mask,
             token_type_ids,
-            position_ids,
             labels,
         ) = prepare_layoutlmv2_batch_inputs()
 
@@ -388,7 +407,7 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
             image=image,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
+            output_hidden_states=True,
         )
         
         # verify the sequence output
@@ -400,16 +419,12 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
             )
         )
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[0.1785, -0.1947, -0.0425], [-0.3254, -0.2807, 0.2553], [-0.5391, -0.3322, 0.3364]],
-            device=torch_device,
-        )
+        
+        expected_slice = torch.tensor([[-0.1087,  0.0727, -0.3075],
+        [ 0.0799, -0.0427, -0.0751],
+        [-0.0367,  0.0480, -0.1358]],device=torch_device)
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-3))
 
         # verify the pooled output
         expected_shape = torch.Size((2, model.config.hidden_size))
-        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.6580, -0.0214, 0.8552], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.pooler_output[1, :3], expected_slice, atol=1e-3))
+        self.assertEqual(outputs.pooler_output.shape, expected_shape)
