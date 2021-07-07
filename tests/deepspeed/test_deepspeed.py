@@ -25,6 +25,7 @@ from parameterized import parameterized
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
 from transformers.file_utils import WEIGHTS_NAME
+from transformers.trainer_utils import get_last_checkpoint
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStderr,
@@ -52,12 +53,27 @@ with ExtendSysPath(tests_dir):
 
 
 set_seed(42)
-MBART_TINY = "sshleifer/tiny-mbart"
 T5_SMALL = "t5-small"
+
+# tinies
+MBART_TINY = "sshleifer/tiny-mbart"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
 GPT2_TINY = "sshleifer/tiny-gpt2"
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
+
+# trans
+FSMT_TINY = "stas/tiny-wmt19-en-de"
+BART_TINY = "sshleifer/bart-tiny-random"
+
+# clm
+ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
+DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased-distilled-squad"
+
+
+# new:
+CTRL_TINY = "sshleifer/tiny-ctrl"
+XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
 
 
 def load_json(path):
@@ -83,6 +99,7 @@ def require_deepspeed_aio(test_case):
 
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
+    from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
     from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 
@@ -664,6 +681,43 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
+    @parameterized.expand(stages)
+    def test_load_state_dict_from_zero_checkpoint(self, stage):
+        # test that we can load fp32 weights directly from the zero checkpoint into the current model
+
+        output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False, before=False)
+
+        ds_config_dict = self.get_config_dict(stage)
+
+        kwargs = dict(
+            output_dir=output_dir,
+            train_len=4,
+            per_device_train_batch_size=4,
+            num_train_epochs=1,
+            save_strategy="steps",
+            save_steps=1,
+            learning_rate=0.1,
+            fp16=True,
+            deepspeed=ds_config_dict,
+        )
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(**kwargs)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
+
+            checkpoint_dir = get_last_checkpoint(output_dir)
+            model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
+
+            (a1, b1) = model.a.item(), model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+
+
     def test_config_object(self):
         # test that we can switch from zero2 to zero3 in the same process for example
         # test is_zero, etc.
@@ -1008,6 +1062,13 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] + cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
+
+        # XXX: requires ds pr merge
+        return
+        if task == "sum_pegasus" and stage == "zero3":
+            return
+        if task == "trans_marian" and stage == "zero3":
+            return
 
         # 2. test that the fp32 weights get reconsolidated
         chkpt_dir = f"{output_dir}/checkpoint-1"
