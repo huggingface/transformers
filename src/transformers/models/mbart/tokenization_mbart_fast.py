@@ -139,6 +139,9 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
             )
 
         self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
+        self.lang_code_to_id = {
+            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
+        }
 
         self._src_lang = src_lang if src_lang is not None else "en_XX"
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
