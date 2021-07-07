@@ -1812,6 +1812,13 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             >>> last_hidden_states_ngram = outputs.last_hidden_state_ngram  # predict hidden states
         """
 
+        if self.training:
+            logger.warning(
+                "There is a known issue with ProphetNet training/fine-tuning that hasn't been fixed yet:"
+                "https://github.com/huggingface/transformers/issues/9804. Please try to use an off-the-shelf"
+                "checkpoint from the model hub or fine-tune another architecture instead."
+            )
+
         use_cache == use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
