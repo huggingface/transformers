@@ -14,6 +14,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
+<!---
+A useful guide for English-Chinese translation of Hugging Face documentation
+- Add space around English words and numbers when they appear between Chinese characters. E.g., 共 100 多种语言; 使用 transformers 库。
+- Use square quotes, e.g.,「引用」
+
+Dictionary
+
+Hugging Face: 抱抱脸
+token: 词符（并用括号标注原英文）
+tokenize: 词符化（并用括号标注原英文）
+tokenizer: 词符化器（并用括号标注原英文）
+transformer: transformer（不翻译）
+pipeline: 流水线
+API: API (不翻译）
+inference: 推理
+Trainer: 训练器。当作为类名出现时不翻译。
+pretrained/pretrain: 预训练
+finetune: 微调
+community: 社区
+example: 当特制仓库中 example 目录时翻译为「用例」
+Python data structures (e.g., list, set, dict): 翻译为列表，集合，词典，并用括号标注原英文
+NLP/Natural Language Processing: 以 NLP 出现时不翻译，以 Natural Language Processing 出现时翻译为自然语言处理
+-->
+
 <p align="center">
     <br>
     <img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/transformers_logo_name.png" width="400"/>
@@ -169,7 +193,7 @@ limitations under the License.
 
 这个仓库已在 Python 3.6+、Flax 0.3.2+、PyTorch 1.3.1+ 和 TensorFlow 2.3+ 下经过测试。
 
-你可以在[虚拟环境](https://docs.python.org/3/library/venv.html)中安装 🤗 Transformers 。如果你还不熟悉 Python 的虚拟环境，请阅此[用户说明](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/)。
+你可以在[虚拟环境](https://docs.python.org/3/library/venv.html)中安装 🤗 Transformers。如果你还不熟悉 Python 的虚拟环境，请阅此[用户说明](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/)。
 
 首先，用你打算使用的版本的 Python 创建一个虚拟环境并激活。
 
