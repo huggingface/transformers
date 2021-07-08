@@ -13,7 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
+import os
+import re
 from contextlib import contextmanager
+from pathlib import Path
 
 from git import Repo
 
@@ -91,6 +95,60 @@ def get_modified_python_files():
     return code_diff
 
 
+def get_module_dependencies(module_fname):
+    """
+    Get the dependencies of a module.
+    """
+    with open(module_fname, "r", encoding="utf-8") as f:
+        content = f.read()
+    
+    imports = re.findall(r"from\s+(\.+\S+)\s+import\s+\S+\s", content)
+    module_parts = module_fname.split(os.path.sep)
+    dependencies = []
+    for imp in imports:
+        level = 0
+        while imp.startswith("."):
+            imp = imp[1:]
+            level += 1
+        
+        dep_parts = module_parts[:len(module_parts)-level] + imp.split(".")
+        if os.path.isfile(os.path.sep.join(dep_parts) + ".py"):
+            dependencies.append(os.path.sep.join(dep_parts) + ".py")
+    return dependencies
+
+
+def create_reverse_dependency_map():
+    """
+    Create the dependency map from module filename to the list of modules that depend on it.
+    """
+    modules = [str(f) for f in Path("src/transformers").glob("**/*.py")]
+    direct_deps = {m: get_module_dependencies(m) for m in modules}
+
+    something_changed = True
+    while something_changed:
+        something_changed = False
+        for m in modules:
+            for d in direct_deps[m]:
+                for dep in direct_deps[d]:
+                    if dep not in direct_deps[m]:
+                        direct_deps[m].append(dep)
+                        something_changed = True
+    
+    reverse_map = collections.defaultdict(list)
+    for m in modules:
+        for d in direct_deps[m]:
+            reverse_map[d].append(m)
+
+    return reverse_map
+
+
 if __name__ == "__main__":
     modified_files = get_modified_python_files()
     print(f"Modified files: {modified_files}")
+
+    reverse_deps = create_reverse_dependency_map()
+    impacted_files = []
+    for f in modified_files:
+        impacted_files.extend(reverse_deps[f])
+    impacted_files = list(set(impacted_files))
+    print(f"Impact: {impacted_files}")
