@@ -70,11 +70,27 @@ GPT2_TINY = "sshleifer/tiny-gpt2"
 # question-answering
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased-distilled-squad"
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
+XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
 
 # classification
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
 BERT_TINY = "hf-internal-testing/tiny-bert"
 
+
+# TODO: to add:
+# electra
+# albert
+# deberta
+# funnel
+# longformer
+# dpr
+# gpt_neo
+# camembert
+# deberta-v2
+# m2m_100
+# tapas
+# vit
+# big_bird
 
 def load_json(path):
     with open(path) as f:
@@ -146,6 +162,7 @@ def make_task_cmds():
         ],
         clm=[
             "gpt2",
+            "xlm-roberta"
         ],
         qa=[
             "distilbert",
@@ -195,7 +212,7 @@ def make_task_cmds():
     for task, args in tasks.items():
         args = args.split()
         for model in tasks2models[task]:
-            model_name = globals()[f"{model.upper()}_TINY"]
+            model_name = globals()[f"{model.upper().replace('-', '_')}_TINY"]
             args_model = f"--model_name_or_path {model_name}".split()
             cmds[f"{task}_{model}"] = launcher + args + args_model + args_main
 
