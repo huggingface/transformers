@@ -464,18 +464,6 @@ jobs:
                   cluster: $GKE_CLUSTER
                   perform-login: true
             - *delete_gke_jobs
-    
-    test_git_ci:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.6
-        resource_class: small
-        parallelism: 1
-        steps:
-            - checkout
-            - run: pip install --upgrade pip
-            - run: pip install GitPython
-            - run: python utils/git_diff.py
 
 workflow_filters: &workflow_filters
     filters:
@@ -486,21 +474,20 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            - test_git_ci
-            #- check_code_quality
-            #- check_repository_consistency
-            #- run_examples_torch
-            #- run_tests_custom_tokenizers
-            #- run_tests_torch_and_tf
-            #- run_tests_torch_and_flax
-            #- run_tests_torch
-            #- run_tests_tf
-            #- run_tests_flax
-            #- run_tests_pipelines_torch
-            #- run_tests_pipelines_tf
-            #- run_tests_hub
-            #- build_doc
-            #- deploy_doc: *workflow_filters
+            - check_code_quality
+            - check_repository_consistency
+            - run_examples_torch
+            - run_tests_custom_tokenizers
+            - run_tests_torch_and_tf
+            - run_tests_torch_and_flax
+            - run_tests_torch
+            - run_tests_tf
+            - run_tests_flax
+            - run_tests_pipelines_torch
+            - run_tests_pipelines_tf
+            - run_tests_hub
+            - build_doc
+            - deploy_doc: *workflow_filters
 #    tpu_testing_jobs:
 #        triggers:
 #            - schedule:
