@@ -96,8 +96,7 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 @require_tokenizers
 class ReduceMutableBorrowTests(unittest.TestCase):
     def test_async_share_tokenizer(self):
-        tokenizer = PreTrainedTokenizerFast.from_pretrained("gpt2")
-        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        tokenizer = PreTrainedTokenizerFast.from_pretrained("robot-test/dummy-tokenizer-wordlevel")
         text = "The Matrix is a 1999 science fiction action film."
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
