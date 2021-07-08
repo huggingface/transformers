@@ -22,7 +22,11 @@ from ...file_utils import _LazyModule, is_tf_available, is_tokenizers_available,
 
 
 _import_structure = {
-    "configuration_distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig"],
+    "configuration_distilbert": [
+        "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DistilBertConfig",
+        "DistilBertOnnxConfig",
+    ],
     "tokenization_distilbert": ["DistilBertTokenizer"],
 }
 
@@ -56,7 +60,11 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
+    from .configuration_distilbert import (
+        DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DistilBertConfig,
+        DistilBertOnnxConfig,
+    )
     from .tokenization_distilbert import DistilBertTokenizer
 
     if is_tokenizers_available():
