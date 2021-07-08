@@ -456,6 +456,7 @@ if is_detectron2_available():
     _import_structure["models.layoutlmv2"].extend(
         [
             "LAYOUTLM_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LayoutLMv2ForQuestionAnswering",
             "LayoutLMv2ForSequenceClassification",
             "LayoutLMv2ForTokenClassification",
             "LayoutLMv2Model",

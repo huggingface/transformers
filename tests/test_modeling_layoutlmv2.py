@@ -29,6 +29,7 @@ if is_torch_available():
 
     from transformers import (
         LayoutLMv2Config,
+        LayoutLMv2ForQuestionAnswering,
         LayoutLMv2ForSequenceClassification,
         LayoutLMv2ForTokenClassification,
         LayoutLMv2Model,
@@ -205,6 +206,24 @@ class LayoutLMv2ModelTester:
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_for_question_answering(
+        self, config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
+    ):
+        model = LayoutLMv2ForQuestionAnswering(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            bbox=bbox,
+            image=image,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
+        )
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -238,6 +257,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
             LayoutLMv2Model,
             LayoutLMv2ForSequenceClassification,
             LayoutLMv2ForTokenClassification,
+            LayoutLMv2ForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -267,6 +287,10 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

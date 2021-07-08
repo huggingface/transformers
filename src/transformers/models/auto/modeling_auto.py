@@ -174,6 +174,7 @@ from ..layoutlm.modeling_layoutlm import (
     LayoutLMModel,
 )
 from ..layoutlmv2.modeling_layoutlmv2 import (
+    LayoutLMv2ForQuestionAnswering,
     LayoutLMv2ForSequenceClassification,
     LayoutLMv2ForTokenClassification,
     LayoutLMv2Model,
