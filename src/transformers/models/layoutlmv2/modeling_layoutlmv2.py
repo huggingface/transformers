@@ -969,7 +969,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
             >>> from transformers import LayoutLMv2Tokenizer, LayoutLMv2ForSequenceClassification
 
             >>> tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
-            >>> model = LayoutLMv2ForSequenceClassification("microsoft/layoutlmv2-base-uncased")
+            >>> model = LayoutLMv2ForSequenceClassification.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
             >>> words = ["Hello", "world"]
             >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
@@ -1115,10 +1115,10 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    LayoutLMv2 Model with a token classification head on top (a linear layer on top of the above the text part of the
-    hidden states) e.g. for sequence labeling (information extraction) tasks such as `FUNSD
-    <https://guillaumejaume.github.io/FUNSD/>`__, `SROIE <https://rrc.cvc.uab.es/?ch=13>`__ and `CORD
-    <https://github.com/clovaai/cord>`__.
+    LayoutLMv2 Model with a token classification head on top (a linear layer on top of the text part of the hidden
+    states) e.g. for sequence labeling (information extraction) tasks such as `FUNSD
+    <https://guillaumejaume.github.io/FUNSD/>`__, `SROIE <https://rrc.cvc.uab.es/?ch=13>`__, `CORD
+    <https://github.com/clovaai/cord>`__ and `Kleister-NDA <https://github.com/applicaai/kleister-nda>`__.
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
@@ -1164,7 +1164,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
             >>> from transformers import LayoutLMv2Tokenizer, LayoutLMv2ForTokenClassification
 
             >>> tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
-            >>> model = LayoutLMv2ForTokenClassification("microsoft/layoutlmv2-base-uncased")
+            >>> model = LayoutLMv2ForTokenClassification.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
             >>> words = ["Hello", "world"]
             >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
@@ -1245,8 +1245,8 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 @add_start_docstrings(
     """
     LayoutLMv2 Model with a span classification head on top for extractive question-answering tasks such as `DocVQA
-    <>`__ (a linear layer on top of the text part of the hidden-states output to compute `span start logits` and `span
-    end logits`).
+    <https://rrc.cvc.uab.es/?ch=17>`__ (a linear layer on top of the text part of the hidden-states output to compute
+    `span start logits` and `span end logits`).
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
