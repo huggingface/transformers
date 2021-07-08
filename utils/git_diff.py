@@ -147,7 +147,7 @@ if __name__ == "__main__":
     print(f"Modified files: {modified_files}")
 
     reverse_deps = create_reverse_dependency_map()
-    impacted_files = []
+    impacted_files = modified_files.copy()
     for f in modified_files:
         impacted_files.extend(reverse_deps[f])
     impacted_files = list(set(impacted_files))

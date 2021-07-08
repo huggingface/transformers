@@ -462,6 +462,7 @@ class LabelSmoother:
         num_active_elements = padding_mask.numel() - padding_mask.long().sum()
         nll_loss = nll_loss.sum() / num_active_elements
         smoothed_loss = smoothed_loss.sum() / (num_active_elements * log_probs.shape[-1])
+
         return (1 - self.epsilon) * nll_loss + self.epsilon * smoothed_loss
 
 
