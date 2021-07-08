@@ -104,11 +104,11 @@ def infer_framework_load_model(
             classes = []
             for architecture in config.architectures:
                 transformers_module = importlib.import_module("transformers")
-                if look_tf:
+                if look_pt:
                     _class = getattr(transformers_module, architecture, None)
                     if _class is not None:
                         classes.append(_class)
-                if look_pt:
+                if look_tf:
                     _class = getattr(transformers_module, f"TF{architecture}", None)
                     if _class is not None:
                         classes.append(_class)
