@@ -39,6 +39,7 @@ limitations under the License.
 </p>
 
 <h3 align="center">
+    <p><a href="https://github.com/huggingface/transformers/">English</a> | <b>简体中文</b><p>
     <p>为 Jax、PyTorch 和 TensorFlow 打造的先进的自然语言处理</p>
 </h3>
 
@@ -103,7 +104,7 @@ limitations under the License.
 
 ```
 
-除了给出答案，预训练模型还给出了对应的置信度分数、答案在词符化 (tokenized) 后的文本中开始和结束的位置。你可以从[这个教程](https://huggingface.co/transformers/task_summary.html)了解更多流水线API支持的任务
+除了给出答案，预训练模型还给出了对应的置信度分数、答案在词符化 (tokenized) 后的文本中开始和结束的位置。你可以从[这个教程](https://huggingface.co/transformers/task_summary.html)了解更多流水线API支持的任务。
 
 要在你的任务上下载和使用任意预训练模型也很简单，只需三行代码。这里是 PyTorch 版的示例：
 ```python
@@ -156,7 +157,7 @@ limitations under the License.
 ## 什么情况下我不该用 transformers？
 
 - 本库并不是模块化的神经网络工具箱。模型文件中的代码特意呈若璞玉，未经额外抽象封装，以便研究人员快速迭代魔改而不致溺于抽象和文件跳转之中。
-- 训练 API 并非兼容任何模型，只为本库之模型优化。若是用于通用机器学习训练循环，请另觅他库。
+- `Trainer` API 并非兼容任何模型，只为本库之模型优化。若是在寻找适用于通用机器学习的训练循环实现，请另觅他库。
 - 尽管我们已尽力而为，[examples 目录](https://github.com/huggingface/transformers/tree/master/examples)中的脚本也仅为用例而已。对于你的特定问题，它们并不一定开箱即用，可能需要改几行代码以适之。
 
 ## 安装
@@ -268,7 +269,7 @@ Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
 
 要检查某个模型是否已有 Flax、PyTorch 或 TensorFlow 的实现，或其是否在 🤗 Tokenizers 库中有对应词符化器（tokenizer），敬请参阅[此表](https://huggingface.co/transformers/index.html#supported-frameworks)。
 
-这些实现均已于多个数据集测试（请参看用例脚本）并应于原版实现表现相当。你可以在用例文档的[此节](https://huggingface.co/transformers/examples.html)中了解表现的细节。
+这些实现均已于多个数据集测试（请参看用例脚本）并应于原版实现表现相当。你可以在用例文档的[此节](https://huggingface.co/transformers/examples.html)中了解表现的细节。
 
 
 ## 了解更多
