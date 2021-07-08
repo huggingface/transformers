@@ -29,6 +29,8 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import torch
+
+import torch.utils.data as data
 from tqdm import tqdm
 
 import jax
@@ -253,23 +255,15 @@ def main():
     # set seed for torch dataloaders
     set_seed(training_args.seed)
 
-    # Initialize torchvision transforms and jit them for faster processing
-    preprocess = Transform(config.vision_config.image_size)
-    preprocess = torch.jit.script(preprocess)
-
-    # Initialize the image-text dataset
-    train_dataset = ImageTextDataset(
+    # Initialize the text-text dataset
+    train_dataset = TextTextDataset(
         data_args.data_dir,
         data_args.train_file,
-        captions_per_image=2,
-        transform=preprocess,
     )
 
-    eval_dataset = ImageTextDataset(
+    eval_dataset = TextTextDataset(
         data_args.data_dir,
         data_args.validation_file,
-        captions_per_image=1,
-        transform=preprocess,
     )
 
     # Store some constant
@@ -281,14 +275,15 @@ def main():
 
     # Use collate function to tokenizer the text and convert the processed images to numpy
     def collate_fn(examples):
-        pixel_values = torch.stack([example[0] for example in examples]).permute(0, 2, 3, 1).numpy()
-        captions = [example[1] for example in examples]
-        inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", return_tensors="np")
+        text1 = [example[0] for example in examples]
+        text2 = [example[1] for example in examples]
+        input1 = tokenizer(text1, max_length=data_args.max_seq_length, padding="max_length", return_tensors="np")
+        input2 = tokenizer(text2, max_length=data_args.max_seq_length, padding="max_length", return_tensors="np")
 
         batch = {
-            "pixel_values": pixel_values,
-            "input_ids": inputs["input_ids"],
-            "attention_mask": inputs["attention_mask"],
+            "input1_ids": input1["input_ids"],
+            "input2_ids": input2["input_ids"],
+            "attention_mask": input2["attention_mask"],
         }
 
         return batch
@@ -466,6 +461,52 @@ def main():
                 push_to_hub=training_args.push_to_hub,
                 commit_message=f"Saving weights and logs of epoch {epoch + 1}",
             )
+
+
+class TextTextDataset(data.Dataset):
+    """
+    Dtaset for loading image-text data for tasks like CLIP training, Image Captioning.
+
+    Args:
+        root: (string): The root path where the dataset is stored
+        file_path: (string): Path to the file containing the image_paths and associated captions.
+            The expected format is jsonlines where each line is a json object containing to keys.
+            `image_path`: The path to the image.
+            `captions`: An `array` of captions.
+        transform (callable, optional): A function/transform that  takes in an PIL image
+            and returns a transformed version. E.g, ``transforms.ToTensor``
+        target_transform (callable, optional): A function/transform that takes in the
+            target and transforms it.
+        transforms (callable, optional): A function/transform that takes input sample and its target as entry
+            and returns a transformed version.
+    """
+
+    def __init__(
+            self,
+            root: str,
+            file_path: str,
+    ):
+        super().__init__(root)
+
+        with open(file_path, "r") as f:
+            examples = [json.loads(line) for line in f.readlines()]
+
+        self.text1 = []
+        self.text2 = []
+
+        for example in examples:
+            self.text1.extend(example["text1"])
+            self.text2.extend(example["text2"])
+
+    def _load_targets(self, idx):
+        return (self.text1[idx], self.text2[idx])
+
+    def __getitem__(self, index: int):
+        target = self._load_targets(index)
+        return target
+
+    def __len__(self) -> int:
+        return len(self.text1)
 
 
 if __name__ == "__main__":

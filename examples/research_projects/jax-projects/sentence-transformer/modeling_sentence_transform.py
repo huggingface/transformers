@@ -147,19 +147,19 @@ class FlaxSentenceEncoderCLIPModel(FlaxPreTrainedModel):
         **kwargs
     ):
         if input_shape is None:
-            input_shape = ((1, 1), (1, config.vision_config.image_size, config.vision_config.image_size, 3))
+            input_shape = ((1, 1),)
 
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensor
-        input_ids = jnp.zeros(input_shape[0], dtype="i4")
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape[0])
-        token_type_ids = jnp.ones_like(input_ids)
-        attention_mask = jnp.ones_like(input_ids)
-
-        pixel_values = jax.random.normal(rng, input_shape[1])
+        input1_ids = jnp.zeros(input_shape[0], dtype="i4")
+        input2_ids = jnp.zeros(input_shape[1], dtype="i4")
+        position1_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input1_ids).shape[-1]), input_shape[0])
+        position2_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input2_ids).shape[-1]), input_shape[0])
+        token_type_ids = jnp.ones_like(input1_ids)
+        attention_mask = jnp.ones_like(input1_ids)
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
