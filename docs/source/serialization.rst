@@ -114,15 +114,17 @@ visible below:
     class BertOnnxConfig(OnnxConfig):
         @property
         def inputs(self) -> Mapping[str, Mapping[int, str]]:
-            return {
-                "input_ids": {0: "batch", 1: "sequence"},
-                "attention_mask": {0: "batch", 1: "sequence"},
-                "token_type_ids": {0: "batch", 1: "sequence"},
-            }
+            return OrderedDict(
+                [
+                    ("input_ids", {0: "batch", 1: "sequence"}),
+                    ("attention_mask", {0: "batch", 1: "sequence"}),
+                    ("token_type_ids", {0: "batch", 1: "sequence"}),
+                ]
+            )
 
         @property
         def outputs(self) -> Mapping[str, Mapping[int, str]]:
-            return {"last_hidden_state": {0: "batch", 1: "sequence"}, "pooler_output": {0: "batch"}}
+            return OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"}), ("pooler_output", {0: "batch"})])
 
 Let's understand what's happening here. This configuration has two properties: the inputs, and the outputs.
 
@@ -137,6 +139,10 @@ indicates the axis of that output.
 
 Once this is done, a single step remains: adding this configuration object to the initialisation of the model class,
 and to the general ``transformers`` initialisation.
+
+An important fact to notice is the use of `OrderedDict` in both inputs and outputs properties. This is a requirements
+as inputs are matched against their relative position within the `PreTrainedModel.forward()` prototype and outputs
+are match against there position in the returned `BaseModelOutputX` instance.
 
 
 Graph conversion
