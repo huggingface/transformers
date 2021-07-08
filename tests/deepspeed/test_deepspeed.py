@@ -52,29 +52,35 @@ with ExtendSysPath(tests_dir):
 
 
 set_seed(42)
-T5_SMALL = "t5-small"
 
-# tinies
-MBART_TINY = "sshleifer/tiny-mbart"
-T5_TINY = "patrickvonplaten/t5-tiny-random"
-PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
-GPT2_TINY = "sshleifer/tiny-gpt2"
-MARIAN_TINY = "sshleifer/tiny-marian-en-de"
 
 # trans
 FSMT_TINY = "stas/tiny-wmt19-en-de"
 BART_TINY = "sshleifer/bart-tiny-random"
+T5_SMALL = "t5-small"
+T5_TINY = "patrickvonplaten/t5-tiny-random"
+MBART_TINY = "sshleifer/tiny-mbart"
+MARIAN_TINY = "sshleifer/tiny-marian-en-de"
+
+# sum
+PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
 
 # clm
-ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
+GPT2_TINY = "sshleifer/tiny-gpt2"
 
 # qa
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased-distilled-squad"
+ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 
-
-# new:
-CTRL_TINY = "sshleifer/tiny-ctrl"
+# class
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
+BERT_TINY = "prajjwal1/bert-tiny"
+
+# XXX: find a task to exercise these models under deepspeed:
+#
+# - works with text-generation, but the example doesn't work with Trainer - so can't use deepspeed
+# - fails with text-classification, but perhaps can be made to work.
+CTRL_TINY = "sshleifer/tiny-ctrl"
 
 
 def load_json(path):
@@ -135,11 +141,11 @@ def make_task_cmds():
     # should have T5_TINY, etc. global var defined
     tasks2models = dict(
         trans=[
+            "bart",
+            "fsmt",
             "marian",
             "mbart",
             "t5",
-            "fsmt", # z3 not working yet
-            "bart",
         ],
         sum=[
             "pegasus",
@@ -148,9 +154,15 @@ def make_task_cmds():
             "gpt2",
         ],
         qa=[
-            "roberta",
             "distilbert",
+            "roberta",
         ],
+        clas=[
+            "bert",
+            # "ctrl", # not working at the moment due to example script failing with it
+            "xlnet",
+        ],
+
     )
 
     scripts_dir = f"{root_dir}/examples/pytorch"
@@ -161,34 +173,48 @@ def make_task_cmds():
         --train_file {data_dir_wmt}/train.json
         --source_lang en
         --target_lang ro
-        """.split(),
+        """,
         sum=f"""
         {scripts_dir}/summarization/run_summarization.py
         --train_file {data_dir_xsum}/sample.json
         --max_source_length 12
         --max_target_length 12
-        """.split(),
+        """,
         clm=f"""
         {scripts_dir}/language-modeling/run_clm.py
         --train_file {data_dir_fixtures}/sample_text.txt
         --block_size 8
-        """.split(),
+        """,
         qa=f"""
         {scripts_dir}/question-answering/run_qa.py
         --train_file {data_dir_samples}/SQUAD/sample.json
-        """.split(),
+        """,
+        clas=f"""
+        {scripts_dir}/text-classification/run_glue.py
+        --train_file {data_dir_samples}/MRPC/train.csv
+        --max_seq_length 12
+        --task_name MRPC
+        """,
     )
 
-    # XXX: undo
-    launcher = get_launcher(distributed=False)
-    #launcher = get_launcher(distributed=True)
+
+    launcher = get_launcher(distributed=True)
 
     cmds = {}
     for task, args in tasks.items():
+        args = args.split()
         for model in tasks2models[task]:
             model_name = globals()[f"{model.upper()}_TINY"]
             args_model = f"--model_name_or_path {model_name}".split()
             cmds[f"{task}_{model}"] = launcher + args + args_model + args_main
+
+            # # generation special case
+            # if task == "gen":
+            #     launcher = f"deepspeed --num_nodes 1 --num_gpus 1".split()
+            #     args_model += f"--model_type {model}".split()
+            #     cmds[f"{task}_{model}"] = launcher + args + args_model
+            # else:
+
 
     return cmds
 
