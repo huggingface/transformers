@@ -96,6 +96,8 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 @require_tokenizers
 class ReduceMutableBorrowTests(unittest.TestCase):
     def test_async_share_tokenizer(self):
+        # See https://github.com/huggingface/transformers/pull/12550
+        # and https://github.com/huggingface/tokenizers/issues/537
         tokenizer = PreTrainedTokenizerFast.from_pretrained("robot-test/dummy-tokenizer-wordlevel")
         text = "The Matrix is a 1999 science fiction action film."
 
