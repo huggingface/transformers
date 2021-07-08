@@ -108,6 +108,14 @@ TASK_ALIASES = {
     "ner": "token-classification",
 }
 SUPPORTED_TASKS = {
+    "automatic-speech-recognition": {
+        "impl": AutomaticSpeechRecognitionPipeline,
+        "tf": (),
+        # Only load from `config.architectures`, AutoModelForCTC and AutoModelForConditionalGeneration
+        # do not exist yet.
+        "pt": () if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/wav2vec2-base-960h"}},
+    },
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),

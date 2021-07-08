@@ -36,6 +36,7 @@ if is_torch_available():
         "MegatronBertForSequenceClassification",
         "MegatronBertForTokenClassification",
         "MegatronBertModel",
+        "MegatronBertPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -53,6 +54,7 @@ if TYPE_CHECKING:
             MegatronBertForSequenceClassification,
             MegatronBertForTokenClassification,
             MegatronBertModel,
+            MegatronBertPreTrainedModel,
         )
 
 else:

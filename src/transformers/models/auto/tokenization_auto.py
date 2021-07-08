@@ -37,6 +37,7 @@ from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
 from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
 from ..byt5.tokenization_byt5 import ByT5Tokenizer
+from ..canine.tokenization_canine import CanineTokenizer
 from ..convbert.tokenization_convbert import ConvBertTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
@@ -78,6 +79,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
+    CanineConfig,
     ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -196,6 +198,7 @@ if is_tokenizers_available():
     from ..reformer.tokenization_reformer_fast import ReformerTokenizerFast
     from ..retribert.tokenization_retribert_fast import RetriBertTokenizerFast
     from ..roberta.tokenization_roberta_fast import RobertaTokenizerFast
+    from ..roformer.tokenization_roformer_fast import RoFormerTokenizerFast
     from ..squeezebert.tokenization_squeezebert_fast import SqueezeBertTokenizerFast
     from ..t5.tokenization_t5_fast import T5TokenizerFast
     from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
@@ -230,6 +233,7 @@ else:
     ReformerTokenizerFast = None
     RetriBertTokenizerFast = None
     RobertaTokenizerFast = None
+    RoFormerTokenizerFast = None
     SqueezeBertTokenizerFast = None
     T5TokenizerFast = None
     XLMRobertaTokenizerFast = None
@@ -243,7 +247,7 @@ logger = logging.get_logger(__name__)
 TOKENIZER_MAPPING = OrderedDict(
     [
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
-        (RoFormerConfig, (RoFormerTokenizer, None)),
+        (RoFormerConfig, (RoFormerTokenizer, RoFormerTokenizerFast)),
         (T5Config, (T5Tokenizer, T5TokenizerFast)),
         (MT5Config, (MT5Tokenizer, MT5TokenizerFast)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
@@ -294,6 +298,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (GPTNeoConfig, (GPT2Tokenizer, GPT2TokenizerFast)),
         (LukeConfig, (LukeTokenizer, None)),
         (BigBirdPegasusConfig, (PegasusTokenizer, PegasusTokenizerFast)),
+        (CanineConfig, (CanineTokenizer, None)),
     ]
 )
 

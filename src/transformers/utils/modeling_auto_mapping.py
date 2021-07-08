@@ -6,6 +6,7 @@ from collections import OrderedDict
 
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
+        ("CanineConfig", "CanineForQuestionAnswering"),
         ("RoFormerConfig", "RoFormerForQuestionAnswering"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForQuestionAnswering"),
         ("BigBirdConfig", "BigBirdForQuestionAnswering"),
@@ -112,6 +113,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
+        ("CanineConfig", "CanineForMultipleChoice"),
         ("RoFormerConfig", "RoFormerForMultipleChoice"),
         ("BigBirdConfig", "BigBirdForMultipleChoice"),
         ("ConvBertConfig", "ConvBertForMultipleChoice"),
@@ -175,6 +177,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
+        ("CanineConfig", "CanineForSequenceClassification"),
         ("RoFormerConfig", "RoFormerForSequenceClassification"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForSequenceClassification"),
         ("BigBirdConfig", "BigBirdForSequenceClassification"),
@@ -222,6 +225,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
+        ("CanineConfig", "CanineForTokenClassification"),
         ("RoFormerConfig", "RoFormerForTokenClassification"),
         ("BigBirdConfig", "BigBirdForTokenClassification"),
         ("ConvBertConfig", "ConvBertForTokenClassification"),
@@ -252,6 +256,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         ("VisualBertConfig", "VisualBertModel"),
+        ("CanineConfig", "CanineModel"),
         ("RoFormerConfig", "RoFormerModel"),
         ("CLIPConfig", "CLIPModel"),
         ("BigBirdPegasusConfig", "BigBirdPegasusModel"),

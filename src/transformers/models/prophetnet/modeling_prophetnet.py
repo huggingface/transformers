@@ -1687,7 +1687,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         batch_size, seq_length = hidden_states.shape[:2]
 
         # get causal mask
-        causal_mask = hidden_states.new(seq_length, seq_length).float().fill_(-float("inf"))
+        causal_mask = torch.full(
+            (seq_length, seq_length), -float("inf"), dtype=hidden_states.dtype, device=hidden_states.device
+        )
         causal_mask = torch.triu(causal_mask, 1)
         extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand(
             (batch_size,) + causal_mask.shape
@@ -1809,6 +1811,13 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             >>> last_hidden_states = outputs.last_hidden_state  # main stream hidden states
             >>> last_hidden_states_ngram = outputs.last_hidden_state_ngram  # predict hidden states
         """
+
+        if self.training:
+            logger.warning(
+                "There is a known issue with ProphetNet training/fine-tuning that hasn't been fixed yet:"
+                "https://github.com/huggingface/transformers/issues/9804. Please try to use an off-the-shelf"
+                "checkpoint from the model hub or fine-tune another architecture instead."
+            )
 
         use_cache == use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

@@ -112,8 +112,8 @@ class HfArgumentParser(ArgumentParser):
                 # Hack because type=bool in argparse does not behave as we want.
                 kwargs["type"] = string_to_bool
                 if field.type is bool or (field.default is not None and field.default is not dataclasses.MISSING):
-                    # Default value is True if we have no default when of type bool.
-                    default = True if field.default is dataclasses.MISSING else field.default
+                    # Default value is False if we have no default when of type bool.
+                    default = False if field.default is dataclasses.MISSING else field.default
                     # This is the value that will get picked if we don't include --field_name in any way
                     kwargs["default"] = default
                     # This tells argparse we accept 0 or 1 value after --field_name
