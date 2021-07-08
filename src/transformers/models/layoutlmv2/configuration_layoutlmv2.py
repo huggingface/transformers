@@ -37,7 +37,6 @@ class LayoutLMv2Config(PretrainedConfig):
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
-
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the LayoutLMv2 model. Defines the number of different tokens that can be represented by
@@ -74,21 +73,21 @@ class LayoutLMv2Config(PretrainedConfig):
         max_rel_pos (:obj:`int`, `optional`, defaults to 128):
             ...
         rel_pos_bins (:obj:`int`, `optional`, defaults to 32):
-            ...
+            The number of relative position bins.
         fast_qkv (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a single matrix for the queries, keys, values in the self-attention layers.
         max_rel_2d_pos (:obj:`int`, `optional`, defaults to 256):
-            ...
+            The maximum number of relative 2D positions.
         rel_2d_pos_bins (:obj:`int`, `optional`, defaults to 64):
-            ...
+            The number of 2D relative position bins.
         convert_sync_batchnorm (:obj:`bool`, `optional`, defaults to :obj:`True`):
             ...
         image_feature_pool_shape (:obj:`List[int]`, `optional`, defaults to [7, 7, 256]):
             The shape of the average-pooled feature map.
         coordinate_size (:obj:`int`, `optional`, defaults to 128):
-            ...
+            Coordinate size to use.
         shape_size (:obj:`int`, `optional`, defaults to 128):
-            ...
+            Shape size to use.
         has_relative_attention_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a relative attention bias.
         has_spatial_attention_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -96,7 +95,7 @@ class LayoutLMv2Config(PretrainedConfig):
         has_visual_segment_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to add visual segment embeddings.
 
-        Example::
+    Example::
 
         >>> from transformers import LayoutLMv2Model, LayoutLMv2Config
 
