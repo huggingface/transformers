@@ -245,7 +245,6 @@ def main():
 
     model = FlaxSentenceEncoderCLIPModel(
         model_args.text_model_name_or_path,
-        model_args.vision_model_name_or_path,
         seed=training_args.seed,
         dtype=getattr(jnp, model_args.dtype),
         text_from_pt=model_args.from_pt,

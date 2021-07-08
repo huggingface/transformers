@@ -57,10 +57,12 @@ class FlaxSentenceCLIPModule(nn.Module):
         self,
         input1_ids=None,
         input2_ids=None,
-        attention_mask=None,
+        attention1_mask=None,
+        attention2_mask=None,
         position1_ids=None,
         position2_ids=None,
-        token_type_ids=None,
+        token_type1_ids=None,
+        token_type2_ids=None,
         deterministic: bool = True,
         output_attentions=None,
         output_hidden_states=None,
@@ -70,8 +72,8 @@ class FlaxSentenceCLIPModule(nn.Module):
 
         text1_outputs = self.text_model(
             input_ids=input1_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
+            attention_mask=attention1_mask,
+            token_type_ids=token_type1_ids,
             position_ids=position1_ids,
             deterministic=deterministic,
             output_attentions=output_attentions,
@@ -81,8 +83,8 @@ class FlaxSentenceCLIPModule(nn.Module):
 
         text2_outputs = self.text_model(
             input_ids=input2_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
+            attention_mask=attention2_mask,
+            token_type_ids=token_type2_ids,
             position_ids=position2_ids,
             deterministic=deterministic,
             output_attentions=output_attentions,
@@ -158,21 +160,27 @@ class FlaxSentenceEncoderCLIPModel(FlaxPreTrainedModel):
         input2_ids = jnp.zeros(input_shape[1], dtype="i4")
         position1_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input1_ids).shape[-1]), input_shape[0])
         position2_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input2_ids).shape[-1]), input_shape[0])
-        token_type_ids = jnp.ones_like(input1_ids)
-        attention_mask = jnp.ones_like(input1_ids)
+        token_type1_ids = jnp.ones_like(input1_ids)
+        token_type2_ids = jnp.ones_like(input2_ids)
+        attention1_mask = jnp.ones_like(input1_ids)
+        attention2_mask = jnp.ones_like(input2_ids)
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, pixel_values, attention_mask, position_ids, token_type_ids)["params"]
+        return self.module.init(rngs, input1_ids, input2_ids, attention1_mask, attention2_mask,
+                                position1_ids, position2_ids, token_type1_ids, token_type2_ids)["params"]
 
     def __call__(
         self,
-        input_ids,
-        pixel_values,
-        attention_mask=None,
-        position_ids=None,
-        token_type_ids=None,
+        input1_ids,
+        input2_ids,
+        attention1_mask=None,
+        attention2_mask=None,
+        position1_ids=None,
+        position2_ids=None,
+        token_type1_ids=None,
+        token_type2_ids=None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
@@ -186,14 +194,23 @@ class FlaxSentenceEncoderCLIPModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+        if position1_ids is None:
+            position1_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input1_ids).shape[-1]), input1_ids.shape)
 
-        if token_type_ids is None:
-            token_type_ids = jnp.zeros_like(input_ids)
+        if position2_ids is None:
+            position2_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input2_ids).shape[-1]), input2_ids.shape)
 
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+        if token_type1_ids is None:
+            token_type1_ids = jnp.zeros_like(input1_ids)
+
+        if token_type2_ids is None:
+            token_type2_ids = jnp.zeros_like(input2_ids)
+
+        if attention1_mask is None:
+            attention1_mask = jnp.ones_like(input1_ids)
+
+        if attention2_mask is None:
+            attention2_mask = jnp.ones_like(input2_ids)
 
         # Handle any PRNG if needed
         rngs = {}
@@ -202,11 +219,14 @@ class FlaxSentenceEncoderCLIPModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             {"params": params or self.params},
-            jnp.array(input_ids, dtype="i4"),
-            jnp.array(pixel_values, dtype=jnp.float32),
-            jnp.array(attention_mask, dtype="i4"),
-            jnp.array(position_ids, dtype="i4"),
-            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(input1_ids, dtype="i4"),
+            jnp.array(input2_ids, dtype="i4"),
+            jnp.array(attention1_mask, dtype="i4"),
+            jnp.array(attention2_mask, dtype="i4"),
+            jnp.array(position1_ids, dtype="i4"),
+            jnp.array(position2_ids, dtype="i4"),
+            jnp.array(token_type1_ids, dtype="i4"),
+            jnp.array(token_type2_ids, dtype="i4"),
             not train,
             output_attentions,
             output_hidden_states,
@@ -276,43 +296,10 @@ class FlaxSentenceEncoderCLIPModel(FlaxPreTrainedModel):
             rngs=rngs,
         )
 
-    def get_image_features(self, pixel_values, dropout_rng: jax.random.PRNGKey = None, train=False):
-        r"""
-        Args:
-            pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
-                Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
-                using :class:`~transformers.ImageFeatureExtractionMixin`. See
-                :meth:`transformers.ImageFeatureExtractionMixin.__call__` for details.
-
-        Returns:
-            image_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The image embeddings
-            obtained by applying the projection layer to the pooled output of vision model.
-        """
-
-        # Handle any PRNG if needed
-        rngs = {}
-        if dropout_rng is not None:
-            rngs["dropout"] = dropout_rng
-
-        def _get_features(module, pixel_values, deterministic):
-            vision_outputs = module.vision_model(pixel_values=pixel_values, deterministic=deterministic)
-            pooled_output = vision_outputs[1]  # pooled_output
-            image_features = module.visual_projection(pooled_output)
-            return image_features
-
-        return self.module.apply(
-            {"params": self.params},
-            jnp.array(pixel_values, dtype=jnp.float32),
-            not train,
-            method=_get_features,
-            rngs=rngs,
-        )
-
     @classmethod
-    def from_text_vision_pretrained(
+    def from_text_pretrained(
         cls,
         text_model_name_or_path: str = None,
-        vision_model_name_or_path: str = None,
         *model_args,
         **kwargs,
     ) -> FlaxPreTrainedModel:
@@ -373,15 +360,9 @@ class FlaxSentenceEncoderCLIPModel(FlaxPreTrainedModel):
             argument[len("text_") :]: value for argument, value in kwargs.items() if argument.startswith("text_")
         }
 
-        kwargs_vision = {
-            argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")
-        }
-
         # remove text, vision kwargs from kwargs
         for key in kwargs_text.keys():
             del kwargs["text_" + key]
-        for key in kwargs_vision.keys():
-            del kwargs["vision_" + key]
 
         # Load and initialize the text and vision model
         text_model = kwargs_text.pop("model", None)
@@ -399,33 +380,12 @@ class FlaxSentenceEncoderCLIPModel(FlaxPreTrainedModel):
 
             text_model = FlaxAutoModel.from_pretrained(text_model_name_or_path, *model_args, **kwargs_text)
 
-        vision_model = kwargs_vision.pop("model", None)
-        if vision_model is None:
-            assert (
-                vision_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `vision_model_name_or_path` has to be defined"
-            from transformers import FlaxAutoModel
-
-            if "config" not in kwargs_vision:
-                from transformers import AutoConfig
-
-                vision_config = AutoConfig.from_pretrained(vision_model_name_or_path)
-                kwargs_vision["config"] = vision_config
-
-            vision_model = FlaxAutoModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
-
         # instantiate config with corresponding kwargs
         dtype = kwargs.pop("dtype", jnp.float32)
-        config = HybridCLIPConfig.from_text_vision_configs(text_model.config, vision_model.config, **kwargs)
+        config = SentenceTransformerCLIPConfig.from_text_configs(text_model.config, **kwargs)
 
         # init model
         model = cls(config, *model_args, dtype=dtype, **kwargs)
-
-        if vision_config.model_type == "clip":
-            model.params["vision_model"]["vision_model"] = vision_model.params["vision_model"]
-            model.params["visual_projection"]["kernel"] = vision_model.params["visual_projection"]["kernel"]
-        else:
-            model.params["vision_model"] = vision_model.params
 
         model.params["text_model"] = text_model.params
 
