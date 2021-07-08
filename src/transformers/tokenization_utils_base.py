@@ -1679,7 +1679,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         use_auth_token=use_auth_token,
                         user_agent=user_agent,
                     )
-                
+
                 except FileNotFoundError as error:
                     if local_files_only:
                         unresolved_files.append(file_id)
