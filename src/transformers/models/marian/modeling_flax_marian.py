@@ -208,9 +208,10 @@ def create_sinusoidal_positions(n_pos, dim, dtype):
     position_enc = jnp.array(
         [[pos / jnp.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
     )
+    sentinel = dim // 2 + dim % 2
     out = jnp.zeros_like(position_enc)
-    out = jax.ops.index_update(out, jax.ops.index[:, 0::2], jnp.sin(position_enc[:, 0::2]))
-    out = jax.ops.index_update(out, jax.ops.index[:, 1::2], jnp.cos(position_enc[:, 1::2]))
+    out = jax.ops.index_update(out, jax.ops.index[:, 0:sentinel], jnp.sin(position_enc[:, 0::2]))
+    out = jax.ops.index_update(out, jax.ops.index[:, sentinel:], jnp.cos(position_enc[:, 1::2]))
     return out.astype(dtype)
 
 
@@ -672,7 +673,6 @@ class FlaxMarianEncoder(nn.Module):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
 
         embed_dim = self.config.d_model
-        self.padding_idx = self.config.pad_token_id
         self.max_source_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
 
@@ -737,7 +737,6 @@ class FlaxMarianDecoder(nn.Module):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
 
         embed_dim = self.config.d_model
-        self.padding_idx = self.config.pad_token_id
         self.max_target_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
 
