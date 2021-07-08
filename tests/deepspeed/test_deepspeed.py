@@ -138,7 +138,7 @@ def make_task_cmds():
             "marian",
             "mbart",
             "t5",
-            # "fsmt", # z3 not working yet
+            "fsmt", # z3 not working yet
             "bart",
         ],
         sum=[
@@ -179,7 +179,9 @@ def make_task_cmds():
         """.split(),
     )
 
-    launcher = get_launcher(distributed=True)
+    # XXX: undo
+    launcher = get_launcher(distributed=False)
+    #launcher = get_launcher(distributed=True)
 
     cmds = {}
     for task, args in tasks.items():
