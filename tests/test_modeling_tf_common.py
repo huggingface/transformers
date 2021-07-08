@@ -35,7 +35,7 @@ from transformers.testing_utils import (
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     is_staging_test,
-    require_onnx,
+    require_keras2onnx,
     require_tf,
     slow,
     tooslow,
@@ -325,7 +325,7 @@ class TFModelTesterMixin:
 
             self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
 
-    @require_onnx
+    @require_keras2onnx
     @slow
     def test_onnx_runtime_optimize(self):
         if not self.test_onnx:

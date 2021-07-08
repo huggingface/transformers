@@ -13,8 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ T5 model configuration """
+from collections import OrderedDict
+from typing import Any, Mapping, Optional
+
+from transformers import PreTrainedTokenizer, TensorType
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -132,3 +137,66 @@ class T5Config(PretrainedConfig):
     @property
     def num_hidden_layers(self):
         return self.num_layers
+
+
+class T5OnnxConfig(OnnxConfigWithPast):
+    def __init__(self, config: PretrainedConfig, use_past: bool = False):
+        super().__init__(config, use_past)
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_inputs = OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+                ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+                ("decoder_input_ids", {0: "batch"}),
+                ("decoder_attention_mask", {0: "batch"}),
+            ]
+        )
+
+        if self.use_past:
+            for i in range(self._config.num_layers):
+                common_inputs[f"past_key_values.{i}.decoder.0"] = ({0: "batch", 2: "past_sequence"},)
+                common_inputs[f"past_key_values.{i}.decoder.1"] = ({0: "batch", 2: "past_sequence"},)
+                common_inputs[f"past_key_values.{i}.encoder.0"] = ({0: "batch", 2: "past_sequence"},)
+                common_inputs[f"past_key_values.{i}.encoder.1"] = ({0: "batch", 2: "past_sequence"},)
+
+        return common_inputs
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_outputs = OrderedDict(
+            [
+                ("last_hidden_state", {0: "batch", 1: "decoder_sequence"}),
+                ("encoder_last_hidden_state", {0: "batch", 2: "encoder_sequence"}),
+            ]
+        )
+
+        if self.use_past:
+            for i in range(self._config.num_layers):
+                common_outputs[f"past_key_values.{i}.decoder.0"] = ({0: "batch", 2: "decoder_sequence"},)
+                common_outputs[f"past_key_values.{i}.decoder.1"] = ({0: "batch", 2: "decoder_sequence"},)
+                common_outputs[f"past_key_values.{i}.encoder.0"] = ({0: "batch", 2: "encoder_sequence"},)
+                common_outputs[f"past_key_values.{i}.encoder.1"] = ({0: "batch", 2: "encoder_sequence"},)
+
+        return common_outputs
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+        if self.use_past:
+            raise NotImplementedError()
+
+        # Generate encoder inputs
+        encoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+
+        # Generate decoder inputs
+        decoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, 1, is_pair, framework)
+        decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
+
+        return dict(**encoder_inputs, **decoder_inputs)

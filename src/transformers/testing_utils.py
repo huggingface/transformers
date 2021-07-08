@@ -33,6 +33,7 @@ from .file_utils import (
     is_datasets_available,
     is_faiss_available,
     is_flax_available,
+    is_keras2onnx_available,
     is_onnx_available,
     is_pandas_available,
     is_rjieba_available,
@@ -230,6 +231,13 @@ def require_rjieba(test_case):
     """
     if not is_rjieba_available():
         return unittest.skip("test requires rjieba")(test_case)
+    else:
+        return test_case
+
+
+def require_keras2onnx(test_case):
+    if not is_keras2onnx_available():
+        return unittest.skip("test requires keras2onnx")(test_case)
     else:
         return test_case
 
