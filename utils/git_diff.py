@@ -14,14 +14,16 @@
 # limitations under the License.
 
 from contextlib import contextmanager
+
 from git import Repo
+
 
 @contextmanager
 def checkout_commit(repo, commit_id):
     """
     Context manager that checks out a commit in the repo.
     """
-    current_head = repo.head.commit if repo.head.is_detached else repo.head.ref 
+    current_head = repo.head.commit if repo.head.is_detached else repo.head.ref
 
     try:
         repo.git.checkout(commit_id)
@@ -38,10 +40,10 @@ def diff_is_docstring_only(repo, branching_point, filename):
     with checkout_commit(repo, branching_point):
         with open(filename, "r", encoding="utf-8") as f:
             old_content = f.read()
-    
+
     with open(filename, "r", encoding="utf-8") as f:
         new_content = f.read()
-    
+
     old_content_splits = old_content.split('"""')
     old_content_no_doc = "".join(old_content_splits[::2])
 
@@ -51,9 +53,9 @@ def diff_is_docstring_only(repo, branching_point, filename):
     return old_content_no_doc == new_content_no_doc
 
 
-def get_modified_files():
+def get_modified_python_files():
     """
-    Return a list of files that have been modified between the current head and the master branch.
+    Return a list of python files that have been modified between the current head and the master branch.
     """
     repo = Repo(".")
 
@@ -85,9 +87,10 @@ def get_modified_files():
                         print(f"Ignoring diff in {diff_obj.b_path} as it only concerns docstrings.")
                     else:
                         code_diff.append(diff_obj.a_path)
-        
+
     return code_diff
 
+
 if __name__ == "__main__":
-    modified_files = get_modified_files()
+    modified_files = get_modified_python_files()
     print(f"Modified files: {modified_files}")
