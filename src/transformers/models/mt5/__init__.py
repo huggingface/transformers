@@ -19,7 +19,7 @@
 from typing import TYPE_CHECKING
 
 from ...file_utils import (
-    _BaseLazyModule,
+    _LazyModule,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
@@ -74,20 +74,12 @@ if TYPE_CHECKING:
         from .modeling_tf_mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
 
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
+    class _MT5LazyModule(_LazyModule):
         """
         Module class that surfaces all objects but only performs associated imports when the objects are requested.
         """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
 
         def __getattr__(self, name):
             if name == "MT5Tokenizer":
@@ -97,4 +89,9 @@ else:
             else:
                 return super().__getattr__(name)
 
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _MT5LazyModule(
+        __name__,
+        globals()["__file__"],
+        _import_structure,
+        extra_objects={"MT5Tokenizer": MT5Tokenizer, "MT5TokenizerFast": MT5TokenizerFast},
+    )

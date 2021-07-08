@@ -1865,14 +1865,14 @@ class TensorType(ExplicitEnum):
     JAX = "jax"
 
 
-class _BaseLazyModule(ModuleType):
+class _LazyModule(ModuleType):
     """
     Module class that surfaces all objects but only performs associated imports when the objects are requested.
     """
 
     # Very heavily inspired by optuna.integration._IntegrationModule
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
-    def __init__(self, name, import_structure):
+    def __init__(self, name, module_file, import_structure, extra_objects=None):
         super().__init__(name)
         self._modules = set(import_structure.keys())
         self._class_to_module = {}
@@ -1881,12 +1881,19 @@ class _BaseLazyModule(ModuleType):
                 self._class_to_module[value] = key
         # Needed for autocompletion in an IDE
         self.__all__ = list(import_structure.keys()) + sum(import_structure.values(), [])
+        self.__file__ = module_file
+        self.__path__ = [os.path.dirname(module_file)]
+        self._objects = {} if extra_objects is None else extra_objects
+        self._name = name
+        self._import_structure = import_structure
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
         return super().__dir__() + self.__all__
 
     def __getattr__(self, name: str) -> Any:
+        if name in self._objects:
+            return self._objects[name]
         if name in self._modules:
             value = self._get_module(name)
         elif name in self._class_to_module.keys():
@@ -1898,8 +1905,11 @@ class _BaseLazyModule(ModuleType):
         setattr(self, name, value)
         return value
 
-    def _get_module(self, module_name: str) -> ModuleType:
-        raise NotImplementedError
+    def _get_module(self, module_name: str):
+        return importlib.import_module("." + module_name, self.__name__)
+
+    def __reduce__(self):
+        return (self.__class__, (self._name, self._import_structure))
 
 
 def copy_func(f):
