@@ -40,8 +40,11 @@ limitations under the License.
 
 <h4 align="center">
     <p><b>English</b> | <a href="https://github.com/huggingface/transformers/blob/master/README_zh-hans.md">简体中文</a><p>
-    <p>State-of-the-art Natural Language Processing for Jax, PyTorch and TensorFlow</p>
 </h4>
+
+<h3 align="center">
+    <p>State-of-the-art Natural Language Processing for Jax, PyTorch and TensorFlow</p>
+</h3>
 
 <h3 align="center">
     <a href="https://hf.co/course"><img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/course_banner.png"></a>

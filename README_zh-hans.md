@@ -40,8 +40,11 @@ limitations under the License.
 
 <h4 align="center">
     <p><a href="https://github.com/huggingface/transformers/">English</a> | <b>简体中文</b><p>
-    <p>为 Jax、PyTorch 和 TensorFlow 打造的先进的自然语言处理</p>
 </h4>
+
+<h3 align="center">
+    <p>为 Jax、PyTorch 和 TensorFlow 打造的先进的自然语言处理</p>
+</h3>
 
 <h3 align="center">
     <a href="https://hf.co/course"><img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/course_banner.png"></a>
