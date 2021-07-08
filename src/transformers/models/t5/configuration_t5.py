@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ T5 model configuration """
+from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
 from transformers import PreTrainedTokenizer, TensorType
@@ -144,34 +145,28 @@ class T5OnnxConfig(OnnxConfigWithPast):
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_inputs = OrderedDict([
+            ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+            ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+            ("decoder_input_ids", {0: "batch"}),
+            ("decoder_attention_mask", {0: "batch"}),
+        ])
+
         if self.use_past:
-            common_inputs = {
-                "input_ids": {0: "batch", 1: "encoder_sequence"},
-                "attention_mask": {0: "batch", 1: "encoder_sequence"},
-                "decoder_input_ids": {0: "batch"},
-                "decoder_attention_mask": {0: "batch"},
-            }
             for i in range(self._config.num_layers):
                 common_inputs[f"past_key_values.{i}.decoder.0"] = ({0: "batch", 2: "past_sequence"},)
                 common_inputs[f"past_key_values.{i}.decoder.1"] = ({0: "batch", 2: "past_sequence"},)
                 common_inputs[f"past_key_values.{i}.encoder.0"] = ({0: "batch", 2: "past_sequence"},)
                 common_inputs[f"past_key_values.{i}.encoder.1"] = ({0: "batch", 2: "past_sequence"},)
-        else:
-            common_inputs = {
-                "input_ids": {0: "batch", 1: "encoder_sequence"},
-                "attention_mask": {0: "batch", 1: "encoder_sequence"},
-                "decoder_input_ids": {0: "batch", 1: "decoder_sequence"},
-                "decoder_attention_mask": {0: "batch", 1: "decoder_sequence"},
-            }
 
         return common_inputs
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_outputs = {
-            "last_hidden_state": {0: "batch", 1: "decoder_sequence"},
-            "encoder_last_hidden_state": {0: "batch", 2: "encoder_sequence"},
-        }
+        common_outputs = OrderedDict([
+            ("last_hidden_state", {0: "batch", 1: "decoder_sequence"}),
+            ("encoder_last_hidden_state", {0: "batch", 2: "encoder_sequence"}),
+        ])
 
         if self.use_past:
             for i in range(self._config.num_layers):

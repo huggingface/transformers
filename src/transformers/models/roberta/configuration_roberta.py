@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ RoBERTa configuration """
+from collections import OrderedDict
 from typing import Mapping
 
 from ...onnx import OnnxConfig
@@ -69,11 +70,14 @@ class RobertaConfig(BertConfig):
 class RobertaOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return {
-            "input_ids": {0: "batch", 1: "sequence"},
-            "attention_mask": {0: "batch", 1: "sequence"},
-        }
+        return OrderedDict([
+            ("input_ids", {0: "batch", 1: "sequence"}),
+            ("attention_mask", {0: "batch", 1: "sequence"}),
+        ])
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return {"last_hidden_state": {0: "batch", 1: "sequence"}, "pooler_output": {0: "batch"}}
+        return OrderedDict([
+            ("last_hidden_state", {0: "batch", 1: "sequence"}),
+            ("pooler_output", {0: "batch"})
+        ])
