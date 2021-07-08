@@ -48,6 +48,9 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from ...deepspeed import is_deepspeed_zero3_enabled
+
+
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -85,9 +88,20 @@ class Embeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
         if config.sinusoidal_pos_embds:
-            create_sinusoidal_embeddings(
-                n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
-            )
+
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters(self.position_embeddings.weight, modifier_rank=0):
+                    if torch.distributed.get_rank() == 0:
+                        create_sinusoidal_embeddings(
+                            n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
+                        )
+            else:
+                create_sinusoidal_embeddings(
+                    n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
+                )
+
 
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
@@ -275,8 +289,13 @@ class Transformer(nn.Module):
         super().__init__()
         self.n_layers = config.n_layers
 
-        layer = TransformerBlock(config)
-        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.n_layers)])
+        if is_deepspeed_zero3_enabled():
+            self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
+        else:
+            layer = TransformerBlock(config)
+            self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.n_layers)])
+
+
 
     def forward(
         self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_dict=None
@@ -419,6 +438,18 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
+
+        # print(f"TRANSFORMER")
+        # for n,p in self.transformer.named_parameters(recurse=True):
+        #     print(f"{n} {p.shape}")
+
+        # import deepspeed
+        # with deepspeed.zero.GatheredParameters(list(self.transformer.parameters(recurse=True)), modifier_rank=None):
+        #     print(f"TRANSFORMER 2")
+        #     for n,p in self.transformer.named_parameters(recurse=True):
+        #         print(f"{n} {p.shape}")
+
+        # #die
 
         self.init_weights()
 

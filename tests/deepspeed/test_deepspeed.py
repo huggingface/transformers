@@ -67,6 +67,8 @@ BART_TINY = "sshleifer/bart-tiny-random"
 
 # clm
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
+
+# qa
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased-distilled-squad"
 
 
@@ -98,7 +100,8 @@ def require_deepspeed_aio(test_case):
 
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
-    from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+    # XXX: re-enable
+    #from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
     from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 
@@ -126,7 +129,7 @@ def make_task_cmds():
         --overwrite_output_dir
         """.split()
 
-    # XXX: try to cover as many models as possible once (tasks don't really matter)
+    # XXX: try to cover as many models as possible once (it's enough to run on one task per model)
     # but need a tiny model for each
     #
     # should have T5_TINY, etc. global var defined
@@ -135,12 +138,18 @@ def make_task_cmds():
             "marian",
             "mbart",
             "t5",
+            # "fsmt", # z3 not working yet
+            "bart",
         ],
         sum=[
             "pegasus",
         ],
         clm=[
             "gpt2",
+        ],
+        qa=[
+            "roberta",
+            "distilbert",
         ],
     )
 
@@ -163,6 +172,10 @@ def make_task_cmds():
         {scripts_dir}/language-modeling/run_clm.py
         --train_file {data_dir_fixtures}/sample_text.txt
         --block_size 8
+        """.split(),
+        qa=f"""
+        {scripts_dir}/question-answering/run_qa.py
+        --train_file {data_dir_samples}/SQUAD/sample.json
         """.split(),
     )
 
@@ -1062,10 +1075,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         # XXX: requires ds pr merge
         return
-        if task == "sum_pegasus" and stage == "zero3":
-            return
-        if task == "trans_marian" and stage == "zero3":
-            return
 
         # 2. test that the fp32 weights get reconsolidated
         chkpt_dir = f"{output_dir}/checkpoint-1"

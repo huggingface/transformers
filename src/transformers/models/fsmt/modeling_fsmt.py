@@ -52,6 +52,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_fsmt import FSMTConfig
+from ...deepspeed import is_deepspeed_zero3_enabled
+import transformers
 
 
 logger = logging.get_logger(__name__)
@@ -658,9 +660,15 @@ class FSMTDecoder(nn.Module):
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
 
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+            with deepspeed.zero.GatheredParameters(self.embed_tokens.weight, modifier_rank=None):
+                embed_tokens_weight_shape = self.embed_tokens.weight.shape
+        else:
+            embed_tokens_weight_shape = self.embed_tokens.weight.shape
         self.output_projection = nn.Linear(
-            self.embed_tokens.weight.shape[1],
-            self.embed_tokens.weight.shape[0],
+            embed_tokens_weight_shape[1],
+            embed_tokens_weight_shape[0],
             bias=False,
         )
         self.output_projection.weight = self.embed_tokens.weight
@@ -1136,7 +1144,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
 
         # XXX: this is not quite correct, as we have 2 different `new_embeddings`, and
         # only one return value is expected. Needs to be redesigned in the core to support dual dicts
-        raise NotImplementedError("this method needs re-thinking for models with 2 separate dictionaries")
+        #raise NotImplementedError("this method needs re-thinking for models with 2 separate dictionaries")
 
         return new_embeddings
 
@@ -1256,6 +1264,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
 
     def get_output_embeddings(self):
         return self.model.decoder.embed_tokens
+
+    def set_output_embeddings(self, value):
+        self.model.decoder.embed_tokens = value
 
 
 class SinusoidalPositionalEmbedding(nn.Embedding):

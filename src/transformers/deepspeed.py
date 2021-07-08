@@ -16,6 +16,7 @@ Integration with Deepspeed
 """
 
 import importlib.util
+import sys
 import io
 import json
 import weakref
@@ -35,7 +36,6 @@ logger = logging.get_logger(__name__)
 
 def is_deepspeed_available():
     return importlib.util.find_spec("deepspeed") is not None
-
 
 class HfDeepSpeedConfig:
     """
@@ -59,6 +59,7 @@ class HfDeepSpeedConfig:
         set_hf_deepspeed_config(self)
 
         dep_version_check("deepspeed")
+        #self.import_deepspeed_into_globals()
 
         if isinstance(config_file_or_dict, dict):
             # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
@@ -88,6 +89,14 @@ class HfDeepSpeedConfig:
             )
             if len(offload_devices & offload_devices_valid) > 0:
                 self._offload = True
+
+    # def import_deepspeed_into_globals(self):
+    #     """
+    #     Since we shouldn't load deepspeed on the module level just because it's available, we load it
+    #     here and push the symbols into the ``globals`` as if it was imported normally on top.
+    #     """
+    #     import deepspeed
+    #     globals()["deepspeed"] = sys.modules["deepspeed"]
 
     def find_config_node(self, ds_key_long):
         config = self.config
@@ -393,3 +402,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
             logger.info(f"{resume_from_checkpoint} doesn't have deepspeed checkpoints, doing nothing")
 
     return model, optimizer, lr_scheduler
+
+# from functools import partial
+# gather_params_read_only = partial(deepspeed.zero.GatheredParameters, modifier_rank=None)
+# gather_params_read_write = partial(deepspeed.zero.GatheredParameters, modifier_rank=0)
