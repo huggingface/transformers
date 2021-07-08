@@ -47,7 +47,7 @@ if is_tf_available():
     _import_structure["modeling_tf_marian"] = ["TFMarianModel", "TFMarianMTModel", "TFMarianPreTrainedModel"]
 
 if is_flax_available():
-    _import_structure["modeling_flax_marian"] = ["FlaxMarianModel", "FlaxMarianMTModel"]
+    _import_structure["modeling_flax_marian"] = ["FlaxMarianModel", "FlaxMarianMTModel", "FlaxMarianPreTrainedModel."]
 if TYPE_CHECKING:
     from .configuration_marian import MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MarianConfig
 
@@ -67,7 +67,7 @@ if TYPE_CHECKING:
         from .modeling_tf_marian import TFMarianModel, TFMarianMTModel, TFMarianPreTrainedModel
 
     if is_flax_available():
-        from .modeling_flax_marian import FlaxMarianModel, FlaxMarianMTModel
+        from .modeling_flax_marian import FlaxMarianModel, FlaxMarianMTModel, FlaxMarianPreTrainedModel
 
 else:
     import sys
