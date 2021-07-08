@@ -104,9 +104,7 @@ class ReduceMutableBorrowTests(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [executor.submit(self.fetch, tokenizer, text) for i in range(10)]
             return_value = [future.result() for future in futures]
-            self.assertEqual(
-                return_value, [[464, 24936, 318, 257, 7358, 3783, 10165, 2223, 2646, 13] for i in range(10)]
-            )
+            self.assertEqual(return_value, [[1, 10, 0, 8, 0, 18, 0, 0, 0, 2] for i in range(10)])
 
     def fetch(self, tokenizer, text):
         return tokenizer.encode(text, truncation="longest_first", padding="longest")
