@@ -141,8 +141,8 @@ Once this is done, a single step remains: adding this configuration object to th
 and to the general ``transformers`` initialisation.
 
 An important fact to notice is the use of `OrderedDict` in both inputs and outputs properties. This is a requirements
-as inputs are matched against their relative position within the `PreTrainedModel.forward()` prototype and outputs
-are match against there position in the returned `BaseModelOutputX` instance.
+as inputs are matched against their relative position within the `PreTrainedModel.forward()` prototype and outputs are
+match against there position in the returned `BaseModelOutputX` instance.
 
 
 Graph conversion
