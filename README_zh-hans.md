@@ -33,7 +33,7 @@ Trainer: 训练器。当作为类名出现时不翻译。
 pretrained/pretrain: 预训练
 finetune: 微调
 community: 社区
-example: 当特制仓库中 example 目录时翻译为「用例」
+example: 当特指仓库中 example 目录时翻译为「用例」
 Python data structures (e.g., list, set, dict): 翻译为列表，集合，词典，并用括号标注原英文
 NLP/Natural Language Processing: 以 NLP 出现时不翻译，以 Natural Language Processing 出现时翻译为自然语言处理
 checkpoint: 检查点
