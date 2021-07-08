@@ -380,13 +380,13 @@ def pipeline(
         >>> pipeline('ner', model=model, tokenizer=tokenizer)
     """
     if model is None and tokenizer is not None:
-        raise Exception(
+        raise RuntimeError(
             "Impossible to instantiate a pipeline with tokenizer specified but not the model "
             "as the provided tokenizer may not be compatible with the default model. "
             "Please provide a PreTrainedModel class or a path/identifier to a pretrained model when providing tokenizer."
         )
     if model is None and feature_extractor is not None:
-        raise Exception(
+        raise RuntimeError(
             "Impossible to instantiate a pipeline with feature_extractor specified but not the model "
             "as the provided feature_extractor may not be compatible with the default model. "
             "Please provide a PreTrainedModel class or a path/identifier to a pretrained model when providing feature_extractor."
