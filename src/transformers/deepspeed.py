@@ -16,7 +16,6 @@ Integration with Deepspeed
 """
 
 import importlib.util
-import sys
 import io
 import json
 import weakref
@@ -36,6 +35,7 @@ logger = logging.get_logger(__name__)
 
 def is_deepspeed_available():
     return importlib.util.find_spec("deepspeed") is not None
+
 
 class HfDeepSpeedConfig:
     """
@@ -59,7 +59,6 @@ class HfDeepSpeedConfig:
         set_hf_deepspeed_config(self)
 
         dep_version_check("deepspeed")
-        #self.import_deepspeed_into_globals()
 
         if isinstance(config_file_or_dict, dict):
             # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
@@ -402,6 +401,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
             logger.info(f"{resume_from_checkpoint} doesn't have deepspeed checkpoints, doing nothing")
 
     return model, optimizer, lr_scheduler
+
 
 # from functools import partial
 # gather_params_read_only = partial(deepspeed.zero.GatheredParameters, modifier_rank=None)

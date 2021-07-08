@@ -858,9 +858,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if torch.distributed.get_rank() == 0:
                     # Copy old lm head weights to new lm head
                     if not transposed:
-                        new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
+                        new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[
+                            :num_tokens_to_copy, :
+                        ]
                     else:
-                        new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
+                        new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[
+                            :, :num_tokens_to_copy
+                        ]
 
                     # Copy bias weights to new lm head
                     if has_new_lm_head_bias:

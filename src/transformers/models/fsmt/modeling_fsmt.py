@@ -36,6 +36,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
@@ -52,8 +53,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_fsmt import FSMTConfig
-from ...deepspeed import is_deepspeed_zero3_enabled
-import transformers
 
 
 logger = logging.get_logger(__name__)
@@ -662,6 +661,7 @@ class FSMTDecoder(nn.Module):
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
+
             with deepspeed.zero.GatheredParameters(self.embed_tokens.weight, modifier_rank=None):
                 embed_tokens_weight_shape = self.embed_tokens.weight.shape
         else:

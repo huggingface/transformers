@@ -23,8 +23,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-
 from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
@@ -35,7 +35,7 @@ from ...modeling_outputs import BaseModelOutput, CausalLMOutput, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
-from ...deepspeed import is_deepspeed_zero3_enabled
+
 
 logger = logging.get_logger(__name__)
 

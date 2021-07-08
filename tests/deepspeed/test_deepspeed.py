@@ -53,8 +53,7 @@ with ExtendSysPath(tests_dir):
 
 set_seed(42)
 
-
-# trans
+# translation
 FSMT_TINY = "stas/tiny-wmt19-en-de"
 BART_TINY = "sshleifer/bart-tiny-random"
 T5_SMALL = "t5-small"
@@ -62,25 +61,19 @@ T5_TINY = "patrickvonplaten/t5-tiny-random"
 MBART_TINY = "sshleifer/tiny-mbart"
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
 
-# sum
+# summarization
 PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
 
-# clm
+# causal lm
 GPT2_TINY = "sshleifer/tiny-gpt2"
 
-# qa
+# question-answering
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased-distilled-squad"
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 
-# class
+# classification
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
-BERT_TINY = "prajjwal1/bert-tiny"
-
-# XXX: find a task to exercise these models under deepspeed:
-#
-# - works with text-generation, but the example doesn't work with Trainer - so can't use deepspeed
-# - fails with text-classification, but perhaps can be made to work.
-CTRL_TINY = "sshleifer/tiny-ctrl"
+BERT_TINY = "hf-internal-testing/tiny-bert"
 
 
 def load_json(path):
@@ -106,8 +99,9 @@ def require_deepspeed_aio(test_case):
 
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
+
     # XXX: re-enable
-    #from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+    # from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
     from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 
@@ -159,10 +153,8 @@ def make_task_cmds():
         ],
         clas=[
             "bert",
-            # "ctrl", # not working at the moment due to example script failing with it
             "xlnet",
         ],
-
     )
 
     scripts_dir = f"{root_dir}/examples/pytorch"
@@ -197,7 +189,6 @@ def make_task_cmds():
         """,
     )
 
-
     launcher = get_launcher(distributed=True)
 
     cmds = {}
@@ -214,7 +205,6 @@ def make_task_cmds():
             #     args_model += f"--model_type {model}".split()
             #     cmds[f"{task}_{model}"] = launcher + args + args_model
             # else:
-
 
     return cmds
 
