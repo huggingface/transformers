@@ -145,12 +145,14 @@ class T5OnnxConfig(OnnxConfigWithPast):
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict([
-            ("input_ids", {0: "batch", 1: "encoder_sequence"}),
-            ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
-            ("decoder_input_ids", {0: "batch"}),
-            ("decoder_attention_mask", {0: "batch"}),
-        ])
+        common_inputs = OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+                ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+                ("decoder_input_ids", {0: "batch"}),
+                ("decoder_attention_mask", {0: "batch"}),
+            ]
+        )
 
         if self.use_past:
             for i in range(self._config.num_layers):
@@ -163,10 +165,12 @@ class T5OnnxConfig(OnnxConfigWithPast):
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_outputs = OrderedDict([
-            ("last_hidden_state", {0: "batch", 1: "decoder_sequence"}),
-            ("encoder_last_hidden_state", {0: "batch", 2: "encoder_sequence"}),
-        ])
+        common_outputs = OrderedDict(
+            [
+                ("last_hidden_state", {0: "batch", 1: "decoder_sequence"}),
+                ("encoder_last_hidden_state", {0: "batch", 2: "encoder_sequence"}),
+            ]
+        )
 
         if self.use_past:
             for i in range(self._config.num_layers):
