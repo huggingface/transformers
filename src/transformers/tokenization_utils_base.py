@@ -28,7 +28,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
-
 import requests
 
 from .file_utils import (
@@ -111,6 +110,7 @@ EncodedInputPair = Tuple[List[int], List[int]]
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+CONFIG_FILE = "config.json"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
@@ -1639,6 +1639,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
                 "tokenizer_file": FULL_TOKENIZER_FILE,
+                "config_file": CONFIG_FILE,
             }
             # Look for the tokenizer files
             for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
@@ -1742,15 +1743,33 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
         tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
+        config_tokenizer_class = None
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
+            config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
         else:
             init_kwargs = init_configuration
+
+        if tokenizer_config_file is None or config_tokenizer_class is None:
+            config_file = resolved_vocab_files.pop("config_file", None)
+            if config_file is not None:
+                with open(config_file, encoding="utf-8") as config_handle:
+                    config_dict = json.load(config_handle)
+                config_tokenizer_class = config_dict.get("tokenizer_class")
+
+        if config_tokenizer_class is not None:
+            if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
+                raise ValueError(
+                    "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. "
+                    "It may result in unexpected tokenization. \n"
+                    f"The tokenizer class you load from this checkpoint is '{config_tokenizer_class}'. \n"
+                    f"The class this function is called from is '{cls.__name__}'."
+                )
 
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
