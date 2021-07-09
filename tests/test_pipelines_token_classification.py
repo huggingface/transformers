@@ -62,6 +62,13 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
                 self.assertIn(key, result)
 
     @require_torch
+    def test_model_kwargs_passed_to_model_load(self):
+        ner_pipeline = pipeline(task="ner", model=self.small_models[0])
+        self.assertFalse(ner_pipeline.model.config.output_attentions)
+        ner_pipeline = pipeline(task="ner", model=self.small_models[0], model_kwargs={"output_attentions": True})
+        self.assertTrue(ner_pipeline.model.config.output_attentions)
+
+    @require_torch
     @slow
     def test_spanish_bert(self):
         # https://github.com/huggingface/transformers/pull/4987

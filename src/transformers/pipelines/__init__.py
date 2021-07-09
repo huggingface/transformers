@@ -426,7 +426,13 @@ def pipeline(
     # Will load the correct model if possible
     model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"]}
     framework, model = infer_framework_load_model(
-        model, model_classes=model_classes, config=config, framework=framework, revision=revision, task=task
+        model,
+        model_classes=model_classes,
+        config=config,
+        framework=framework,
+        revision=revision,
+        task=task,
+        **model_kwargs,
     )
 
     model_config = model.config
