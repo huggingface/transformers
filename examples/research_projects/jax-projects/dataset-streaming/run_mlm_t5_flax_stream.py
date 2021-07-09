@@ -735,17 +735,16 @@ if __name__ == "__main__":
                 write_eval_metric(summary_writer, eval_metrics, step)
             eval_metrics = []
 
-            if step % training_args.save_steps == 0 and step > 0:
-                # save checkpoint after each save_steps and push checkpoint to the hub
-                if jax.process_index() == 0:
-                    params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
-                    model.save_pretrained(
-                        training_args.output_dir,
-                        params=params,
-                        push_to_hub=training_args.push_to_hub,
-                        commit_message=f"Saving weights and logs of step {step+1}",
-                    )
-                    tokenizer.save_pretrained(training_args.output_dir)
+        if step % training_args.save_steps == 0 and step > 0:
+            # save checkpoint after each save_steps and push checkpoint to the hub
+            if jax.process_index() == 0:
+                params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+                model.save_pretrained(
+                    training_args.output_dir,
+                    params=params,
+                    push_to_hub=training_args.push_to_hub,
+                    commit_message=f"Saving weights and logs of step {step+1}",
+                )
 
         # update tqdm bar
         steps.update(1)
