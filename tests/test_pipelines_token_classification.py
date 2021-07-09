@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
-from transformers.file_utils import WEIGHTS_NAME, get_from_cache, hf_bucket_url
 from transformers.pipelines import AggregationStrategy, Pipeline, TokenClassificationArgumentHandler
 from transformers.testing_utils import nested_simplify, require_tf, require_torch, slow
 
