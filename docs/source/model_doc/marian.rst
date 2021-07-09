@@ -55,7 +55,7 @@ Tips
           >>> input_ids = tokenizer(text, max_length=64, return_tensors='jax').input_ids
 
           >>> # Marian has to make use of early_stopping=True
-          >>> sequences = model.generate(inputs, early_stopping=True, max_length=64, num_beams=2).sequences
+          >>> sequences = model.generate(input_ids, early_stopping=True, max_length=64, num_beams=2).sequences
 
 
 Naming
