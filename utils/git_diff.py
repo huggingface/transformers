@@ -72,7 +72,7 @@ def get_modified_python_files():
     for commit in branching_commits:
         print(f"Branching commit: {commit}")
 
-    print("### DIFF ###")
+    print("\n### DIFF ###\n")
     code_diff = []
     for commit in branching_commits:
         for diff_obj in commit.diff(repo.head.commit):
@@ -243,6 +243,10 @@ EXPECTED_TEST_FILES_NEVER_TOUCHED = [
 ]
 
 
+def _print_list(l):
+    return "\n".join([f"- {f}" for f in l])
+
+
 def sanity_check():
     """
     Checks that all test files can be touched by a modification in at least one module/utils. This test ensures that
@@ -268,19 +272,19 @@ def sanity_check():
 
     should_be_tested = set(not_touched_test_files) - set(EXPECTED_TEST_FILES_NEVER_TOUCHED)
     if len(should_be_tested) > 0:
-        text = "\n".join([f"- {f}" for f in should_be_tested])
         raise ValueError(
             "The following test files are not currently associated with any module or utils files, which means they "
-            f"will never get run by the CI:\n{text}\n. Make sure the names of these test files match the name of the "
-            "module or utils they are testing, or adapt the constant SPECIAL_MODULE_TO_TEST_MAP in utils/git_diff.py "
-            "to add them. If your test file is triggered separately and is not supposed to be run by the regular CI, "
-            "add it to the EXPECTED_TEST_FILES_NEVER_TOUCHED constant instead."
+            f"will never get run by the CI:\n{_print_list(should_be_tested)}\n. Make sure the names of these test "
+            "files match the name of the module or utils they are testing, or adapt the constant "
+            "`SPECIAL_MODULE_TO_TEST_MAP` in `utils/git_diff.py` to add them. If your test file is triggered "
+            "separately and is not supposed to be run by the regular CI, add it to the "
+            "`EXPECTED_TEST_FILES_NEVER_TOUCHED` constant instead."
         )
 
 
 def infer_tests_to_run():
     modified_files = get_modified_python_files()
-    print(f"Modified files: {modified_files}")
+    print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
     # Create the map that will give us all impacted modules.
     impacted_modules_map = create_reverse_dependency_map()
@@ -290,8 +294,8 @@ def infer_tests_to_run():
             impacted_files.extend(impacted_modules_map[f])
 
     # Remove duplicates
-    impacted_files = list(set(impacted_files))
-    print(f"Impact: {impacted_files}")
+    impacted_files = sorted(list(set(impacted_files)))
+    print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
     # Grab the corresponding test files:
     test_files_to_run = []
@@ -308,8 +312,8 @@ def infer_tests_to_run():
                     test_files_to_run.extend(new_tests)
 
     # Remove duplicates
-    test_files_to_run = list(set(test_files_to_run))
-    print(f"Test files to run: {test_files_to_run}")
+    test_files_to_run = sorted(list(set(test_files_to_run)))
+    print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
 
 
 if __name__ == "__main__":
