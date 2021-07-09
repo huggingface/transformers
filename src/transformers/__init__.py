@@ -1343,6 +1343,14 @@ if is_tf_available():
             "TFGPT2PreTrainedModel",
         ]
     )
+    _import_structure["models.hubert"].extend(
+        [
+            "TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFHubertForCTC",
+            "TFHubertModel",
+            "TFHubertPreTrainedModel",
+        ]
+    )
     _import_structure["models.layoutlm"].extend(
         [
             "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2803,6 +2811,12 @@ if TYPE_CHECKING:
             TFGPT2MainLayer,
             TFGPT2Model,
             TFGPT2PreTrainedModel,
+        )
+        from .models.hubert import (
+            TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFHubertForCTC,
+            TFHubertModel,
+            TFHubertPreTrainedModel,
         )
         from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
         from .models.longformer import (

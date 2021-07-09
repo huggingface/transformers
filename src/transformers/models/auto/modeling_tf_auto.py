@@ -101,6 +101,7 @@ from ..funnel.modeling_tf_funnel import (
     TFFunnelModel,
 )
 from ..gpt2.modeling_tf_gpt2 import TFGPT2ForSequenceClassification, TFGPT2LMHeadModel, TFGPT2Model
+from ..hubert.modeling_tf_hubert import TFHubertModel
 from ..layoutlm.modeling_tf_layoutlm import (
     TFLayoutLMForMaskedLM,
     TFLayoutLMForSequenceClassification,
@@ -204,6 +205,7 @@ from .configuration_auto import (
     FlaubertConfig,
     FunnelConfig,
     GPT2Config,
+    HubertConfig,
     LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
@@ -266,6 +268,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (BlenderbotConfig, TFBlenderbotModel),
         (BlenderbotSmallConfig, TFBlenderbotSmallModel),
         (Wav2Vec2Config, TFWav2Vec2Model),
+        (HubertConfig, TFHubertModel),
     ]
 )
 
