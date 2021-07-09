@@ -119,6 +119,7 @@ from .trainer_utils import (
     default_hp_space,
     denumpify_detensorize,
     get_last_checkpoint,
+    number_of_arguments,
     set_seed,
     speed_metrics,
 )
@@ -905,7 +906,7 @@ class Trainer:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
     def call_model_init(self, trial=None):
-        model_init_argcount = len(inspect.signature(self.model_init).parameters)
+        model_init_argcount = number_of_arguments(self.model_init)
         if model_init_argcount == 0:
             model = self.model_init()
         elif model_init_argcount == 1:

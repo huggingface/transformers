@@ -17,6 +17,7 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 """
 
 import copy
+import functools
 import gc
 import inspect
 import os
@@ -466,6 +467,16 @@ def denumpify_detensorize(metrics):
     elif is_torch_available() and isinstance(metrics, torch.Tensor) and metrics.numel() == 1:
         return metrics.item()
     return metrics
+
+
+def number_of_arguments(func):
+    """
+    Return the number of arguments of the passed function, even if it's a partial function.
+    """
+    if isinstance(func, functools.partial):
+        total_args = len(inspect.signature(func.func).parameters)
+        return total_args - len(func.args) - len(func.keywords)
+    return len(inspect.signature(func).parameters)
 
 
 class ShardedDDPOption(ExplicitEnum):
