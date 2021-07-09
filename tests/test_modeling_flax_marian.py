@@ -344,7 +344,7 @@ class MarianIntegrationTest(unittest.TestCase):
     def translate_src_text(self, **tokenizer_kwargs):
         model_inputs = self.tokenizer(self.src_text, padding=True, return_tensors="np", **tokenizer_kwargs)
         generated_ids = self.model.generate(
-            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, max_length=128, early_stopping=True
+            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, max_length=128, early_stopping=True 
         ).sequences
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
@@ -421,12 +421,12 @@ class TestMarian_EN_DE(MarianIntegrationTest):
         "Turn around and close your eyes.",
     ]
     expected_text = [
-        "Ich bin ein kleiner Frosch.",
+        "- Ich bin ein kleiner Frosch.",
         "Jetzt kann ich die 100 Wörter des Deutschen vergessen, die ich kenne.",
-        "Tom bat seinen Lehrer um Rat.",
+        "Tom fragte seinen Lehrer um Rat.",
         "So würde ich das machen.",
         "Tom bewunderte Marias Mut wirklich.",
-        "Drehen Sie sich um und schließen Sie die Augen.",
+        "Dreh dich um und schließe deine Augen.",
     ]
 
     @slow
