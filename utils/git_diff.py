@@ -301,10 +301,11 @@ def infer_tests_to_run():
             test_files_to_run.append(f)
         else:
             new_tests = module_to_test_file(f)
-            if isinstance(new_tests, str):
-                test_files_to_run.append(new_tests)
-            else:
-                test_files_to_run.extend(new_tests)
+            if new_tests is not None:
+                if isinstance(new_tests, str):
+                    test_files_to_run.append(new_tests)
+                else:
+                    test_files_to_run.extend(new_tests)
 
     # Remove duplicates
     test_files_to_run = list(set(test_files_to_run))
