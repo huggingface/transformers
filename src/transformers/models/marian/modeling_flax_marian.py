@@ -38,7 +38,7 @@ from ...modeling_flax_outputs import (
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqModelOutput,
 )
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
 from ...utils import logging
 from .configuration_marian import MarianConfig
 
@@ -1450,3 +1450,29 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
         model_kwargs["decoder_position_ids"] = model_kwargs["decoder_position_ids"][:, -1:] + 1
         return model_kwargs
+
+
+FLAX_MARIAN_MT_DOCSTRING = """
+    Returns:
+
+    Example::
+
+        >>> from transformers import MarianTokenizer, FlaxMarianMTModel
+
+        >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> input_ids = tokenizer(text, max_length=64, return_tensors='jax').input_ids
+
+        >>> # Marian has to make use of early_stopping=True
+        >>> sequences = model.generate(inputs, early_stopping=True, max_length=64, num_beams=2).sequences
+
+        >>> outputs = tokenizer.batch_decode(sequences, skip_special_tokens=True)
+        >>> # should give `Meine Freunde sind cool, aber sie essen zu viele Kohlenhydrate.`
+"""
+
+overwrite_call_docstring(
+    FlaxMarianMTModel,
+    MARIAN_INPUTS_DOCSTRING + FLAX_MARIAN_MT_DOCSTRING,
+)
