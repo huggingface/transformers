@@ -72,13 +72,15 @@ DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased-distilled-squad"
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
 
+# masked lm
+ELECTRA_TINY = "hf-internal-testing/tiny-electra"
+
 # classification
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
 BERT_TINY = "hf-internal-testing/tiny-bert"
 
 
 # TODO: to add:
-# electra
 # albert
 # deberta
 # funnel
@@ -162,7 +164,10 @@ def make_task_cmds():
         ],
         clm=[
             "gpt2",
-            "xlm-roberta"
+            "xlm-roberta",
+        ],
+        mlm=[
+            "electra",
         ],
         qa=[
             "distilbert",
@@ -193,6 +198,10 @@ def make_task_cmds():
         {scripts_dir}/language-modeling/run_clm.py
         --train_file {data_dir_fixtures}/sample_text.txt
         --block_size 8
+        """,
+        mlm=f"""
+        {scripts_dir}/language-modeling/run_mlm.py
+        --train_file {data_dir_fixtures}/sample_text.txt
         """,
         qa=f"""
         {scripts_dir}/question-answering/run_qa.py
