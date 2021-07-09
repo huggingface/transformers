@@ -1633,6 +1633,13 @@ if is_flax_available():
     _import_structure["models.gpt_neo"].extend(
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
+    _import_structure["models.marian"].extend(
+        [
+            "FlaxMarianModel",
+            "FlaxMarianMTModel",
+            "FlaxMarianPreTrainedModel",
+        ]
+    )
     _import_structure["models.mbart"].extend(
         [
             "FlaxMBartForConditionalGeneration",
@@ -3028,6 +3035,7 @@ if TYPE_CHECKING:
         )
         from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
         from .models.gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel, FlaxGPTNeoPreTrainedModel
+        from .models.marian import FlaxMarianModel, FlaxMarianMTModel, FlaxMarianPreTrainedModel
         from .models.mbart import (
             FlaxMBartForConditionalGeneration,
             FlaxMBartForQuestionAnswering,
