@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import collections
 import os
 import re
@@ -39,7 +40,7 @@ def checkout_commit(repo, commit_id):
 
 def diff_is_docstring_only(repo, branching_point, filename):
     """
-    Check if the diff is only a docstring in a filename renamed from filename to filename.
+    Check if the diff is only in docstrings in a filename.
     """
     with checkout_commit(repo, branching_point):
         with open(filename, "r", encoding="utf-8") as f:
@@ -48,6 +49,7 @@ def diff_is_docstring_only(repo, branching_point, filename):
     with open(filename, "r", encoding="utf-8") as f:
         new_content = f.read()
 
+    # To check if the diff is in docstrings, we remove all docstrings by splitting on """.
     old_content_splits = old_content.split('"""')
     old_content_no_doc = "".join(old_content_splits[::2])
 
@@ -101,7 +103,7 @@ def get_module_dependencies(module_fname):
     """
     with open(module_fname, "r", encoding="utf-8") as f:
         content = f.read()
-    
+
     imports = re.findall(r"from\s+(\.+\S+)\s+import\s+\S+\s", content)
     module_parts = module_fname.split(os.path.sep)
     dependencies = []
@@ -110,8 +112,8 @@ def get_module_dependencies(module_fname):
         while imp.startswith("."):
             imp = imp[1:]
             level += 1
-        
-        dep_parts = module_parts[:len(module_parts)-level] + imp.split(".")
+
+        dep_parts = module_parts[: len(module_parts) - level] + imp.split(".")
         if os.path.isfile(os.path.sep.join(dep_parts) + ".py"):
             dependencies.append(os.path.sep.join(dep_parts) + ".py")
     return dependencies
@@ -133,7 +135,7 @@ def create_reverse_dependency_map():
                     if dep not in direct_deps[m]:
                         direct_deps[m].append(dep)
                         something_changed = True
-    
+
     reverse_map = collections.defaultdict(list)
     for m in modules:
         for d in direct_deps[m]:
@@ -142,15 +144,178 @@ def create_reverse_dependency_map():
     return reverse_map
 
 
+# Any module file that has a test name which is not obviously inferred from its name should go there (better name
+# your test file appropriately than add a new entry in this list if you can!)
+SPECIAL_MODULE_TO_TEST_MAP = {
+    "configuration_utils.py": "test_configuration_common.py",
+    "convert_graph_to_onnx.py": "test_onnx.py",
+    "data/data_collator.py": "test_data_collator.py",
+    "deepspeed.py": "deepspeed/test_deepspeed.py",
+    "feature_extraction_sequence_utils.py": "test_sequence_feature_extraction_common.py",
+    "feature_extraction_utils.py": "test_feature_extraction_common.py",
+    "file_utils.py": ["test_file_utils.py", "test_model_output.py"],
+    "modelcard.py": "test_model_card.py",
+    "modeling_flax_utils.py": "test_modeling_flax_common.py",
+    "modeling_tf_utils.py": "test_modeling_tf_common.py",
+    "modeling_utils.py": ["test_modeling_common.py", "test_offline.py"],
+    "models/auto/modeling_auto.py": ["test_modeling_auto.py", "test_modeling_tf_pytorch.py", "test_modeling_bort.py"],
+    "models/auto/modeling_flax_auto.py": "test_flax_auto.py",
+    "models/auto/modeling_tf_auto.py": [
+        "test_modeling_tf_auto.py",
+        "test_modeling_tf_pytorch.py",
+        "test_modeling_tf_bort.py",
+    ],
+    "models/blenderbot_small/tokenization_blenderbot_small.py": "test_tokenization_small_blenderbot.py",
+    "models/blenderbot_small/tokenization_blenderbot_small_fast.py": "test_tokenization_small_blenderbot.py",
+    "models/gpt2/modeling_gpt2.py": ["test_modeling_gpt2.py", "test_modeling_megatron_gpt2.py"],
+    "pipelines/base.py": "test_pipelines_common.py",
+    "pipelines/text2text_generation.py": [
+        "test_pipelines_text2text_generation.py",
+        "test_pipelines_summarization.py",
+        "test_pipelines_translation.py",
+    ],
+    "pipelines/zero_shot_classification.py": "test_pipelines_zero_shot.py",
+    "testing_utils.py": "test_skip_decorators.py",
+    "tokenization_utils.py": "test_tokenization_common.py",
+    "tokenization_utils_base.py": "test_tokenization_common.py",
+    "tokenization_utils_fast.py": "test_tokenization_fast.py",
+    "trainer.py": [
+        "test_trainer.py",
+        "extended/test_trainer_ext.py",
+        "test_trainer_distributed.py",
+        "test_trainer_tpu.py",
+    ],
+    "utils/versions.py": "test_versions_utils.py",
+}
 
 
-if __name__ == "__main__":
+def module_to_test_file(module_fname):
+    """
+    Returns the name of the file(s) where `module_fname` is tested.
+    """
+    splits = module_fname.split(os.path.sep)
+
+    # Special map has priority
+    short_name = os.path.sep.join(splits[2:])
+    if short_name in SPECIAL_MODULE_TO_TEST_MAP:
+        test_file = SPECIAL_MODULE_TO_TEST_MAP[short_name]
+        if isinstance(test_file, str):
+            return f"tests/{test_file}"
+        return [f"tests/{f}" for f in test_file]
+
+    module_name = splits[-1]
+    # Fast tokenizers are tested in the same file as the slow ones.
+    if module_name.endswith("_fast.py"):
+        module_name = module_name.replace("_fast.py", ".py")
+
+    # Special case for pipelines submodules
+    if splits[-2] == "pipelines":
+        default_test_file = f"tests/test_pipelines_{module_name}"
+    # Special case for benchmarks submodules
+    elif splits[-2] == "benchmark":
+        return ["tests/test_benchmark.py", "tests/test_benchmark_tf.py"]
+    # Special case for commands submodules
+    elif splits[-2] == "commands":
+        return "tests/test_cli.py"
+    # Special case for utils (not the one in src/transformers, the ones at the root of the repo).
+    elif splits[0] == "utils":
+        default_test_file = f"tests/test_utils_{module_name}"
+    else:
+        default_test_file = f"tests/test_{module_name}"
+
+    if os.path.isfile(default_test_file):
+        return default_test_file
+
+    # Processing -> processor
+    if "processing" in default_test_file:
+        test_file = default_test_file.replace("processing", "processor")
+        if os.path.isfile(test_file):
+            return test_file
+
+
+# This list contains the list of test files we expect never to be launched from a change in a module/util. Those are
+# launched separately.
+EXPECTED_TEST_FILES_NEVER_TOUCHED = [
+    "tests/test_doc_samples.py",  # Doc tests
+    "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
+    "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
+    "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
+]
+
+
+def sanity_check():
+    """
+    Checks that all test files can be touched by a modification in at least one module/utils. This test ensures that
+    newly-added test files are properly mapped to some module or utils, so they can be run by the CI.
+    """
+    # Grab all module and utils
+    all_files = [str(p.relative_to(".")) for p in Path("src/transformers").glob("**/*.py")]
+    all_files += [str(p.relative_to(".")) for p in Path("utils").glob("**/*.py")]
+
+    # Compute all the test files we get from those.
+    test_files_found = []
+    for f in all_files:
+        test_f = module_to_test_file(f)
+        if test_f is not None:
+            if isinstance(test_f, str):
+                test_files_found.append(test_f)
+            else:
+                test_files_found.extend(test_f)
+
+    # Compare to existing test files
+    existing_test_files = [str(p.relative_to(".")) for p in Path("tests").glob("**/test*.py")]
+    not_touched_test_files = [f for f in existing_test_files if f not in test_files_found]
+
+    should_be_tested = set(not_touched_test_files) - set(EXPECTED_TEST_FILES_NEVER_TOUCHED)
+    if len(should_be_tested) > 0:
+        text = "\n".join([f"- {f}" for f in should_be_tested])
+        raise ValueError(
+            "The following test files are not currently associated with any module or utils files, which means they "
+            f"will never get run by the CI:\n{text}\n. Make sure the names of these test files match the name of the "
+            "module or utils they are testing, or adapt the constant SPECIAL_MODULE_TO_TEST_MAP in utils/git_diff.py "
+            "to add them. If your test file is triggered separately and is not supposed to be run by the regular CI, "
+            "add it to the EXPECTED_TEST_FILES_NEVER_TOUCHED constant instead."
+        )
+
+
+def infer_tests_to_run():
     modified_files = get_modified_python_files()
     print(f"Modified files: {modified_files}")
 
-    reverse_deps = create_reverse_dependency_map()
+    # Create the map that will give us all impacted modules.
+    impacted_modules_map = create_reverse_dependency_map()
     impacted_files = modified_files.copy()
     for f in modified_files:
-        impacted_files.extend(reverse_deps[f])
+        if f in impacted_modules_map:
+            impacted_files.extend(impacted_modules_map[f])
+
+    # Remove duplicates
     impacted_files = list(set(impacted_files))
     print(f"Impact: {impacted_files}")
+
+    # Grab the corresponding test files:
+    test_files_to_run = []
+    for f in impacted_files:
+        # Modified test files are always added
+        if f.startswith("tests/"):
+            test_files_to_run.append(f)
+        else:
+            new_tests = module_to_test_file(f)
+            if isinstance(new_tests, str):
+                test_files_to_run.append(new_tests)
+            else:
+                test_files_to_run.extend(new_tests)
+
+    # Remove duplicates
+    test_files_to_run = list(set(test_files_to_run))
+    print(f"Test files to run: {test_files_to_run}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sanity_check", action="store_true", help="Whether to just perform a sanity check.")
+    args = parser.parse_args()
+    if args.sanity_check:
+        sanity_check()
+    else:
+        infer_tests_to_run()
