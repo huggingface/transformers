@@ -18,6 +18,7 @@ import math
 import random
 from functools import partial
 from typing import Callable, Optional, Tuple
+
 import numpy as np
 
 import flax.linen as nn
@@ -206,9 +207,7 @@ MARIAN_DECODE_INPUTS_DOCSTRING = r"""
 
 
 def create_sinusoidal_positions(n_pos, dim, dtype):
-    position_enc = np.array(
-        [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
-    )
+    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     sentinel = dim // 2 + dim % 2
     out = np.zeros_like(position_enc)
     out[:, 0:sentinel] = np.sin(position_enc[:, 0::2])
@@ -1415,6 +1414,11 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
             outputs = outputs[:1] + (unfreeze(past["cache"]),) + outputs[1:]
 
         return outputs
+
+    def _adapt_logits_for_beam_search(self, logits):
+        """This function enforces the padding token never to be generated."""
+        logits = jax.ops.index_update(logits, jax.ops.index[:, self.config.pad_token_id], float("-inf"))
+        return logits
 
     def prepare_inputs_for_generation(
         self,
