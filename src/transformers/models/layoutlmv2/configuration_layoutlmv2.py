@@ -68,8 +68,8 @@ class LayoutLMv2Config(PretrainedConfig):
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         max_2d_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
-            The maximum value that the 2D position embedding might ever be used with. Typically set this to something large
-            just in case (e.g., 1024).
+            The maximum value that the 2D position embedding might ever be used with. Typically set this to something
+            large just in case (e.g., 1024).
         max_rel_pos (:obj:`int`, `optional`, defaults to 128):
             The maximum number of relative positions to be used in the self-attention mechanism.
         rel_pos_bins (:obj:`int`, `optional`, defaults to 32):

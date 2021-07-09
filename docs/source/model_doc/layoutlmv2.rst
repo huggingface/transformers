@@ -58,8 +58,8 @@ Tips:
   document images, :obj:`image` should be a tensor of shape (batch_size, 3, 224, 224). This can be either a
   :obj:`torch.Tensor` or a :obj:`Detectron2.structures.ImageList`. You don't need to normalize the channels, as this is
   done by the model. The :obj:`bbox` input are the bounding boxes (i.e. 2D-positions) of the input text tokens. This is
-  identical to :class:`~transformer.LayoutLMModel`. These can be obtained using an external OCR engine such as
-  Google's `Tesseract <https://github.com/tesseract-ocr/tesseract>`__ (there's a `Python wrapper
+  identical to :class:`~transformer.LayoutLMModel`. These can be obtained using an external OCR engine such as Google's
+  `Tesseract <https://github.com/tesseract-ocr/tesseract>`__ (there's a `Python wrapper
   <https://pypi.org/project/pytesseract/>`__ available). Each bounding box should be in (x0, y0, x1, y1) format, where
   (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1, y1) represents the
   position of the lower right corner. Note that one first needs to normalize the bounding boxes to be on a 0-1000
@@ -76,7 +76,8 @@ Tips:
          ]
 
 Here, :obj:`width` and :obj:`height` correspond to the width and height of the original document in which the token
-occurs (before resizing the image). Those can be obtained using the Python Image Library (PIL) library for example, as follows:
+occurs (before resizing the image). Those can be obtained using the Python Image Library (PIL) library for example, as
+follows:
 
 .. code-block::
 
@@ -92,9 +93,9 @@ occurs (before resizing the image). Those can be obtained using the Python Image
   the size of the feature map is 7x7 by default, one obtains 49 image tokens. These are then concatenated with the text
   tokens, and send through the Transformer encoder. This means that the last hidden states of the model will have a
   length of 512 + 49 = 561, if you pad the text tokens up to the max length.
-- When calling :meth:`~transformer.LayoutLMv2Model.from_pretrained`, a warning will be printed with a long list of 
-  parameter names that are not initialized. This is not a problem, as these parameters are batch normalization statistics,
-  which are going to have values when fine-tuning on a custom dataset.
+- When calling :meth:`~transformer.LayoutLMv2Model.from_pretrained`, a warning will be printed with a long list of
+  parameter names that are not initialized. This is not a problem, as these parameters are batch normalization
+  statistics, which are going to have values when fine-tuning on a custom dataset.
 
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
 <https://github.com/microsoft/unilm/tree/master/layoutlmv2>`__.
