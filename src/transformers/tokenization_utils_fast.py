@@ -338,23 +338,32 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
         """
+        _truncation = self._tokenizer.truncation
+        _padding = self._tokenizer.padding
         # Set truncation and padding on the backend tokenizer
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
-            self._tokenizer.enable_truncation(max_length, stride=stride, strategy=truncation_strategy.value)
+        if truncation_strategy == TruncationStrategy.DO_NOT_TRUNCATE:
+            if _truncation is not None:
+                self._tokenizer.no_truncation()
         else:
-            self._tokenizer.no_truncation()
+            target = {"max_length": max_length, "stride": stride, "strategy": truncation_strategy.value}
+            if _truncation != target:
+                self._tokenizer.enable_truncation(**target)
 
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD:
-            self._tokenizer.enable_padding(
-                length=max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None,
-                direction=self.padding_side,
-                pad_id=self.pad_token_id,
-                pad_type_id=self.pad_token_type_id,
-                pad_token=self.pad_token,
-                pad_to_multiple_of=pad_to_multiple_of,
-            )
+        if padding_strategy == PaddingStrategy.DO_NOT_PAD:
+            if _padding is not None:
+                self._tokenizer.no_padding()
         else:
-            self._tokenizer.no_padding()
+            length = max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None
+            target = {
+                "length": length,
+                "direction": self.padding_side,
+                "pad_id": self.pad_token_id,
+                "pad_token": self.pad_token,
+                "pad_type_id": self.pad_token_type_id,
+                "pad_to_multiple_of": pad_to_multiple_of,
+            }
+            if _padding != target:
+                self._tokenizer.enable_padding(**target)
 
     def _batch_encode_plus(
         self,
