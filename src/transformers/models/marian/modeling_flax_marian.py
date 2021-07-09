@@ -18,6 +18,7 @@ import math
 import random
 from functools import partial
 from typing import Callable, Optional, Tuple
+import numpy as np
 
 import flax.linen as nn
 import jax
@@ -205,14 +206,15 @@ MARIAN_DECODE_INPUTS_DOCSTRING = r"""
 
 
 def create_sinusoidal_positions(n_pos, dim, dtype):
-    position_enc = jnp.array(
-        [[pos / jnp.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+    position_enc = np.array(
+        [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
     )
     sentinel = dim // 2 + dim % 2
-    out = jnp.zeros_like(position_enc)
-    out = jax.ops.index_update(out, jax.ops.index[:, 0:sentinel], jnp.sin(position_enc[:, 0::2]))
-    out = jax.ops.index_update(out, jax.ops.index[:, sentinel:], jnp.cos(position_enc[:, 1::2]))
-    return out.astype(dtype)
+    out = np.zeros_like(position_enc)
+    out[:, 0:sentinel] = np.sin(position_enc[:, 0::2])
+    out[:, sentinel:] = np.cos(position_enc[:, 1::2])
+
+    return jnp.array(out, dtype=dtype)
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
@@ -751,7 +753,6 @@ class FlaxMarianDecoder(nn.Module):
         self.embed_positions = create_sinusoidal_positions(
             self.config.max_position_embeddings, embed_dim, dtype=self.dtype
         )
-
         self.layers = FlaxMarianDecoderLayerCollection(self.config, self.dtype)
 
     def __call__(

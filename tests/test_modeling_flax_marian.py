@@ -304,7 +304,7 @@ class FlaxMarianModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneratio
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("facebook/marian-base", from_pt=True)
+            model = model_class_name.from_pretrained("Helsinki-NLP/opus-mt-en-de", from_pt=True)
             # FlaxMarianForSequenceClassification expects eos token in input_ids
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
@@ -315,25 +315,8 @@ class FlaxMarianModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneratio
 @require_sentencepiece
 @require_tokenizers
 class MarianIntegrationTest(unittest.TestCase):
-    src = "en"
-    tgt = "de"
-    src_text = [
-        "I am a small frog.",
-        "Now I can forget the 100 words of german that I know.",
-        "Tom asked his teacher for advice.",
-        "That's how I would do it.",
-        "Tom really admired Mary's courage.",
-        "Turn around and close your eyes.",
-    ]
-    expected_text = [
-        "Ich bin ein kleiner Frosch.",
-        "Jetzt kann ich die 100 Wörter des Deutschen vergessen, die ich kenne.",
-        "Tom bat seinen Lehrer um Rat.",
-        "So würde ich das machen.",
-        "Tom bewunderte Marias Mut wirklich.",
-        "Drehen Sie sich um und schließen Sie die Augen.",
-    ]
-    # ^^ actual C++ output differs slightly: (1) des Deutschen removed, (2) ""-> "O", (3) tun -> machen
+    src = None
+    tgt = None
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -351,10 +334,7 @@ class MarianIntegrationTest(unittest.TestCase):
     @cached_property
     def model(self):
         model: FlaxMarianMTModel = FlaxMarianMTModel.from_pretrained(self.model_name, from_pt=True)
-        config = model.config
-        self.assertEqual(config.max_length, 512)
-        self.assertEqual(config.decoder_start_token_id, config.pad_token_id)
-
+        self.assertEqual(model.config.decoder_start_token_id, model.config.pad_token_id)
         return model
 
     def _assert_generated_batch_equal_expected(self, **tokenizer_kwargs):
@@ -363,15 +343,14 @@ class MarianIntegrationTest(unittest.TestCase):
 
     def translate_src_text(self, **tokenizer_kwargs):
         model_inputs = self.tokenizer(self.src_text, padding=True, return_tensors="np", **tokenizer_kwargs)
-
-        self.assertEqual(self.model.device, model_inputs.input_ids.device)
         generated_ids = self.model.generate(
-            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, max_length=128
-        )
+            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, max_length=128, early_stopping=True
+        ).sequences
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
 
 
+@require_flax
 @require_sentencepiece
 @require_tokenizers
 class TestMarian_EN_FR(MarianIntegrationTest):
@@ -391,6 +370,7 @@ class TestMarian_EN_FR(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_flax
 @require_sentencepiece
 @require_tokenizers
 class TestMarian_FR_EN(MarianIntegrationTest):
@@ -401,7 +381,7 @@ class TestMarian_FR_EN(MarianIntegrationTest):
         "Tom et Mary étaient assis à une table.",  # Accents
     ]
     expected_text = [
-        "Give me the microphone.",
+        "Give me the microphone, please.",
         "Tom and Mary were sitting at a table.",
     ]
 
@@ -410,6 +390,7 @@ class TestMarian_FR_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_flax
 @require_sentencepiece
 @require_tokenizers
 class TestMarian_MT_EN(MarianIntegrationTest):
@@ -425,9 +406,29 @@ class TestMarian_MT_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_flax
 @require_sentencepiece
 @require_tokenizers
 class TestMarian_EN_DE(MarianIntegrationTest):
+    src = "en"
+    tgt = "de"
+    src_text = [
+        "I am a small frog.",
+        "Now I can forget the 100 words of german that I know.",
+        "Tom asked his teacher for advice.",
+        "That's how I would do it.",
+        "Tom really admired Mary's courage.",
+        "Turn around and close your eyes.",
+    ]
+    expected_text = [
+        "Ich bin ein kleiner Frosch.",
+        "Jetzt kann ich die 100 Wörter des Deutschen vergessen, die ich kenne.",
+        "Tom bat seinen Lehrer um Rat.",
+        "So würde ich das machen.",
+        "Tom bewunderte Marias Mut wirklich.",
+        "Drehen Sie sich um und schließen Sie die Augen.",
+    ]
+
     @slow
     def test_batch_generation_en_de(self):
         self._assert_generated_batch_equal_expected()
