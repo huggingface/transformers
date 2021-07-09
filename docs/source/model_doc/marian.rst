@@ -39,6 +39,25 @@ Implementation Notes
 - Code to bulk convert models can be found in ``convert_marian_to_pytorch.py``.
 - This model was contributed by `sshleifer <https://huggingface.co/sshleifer>`__.
 
+Tips
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- In Flax, it is highly advised to pass `early_stopping=True` to `generate`. *E.g.*:
+
+    ::
+
+          >>> from transformers import MarianTokenizer, FlaxMarianMTModel
+
+          >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+          >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+
+          >>> text = "My friends are cool but they eat too many carbs."
+          >>> input_ids = tokenizer(text, max_length=64, return_tensors='jax').input_ids
+
+          >>> # Marian has to make use of early_stopping=True
+          >>> sequences = model.generate(inputs, early_stopping=True, max_length=64, num_beams=2).sequences
+
+
 Naming
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
