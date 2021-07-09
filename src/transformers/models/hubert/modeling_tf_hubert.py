@@ -78,13 +78,6 @@ def input_values_processing(func, config, input_values, **kwargs):
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
 
-    if len(kwargs["kwargs_call"]) > 0:
-        raise ValueError(
-            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
-        )
-
-    kwargs.pop("kwargs_call")
-
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
             output[k] = v

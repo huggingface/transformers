@@ -83,13 +83,6 @@ def input_values_processing(func, config, input_values, **kwargs):
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
 
-    if len(kwargs["kwargs_call"]) > 0:
-        raise ValueError(
-            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
-        )
-
-    kwargs.pop("kwargs_call")
-
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
             output[k] = v
@@ -1398,7 +1391,6 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs: Any,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         """
 
@@ -1438,7 +1430,6 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
         )
 
         inputs["output_hidden_states"] = (
@@ -1505,7 +1496,6 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs: Any,
     ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1561,7 +1551,6 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
         )
 
         outputs = self.wav2vec2(
