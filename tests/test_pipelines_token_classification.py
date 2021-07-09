@@ -196,7 +196,13 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
     def test_aggregation_strategy_byte_level_tokenizer(self):
         sentence = "Groenlinks praat over Schiphol."
         ner = pipeline("ner", model="xlm-roberta-large-finetuned-conll02-dutch", aggregation_strategy="max")
-        self.assertEqual(nested_simplify(ner(sentence)), [{}])
+        self.assertEqual(
+            nested_simplify(ner(sentence)),
+            [
+                {"end": 10, "entity_group": "ORG", "score": 0.994, "start": 0, "word": "Groenlinks"},
+                {"entity_group": "LOC", "score": 1.0, "word": "Schiphol.", "start": 22, "end": 31},
+            ],
+        )
 
     @require_torch
     def test_aggregation_strategy(self):
