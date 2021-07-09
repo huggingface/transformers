@@ -38,7 +38,6 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     HfArgumentParser,
-    Seq2SeqTrainingArguments,
     TFAutoModelForSeq2SeqLM,
     TFTrainingArguments,
     create_optimizer,
@@ -68,6 +67,7 @@ except (LookupError, OSError):
     with FileLock(".lock") as lock:
         nltk.download("punkt", quiet=True)
 # endregion
+
 
 # region Arguments
 @dataclass
@@ -270,6 +270,7 @@ summarization_name_mapping = {
 }
 # endregion
 
+
 # region Data generator
 def sample_generator(dataset, model, tokenizer, shuffle, pad_to_multiple_of=None):
     if shuffle:
@@ -457,10 +458,8 @@ def main():
         column_names = raw_datasets["train"].column_names
     elif training_args.do_eval:
         column_names = raw_datasets["validation"].column_names
-    elif training_args.do_predict:
-        column_names = raw_datasets["test"].column_names
     else:
-        logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
+        logger.info("There is nothing to do. Please pass `do_train`, and/or `do_eval`.")
         return
 
     # Get the column names for input/target.
@@ -542,25 +541,6 @@ def main():
             )
     else:
         eval_dataset = None
-
-    if training_args.do_predict:
-        max_target_length = data_args.val_max_target_length
-        if "test" not in raw_datasets:
-            raise ValueError("--do_predict requires a test dataset")
-        predict_dataset = raw_datasets["test"]
-        if data_args.max_predict_samples is not None:
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
-        with training_args.main_process_first(desc="prediction dataset map pre-processing"):
-            predict_dataset = predict_dataset.map(
-                preprocess_function,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                remove_columns=column_names,
-                load_from_cache_file=not data_args.overwrite_cache,
-                desc="Running tokenizer on prediction dataset",
-            )
-    else:
-        predict_dataset = None
     # endregion
 
     # region Text preprocessing
@@ -606,14 +586,6 @@ def main():
         )
         tf_eval_dataset = dataset_to_tf(
             eval_dataset,
-            model,
-            tokenizer,
-            total_eval_batch_size,
-            num_epochs=1,
-            shuffle=False,
-        )
-        tf_test_dataset = dataset_to_tf(
-            predict_dataset,
             model,
             tokenizer,
             total_eval_batch_size,
