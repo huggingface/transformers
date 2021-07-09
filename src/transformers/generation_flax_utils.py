@@ -145,6 +145,14 @@ class FlaxGenerationMixin:
     def _expand_to_num_beams(tensor, num_beams):
         return jnp.broadcast_to(tensor[:, None], (tensor.shape[0], num_beams) + tensor.shape[1:])
 
+    def _adapt_logits_for_beam_search(self, logits):
+        """
+        This function can be overwritten in the specific modeling_flax_<model-name>.py classes to allow for custom beam
+        search behavior. Note that the only model that overwrites this method is
+        :class:`~transformes.FlaxMarianMTModel`.
+        """
+        return logits
+
     def generate(
         self,
         input_ids: jax_xla.DeviceArray,
@@ -695,6 +703,9 @@ class FlaxGenerationMixin:
             cache = jax.tree_map(
                 lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams), model_outputs.past_key_values
             )
+
+            # adapt logits for FlaxMarianMTModel
+            logits = self._adapt_logits_for_beam_search(logits)
 
             # 2. Compute log probs
             # get log probabilities from logits,

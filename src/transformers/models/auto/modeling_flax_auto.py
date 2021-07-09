@@ -55,6 +55,7 @@ from ..electra.modeling_flax_electra import (
 )
 from ..gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
 from ..gpt_neo.modeling_flax_gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel
+from ..marian.modeling_flax_marian import FlaxMarianModel, FlaxMarianMTModel
 from ..mbart.modeling_flax_mbart import (
     FlaxMBartForConditionalGeneration,
     FlaxMBartForQuestionAnswering,
@@ -81,6 +82,7 @@ from .configuration_auto import (
     ElectraConfig,
     GPT2Config,
     GPTNeoConfig,
+    MarianConfig,
     MBartConfig,
     RobertaConfig,
     T5Config,
@@ -107,6 +109,7 @@ FLAX_MODEL_MAPPING = OrderedDict(
         (MBartConfig, FlaxMBartModel),
         (T5Config, FlaxT5Model),
         (Wav2Vec2Config, FlaxWav2Vec2Model),
+        (MarianConfig, FlaxMarianModel),
     ]
 )
 
@@ -141,6 +144,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         # Model for Seq2Seq Causal LM mapping
         (BartConfig, FlaxBartForConditionalGeneration),
         (T5Config, FlaxT5ForConditionalGeneration),
+        (MarianConfig, FlaxMarianMTModel),
     ]
 )
 
