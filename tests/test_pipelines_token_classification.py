@@ -66,14 +66,10 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
 
     @require_torch
     def test_model_kwargs_passed_to_model_load(self):
-        # Tests the model_kwargs parameter is passed properly when loading a model with pipeline()
-        # Currently uses the cache_dir parameter of from_pretrained()
-        # There might be a better parameter, but this one is fairly easy to test.
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            self.assertFalse(os.listdir(tmpdirname))
-            _ = pipeline(task="ner", model=self.small_models[0], model_kwargs={"cache_dir": tmpdirname})
-            file_url = hf_bucket_url(self.small_models[0], filename=WEIGHTS_NAME)
-            self.assertTrue(get_from_cache(file_url, cache_dir=tmpdirname, local_files_only=True))
+        ner_pipeline = pipeline(task="ner", model=self.small_models[0])
+        self.assertFalse(ner_pipeline.model.config.output_attentions)
+        ner_pipeline = pipeline(task="ner", model=self.small_models[0], model_kwargs={"output_attentions": True})
+        self.assertTrue(ner_pipeline.model.config.output_attentions)
 
     @require_torch
     @slow
