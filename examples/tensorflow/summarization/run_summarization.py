@@ -563,9 +563,7 @@ def main():
         predict_dataset = None
     # endregion
 
-    # region Metric computation
-    metric = load_metric("rouge")
-
+    # region Text preprocessing
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]
         labels = [label.strip() for label in labels]
