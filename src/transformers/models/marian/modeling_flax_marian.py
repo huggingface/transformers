@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The Google Flax Team Authors And The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Marian Team Authors and The Google Flax Team Authors And The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -938,12 +938,7 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
 
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
             decoder_module = module._get_decoder_module()
-            return decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                decoder_position_ids,
-                **kwargs,
-            )
+            return decoder_module(decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs)
 
         init_variables = self.module.init(
             jax.random.PRNGKey(0),
