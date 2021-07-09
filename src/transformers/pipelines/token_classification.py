@@ -270,7 +270,7 @@ class TokenClassificationPipeline(Pipeline):
             if offset_mapping is not None:
                 start_ind, end_ind = offset_mapping[idx]
                 word_ref = sentence[start_ind:end_ind]
-                is_subword = len(word_ref) != len(word)
+                is_subword = sentence[start_ind - 1 : start_ind] != " " if start_ind > 0 else False
 
                 if int(input_ids[idx]) == self.tokenizer.unk_token_id:
                     word = word_ref

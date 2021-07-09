@@ -192,6 +192,13 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         )
 
     @require_torch
+    @slow
+    def test_aggregation_strategy_byte_level_tokenizer(self):
+        sentence = "Groenlinks praat over Schiphol."
+        ner = pipeline("ner", model="xlm-roberta-large-finetuned-conll02-dutch", aggregation_strategy="max")
+        self.assertEqual(nested_simplify(ner(sentence)), [{}])
+
+    @require_torch
     def test_aggregation_strategy(self):
         model_name = self.small_models[0]
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
