@@ -1412,7 +1412,7 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
 
     def _adapt_logits_for_beam_search(self, logits):
         """This function enforces the padding token never to be generated."""
-        logits = jax.ops.index_update(logits, jax.ops.index[:, self.config.pad_token_id], float("-inf"))
+        logits = jax.ops.index_update(logits, jax.ops.index[:, :, self.config.pad_token_id], float("-inf"))
         return logits
 
     def prepare_inputs_for_generation(

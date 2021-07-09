@@ -402,8 +402,8 @@ class TestMarian_MT_EN(MarianIntegrationTest):
 
     src = "mt"
     tgt = "en"
-    src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
-    expected_text = ["Touching gently, Jesus healed a man who was affected by the sad disease of leprosy."]
+    src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil"]
+    expected_text = ["By touching him gently, Jesus healed a man who was affected by"]
 
     @slow
     def test_batch_generation_mt_en(self):
