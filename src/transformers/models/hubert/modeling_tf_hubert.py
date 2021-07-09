@@ -282,7 +282,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2GroupNorm with TFWav2Vec2->TFHubert
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2GroupNorm with Wav2Vec2->Hubert
 class TFHubertGroupNorm(tf.keras.layers.Layer):
     """
     From tensorflow-addons https://www.tensorflow.org/addons/api_docs/python/tfa/layers/GroupNormalization
@@ -501,7 +501,7 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
         return broadcast_shape
 
 
-# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2WeightNormConv1D with TFWav2Vec2->TFHubert
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2WeightNormConv1D with Wav2Vec2->Hubert
 class TFHubertWeightNormConv1D(tf.keras.layers.Conv1D):
     """Adapted from https://www.tensorflow.org/probability/api_docs/python/tfp/layers/weight_norm/WeightNorm"""
 
@@ -558,6 +558,7 @@ class TFHubertWeightNormConv1D(tf.keras.layers.Conv1D):
         return output
 
 
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2NoLayerNormConvLayer with Wav2Vec2->Hubert
 class TFHubertNoLayerNormConvLayer(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, layer_id: int = 0, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -579,6 +580,7 @@ class TFHubertNoLayerNormConvLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2LayerNormConvLayer with Wav2Vec2->Hubert
 class TFHubertLayerNormConvLayer(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, layer_id: int = 0, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -602,6 +604,7 @@ class TFHubertLayerNormConvLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2GroupNormConvLayer with Wav2Vec2->Hubert
 class TFHubertGroupNormConvLayer(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, layer_id: int = 0, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -625,6 +628,7 @@ class TFHubertGroupNormConvLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2PositionalConvEmbedding with Wav2Vec2->Hubert
 class TFHubertPositionalConvEmbedding(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -645,7 +649,7 @@ class TFHubertPositionalConvEmbedding(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2SamePadLayer with TFWav2Vec2->TFHubert
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2SamePadLayer with Wav2Vec2->Hubert
 class TFHubertSamePadLayer(tf.keras.layers.Layer):
     def __init__(self, num_conv_pos_embeddings, **kwargs):
         super().__init__(**kwargs)
@@ -854,6 +858,7 @@ class TFHubertAttention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
 
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2FeedForward with Wav2Vec2->Hubert
 class TFHubertFeedForward(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -886,6 +891,7 @@ class TFHubertFeedForward(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2EncoderLayer with Wav2Vec2->Hubert
 class TFHubertEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -929,6 +935,7 @@ class TFHubertEncoderLayer(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->Hubert
 class TFHubertEncoderLayerStableLayerNorm(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -970,6 +977,7 @@ class TFHubertEncoderLayerStableLayerNorm(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2Encoder with Wav2Vec2->Hubert
 class TFHubertEncoder(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -1035,6 +1043,7 @@ class TFHubertEncoder(tf.keras.layers.Layer):
         )
 
 
+# Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2EncoderStableLayerNorm with Wav2Vec2->Hubert
 class TFHubertEncoderStableLayerNorm(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -1398,7 +1407,6 @@ class TFHubertModel(TFHubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs: Any,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         """
 
@@ -1414,9 +1422,9 @@ class TFHubertModel(TFHubertPreTrainedModel):
             >>> model = TFHubertModel.from_pretrained("facebook/hubert-base-960h")
 
             >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
+            ...     speech, _ = sf.read(batch["file"])
+            ...     batch["speech"] = speech
+            ...     return batch
 
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
@@ -1438,7 +1446,6 @@ class TFHubertModel(TFHubertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
         )
 
         inputs["output_hidden_states"] = (
@@ -1505,7 +1512,6 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs: Any,
     ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1526,9 +1532,9 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
             >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-base-960h")
 
             >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
+            ...     speech, _ = sf.read(batch["file"])
+            ...     batch["speech"] = speech
+            ...     return batch
 
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
@@ -1543,7 +1549,7 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
 
             >>> # wrap processor as target processor to encode labels
             >>> with processor.as_target_processor():
-            >>>     labels = processor(transcription, return_tensors="tf").input_values
+            ...     labels = processor(transcription, return_tensors="tf").input_values
 
             >>> loss = model(input_values, labels=labels).loss
         """
@@ -1560,7 +1566,6 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
         )
 
         outputs = self.hubert(
