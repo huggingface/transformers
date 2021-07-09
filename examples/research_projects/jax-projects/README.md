@@ -1259,7 +1259,26 @@ More to come!
 
 ## Project evaluation
 
-TODO (should be filled by 5.07.)...
+
+### Criteria
+
+* **Demo.** All projects are required to have a demo. It’s open ended, but we provide some ideas on how to build demos in the [How to build a demo](#how-to-build-a-demo) section.
+* **Technical difficulty.** Difficulty has different aspects, such as working with complex architectures, obtaining better evaluation metrics than existing models, or implementing models for low-resource languages. 
+* **Social impact.** The project is expected to have a positive social impact, e.g. by tackling under-explored area of practical interest for minorities or under-represented group (low-ressources languages, specific focus on bias, fairness or ethical issues in ML) or by tackling general societal challenges, e.g. health or climate related challenges.
+* **Innovativeness.** Projects that propose novel applications or bring new ideas will be rewarded more.
+
+### Jury
+
+* [Niki Parmar](https://research.google/people/NikiParmar/): Staff Research Scientist at Google.
+* [Ross Wightman](https://www.linkedin.com/in/wightmanr/): Angel Investor.
+* [Thomas Wolf](https://www.linkedin.com/in/thomas-wolf-a056857/): Co-founder and CSO at Hugging Face.
+
+### Process
+
+* **July 16-19** A group of event organizers (Suraj, Patrick, Suzana, and Omar) will do an initial filter to find the top 15 projects.
+* **July 19-22** The jury will go over the 15 projects and pick the top three projects out of them.
+* **July 23.** Winner projects are announced
+
 
 ## General tips and tricks
 
