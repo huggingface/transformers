@@ -68,30 +68,30 @@ class LayoutLMv2Config(PretrainedConfig):
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         max_2d_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
-            The maximum value that the 2D position embedding might ever used. Typically set this to something large
+            The maximum value that the 2D position embedding might ever be used with. Typically set this to something large
             just in case (e.g., 1024).
         max_rel_pos (:obj:`int`, `optional`, defaults to 128):
-            ...
+            The maximum number of relative positions to be used in the self-attention mechanism.
         rel_pos_bins (:obj:`int`, `optional`, defaults to 32):
-            The number of relative position bins.
+            The number of relative position bins to be used in the self-attention mechanism.
         fast_qkv (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a single matrix for the queries, keys, values in the self-attention layers.
         max_rel_2d_pos (:obj:`int`, `optional`, defaults to 256):
-            The maximum number of relative 2D positions.
+            The maximum number of relative 2D positions in the self-attention mechanism.
         rel_2d_pos_bins (:obj:`int`, `optional`, defaults to 64):
-            The number of 2D relative position bins.
+            The number of 2D relative position bins in the self-attention mechanism.
         convert_sync_batchnorm (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            ...
+            Whether or not to convert BatchNorm layers to SyncNorm layers before wrapping the visual backbone with DDP.
         image_feature_pool_shape (:obj:`List[int]`, `optional`, defaults to [7, 7, 256]):
             The shape of the average-pooled feature map.
         coordinate_size (:obj:`int`, `optional`, defaults to 128):
-            Coordinate size to use.
+            Dimension of the coordinate embeddings.
         shape_size (:obj:`int`, `optional`, defaults to 128):
-            Shape size to use.
+            Dimension of the width and height embeddings.
         has_relative_attention_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to use a relative attention bias.
+            Whether or not to use a relative attention bias in the self-attention mechanism.
         has_spatial_attention_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to use a spatial attention bias.
+            Whether or not to use a spatial attention bias in the self-attention mechanism.
         has_visual_segment_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to add visual segment embeddings.
 

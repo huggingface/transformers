@@ -87,7 +87,7 @@ class LayoutLMv2Embeddings(nn.Module):
             right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
             lower_position_embeddings = self.y_position_embeddings(bbox[:, :, 3])
         except IndexError as e:
-            raise IndexError("The :obj:`bbox`coordinate values should be within 0-1000 range.") from e
+            raise IndexError("The :obj:`bbox` coordinate values should be within 0-1000 range.") from e
 
         h_position_embeddings = self.h_position_embeddings(bbox[:, :, 3] - bbox[:, :, 1])
         w_position_embeddings = self.w_position_embeddings(bbox[:, :, 2] - bbox[:, :, 0])
@@ -1254,6 +1254,7 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+        config.has_visual_segment_embedding = True
         self.layoutlmv2 = LayoutLMv2Model(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 

@@ -1,5 +1,5 @@
 .. 
-    Copyright 2020 The HuggingFace Team. All rights reserved.
+    Copyright 2021 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
     the License. You may obtain a copy of the License at
@@ -76,7 +76,7 @@ Tips:
          ]
 
 Here, :obj:`width` and :obj:`height` correspond to the width and height of the original document in which the token
-occurs. Those can be obtained using the Python Image Library (PIL) library for example, as follows:
+occurs (before resizing the image). Those can be obtained using the Python Image Library (PIL) library for example, as follows:
 
 .. code-block::
 
