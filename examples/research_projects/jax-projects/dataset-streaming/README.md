@@ -63,7 +63,7 @@ git lfs track "*tfevents*"
 Great, we have set up our model repository. During training, we will automatically
 push the training logs and model weights to the repo.
 
-Next, let's add a symbolic link to the `run_mlm_flax.py`.
+Next, let's add a symbolic link to the `run_mlm_flax_stream.py`.
 
 ```bash
 export MODEL_DIR="./english-roberta-base-dummy"
@@ -90,11 +90,9 @@ config.save_pretrained(model_dir)
 ### Train model
 
 Next we can run the example script to pretrain the model.
-Compared to the default [`run_mlm_flax`](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_mlm_flax.py), we introduced 4 new training settings:
+Compared to the default [`run_mlm_flax`](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_mlm_flax.py), we introduced 2 new training settings:
 - `num_train_steps` - how many update steps should be run.
 - `num_eval_samples` - how many training samples should be taken for evaluation.
-- `logging_steps` - at what rate should the training loss be logged.
-- `eval_steps` - at what rate should evaluation be run.
 10K update steps 
 
 ```bash
@@ -117,5 +115,97 @@ Compared to the default [`run_mlm_flax`](https://github.com/huggingface/transfor
     --num_eval_samples="5000" \
     --logging_steps="250" \
     --eval_steps="1000" \
+    --push_to_hub
+```
+
+## T5-like span-masked language modeling
+
+In the following, we demonstrate how to train a T5 model using the span-masked language model 
+objective as proposed in the [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683).
+More specifically, we demonstrate how JAX/Flax and dataset streaming can be leveraged 
+to pre-train [**`t5-small`**](https://huggingface.co/t5-small)
+in English on a single TPUv3-8 pod for 10000 update steps.
+
+The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
+
+Let's start by creating a model repository to save the trained model and logs.
+Here we call the model `"t5-small-dummy-en"`, but you can change the model name as you like.
+
+You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
+you are logged in) or via the command line:
+
+```
+huggingface-cli repo create t5-small-dummy-en
+```
+
+Next we clone the model repository to add the tokenizer and model files.
+
+```
+git clone https://huggingface.co/<your-username>/t5-small-dummy-en
+```
+
+To ensure that all tensorboard traces will be uploaded correctly, we need to 
+track them. You can run the following command inside your model repo to do so.
+
+```
+cd t5-small-dummy-en
+git lfs track "*tfevents*"
+```
+
+Great, we have set up our model repository. During training, we will automatically
+push the training logs and model weights to the repo.
+
+Next, let's add a symbolic link to the `run_mlm_t5_flax_stream.py`.
+
+```bash
+export MODEL_DIR="./t5-small-dummy-en"
+ln -s ~/transformers/examples/research_projects/jax-projects/dataset-streaming/run_mlm_t5_flax_stream.py ./
+```
+
+### Copy config and tokenizer of existing model
+
+In this example, we will simply copy an existing config and tokenizer in English.
+You can run the following code in a Python shell to do so.
+
+```python
+from transformers import T5TokenizerFast, T5Config
+
+model_dir = "./t5-small-dummy-en"
+
+tokenizer = RobertaTokenizerFast.from_pretrained("t5-small")
+config = RobertaConfig.from_pretrained("t5-small")
+
+tokenizer.save_pretrained(model_dir)
+config.save_pretrained(model_dir)
+```
+
+### Train model
+
+Next we can run the example script to pretrain the model.
+Compared to the default [`run_mlm_t5_flax`](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_mlm_flax.py), we introduced 2 new training settings:
+- `num_train_steps` - how many update steps should be run.
+- `num_eval_samples` - how many training samples should be taken for evaluation.
+
+We perform 10K update steps on the english portion of the [multilingual C4 corpus](https://huggingface.co/datasets/mc4), that would weight 800GB if downloaded locally.
+
+```bash
+./run_mlm_t5_flax_stream.py \
+    --output_dir="${MODEL_DIR}" \
+    --model_type="t5" \
+    --config_name="${MODEL_DIR}" \
+    --tokenizer_name="${MODEL_DIR}" \
+    --dataset_name="mc4" \
+    --dataset_config_name="en" \
+    --max_seq_length="128" \
+    --per_device_train_batch_size="128" \
+    --per_device_eval_batch_size="128" \
+    --learning_rate="1e-3" \
+    --warmup_steps="2000" \
+    --overwrite_output_dir \
+    --num_train_steps="10000" \
+    --num_eval_samples="5000" \
+    --eval_steps="500" \
+    --save_steps="1000"
+    --logging_steps="250" \
     --push_to_hub
 ```
