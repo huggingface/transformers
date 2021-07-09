@@ -622,7 +622,6 @@ def main():
 
                 # Save metrics
                 if has_tensorboard and jax.process_index() == 0:
-                    cur_step = epoch * (len(train_dataset) // train_batch_size)
                     write_eval_metric(summary_writer, eval_metrics, cur_step)
 
             if cur_step % training_args.save_steps == 0 and cur_step > 0:
