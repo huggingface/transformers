@@ -199,7 +199,7 @@ class HubertPositionalConvEmbedding(nn.Module):
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
+            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=None):
                 self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
             deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
             deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
