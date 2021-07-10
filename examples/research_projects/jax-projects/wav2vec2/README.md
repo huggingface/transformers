@@ -46,6 +46,17 @@ export MODEL_DIR="./wav2vec2-base-robust"
 ln -s ~/transformers/examples/research_projects/jax-projects/wav2vec2/run_wav2vec2_pretrain_flax.py ./
 ```
 
+### Create the virtual environment
+
+Besides installing the libraries required to train a JAX/Flax model with 🤗 Transformers and 🤗 Datasets (see [jax-projects](https://github.com/huggingface/transformers/tree/master/examples/research_projects/jax-projects#how-to-install-relevant-libraries)), since Wav2Vec2 is a tech-to-speech model you might need to install some specific libraries to read and process audio files, such as librosa, soundfile and ffmpeg.
+
+You can install these dependencies on Ubuntu 20.04 by running:
+
+```bash
+apt install ffmpeg libsndfile1
+pip install ffmpeg librosa
+```
+
 ### Create the model configuration
 
 Let's first create the model configuration and store it in the model repository. 
@@ -107,12 +118,14 @@ Finally, we can run the example script to train the model:
     --model_name_or_path=${MODEL_DIR} \
     --dataset_name="librispeech_asr" \
     --dataset_config_name="clean" \
-    --train_split_name="train.100" \
+    --validation_split_percentage="5" \
     --preprocessing_num_workers="4" \
     --max_duration_in_seconds="10.0" \
     --adam_beta1="0.9" \
     --adam_beta2="0.98" \
     --pad_to_multiple_of="16384" \
+    --speech_file_column="path" \
+    --dtype="bfloat16" \
     --push_to_hub
 ```
 
