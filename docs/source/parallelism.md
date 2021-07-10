@@ -43,13 +43,10 @@ The following is the brief description of the main concepts that will be describ
 
 Most users with just 2 GPUs already enjoy the increased training speed up thanks to DataParallel (DP) and DistributedDataParallel (DDP) that are almost trivial to use. This is a built-in feature of Pytorch.
 
-.. parallelism-zero-dp
-
 ## ZeRO Data Parallel
 
 ZeRO-powered data parallelism (ZeRO-DP) is described on the following diagram from this [blog post](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)
 ![DeepSpeed-Image-1](imgs/parallelism-zero.png)
-
 
 It can be difficult to wrap one's head around it, but in reality the concept is quite simple. This is just the usual DataParallel (DP), except, instead of replicating the full model params, gradients and optimizer states, each GPU stores only a slice of it.  And then at run-time when the full layer params are needed just for the given layer, all GPUs synchronize to give each other parts that they miss - this is it.
 
@@ -266,7 +263,7 @@ Implementations:
 
 ## DP+PP+TP+ZeRO
 
-One of the main features of DeepSpeed is ZeRO, which is a super-scalable extension of DP. It has already been discussed in :ref:`parallelism-zero-dp`. Normally it's a standalone feature that doesn't require PP or TP. But it can be combined with PP and TP.
+One of the main features of DeepSpeed is ZeRO, which is a super-scalable extension of DP. It has already been discussed in [ZeRO Data Parallel](#zero-data-parallel). Normally it's a standalone feature that doesn't require PP or TP. But it can be combined with PP and TP.
 
 When ZeRO-DP is combined with PP (and optinally TP) it typically enables only ZeRO stage 1 (optimizer sharding).
 
