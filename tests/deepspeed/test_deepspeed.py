@@ -17,7 +17,6 @@ import io
 import itertools
 import json
 import os
-import subprocess
 import unittest
 from copy import deepcopy
 
@@ -53,46 +52,9 @@ with ExtendSysPath(tests_dir):
 
 set_seed(42)
 
-# translation
-FSMT_TINY = "stas/tiny-wmt19-en-de"
-BART_TINY = "sshleifer/bart-tiny-random"
 T5_SMALL = "t5-small"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
-MBART_TINY = "sshleifer/tiny-mbart"
-MARIAN_TINY = "sshleifer/tiny-marian-en-de"
-
-# summarization
-PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
-
-# causal lm
 GPT2_TINY = "sshleifer/tiny-gpt2"
-
-# question-answering
-DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased-distilled-squad"
-ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
-XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
-
-# masked lm
-ELECTRA_TINY = "hf-internal-testing/tiny-electra"
-
-# classification
-XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
-BERT_TINY = "hf-internal-testing/tiny-bert"
-
-
-# TODO: to add:
-# albert
-# deberta
-# funnel
-# longformer
-# dpr
-# gpt_neo
-# camembert
-# deberta-v2
-# m2m_100
-# tapas
-# vit
-# big_bird
 
 
 def load_json(path):
@@ -826,21 +788,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     # 2. most tests should probably be run on both: zero2 and zero3 configs
     #
 
-    def get_task_cmd(self, task, stage):
-        # return a ready to run train cmd
-        if task not in task_cmds:
-            raise ValueError(f"don't know of task {task}, have {task_cmds.keys()}")
-
-        cmd = task_cmds[task]
-        args_ds = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
-
-        output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False, before=False)
-        args_out = f"--output_dir {output_dir}".split()
-
-        cmd += args_ds + args_out
-
-        return cmd, output_dir
-
     @require_torch_multi_gpu
     @parameterized.expand(stages)
     def test_basic_distributed(self, stage):
@@ -1103,30 +1050,3 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         with CaptureStderr() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
         assert "Detected DeepSpeed ZeRO-3" in cs.err
-
-    @parameterized.expand(params, name_func=parameterized_custom_name_func)
-    def test_zero_to_fp32(self, stage, task):
-        # testing the ability to do a run followed by recovery of full fp32 weights
-
-        cmd, output_dir = self.get_task_cmd(task, stage)
-
-        # 1. generate the checkpoint
-        cmd += "--save_steps 1".split()
-        # keep for quick debug
-        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] + cmd)); die
-        execute_subprocess_async(cmd, env=self.get_env())
-
-        # XXX: requires ds pr merge
-        #return
-
-        # 2. test that the fp32 weights get reconsolidated
-        chkpt_dir = f"{output_dir}/checkpoint-1"
-        recovered_model_path = f"{chkpt_dir}/out.bin"
-        cmd = f"{chkpt_dir}/zero_to_fp32.py {chkpt_dir} {recovered_model_path}"
-        # keep for quick debug
-        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
-        subprocess.check_call(cmd, shell=True)
-        assert os.path.exists(recovered_model_path), f"{recovered_model_path} was not found"
-
-        # possibly could also test that the resulting saved model is usable but given that we use
-        # random models we won't know if it's any good
