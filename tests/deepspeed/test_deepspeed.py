@@ -14,7 +14,6 @@
 
 import dataclasses
 import io
-import itertools
 import json
 import os
 import unittest
@@ -93,125 +92,9 @@ def get_launcher(distributed=False):
     return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
 
 
-def make_task_cmds():
-    data_dir_fixtures = f"{tests_dir}/fixtures"
-    data_dir_samples = f"{data_dir_fixtures}/tests_samples"
-    data_dir_wmt = f"{data_dir_samples}/wmt_en_ro"
-    data_dir_xsum = f"{data_dir_samples}/xsum"
-    args_main = """
-        --do_train
-        --max_train_samples 4
-        --per_device_train_batch_size 2
-        --num_train_epochs 1
-        --fp16
-        --report_to none
-        --overwrite_output_dir
-        """.split()
-
-    # XXX: try to cover as many models as possible once (it's enough to run on one task per model)
-    # but need a tiny model for each
-    #
-    # should have T5_TINY, etc. global var defined
-    tasks2models = dict(
-        trans=[
-            "bart",
-            "fsmt",
-            "marian",
-            "mbart",
-            "t5",
-        ],
-        sum=[
-            "pegasus",
-        ],
-        clm=[
-            "gpt2",
-            "xlm-roberta",
-        ],
-        mlm=[
-            "electra",
-        ],
-        qa=[
-            "distilbert",
-            "roberta",
-        ],
-        clas=[
-            "bert",
-            "xlnet",
-        ],
-    )
-
-    scripts_dir = f"{root_dir}/examples/pytorch"
-
-    tasks = dict(
-        trans=f"""
-        {scripts_dir}/translation/run_translation.py
-        --train_file {data_dir_wmt}/train.json
-        --source_lang en
-        --target_lang ro
-        """,
-        sum=f"""
-        {scripts_dir}/summarization/run_summarization.py
-        --train_file {data_dir_xsum}/sample.json
-        --max_source_length 12
-        --max_target_length 12
-        """,
-        clm=f"""
-        {scripts_dir}/language-modeling/run_clm.py
-        --train_file {data_dir_fixtures}/sample_text.txt
-        --block_size 8
-        """,
-        mlm=f"""
-        {scripts_dir}/language-modeling/run_mlm.py
-        --train_file {data_dir_fixtures}/sample_text.txt
-        """,
-        qa=f"""
-        {scripts_dir}/question-answering/run_qa.py
-        --train_file {data_dir_samples}/SQUAD/sample.json
-        """,
-        clas=f"""
-        {scripts_dir}/text-classification/run_glue.py
-        --train_file {data_dir_samples}/MRPC/train.csv
-        --max_seq_length 12
-        --task_name MRPC
-        """,
-    )
-
-    launcher = get_launcher(distributed=True)
-
-    cmds = {}
-    for task, args in tasks.items():
-        args = args.split()
-        for model in tasks2models[task]:
-            model_name = globals()[f"{model.upper().replace('-', '_')}_TINY"]
-            args_model = f"--model_name_or_path {model_name}".split()
-            cmds[f"{task}_{model}"] = launcher + args + args_model + args_main
-
-            # # generation special case
-            # if task == "gen":
-            #     launcher = f"deepspeed --num_nodes 1 --num_gpus 1".split()
-            #     args_model += f"--model_type {model}".split()
-            #     cmds[f"{task}_{model}"] = launcher + args + args_model
-            # else:
-
-    return cmds
-
-
-task_cmds = make_task_cmds()
-
 ZERO2 = "zero2"
 ZERO3 = "zero3"
 stages = [ZERO2, ZERO3]
-
-
-def parameterized_custom_name_func(func, param_num, param):
-    # customize the test name generator function as we want both params to appear in the sub-test
-    # name, as by default it shows only the first param
-    param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
-    return f"{func.__name__}_{param_based_name}"
-
-
-# Cartesian-product of zero stages with models to test
-params = list(itertools.product(stages, task_cmds.keys()))
 
 
 @require_deepspeed
