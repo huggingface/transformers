@@ -94,6 +94,7 @@ BERT_TINY = "hf-internal-testing/tiny-bert"
 # vit
 # big_bird
 
+
 def load_json(path):
     with open(path) as f:
         return json.load(f)
@@ -117,9 +118,7 @@ def require_deepspeed_aio(test_case):
 
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
-
-    # XXX: re-enable
-    # from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+    from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
     from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 
@@ -1118,7 +1117,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
 
         # XXX: requires ds pr merge
-        return
+        #return
 
         # 2. test that the fp32 weights get reconsolidated
         chkpt_dir = f"{output_dir}/checkpoint-1"

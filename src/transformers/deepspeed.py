@@ -89,14 +89,6 @@ class HfDeepSpeedConfig:
             if len(offload_devices & offload_devices_valid) > 0:
                 self._offload = True
 
-    # def import_deepspeed_into_globals(self):
-    #     """
-    #     Since we shouldn't load deepspeed on the module level just because it's available, we load it
-    #     here and push the symbols into the ``globals`` as if it was imported normally on top.
-    #     """
-    #     import deepspeed
-    #     globals()["deepspeed"] = sys.modules["deepspeed"]
-
     def find_config_node(self, ds_key_long):
         config = self.config
 
