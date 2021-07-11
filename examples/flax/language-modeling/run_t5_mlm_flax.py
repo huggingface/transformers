@@ -47,7 +47,7 @@ from transformers import (
     HfArgumentParser,
     PreTrainedTokenizerBase,
     T5Config,
-    T5Tokenizer,
+    T5TokenizerFast,
     ByT5Tokenizer,
     TrainingArguments,
     is_tensorboard_available,
@@ -478,7 +478,7 @@ if __name__ == "__main__":
     # Load pretrained model and tokenizer
 
     if model_args.tokenizer_name:
-        tokenizer = T5Tokenizer.from_pretrained(
+        tokenizer = T5TokenizerFast.from_pretrained(
             model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     elif model_args.model_type == 'byt5':
@@ -486,7 +486,7 @@ if __name__ == "__main__":
             model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     elif model_args.model_name_or_path:
-        tokenizer = T5Tokenizer.from_pretrained(
+        tokenizer = T5TokenizerFast.from_pretrained(
             model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     else:
