@@ -477,16 +477,16 @@ if __name__ == "__main__":
 
     # Load pretrained model and tokenizer
 
+    if model_type == "byt5":
+        tokenizer_type = ByT5Tokenizer
+    else:
+        tokenizer_type = T5TokenizerFast
     if model_args.tokenizer_name:
-        tokenizer = T5TokenizerFast.from_pretrained(
-            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
-        )
-    elif model_args.model_type == 'byt5':
-        tokenizer = ByT5Tokenizer.from_pretrained(
+        tokenizer = tokenizer_type.from_pretrained(
             model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     elif model_args.model_name_or_path:
-        tokenizer = T5TokenizerFast.from_pretrained(
+        tokenizer = tokenizer_type.from_pretrained(
             model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     else:
