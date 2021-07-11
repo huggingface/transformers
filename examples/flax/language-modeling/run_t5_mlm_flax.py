@@ -477,7 +477,7 @@ if __name__ == "__main__":
 
     # Load pretrained model and tokenizer
 
-    if model_type == "byt5":
+    if model_args.model_type == "byt5":
         tokenizer_type = ByT5Tokenizer
     else:
         tokenizer_type = T5TokenizerFast
