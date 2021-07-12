@@ -1213,6 +1213,7 @@ class FlaxMarianMTModule(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
         )
+        self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
     def _get_encoder_module(self):
         return self.model.encoder
