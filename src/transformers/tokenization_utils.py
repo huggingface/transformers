@@ -766,7 +766,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             text = "".join(sub_texts)
 
         if clean_up_tokenization_spaces:
-            clean_text = self.clean_up_tokenization(text)
-            return clean_text
+            return self.clean_up_tokenization(text)
         else:
             return text

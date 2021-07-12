@@ -92,7 +92,9 @@ def format_for_slack(total_results, results, scheduled: bool):
         "type": "section",
         "text": {
             "type": "mrkdwn",
-            "text": f"<https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}|View on GitHub>",
+            "text": "<https://github.com/huggingface/transformers/actions/workflows/self-scheduled.yml|View on GitHub>"
+            if scheduled
+            else "<https://github.com/huggingface/transformers/actions/workflows/self-push.yml|View on GitHub>",
         },
     }
 

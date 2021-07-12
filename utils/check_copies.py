@@ -27,9 +27,6 @@ TRANSFORMERS_PATH = "src/transformers"
 PATH_TO_DOCS = "docs/source"
 REPO_PATH = "."
 
-# Mapping for files that are full copies of others (keys are copies, values the file to keep them up to data with)
-FULL_COPIES = {"examples/tensorflow/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py"}
-
 
 def _should_continue(line, indent):
     return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\):\s*$", line) is not None
@@ -171,7 +168,7 @@ def is_copy_consistent(filename, overwrite=False):
                 lines = lines[:start_index] + [theoretical_code] + lines[line_index:]
                 line_index = start_index + 1
 
-    if overwrite and len(diffs) > 0:
+    if overwrite and diffs:
         # Warn the user a file has been modified.
         print(f"Detected changes, rewriting {filename}.")
         with open(filename, "w", encoding="utf-8", newline="\n") as f:
@@ -185,7 +182,7 @@ def check_copies(overwrite: bool = False):
     for filename in all_files:
         new_diffs = is_copy_consistent(filename, overwrite)
         diffs += [f"- {filename}: copy does not match {d[0]} at line {d[1]}" for d in new_diffs]
-    if not overwrite and len(diffs) > 0:
+    if not overwrite and diffs:
         diff = "\n".join(diffs)
         raise Exception(
             "Found the following copy inconsistencies:\n"
@@ -193,30 +190,6 @@ def check_copies(overwrite: bool = False):
             + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
         )
     check_model_list_copy(overwrite=overwrite)
-
-
-def check_full_copies(overwrite: bool = False):
-    diffs = []
-    for target, source in FULL_COPIES.items():
-        with open(source, "r", encoding="utf-8") as f:
-            source_code = f.read()
-        with open(target, "r", encoding="utf-8") as f:
-            target_code = f.read()
-        if source_code != target_code:
-            if overwrite:
-                with open(target, "w", encoding="utf-8") as f:
-                    print(f"Replacing the content of {target} by the one of {source}.")
-                    f.write(source_code)
-            else:
-                diffs.append(f"- {target}: copy does not match {source}.")
-
-    if not overwrite and len(diffs) > 0:
-        diff = "\n".join(diffs)
-        raise Exception(
-            "Found the following copy inconsistencies:\n"
-            + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
-        )
 
 
 def get_model_list():
@@ -329,7 +302,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
     rst_list, start_index, end_index, lines = _find_text_in_file(
         filename=os.path.join(PATH_TO_DOCS, "index.rst"),
         start_prompt="    This list is updated automatically from the README",
-        end_prompt="Supported frameworks",
+        end_prompt=".. _bigtable:",
     )
     md_list = get_model_list()
     converted_list = convert_to_rst(md_list, max_per_line=max_per_line)
@@ -351,4 +324,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite)
-    check_full_copies(args.fix_and_overwrite)

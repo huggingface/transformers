@@ -21,7 +21,7 @@ import numpy as np
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision
 
-from .test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
+from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
 if is_torch_available():
@@ -75,6 +75,34 @@ class DeiTFeatureExtractionTester(unittest.TestCase):
             "image_std": self.image_std,
         }
 
+    def prepare_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
+        """
+
+        assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+
+        image_inputs = []
+        for _ in range(self.batch_size):
+            if equal_resolution:
+                image_inputs.append(
+                    np.random.randint(
+                        255, size=(self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
+                    )
+                )
+            else:
+                width, height = np.random.choice(np.arange(self.min_resolution, self.max_resolution), 2)
+                image_inputs.append(np.random.randint(255, size=(self.num_channels, width, height), dtype=np.uint8))
+
+        if not numpify and not torchify:
+            # PIL expects the channel dimension as last dimension
+            image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+
+        if torchify:
+            image_inputs = [torch.from_numpy(x) for x in image_inputs]
+
+        return image_inputs
+
 
 @require_torch
 @require_vision
@@ -106,7 +134,7 @@ class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PIL images
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
+        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -138,7 +166,7 @@ class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random numpy tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
+        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -170,7 +198,7 @@ class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
+        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 

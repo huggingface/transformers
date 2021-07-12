@@ -101,7 +101,6 @@ from ..funnel.modeling_tf_funnel import (
     TFFunnelModel,
 )
 from ..gpt2.modeling_tf_gpt2 import TFGPT2ForSequenceClassification, TFGPT2LMHeadModel, TFGPT2Model
-from ..hubert.modeling_tf_hubert import TFHubertModel
 from ..layoutlm.modeling_tf_layoutlm import (
     TFLayoutLMForMaskedLM,
     TFLayoutLMForSequenceClassification,
@@ -149,22 +148,12 @@ from ..roberta.modeling_tf_roberta import (
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
-from ..roformer.modeling_tf_roformer import (
-    TFRoFormerForCausalLM,
-    TFRoFormerForMaskedLM,
-    TFRoFormerForMultipleChoice,
-    TFRoFormerForQuestionAnswering,
-    TFRoFormerForSequenceClassification,
-    TFRoFormerForTokenClassification,
-    TFRoFormerModel,
-)
 from ..t5.modeling_tf_t5 import TFT5ForConditionalGeneration, TFT5Model
 from ..transfo_xl.modeling_tf_transfo_xl import (
     TFTransfoXLForSequenceClassification,
     TFTransfoXLLMHeadModel,
     TFTransfoXLModel,
 )
-from ..wav2vec2.modeling_tf_wav2vec2 import TFWav2Vec2Model
 from ..xlm.modeling_tf_xlm import (
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
@@ -205,7 +194,6 @@ from .configuration_auto import (
     FlaubertConfig,
     FunnelConfig,
     GPT2Config,
-    HubertConfig,
     LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
@@ -218,10 +206,8 @@ from .configuration_auto import (
     OpenAIGPTConfig,
     PegasusConfig,
     RobertaConfig,
-    RoFormerConfig,
     T5Config,
     TransfoXLConfig,
-    Wav2Vec2Config,
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
@@ -234,7 +220,6 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
-        (RoFormerConfig, TFRoFormerModel),
         (ConvBertConfig, TFConvBertModel),
         (LEDConfig, TFLEDModel),
         (LxmertConfig, TFLxmertModel),
@@ -267,8 +252,6 @@ TF_MODEL_MAPPING = OrderedDict(
         (PegasusConfig, TFPegasusModel),
         (BlenderbotConfig, TFBlenderbotModel),
         (BlenderbotSmallConfig, TFBlenderbotSmallModel),
-        (Wav2Vec2Config, TFWav2Vec2Model),
-        (HubertConfig, TFHubertModel),
     ]
 )
 
@@ -302,7 +285,6 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-        (RoFormerConfig, TFRoFormerForMaskedLM),
         (ConvBertConfig, TFConvBertForMaskedLM),
         (LEDConfig, TFLEDForConditionalGeneration),
         (T5Config, TFT5ForConditionalGeneration),
@@ -333,7 +315,6 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-        (RoFormerConfig, TFRoFormerForCausalLM),
         (BertConfig, TFBertLMHeadModel),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
         (GPT2Config, TFGPT2LMHeadModel),
@@ -350,7 +331,6 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-        (RoFormerConfig, TFRoFormerForMaskedLM),
         (ConvBertConfig, TFConvBertForMaskedLM),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
@@ -388,7 +368,6 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        (RoFormerConfig, TFRoFormerForSequenceClassification),
         (ConvBertConfig, TFConvBertForSequenceClassification),
         (DistilBertConfig, TFDistilBertForSequenceClassification),
         (AlbertConfig, TFAlbertForSequenceClassification),
@@ -415,7 +394,6 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
-        (RoFormerConfig, TFRoFormerForQuestionAnswering),
         (ConvBertConfig, TFConvBertForQuestionAnswering),
         (DistilBertConfig, TFDistilBertForQuestionAnswering),
         (AlbertConfig, TFAlbertForQuestionAnswering),
@@ -437,7 +415,6 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
-        (RoFormerConfig, TFRoFormerForTokenClassification),
         (ConvBertConfig, TFConvBertForTokenClassification),
         (DistilBertConfig, TFDistilBertForTokenClassification),
         (AlbertConfig, TFAlbertForTokenClassification),
@@ -460,7 +437,6 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
-        (RoFormerConfig, TFRoFormerForMultipleChoice),
         (ConvBertConfig, TFConvBertForMultipleChoice),
         (CamembertConfig, TFCamembertForMultipleChoice),
         (XLMConfig, TFXLMForMultipleChoice),

@@ -16,6 +16,7 @@
  Feature extraction saving/loading class for common feature extractors.
 """
 
+
 import copy
 import json
 import os
@@ -42,9 +43,8 @@ from .file_utils import (
 from .utils import logging
 
 
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
+if TYPE_CHECKING and is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)

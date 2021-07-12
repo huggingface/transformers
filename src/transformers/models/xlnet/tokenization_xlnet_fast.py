@@ -124,7 +124,7 @@ class XLNetTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
+        vocab_file,
         tokenizer_file=None,
         do_lower_case=False,
         remove_space=True,

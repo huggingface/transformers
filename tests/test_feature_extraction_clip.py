@@ -82,17 +82,15 @@ class CLIPFeatureExtractionTester(unittest.TestCase):
 
         assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
 
-        if equal_resolution:
-            image_inputs = []
-            for i in range(self.batch_size):
+        image_inputs = []
+        for _ in range(self.batch_size):
+            if equal_resolution:
                 image_inputs.append(
                     np.random.randint(
                         255, size=(self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
                     )
                 )
-        else:
-            image_inputs = []
-            for i in range(self.batch_size):
+            else:
                 width, height = np.random.choice(np.arange(self.min_resolution, self.max_resolution), 2)
                 image_inputs.append(np.random.randint(255, size=(self.num_channels, width, height), dtype=np.uint8))
 

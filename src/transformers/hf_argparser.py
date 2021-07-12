@@ -46,7 +46,7 @@ class HfArgumentParser(ArgumentParser):
 
     The class is designed to play well with the native argparse. In particular, you can add more (non-dataclass backed)
     arguments to the parser after initialization and you'll get the output back after parsing as an additional
-    namespace. Optional: To create sub argument groups use the `_argument_group_name` attribute in the dataclass.
+    namespace.
     """
 
     dataclass_types: Iterable[DataClassType]
@@ -67,10 +67,6 @@ class HfArgumentParser(ArgumentParser):
             self._add_dataclass_arguments(dtype)
 
     def _add_dataclass_arguments(self, dtype: DataClassType):
-        if hasattr(dtype, "_argument_group_name"):
-            parser = self.add_argument_group(dtype._argument_group_name)
-        else:
-            parser = self
         for field in dataclasses.fields(dtype):
             if not field.init:
                 continue
@@ -87,15 +83,15 @@ class HfArgumentParser(ArgumentParser):
             typestring = str(field.type)
             for prim_type in (int, float, str):
                 for collection in (List,):
-                    if (
-                        typestring == f"typing.Union[{collection[prim_type]}, NoneType]"
-                        or typestring == f"typing.Optional[{collection[prim_type]}]"
-                    ):
+                    if typestring in [
+                        f"typing.Union[{collection[prim_type]}, NoneType]",
+                        f"typing.Optional[{collection[prim_type]}]",
+                    ]:
                         field.type = collection[prim_type]
-                if (
-                    typestring == f"typing.Union[{prim_type.__name__}, NoneType]"
-                    or typestring == f"typing.Optional[{prim_type.__name__}]"
-                ):
+                if typestring in [
+                    f"typing.Union[{prim_type.__name__}, NoneType]",
+                    f"typing.Optional[{prim_type.__name__}]",
+                ]:
                     field.type = prim_type
 
             if isinstance(field.type, type) and issubclass(field.type, Enum):
@@ -107,13 +103,13 @@ class HfArgumentParser(ArgumentParser):
                     kwargs["required"] = True
             elif field.type is bool or field.type == Optional[bool]:
                 if field.default is True:
-                    parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **kwargs)
+                    self.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **kwargs)
 
                 # Hack because type=bool in argparse does not behave as we want.
                 kwargs["type"] = string_to_bool
                 if field.type is bool or (field.default is not None and field.default is not dataclasses.MISSING):
-                    # Default value is False if we have no default when of type bool.
-                    default = False if field.default is dataclasses.MISSING else field.default
+                    # Default value is True if we have no default when of type bool.
+                    default = True if field.default is dataclasses.MISSING else field.default
                     # This is the value that will get picked if we don't include --field_name in any way
                     kwargs["default"] = default
                     # This tells argparse we accept 0 or 1 value after --field_name
@@ -140,7 +136,7 @@ class HfArgumentParser(ArgumentParser):
                     kwargs["default"] = field.default_factory()
                 else:
                     kwargs["required"] = True
-            parser.add_argument(field_name, **kwargs)
+            self.add_argument(field_name, **kwargs)
 
     def parse_args_into_dataclasses(
         self, args=None, return_remaining_strings=False, look_for_args_file=True, args_filename=None
@@ -195,11 +191,10 @@ class HfArgumentParser(ArgumentParser):
             outputs.append(namespace)
         if return_remaining_strings:
             return (*outputs, remaining_args)
-        else:
-            if remaining_args:
-                raise ValueError(f"Some specified arguments are not used by the HfArgumentParser: {remaining_args}")
+        if remaining_args:
+            raise ValueError(f"Some specified arguments are not used by the HfArgumentParser: {remaining_args}")
 
-            return (*outputs,)
+        return (*outputs,)
 
     def parse_json_file(self, json_file: str) -> Tuple[DataClass, ...]:
         """

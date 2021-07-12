@@ -202,7 +202,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         batch_outputs = {}
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in processed_features.items())
+            inputs = {k: v[i] for k, v in processed_features.items()}
             outputs = self._pad(
                 inputs,
                 max_length=max_length,
@@ -284,22 +284,20 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         """
 
         # Get padding strategy
-        if padding is not False:
-            if padding is True:
-                padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
-            elif not isinstance(padding, PaddingStrategy):
-                padding_strategy = PaddingStrategy(padding)
-            elif isinstance(padding, PaddingStrategy):
-                padding_strategy = padding
-        else:
+        if padding is False:
             padding_strategy = PaddingStrategy.DO_NOT_PAD
 
+        elif padding is True:
+            padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
+        elif not isinstance(padding, PaddingStrategy):
+            padding_strategy = PaddingStrategy(padding)
+        else:
+            padding_strategy = padding
         # Set max length if needed
-        if max_length is None:
-            if padding_strategy == PaddingStrategy.MAX_LENGTH:
-                raise ValueError(
-                    f"When setting ``padding={PaddingStrategy.MAX_LENGTH}``, make sure that" f" max_length is defined"
-                )
+        if max_length is None and padding_strategy == PaddingStrategy.MAX_LENGTH:
+            raise ValueError(
+                f"When setting ``padding={PaddingStrategy.MAX_LENGTH}``, make sure that" f" max_length is defined"
+            )
 
         # Test if we have a padding value
         if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.padding_value is None):

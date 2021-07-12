@@ -68,13 +68,14 @@ def onnx_compliancy(saved_model_path, strict, opset):
 
     # Convert to list, sorted if you want
     model_op_names = sorted(model_op_names)
-    incompatible_ops = []
+    incompatible_ops = [
+        op
+        for op in model_op_names
+        if op not in onnx_ops and op not in INTERNAL_OPS
+    ]
 
-    for op in model_op_names:
-        if op not in onnx_ops and op not in INTERNAL_OPS:
-            incompatible_ops.append(op)
 
-    if strict and len(incompatible_ops) > 0:
+    if strict and incompatible_ops:
         raise Exception(f"Found the following incompatible ops for the opset {opset}:\n" + incompatible_ops)
     elif len(incompatible_ops) > 0:
         print(f"Found the following incompatible ops for the opset {opset}:")

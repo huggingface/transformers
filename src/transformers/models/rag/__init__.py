@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tf_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -28,20 +28,10 @@ _import_structure = {
 }
 
 if is_torch_available():
-    _import_structure["modeling_rag"] = [
-        "RagModel",
-        "RagPreTrainedModel",
-        "RagSequenceForGeneration",
-        "RagTokenForGeneration",
-    ]
+    _import_structure["modeling_rag"] = ["RagModel", "RagSequenceForGeneration", "RagTokenForGeneration"]
 
 if is_tf_available():
-    _import_structure["modeling_tf_rag"] = [
-        "TFRagModel",
-        "TFRagPreTrainedModel",
-        "TFRagSequenceForGeneration",
-        "TFRagTokenForGeneration",
-    ]
+    _import_structure["modeling_tf_rag"] = ["TFRagModel", "TFRagSequenceForGeneration", "TFRagTokenForGeneration"]
 
 
 if TYPE_CHECKING:
@@ -50,17 +40,25 @@ if TYPE_CHECKING:
     from .tokenization_rag import RagTokenizer
 
     if is_torch_available():
-        from .modeling_rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
+        from .modeling_rag import RagModel, RagSequenceForGeneration, RagTokenForGeneration
 
     if is_tf_available():
-        from .modeling_tf_rag import (
-            TFRagModel,
-            TFRagPreTrainedModel,
-            TFRagSequenceForGeneration,
-            TFRagTokenForGeneration,
-        )
+        from .modeling_tf_rag import TFRagModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
 
 else:
+    import importlib
+    import os
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    class _LazyModule(_BaseLazyModule):
+        """
+        Module class that surfaces all objects but only performs associated imports when the objects are requested.
+        """
+
+        __file__ = globals()["__file__"]
+        __path__ = [os.path.dirname(__file__)]
+
+        def _get_module(self, module_name: str):
+            return importlib.import_module("." + module_name, self.__name__)
+
+    sys.modules[__name__] = _LazyModule(__name__, _import_structure)

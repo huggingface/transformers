@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -140,6 +141,10 @@ def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):
     return model
 
 
+def mish(x):
+    return x * torch.tanh(nn.functional.softplus(x))
+
+
 class NoNorm(nn.Module):
     def __init__(self, feat_size, eps=None):
         super().__init__()
@@ -150,7 +155,7 @@ class NoNorm(nn.Module):
         return input_tensor * self.weight + self.bias
 
 
-NORM2FN = {"layer_norm": nn.LayerNorm, "no_norm": NoNorm}
+NORM2FN = {"layer_norm": torch.nn.LayerNorm, "no_norm": NoNorm}
 
 
 class MobileBertEmbeddings(nn.Module):
@@ -202,9 +207,9 @@ class MobileBertEmbeddings(nn.Module):
             # dimensional output.
             inputs_embeds = torch.cat(
                 [
-                    nn.functional.pad(inputs_embeds[:, 1:], [0, 0, 0, 1, 0, 0], value=0),
+                    F.pad(inputs_embeds[:, 1:], [0, 0, 0, 1, 0, 0], value=0),
                     inputs_embeds,
-                    nn.functional.pad(inputs_embeds[:, :-1], [0, 0, 1, 0, 0, 0], value=0),
+                    F.pad(inputs_embeds[:, :-1], [0, 0, 1, 0, 0, 0], value=0),
                 ],
                 dim=2,
             )
@@ -915,7 +920,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddigs):
         self.cls.predictions.decoder = new_embeddigs
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
         # resize dense output embedings at first
         self.cls.predictions.dense = self._get_resized_lm_head(
             self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
@@ -1023,7 +1028,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddigs):
         self.cls.predictions.decoder = new_embeddigs
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
         # resize dense output embedings at first
         self.cls.predictions.dense = self._get_resized_lm_head(
             self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
@@ -1274,10 +1279,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
+                loss = loss_fct(logits.view(-1, self.num_labels), labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
@@ -1366,8 +1368,8 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1).contiguous()
-        end_logits = end_logits.squeeze(-1).contiguous()
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -1378,8 +1380,8 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
+            start_positions.clamp_(0, ignored_index)
+            end_positions.clamp_(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

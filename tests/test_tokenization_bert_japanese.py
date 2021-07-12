@@ -35,7 +35,6 @@ from .test_tokenization_common import TokenizerTesterMixin
 class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertJapaneseTokenizer
-    test_rust_tokenizer = False
     space_between_special_tokens = True
 
     def setUp(self):
@@ -205,7 +204,6 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertJapaneseTokenizer
-    test_rust_tokenizer = False
 
     def setUp(self):
         super().setUp()

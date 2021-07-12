@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import pipeline
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import require_tf, require_torch, slow
 
 from .test_pipelines_common import MonoInputPipelineCommonMixin
 
@@ -63,104 +63,45 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     @require_torch
     def test_torch_fill_mask(self):
         valid_inputs = "My name is <mask>"
-        unmasker = pipeline(task="fill-mask", model=self.small_models[0])
-        outputs = unmasker(valid_inputs)
+        nlp = pipeline(task="fill-mask", model=self.small_models[0])
+        outputs = nlp(valid_inputs)
         self.assertIsInstance(outputs, list)
 
         # This passes
-        outputs = unmasker(valid_inputs, targets=[" Patrick", " Clara"])
+        outputs = nlp(valid_inputs, targets=[" Patrick", " Clara"])
         self.assertIsInstance(outputs, list)
 
         # This used to fail with `cannot mix args and kwargs`
-        outputs = unmasker(valid_inputs, something=False)
+        outputs = nlp(valid_inputs, something=False)
         self.assertIsInstance(outputs, list)
 
     @require_torch
     def test_torch_fill_mask_with_targets(self):
         valid_inputs = ["My name is <mask>"]
-        # ' Sam' will yield a warning but work
-        valid_targets = [[" Teven", "ĠPatrick", "ĠClara"], ["ĠSam"], [" Sam"]]
+        valid_targets = [[" Teven", " Patrick", " Clara"], [" Sam"]]
         invalid_targets = [[], [""], ""]
         for model_name in self.small_models:
-            unmasker = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt")
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt")
             for targets in valid_targets:
-                outputs = unmasker(valid_inputs, targets=targets)
+                outputs = nlp(valid_inputs, targets=targets)
                 self.assertIsInstance(outputs, list)
                 self.assertEqual(len(outputs), len(targets))
             for targets in invalid_targets:
-                self.assertRaises(ValueError, unmasker, valid_inputs, targets=targets)
-
-    @require_torch
-    @slow
-    def test_torch_fill_mask_targets_equivalence(self):
-        model_name = self.large_models[0]
-        unmasker = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt")
-        unmasked = unmasker(self.valid_inputs[0])
-        tokens = [top_mask["token_str"] for top_mask in unmasked]
-        scores = [top_mask["score"] for top_mask in unmasked]
-
-        unmasked_targets = unmasker(self.valid_inputs[0], targets=tokens)
-        target_scores = [top_mask["score"] for top_mask in unmasked_targets]
-
-        self.assertEqual(scores, target_scores)
-
-    @require_torch
-    def test_torch_fill_mask_with_targets_and_topk(self):
-        model_name = self.small_models[0]
-        unmasker = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt")
-        targets = [" Teven", "ĠPatrick", "ĠClara"]
-        top_k = 2
-        outputs = unmasker("My name is <mask>", targets=targets, top_k=top_k)
-        self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"sequence": "My name is Patrick", "score": 0.0, "token": 3499, "token_str": " Patrick"},
-                {"sequence": "My name is Te", "score": 0.0, "token": 2941, "token_str": " Te"},
-            ],
-        )
-
-    @require_torch
-    def test_torch_fill_mask_with_duplicate_targets_and_topk(self):
-        model_name = self.small_models[0]
-        unmasker = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt")
-        # String duplicates + id duplicates
-        targets = [" Teven", "ĠPatrick", "ĠClara", "ĠClara", " Clara"]
-        top_k = 10
-        outputs = unmasker("My name is <mask>", targets=targets, top_k=top_k)
-
-        # The target list contains duplicates, so we can't output more
-        # than them
-        self.assertEqual(len(outputs), 3)
+                self.assertRaises(ValueError, nlp, valid_inputs, targets=targets)
 
     @require_tf
     def test_tf_fill_mask_with_targets(self):
         valid_inputs = ["My name is <mask>"]
-        # ' Teven' will yield a warning but work as " Te"
+        valid_targets = [[" Teven", " Patrick", " Clara"], [" Sam"]]
         invalid_targets = [[], [""], ""]
-        unmasker = pipeline(
-            task="fill-mask", model=self.small_models[0], tokenizer=self.small_models[0], framework="tf"
-        )
-        outputs = unmasker(valid_inputs, targets=[" Teven", "ĠPatrick", "ĠClara"])
-        self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"sequence": "My name is Clara", "score": 0.0, "token": 13606, "token_str": " Clara"},
-                {"sequence": "My name is Patrick", "score": 0.0, "token": 3499, "token_str": " Patrick"},
-                {"sequence": "My name is Te", "score": 0.0, "token": 2941, "token_str": " Te"},
-            ],
-        )
-        # topk
-        outputs = unmasker(valid_inputs, targets=[" Teven", "ĠPatrick", "ĠClara"], top_k=2)
-        self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"sequence": "My name is Clara", "score": 0.0, "token": 13606, "token_str": " Clara"},
-                {"sequence": "My name is Patrick", "score": 0.0, "token": 3499, "token_str": " Patrick"},
-            ],
-        )
-        for targets in invalid_targets:
-            with self.assertRaises(ValueError):
-                unmasker(valid_inputs, targets=targets)
+        for model_name in self.small_models:
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf")
+            for targets in valid_targets:
+                outputs = nlp(valid_inputs, targets=targets)
+                self.assertIsInstance(outputs, list)
+                self.assertEqual(len(outputs), len(targets))
+            for targets in invalid_targets:
+                self.assertRaises(ValueError, nlp, valid_inputs, targets=targets)
 
     @require_torch
     @slow
@@ -170,9 +111,9 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
             "My name is <mask>",
             "The largest city in France is <mask>",
         ]
-        valid_targets = ["ĠPatrick", "ĠClara"]
+        valid_targets = [" Patrick", " Clara"]
         for model_name in self.large_models:
-            unmasker = pipeline(
+            nlp = pipeline(
                 task="fill-mask",
                 model=model_name,
                 tokenizer=model_name,
@@ -180,14 +121,14 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 top_k=2,
             )
 
-            mono_result = unmasker(valid_inputs[0], targets=valid_targets)
+            mono_result = nlp(valid_inputs[0], targets=valid_targets)
             self.assertIsInstance(mono_result, list)
             self.assertIsInstance(mono_result[0], dict)
 
             for mandatory_key in mandatory_keys:
                 self.assertIn(mandatory_key, mono_result[0])
 
-            multi_result = [unmasker(valid_input) for valid_input in valid_inputs]
+            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
             self.assertIsInstance(multi_result, list)
             self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -205,17 +146,17 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 for key in mandatory_keys:
                     self.assertIn(key, result)
 
-            self.assertRaises(Exception, unmasker, [None])
+            self.assertRaises(Exception, nlp, [None])
 
             valid_inputs = valid_inputs[:1]
-            mono_result = unmasker(valid_inputs[0], targets=valid_targets)
+            mono_result = nlp(valid_inputs[0], targets=valid_targets)
             self.assertIsInstance(mono_result, list)
             self.assertIsInstance(mono_result[0], dict)
 
             for mandatory_key in mandatory_keys:
                 self.assertIn(mandatory_key, mono_result[0])
 
-            multi_result = [unmasker(valid_input) for valid_input in valid_inputs]
+            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
             self.assertIsInstance(multi_result, list)
             self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -233,7 +174,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 for key in mandatory_keys:
                     self.assertIn(key, result)
 
-            self.assertRaises(Exception, unmasker, [None])
+            self.assertRaises(Exception, nlp, [None])
 
     @require_tf
     @slow
@@ -243,18 +184,18 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
             "My name is <mask>",
             "The largest city in France is <mask>",
         ]
-        valid_targets = ["ĠPatrick", "ĠClara"]
+        valid_targets = [" Patrick", " Clara"]
         for model_name in self.large_models:
-            unmasker = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", top_k=2)
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", top_k=2)
 
-            mono_result = unmasker(valid_inputs[0], targets=valid_targets)
+            mono_result = nlp(valid_inputs[0], targets=valid_targets)
             self.assertIsInstance(mono_result, list)
             self.assertIsInstance(mono_result[0], dict)
 
             for mandatory_key in mandatory_keys:
                 self.assertIn(mandatory_key, mono_result[0])
 
-            multi_result = [unmasker(valid_input) for valid_input in valid_inputs]
+            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
             self.assertIsInstance(multi_result, list)
             self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -272,17 +213,17 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 for key in mandatory_keys:
                     self.assertIn(key, result)
 
-            self.assertRaises(Exception, unmasker, [None])
+            self.assertRaises(Exception, nlp, [None])
 
             valid_inputs = valid_inputs[:1]
-            mono_result = unmasker(valid_inputs[0], targets=valid_targets)
+            mono_result = nlp(valid_inputs[0], targets=valid_targets)
             self.assertIsInstance(mono_result, list)
             self.assertIsInstance(mono_result[0], dict)
 
             for mandatory_key in mandatory_keys:
                 self.assertIn(mandatory_key, mono_result[0])
 
-            multi_result = [unmasker(valid_input) for valid_input in valid_inputs]
+            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
             self.assertIsInstance(multi_result, list)
             self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -300,18 +241,4 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 for key in mandatory_keys:
                     self.assertIn(key, result)
 
-            self.assertRaises(Exception, unmasker, [None])
-
-    @require_tf
-    @slow
-    def test_tf_fill_mask_targets_equivalence(self):
-        model_name = self.large_models[0]
-        unmasker = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf")
-        unmasked = unmasker(self.valid_inputs[0])
-        tokens = [top_mask["token_str"] for top_mask in unmasked]
-        scores = [top_mask["score"] for top_mask in unmasked]
-
-        unmasked_targets = unmasker(self.valid_inputs[0], targets=tokens)
-        target_scores = [top_mask["score"] for top_mask in unmasked_targets]
-
-        self.assertEqual(scores, target_scores)
+            self.assertRaises(Exception, nlp, [None])

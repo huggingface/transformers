@@ -106,7 +106,7 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
+        vocab_file,
         tokenizer_file=None,
         do_lower_case=True,
         bos_token="<s>",

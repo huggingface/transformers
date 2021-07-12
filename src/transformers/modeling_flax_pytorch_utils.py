@@ -53,9 +53,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_pa
     pt_state_dict = torch.load(pt_path, map_location="cpu")
     logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
 
-    flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
-
-    return flax_state_dict
+    return convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
 
 
 def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
@@ -65,12 +63,18 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     random_flax_state_dict = flatten_dict(flax_model.params)
     flax_state_dict = {}
 
-    remove_base_model_prefix = (flax_model.base_model_prefix not in flax_model.params) and (
-        flax_model.base_model_prefix in set([k.split(".")[0] for k in pt_state_dict.keys()])
+    remove_base_model_prefix = (
+        flax_model.base_model_prefix not in flax_model.params
+        and flax_model.base_model_prefix
+        in {k.split(".")[0] for k in pt_state_dict}
     )
-    add_base_model_prefix = (flax_model.base_model_prefix in flax_model.params) and (
-        flax_model.base_model_prefix not in set([k.split(".")[0] for k in pt_state_dict.keys()])
+
+    add_base_model_prefix = (
+        flax_model.base_model_prefix in flax_model.params
+        and flax_model.base_model_prefix
+        not in {k.split(".")[0] for k in pt_state_dict}
     )
+
 
     # Need to change some parameters name to match Flax names so that we don't have to fork any layer
     for pt_key, pt_tensor in pt_state_dict.items():
@@ -90,12 +94,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
             pt_tuple_key = pt_tuple_key[:-1] + ("scale",)
         if pt_tuple_key[-1] == "weight" and pt_tuple_key[:-1] + ("embedding",) in random_flax_state_dict:
             pt_tuple_key = pt_tuple_key[:-1] + ("embedding",)
-        elif pt_tuple_key[-1] == "weight" and pt_tensor.ndim == 4 and pt_tuple_key not in random_flax_state_dict:
-            # conv layer
-            pt_tuple_key = pt_tuple_key[:-1] + ("kernel",)
-            pt_tensor = pt_tensor.transpose(2, 3, 1, 0)
         elif pt_tuple_key[-1] == "weight" and pt_tuple_key not in random_flax_state_dict:
-            # linear layer
             pt_tuple_key = pt_tuple_key[:-1] + ("kernel",)
             pt_tensor = pt_tensor.T
         elif pt_tuple_key[-1] == "gamma":
@@ -103,12 +102,13 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
         elif pt_tuple_key[-1] == "beta":
             pt_tuple_key = pt_tuple_key[:-1] + ("bias",)
 
-        if pt_tuple_key in random_flax_state_dict:
-            if pt_tensor.shape != random_flax_state_dict[pt_tuple_key].shape:
-                raise ValueError(
-                    f"PyTorch checkpoint seems to be incorrect. Weight {pt_key} was expected to be of shape "
-                    f"{random_flax_state_dict[pt_tuple_key].shape}, but is {pt_tensor.shape}."
-                )
+        if (
+            pt_tuple_key in random_flax_state_dict
+            and pt_tensor.shape != random_flax_state_dict[pt_tuple_key].shape
+        ):
+            raise ValueError(
+                "PyTorch checkpoint seems to be incorrect. Weight {pt_key} was expected to be of shape {random_flax_state_dict[pt_tuple_key].shape}, but is {pt_tensor.shape}."
+            )
 
         # also add unexpected weight so that warning is thrown
         flax_state_dict[pt_tuple_key] = jnp.asarray(pt_tensor)
@@ -154,12 +154,18 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     flax_state_dict = flatten_dict(flax_state)
     pt_model_dict = pt_model.state_dict()
 
-    remove_base_model_prefix = (pt_model.base_model_prefix in flax_state) and (
-        pt_model.base_model_prefix not in set([k.split(".")[0] for k in pt_model_dict.keys()])
+    remove_base_model_prefix = (
+        pt_model.base_model_prefix in flax_state
+        and pt_model.base_model_prefix
+        not in {k.split(".")[0] for k in pt_model_dict.keys()}
     )
-    add_base_model_prefix = (pt_model.base_model_prefix not in flax_state) and (
-        pt_model.base_model_prefix in set([k.split(".")[0] for k in pt_model_dict.keys()])
+
+    add_base_model_prefix = (
+        pt_model.base_model_prefix not in flax_state
+        and pt_model.base_model_prefix
+        in {k.split(".")[0] for k in pt_model_dict.keys()}
     )
+
 
     # keep track of unexpected & missing keys
     unexpected_keys = []
@@ -176,12 +182,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
             flax_key_tuple = (pt_model.base_model_prefix,) + flax_key_tuple
 
         # rename flax weights to PyTorch format
-        if flax_key_tuple[-1] == "kernel" and flax_tensor.ndim == 4 and ".".join(flax_key_tuple) not in pt_model_dict:
-            # conv layer
-            flax_key_tuple = flax_key_tuple[:-1] + ("weight",)
-            flax_tensor = jnp.transpose(flax_tensor, (3, 2, 0, 1))
-        elif flax_key_tuple[-1] == "kernel" and ".".join(flax_key_tuple) not in pt_model_dict:
-            # linear layer
+        if flax_key_tuple[-1] == "kernel" and ".".join(flax_key_tuple) not in pt_model_dict:
             flax_key_tuple = flax_key_tuple[:-1] + ("weight",)
             flax_tensor = flax_tensor.T
         elif flax_key_tuple[-1] in ["scale", "embedding"]:
@@ -195,12 +196,11 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
                     f"Flax checkpoint seems to be incorrect. Weight {flax_key_tuple} was expected"
                     f"to be of shape {pt_model_dict[flax_key].shape}, but is {flax_tensor.shape}."
                 )
-            else:
-                # add weight to pytorch dict
-                flax_tensor = np.asarray(flax_tensor) if not isinstance(flax_tensor, np.ndarray) else flax_tensor
-                pt_model_dict[flax_key] = torch.from_numpy(flax_tensor)
-                # remove from missing keys
-                missing_keys.remove(flax_key)
+            # add weight to pytorch dict
+            flax_tensor = np.asarray(flax_tensor) if not isinstance(flax_tensor, np.ndarray) else flax_tensor
+            pt_model_dict[flax_key] = torch.from_numpy(flax_tensor)
+            # remove from missing keys
+            missing_keys.remove(flax_key)
         else:
             # weight is not expected by PyTorch model
             unexpected_keys.append(flax_key)
@@ -210,7 +210,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     # re-transform missing_keys to list
     missing_keys = list(missing_keys)
 
-    if len(unexpected_keys) > 0:
+    if unexpected_keys:
         logger.warning(
             "Some weights of the Flax model were not used when "
             f"initializing the PyTorch model {pt_model.__class__.__name__}: {unexpected_keys}\n"
@@ -221,7 +221,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         )
     else:
         logger.warning(f"All Flax model weights were used when initializing {pt_model.__class__.__name__}.\n")
-    if len(missing_keys) > 0:
+    if missing_keys:
         logger.warning(
             f"Some weights of {pt_model.__class__.__name__} were not initialized from the Flax model "
             f"and are newly initialized: {missing_keys}\n"

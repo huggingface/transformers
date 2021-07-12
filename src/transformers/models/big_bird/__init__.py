@@ -18,8 +18,7 @@
 from typing import TYPE_CHECKING
 
 from ...file_utils import (
-    _LazyModule,
-    is_flax_available,
+    _BaseLazyModule,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
@@ -53,17 +52,6 @@ if is_torch_available():
         "load_tf_weights_in_big_bird",
     ]
 
-if is_flax_available():
-    _import_structure["modeling_flax_big_bird"] = [
-        "FlaxBigBirdForMaskedLM",
-        "FlaxBigBirdForMultipleChoice",
-        "FlaxBigBirdForPreTraining",
-        "FlaxBigBirdForQuestionAnswering",
-        "FlaxBigBirdForSequenceClassification",
-        "FlaxBigBirdForTokenClassification",
-        "FlaxBigBirdModel",
-        "FlaxBigBirdPreTrainedModel",
-    ]
 
 if TYPE_CHECKING:
     from .configuration_big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
@@ -90,19 +78,21 @@ if TYPE_CHECKING:
             load_tf_weights_in_big_bird,
         )
 
-    if is_flax_available():
-        from .modeling_flax_big_bird import (
-            FlaxBigBirdForMaskedLM,
-            FlaxBigBirdForMultipleChoice,
-            FlaxBigBirdForPreTraining,
-            FlaxBigBirdForQuestionAnswering,
-            FlaxBigBirdForSequenceClassification,
-            FlaxBigBirdForTokenClassification,
-            FlaxBigBirdModel,
-            FlaxBigBirdPreTrainedModel,
-        )
 
 else:
+    import importlib
+    import os
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    class _LazyModule(_BaseLazyModule):
+        """
+        Module class that surfaces all objects but only performs associated imports when the objects are requested.
+        """
+
+        __file__ = globals()["__file__"]
+        __path__ = [os.path.dirname(__file__)]
+
+        def _get_module(self, module_name: str):
+            return importlib.import_module("." + module_name, self.__name__)
+
+    sys.modules[__name__] = _LazyModule(__name__, _import_structure)

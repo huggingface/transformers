@@ -19,7 +19,8 @@
 
 
 import torch
-from torch import nn
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 # CUDA_MAJOR = int(torch.version.cuda.split('.')[0])
@@ -70,11 +71,11 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
 
     def _compute_logit(self, hidden, weight, bias, proj):
         if proj is None:
-            logit = nn.functional.linear(hidden, weight, bias=bias)
+            logit = F.linear(hidden, weight, bias=bias)
         else:
             # if CUDA_MAJOR <= 9 and CUDA_MINOR <= 1:
-            proj_hid = nn.functional.linear(hidden, proj.t().contiguous())
-            logit = nn.functional.linear(proj_hid, weight, bias=bias)
+            proj_hid = F.linear(hidden, proj.t().contiguous())
+            logit = F.linear(proj_hid, weight, bias=bias)
             # else:
             #     logit = torch.einsum('bd,de,ev->bv', (hidden, proj, weight.t()))
             #     if bias is not None:
@@ -109,9 +110,9 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         if self.n_clusters == 0:
             logit = self._compute_logit(hidden, self.out_layers[0].weight, self.out_layers[0].bias, self.out_projs[0])
             if labels is not None:
-                out = -nn.functional.log_softmax(logit, dim=-1).gather(1, labels.unsqueeze(1)).squeeze(1)
+                out = -F.log_softmax(logit, dim=-1).gather(1, labels.unsqueeze(1)).squeeze(1)
             else:
-                out = nn.functional.log_softmax(logit, dim=-1)
+                out = F.log_softmax(logit, dim=-1)
         else:
             # construct weights and biases
             weights, biases = [], []
@@ -134,7 +135,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             head_weight, head_bias, head_proj = weights[0], biases[0], self.out_projs[0]
 
             head_logit = self._compute_logit(hidden, head_weight, head_bias, head_proj)
-            head_logprob = nn.functional.log_softmax(head_logit, dim=1)
+            head_logprob = F.log_softmax(head_logit, dim=1)
 
             if labels is None:
                 out = hidden.new_empty((head_logit.size(0), self.n_token))
@@ -168,7 +169,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
                     weight_i, bias_i, proj_i = weights[i], biases[i], self.out_projs[i]
 
                     tail_logit_i = self._compute_logit(hidden_i, weight_i, bias_i, proj_i)
-                    tail_logprob_i = nn.functional.log_softmax(tail_logit_i, dim=1)
+                    tail_logprob_i = F.log_softmax(tail_logit_i, dim=1)
                     cluster_prob_idx = self.cutoffs[0] + i - 1  # No probability for the head cluster
                     if labels is not None:
                         logprob_i = head_logprob_i[:, cluster_prob_idx] + tail_logprob_i.gather(
@@ -204,7 +205,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         """
         if self.n_clusters == 0:
             logit = self._compute_logit(hidden, self.out_layers[0].weight, self.out_layers[0].bias, self.out_projs[0])
-            return nn.functional.log_softmax(logit, dim=-1)
+            return F.log_softmax(logit, dim=-1)
         else:
             # construct weights and biases
             weights, biases = [], []
@@ -228,7 +229,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             head_logit = self._compute_logit(hidden, head_weight, head_bias, head_proj)
 
             out = hidden.new_empty((head_logit.size(0), self.n_token))
-            head_logprob = nn.functional.log_softmax(head_logit, dim=1)
+            head_logprob = F.log_softmax(head_logit, dim=1)
 
             cutoff_values = [0] + self.cutoffs
             for i in range(len(cutoff_values) - 1):
@@ -240,7 +241,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
                     weight_i, bias_i, proj_i = weights[i], biases[i], self.out_projs[i]
 
                     tail_logit_i = self._compute_logit(hidden, weight_i, bias_i, proj_i)
-                    tail_logprob_i = nn.functional.log_softmax(tail_logit_i, dim=1)
+                    tail_logprob_i = F.log_softmax(tail_logit_i, dim=1)
 
                     logprob_i = head_logprob[:, -i] + tail_logprob_i
                     out[:, start_idx, stop_idx] = logprob_i

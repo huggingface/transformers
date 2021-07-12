@@ -27,7 +27,6 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import (
         MODEL_MAPPING,
@@ -177,9 +176,9 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Module))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+            self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -361,7 +360,7 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    image = Image.open("./tests/fixtures/tests_samples/COCO/cats.png")
     return image
 
 

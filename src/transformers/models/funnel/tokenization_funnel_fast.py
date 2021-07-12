@@ -88,7 +88,7 @@ class FunnelTokenizerFast(BertTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
+        vocab_file,
         tokenizer_file=None,
         do_lower_case=True,
         unk_token="<unk>",

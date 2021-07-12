@@ -14,21 +14,12 @@
 # limitations under the License.
 """ Auto Tokenizer class. """
 
-import json
-import os
+
 from collections import OrderedDict
-from typing import Dict, Optional, Union
 
 from ... import GPTNeoConfig
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import (
-    cached_path,
-    hf_bucket_url,
-    is_offline_mode,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-)
-from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
+from ...file_utils import is_sentencepiece_available, is_tokenizers_available
 from ...utils import logging
 from ..bart.tokenization_bart import BartTokenizer
 from ..bert.tokenization_bert import BertTokenizer
@@ -36,8 +27,6 @@ from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
 from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
 from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
-from ..byt5.tokenization_byt5 import ByT5Tokenizer
-from ..canine.tokenization_canine import CanineTokenizer
 from ..convbert.tokenization_convbert import ConvBertTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
@@ -62,7 +51,6 @@ from ..prophetnet.tokenization_prophetnet import ProphetNetTokenizer
 from ..rag.tokenization_rag import RagTokenizer
 from ..retribert.tokenization_retribert import RetriBertTokenizer
 from ..roberta.tokenization_roberta import RobertaTokenizer
-from ..roformer.tokenization_roformer import RoFormerTokenizer
 from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
 from ..tapas.tokenization_tapas import TapasTokenizer
 from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
@@ -79,7 +67,6 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
-    CanineConfig,
     ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -92,7 +79,6 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
-    HubertConfig,
     IBertConfig,
     LayoutLMConfig,
     LEDConfig,
@@ -112,7 +98,6 @@ from .configuration_auto import (
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
-    RoFormerConfig,
     Speech2TextConfig,
     SqueezeBertConfig,
     T5Config,
@@ -169,7 +154,6 @@ else:
     Speech2TextTokenizer = None
 
 if is_tokenizers_available():
-    from ...tokenization_utils_fast import PreTrainedTokenizerFast
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
     from ..bart.tokenization_bart_fast import BartTokenizerFast
     from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
@@ -198,7 +182,6 @@ if is_tokenizers_available():
     from ..reformer.tokenization_reformer_fast import ReformerTokenizerFast
     from ..retribert.tokenization_retribert_fast import RetriBertTokenizerFast
     from ..roberta.tokenization_roberta_fast import RobertaTokenizerFast
-    from ..roformer.tokenization_roformer_fast import RoFormerTokenizerFast
     from ..squeezebert.tokenization_squeezebert_fast import SqueezeBertTokenizerFast
     from ..t5.tokenization_t5_fast import T5TokenizerFast
     from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
@@ -233,12 +216,10 @@ else:
     ReformerTokenizerFast = None
     RetriBertTokenizerFast = None
     RobertaTokenizerFast = None
-    RoFormerTokenizerFast = None
     SqueezeBertTokenizerFast = None
     T5TokenizerFast = None
     XLMRobertaTokenizerFast = None
     XLNetTokenizerFast = None
-    PreTrainedTokenizerFast = None
 
 
 logger = logging.get_logger(__name__)
@@ -247,7 +228,6 @@ logger = logging.get_logger(__name__)
 TOKENIZER_MAPPING = OrderedDict(
     [
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
-        (RoFormerConfig, (RoFormerTokenizer, RoFormerTokenizerFast)),
         (T5Config, (T5Tokenizer, T5TokenizerFast)),
         (MT5Config, (MT5Tokenizer, MT5TokenizerFast)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
@@ -294,11 +274,9 @@ TOKENIZER_MAPPING = OrderedDict(
         (BigBirdConfig, (BigBirdTokenizer, BigBirdTokenizerFast)),
         (IBertConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
-        (HubertConfig, (Wav2Vec2CTCTokenizer, None)),
         (GPTNeoConfig, (GPT2Tokenizer, GPT2TokenizerFast)),
         (LukeConfig, (LukeTokenizer, None)),
         (BigBirdPegasusConfig, (PegasusTokenizer, PegasusTokenizerFast)),
-        (CanineConfig, (CanineTokenizer, None)),
     ]
 )
 
@@ -306,7 +284,6 @@ TOKENIZER_MAPPING = OrderedDict(
 NO_CONFIG_TOKENIZER = [
     BertJapaneseTokenizer,
     BertweetTokenizer,
-    ByT5Tokenizer,
     CpmTokenizer,
     HerbertTokenizer,
     HerbertTokenizerFast,
@@ -315,7 +292,6 @@ NO_CONFIG_TOKENIZER = [
     BarthezTokenizerFast,
     MBart50Tokenizer,
     MBart50TokenizerFast,
-    PreTrainedTokenizerFast,
 ]
 
 
@@ -335,105 +311,6 @@ def tokenizer_class_from_name(class_name: str):
     for c in all_tokenizer_classes:
         if c.__name__ == class_name:
             return c
-
-
-def get_tokenizer_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
-    force_download: bool = False,
-    resume_download: bool = False,
-    proxies: Optional[Dict[str, str]] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
-    local_files_only: bool = False,
-    **kwargs,
-):
-    """
-    Loads the tokenizer configuration from a pretrained model tokenizer configuration.
-
-    Args:
-        pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
-            This can be either:
-
-            - a string, the `model id` of a pretrained model configuration hosted inside a model repo on
-              huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
-              namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-            - a path to a `directory` containing a configuration file saved using the
-              :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g., ``./my_model_directory/``.
-
-        cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
-            Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
-            cache should not be used.
-        force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to force to (re-)download the configuration files and override the cached versions if they
-            exist.
-        resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
-        proxies (:obj:`Dict[str, str]`, `optional`):
-            A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
-            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-        use_auth_token (:obj:`str` or `bool`, `optional`):
-            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
-        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
-            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
-            identifier allowed by git.
-        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, will only try to load the tokenizer configuration from local files.
-
-    .. note::
-
-        Passing :obj:`use_auth_token=True` is required when you want to use a private model.
-
-
-    Returns:
-        :obj:`Dict`: The configuration of the tokenizer.
-
-    Examples::
-
-        # Download configuration from huggingface.co and cache.
-        tokenizer_config = get_tokenizer_config("bert-base-uncased")
-        # This model does not have a tokenizer config so the result will be an empty dict.
-        tokenizer_config = get_tokenizer_config("xlm-roberta-base")
-
-        # Save a pretrained tokenizer locally and you can reload its config
-        from transformers import AutoTokenizer
-
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenizer.save_pretrained("tokenizer-test")
-        tokenizer_config = get_tokenizer_config("tokenizer-test")
-    """
-    if is_offline_mode() and not local_files_only:
-        logger.info("Offline mode: forcing local_files_only=True")
-        local_files_only = True
-
-    pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-    if os.path.isdir(pretrained_model_name_or_path):
-        config_file = os.path.join(pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE)
-    else:
-        config_file = hf_bucket_url(
-            pretrained_model_name_or_path, filename=TOKENIZER_CONFIG_FILE, revision=revision, mirror=None
-        )
-
-    try:
-        # Load from URL or cache if already cached
-        resolved_config_file = cached_path(
-            config_file,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            proxies=proxies,
-            resume_download=resume_download,
-            local_files_only=local_files_only,
-            use_auth_token=use_auth_token,
-        )
-
-    except EnvironmentError:
-        logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
-        return {}
-
-    with open(resolved_config_file, encoding="utf-8") as reader:
-        return json.load(reader)
 
 
 class AutoTokenizer:
@@ -521,27 +398,18 @@ class AutoTokenizer:
         """
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         use_fast = kwargs.pop("use_fast", True)
 
-        # First, let's try to use the tokenizer_config file to get the tokenizer class.
-        tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
-        config_tokenizer_class = tokenizer_config.get("tokenizer_class")
-
-        # If that did not work, let's try to use the config.
-        if config_tokenizer_class is None:
-            if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            config_tokenizer_class = config.tokenizer_class
-
-        # If we have the tokenizer class from the tokenizer config or the model config we're good!
-        if config_tokenizer_class is not None:
+        if config.tokenizer_class is not None:
             tokenizer_class = None
-            if use_fast and not config_tokenizer_class.endswith("Fast"):
-                tokenizer_class_candidate = f"{config_tokenizer_class}Fast"
+            if use_fast and not config.tokenizer_class.endswith("Fast"):
+                tokenizer_class_candidate = f"{config.tokenizer_class}Fast"
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
             if tokenizer_class is None:
-                tokenizer_class_candidate = config_tokenizer_class
+                tokenizer_class_candidate = config.tokenizer_class
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
 
             if tokenizer_class is None:
@@ -550,7 +418,6 @@ class AutoTokenizer:
                 )
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-        # Otherwise we have to be creative.
         # if model is an encoder decoder, the encoder tokenizer class is used by default
         if isinstance(config, EncoderDecoderConfig):
             if type(config.decoder) is not type(config.encoder):  # noqa: E721

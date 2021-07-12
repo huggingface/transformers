@@ -18,15 +18,11 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_longformer": [
-        "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "LongformerConfig",
-        "LongformerOnnxConfig",
-    ],
+    "configuration_longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig"],
     "tokenization_longformer": ["LongformerTokenizer"],
 }
 
@@ -42,7 +38,6 @@ if is_torch_available():
         "LongformerForSequenceClassification",
         "LongformerForTokenClassification",
         "LongformerModel",
-        "LongformerPreTrainedModel",
         "LongformerSelfAttention",
     ]
 
@@ -55,17 +50,12 @@ if is_tf_available():
         "TFLongformerForSequenceClassification",
         "TFLongformerForTokenClassification",
         "TFLongformerModel",
-        "TFLongformerPreTrainedModel",
         "TFLongformerSelfAttention",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_longformer import (
-        LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        LongformerConfig,
-        LongformerOnnxConfig,
-    )
+    from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
     from .tokenization_longformer import LongformerTokenizer
 
     if is_tokenizers_available():
@@ -80,7 +70,6 @@ if TYPE_CHECKING:
             LongformerForSequenceClassification,
             LongformerForTokenClassification,
             LongformerModel,
-            LongformerPreTrainedModel,
             LongformerSelfAttention,
         )
 
@@ -93,11 +82,23 @@ if TYPE_CHECKING:
             TFLongformerForSequenceClassification,
             TFLongformerForTokenClassification,
             TFLongformerModel,
-            TFLongformerPreTrainedModel,
             TFLongformerSelfAttention,
         )
 
 else:
+    import importlib
+    import os
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    class _LazyModule(_BaseLazyModule):
+        """
+        Module class that surfaces all objects but only performs associated imports when the objects are requested.
+        """
+
+        __file__ = globals()["__file__"]
+        __path__ = [os.path.dirname(__file__)]
+
+        def _get_module(self, module_name: str):
+            return importlib.import_module("." + module_name, self.__name__)
+
+    sys.modules[__name__] = _LazyModule(__name__, _import_structure)

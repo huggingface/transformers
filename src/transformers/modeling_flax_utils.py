@@ -28,6 +28,7 @@ from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
+    CONFIG_NAME,
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
     PushToHubMixin,
@@ -40,16 +41,11 @@ from .file_utils import (
     is_remote_url,
     replace_return_docstrings,
 )
-from .generation_flax_utils import FlaxGenerationMixin
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-
-def quick_gelu(x):
-    return x * jax.nn.sigmoid(1.702 * x)
 
 
 ACT2FN = {
@@ -58,11 +54,10 @@ ACT2FN = {
     "silu": nn.swish,
     "swish": nn.swish,
     "gelu_new": partial(nn.gelu, approximate=True),
-    "quick_gelu": quick_gelu,
 }
 
 
-class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
+class FlaxPreTrainedModel(PushToHubMixin):
     r"""
     Base class for all models.
 
@@ -110,13 +105,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
-
-    @classmethod
-    def _from_config(cls, config, **kwargs):
-        """
-        All context managers that the model should be initialized under go here.
-        """
-        return cls(config, **kwargs)
 
     @property
     def config(self) -> PretrainedConfig:
@@ -354,11 +342,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
             state = state[cls.base_model_prefix]
 
-        # if model is head model and we are loading weights from base model
-        # we initialize new params dict with base_model_prefix
-        if cls.base_model_prefix in dict(model.params) and cls.base_model_prefix not in state:
-            state = {cls.base_model_prefix: state}
-
         # flatten dicts
         state = flatten_dict(state)
 
@@ -415,14 +398,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 Directory to which to save. Will be created if it doesn't exist.
             push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it.
-
-                .. warning::
-
-                    Using :obj:`push_to_hub=True` will synchronize the repository you are pushing to with
-                    :obj:`save_directory`, which requires :obj:`save_directory` to be a local clone of the repo you are
-                    pushing to if it's an existing folder. Pass along :obj:`temp_dir=True` to use a temporary directory
-                    instead.
-
             kwargs:
                 Additional key word arguments passed along to the
                 :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
@@ -430,11 +405,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
-
-        if push_to_hub:
-            commit_message = kwargs.pop("commit_message", None)
-            repo = self._create_or_get_repo(save_directory, **kwargs)
-
         os.makedirs(save_directory, exist_ok=True)
 
         # get abs dir
@@ -453,7 +423,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         logger.info(f"Model weights saved in {output_model_file}")
 
         if push_to_hub:
-            url = self._push_to_hub(repo, commit_message=commit_message)
+            saved_files = [os.path.join(save_directory, CONFIG_NAME), output_model_file]
+            url = self._push_to_hub(save_files=saved_files, **kwargs)
             logger.info(f"Model pushed to the hub in this commit: {url}")
 
 

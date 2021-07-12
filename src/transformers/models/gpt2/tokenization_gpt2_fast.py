@@ -125,8 +125,8 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
-        merges_file=None,
+        vocab_file,
+        merges_file,
         tokenizer_file=None,
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",

@@ -109,7 +109,7 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
+        vocab_file,
         tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",

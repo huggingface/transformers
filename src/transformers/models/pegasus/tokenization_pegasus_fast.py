@@ -98,7 +98,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
+        vocab_file,
         tokenizer_file=None,
         pad_token="<pad>",
         eos_token="</s>",

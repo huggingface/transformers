@@ -56,8 +56,9 @@ LARGE_NEGATIVE = -1e8
 
 
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
-    shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
+    shifted_input_ids = tf.roll(input_ids, 1, axis=-1)
+    start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
+    shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids = tf.where(
         shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
@@ -2476,15 +2477,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             encoder_global_attentions=enc_g_attns,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past,
-        attention_mask,
-        head_mask=None,
-        use_cache=None,
-        **kwargs,
-    ) -> Dict:
+    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
         if len(past) == 1:
             assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
@@ -2517,12 +2510,8 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
-            "head_mask": head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
-
-    def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
-        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
     def _reorder_cache(past, beam_idx):

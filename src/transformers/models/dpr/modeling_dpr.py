@@ -241,8 +241,8 @@ class DPRSpanPredictor(PreTrainedModel):
         # compute logits
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1).contiguous()
-        end_logits = end_logits.squeeze(-1).contiguous()
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
         relevance_logits = self.qa_classifier(sequence_output[:, 0, :])
 
         # resize

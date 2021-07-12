@@ -63,8 +63,8 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
-        merges_file=None,
+        vocab_file,
+        merges_file,
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",

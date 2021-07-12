@@ -154,75 +154,82 @@ class CodeStyler:
         if no_style or self.in_block == SpecialBlock.NO_STYLE:
             return "\n".join(paragraph)
         if _re_list.search(paragraph[0]) is not None:
-            # Great, we're in a list. So we need to split our paragraphs in smaller parts, one for each item.
-            result = ""
-            remainder = ""
-            prefix = _re_list.search(paragraph[0]).groups()[0]
-            prefix_indent = get_indent(paragraph[0])
-            current_item = [paragraph[0][len(prefix) :]]
-            for i, line in enumerate(paragraph[1:]):
-                new_item_search = _re_list.search(line)
-                indent = get_indent(line)
-                if len(indent) < len(prefix_indent) or (len(indent) == len(prefix_indent) and new_item_search is None):
-                    # There might not be an empty line after the list, formatting the remainder recursively.
-                    remainder = "\n" + self.style_paragraph(
-                        paragraph[i + 1 :], max_len, no_style=no_style, min_indent=min_indent
-                    )
-                    break
-                elif new_item_search is not None:
-                    text = " ".join([l.strip() for l in current_item])
-                    result += split_text_in_lines(text, max_len, prefix, min_indent=min_indent) + "\n"
-                    prefix = new_item_search.groups()[0]
-                    prefix_indent = indent
-                    current_item = [line[len(prefix) :]]
-                else:
-                    current_item.append(line)
-            # Treat the last item
-            text = " ".join([l.strip() for l in current_item])
-            result += split_text_in_lines(text, max_len, prefix, min_indent=min_indent)
-            # Add the potential remainder
-            return result + remainder
+            return self._extracted_from_style_paragraph_9(
+                paragraph, max_len, no_style, min_indent
+            )
 
         if len(paragraph) > 1 and self.is_comment_or_textual_block(paragraph[0]):
             # Comments/notes in rst should be restyled with indentation, ignoring the first line.
             indent = get_indent(paragraph[1])
-            text = " ".join([l.strip() for l in paragraph[1:]])
+            text = " ".join(l.strip() for l in paragraph[1:])
             return paragraph[0] + "\n" + split_text_in_lines(text, max_len, indent, min_indent=min_indent)
 
         if self.in_block == SpecialBlock.ARG_LIST:
-            # Arg lists are special: we need to ignore the lines that are at the first indentation level beneath the
-            # Args/Parameters (parameter description), then we can style the indentation level beneath.
-            result = ""
-            # The args/parameters could be in that paragraph and should be ignored
-            if _re_arg_def.search(paragraph[0]) is not None:
-                if len(paragraph) == 1:
-                    return paragraph[0]
-                result += paragraph[0] + "\n"
-                paragraph = paragraph[1:]
-
-            if self.current_indent is None:
-                self.current_indent = get_indent(paragraph[1])
-
-            current_item = []
-            for line in paragraph:
-                if get_indent(line) == self.current_indent:
-                    if len(current_item) > 0:
-                        item_indent = get_indent(current_item[0])
-                        text = " ".join([l.strip() for l in current_item])
-                        result += split_text_in_lines(text, max_len, item_indent, min_indent=min_indent) + "\n"
-                    result += line + "\n"
-                    current_item = []
-                else:
-                    current_item.append(line)
-            if len(current_item) > 0:
-                item_indent = get_indent(current_item[0])
-                text = " ".join([l.strip() for l in current_item])
-                result += split_text_in_lines(text, max_len, item_indent, min_indent=min_indent) + "\n"
-            return result[:-1]
-
+            return self._extracted_from_style_paragraph_46(paragraph, max_len, min_indent)
         indent = get_indent(paragraph[0])
-        text = " ".join([l.strip() for l in paragraph])
+        text = " ".join(l.strip() for l in paragraph)
         return split_text_in_lines(text, max_len, indent, min_indent=min_indent)
+
+    def _extracted_from_style_paragraph_46(self, paragraph, max_len, min_indent):
+        # Arg lists are special: we need to ignore the lines that are at the first indentation level beneath the
+        # Args/Parameters (parameter description), then we can style the indentation level beneath.
+        result = ""
+        # The args/parameters could be in that paragraph and should be ignored
+        if _re_arg_def.search(paragraph[0]) is not None:
+            if len(paragraph) == 1:
+                return paragraph[0]
+            result += paragraph[0] + "\n"
+            paragraph = paragraph[1:]
+
+        if self.current_indent is None:
+            self.current_indent = get_indent(paragraph[1])
+
+        current_item = []
+        for line in paragraph:
+            if get_indent(line) == self.current_indent:
+                if current_item:
+                    item_indent = get_indent(current_item[0])
+                    text = " ".join(l.strip() for l in current_item)
+                    result += split_text_in_lines(text, max_len, item_indent, min_indent=min_indent) + "\n"
+                result += line + "\n"
+                current_item = []
+            else:
+                current_item.append(line)
+        if current_item:
+            item_indent = get_indent(current_item[0])
+            text = " ".join(l.strip() for l in current_item)
+            result += split_text_in_lines(text, max_len, item_indent, min_indent=min_indent) + "\n"
+        return result[:-1]
+
+    def _extracted_from_style_paragraph_9(self, paragraph, max_len, no_style, min_indent):
+        # Great, we're in a list. So we need to split our paragraphs in smaller parts, one for each item.
+        result = ""
+        remainder = ""
+        prefix = _re_list.search(paragraph[0]).groups()[0]
+        prefix_indent = get_indent(paragraph[0])
+        current_item = [paragraph[0][len(prefix) :]]
+        for i, line in enumerate(paragraph[1:]):
+            new_item_search = _re_list.search(line)
+            indent = get_indent(line)
+            if len(indent) < len(prefix_indent) or (len(indent) == len(prefix_indent) and new_item_search is None):
+                # There might not be an empty line after the list, formatting the remainder recursively.
+                remainder = "\n" + self.style_paragraph(
+                    paragraph[i + 1 :], max_len, no_style=no_style, min_indent=min_indent
+                )
+                break
+            elif new_item_search is not None:
+                text = " ".join(l.strip() for l in current_item)
+                result += split_text_in_lines(text, max_len, prefix, min_indent=min_indent) + "\n"
+                prefix = new_item_search.groups()[0]
+                prefix_indent = indent
+                current_item = [line[len(prefix) :]]
+            else:
+                current_item.append(line)
+            # Treat the last item
+        text = " ".join(l.strip() for l in current_item)
+        result += split_text_in_lines(text, max_len, prefix, min_indent=min_indent)
+        # Add the potential remainder
+        return result + remainder
 
     def style(self, text, max_len=119, min_indent=None):
         """Style `text` to `max_len`."""

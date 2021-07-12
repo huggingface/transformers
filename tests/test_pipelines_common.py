@@ -73,60 +73,60 @@ class CustomInputPipelineCommonMixin:
     @require_torch
     def test_torch_small(self):
         for model_name in self.small_models:
-            pipe_small = pipeline(
+            nlp = pipeline(
                 task=self.pipeline_task,
                 model=model_name,
                 tokenizer=model_name,
                 framework="pt",
                 **self.pipeline_loading_kwargs,
             )
-            self._test_pipeline(pipe_small)
+            self._test_pipeline(nlp)
 
     @require_tf
     def test_tf_small(self):
         for model_name in self.small_models:
-            pipe_small = pipeline(
+            nlp = pipeline(
                 task=self.pipeline_task,
                 model=model_name,
                 tokenizer=model_name,
                 framework="tf",
                 **self.pipeline_loading_kwargs,
             )
-            self._test_pipeline(pipe_small)
+            self._test_pipeline(nlp)
 
     @require_torch
     @slow
     def test_torch_large(self):
         for model_name in self.large_models:
-            pipe_large = pipeline(
+            nlp = pipeline(
                 task=self.pipeline_task,
                 model=model_name,
                 tokenizer=model_name,
                 framework="pt",
                 **self.pipeline_loading_kwargs,
             )
-            self._test_pipeline(pipe_large)
+            self._test_pipeline(nlp)
 
     @require_tf
     @slow
     def test_tf_large(self):
         for model_name in self.large_models:
-            pipe_large = pipeline(
+            nlp = pipeline(
                 task=self.pipeline_task,
                 model=model_name,
                 tokenizer=model_name,
                 framework="tf",
                 **self.pipeline_loading_kwargs,
             )
-            self._test_pipeline(pipe_large)
+            self._test_pipeline(nlp)
 
-    def _test_pipeline(self, pipe: Pipeline):
+    def _test_pipeline(self, nlp: Pipeline):
         raise NotImplementedError
 
     @require_torch
     def test_compare_slow_fast_torch(self):
         for model_name in self.small_models:
-            pipe_slow = pipeline(
+            nlp_slow = pipeline(
                 task=self.pipeline_task,
                 model=model_name,
                 tokenizer=model_name,
@@ -134,7 +134,7 @@ class CustomInputPipelineCommonMixin:
                 use_fast=False,
                 **self.pipeline_loading_kwargs,
             )
-            pipe_fast = pipeline(
+            nlp_fast = pipeline(
                 task=self.pipeline_task,
                 model=model_name,
                 tokenizer=model_name,
@@ -142,12 +142,12 @@ class CustomInputPipelineCommonMixin:
                 use_fast=True,
                 **self.pipeline_loading_kwargs,
             )
-            self._compare_slow_fast_pipelines(pipe_slow, pipe_fast, method="forward")
+            self._compare_slow_fast_pipelines(nlp_slow, nlp_fast, method="forward")
 
     @require_tf
     def test_compare_slow_fast_tf(self):
         for model_name in self.small_models:
-            pipe_slow = pipeline(
+            nlp_slow = pipeline(
                 task=self.pipeline_task,
                 model=model_name,
                 tokenizer=model_name,
@@ -155,7 +155,7 @@ class CustomInputPipelineCommonMixin:
                 use_fast=False,
                 **self.pipeline_loading_kwargs,
             )
-            pipe_fast = pipeline(
+            nlp_fast = pipeline(
                 task=self.pipeline_task,
                 model=model_name,
                 tokenizer=model_name,
@@ -163,25 +163,23 @@ class CustomInputPipelineCommonMixin:
                 use_fast=True,
                 **self.pipeline_loading_kwargs,
             )
-            self._compare_slow_fast_pipelines(pipe_slow, pipe_fast, method="call")
+            self._compare_slow_fast_pipelines(nlp_slow, nlp_fast, method="call")
 
-    def _compare_slow_fast_pipelines(self, pipe_slow: Pipeline, pipe_fast: Pipeline, method: str):
+    def _compare_slow_fast_pipelines(self, nlp_slow: Pipeline, nlp_fast: Pipeline, method: str):
         """We check that the inputs to the models forward passes are identical for
         slow and fast tokenizers.
         """
         with mock.patch.object(
-            pipe_slow.model, method, wraps=getattr(pipe_slow.model, method)
-        ) as mock_slow, mock.patch.object(
-            pipe_fast.model, method, wraps=getattr(pipe_fast.model, method)
-        ) as mock_fast:
+            nlp_slow.model, method, wraps=getattr(nlp_slow.model, method)
+        ) as mock_slow, mock.patch.object(nlp_fast.model, method, wraps=getattr(nlp_fast.model, method)) as mock_fast:
             for inputs in self.valid_inputs:
                 if isinstance(inputs, dict):
                     inputs.update(self.pipeline_running_kwargs)
-                    _ = pipe_slow(**inputs)
-                    _ = pipe_fast(**inputs)
+                    _ = nlp_slow(**inputs)
+                    _ = nlp_fast(**inputs)
                 else:
-                    _ = pipe_slow(inputs, **self.pipeline_running_kwargs)
-                    _ = pipe_fast(inputs, **self.pipeline_running_kwargs)
+                    _ = nlp_slow(inputs, **self.pipeline_running_kwargs)
+                    _ = nlp_fast(inputs, **self.pipeline_running_kwargs)
 
                 mock_slow.assert_called()
                 mock_fast.assert_called()
@@ -211,10 +209,10 @@ class MonoInputPipelineCommonMixin(CustomInputPipelineCommonMixin):
     expected_multi_result: Optional[List] = None
     expected_check_keys: Optional[List[str]] = None
 
-    def _test_pipeline(self, pipe: Pipeline):
-        self.assertIsNotNone(pipe)
+    def _test_pipeline(self, nlp: Pipeline):
+        self.assertIsNotNone(nlp)
 
-        mono_result = pipe(self.valid_inputs[0], **self.pipeline_running_kwargs)
+        mono_result = nlp(self.valid_inputs[0], **self.pipeline_running_kwargs)
         self.assertIsInstance(mono_result, list)
         self.assertIsInstance(mono_result[0], (dict, list))
 
@@ -224,7 +222,7 @@ class MonoInputPipelineCommonMixin(CustomInputPipelineCommonMixin):
         for key in self.mandatory_keys:
             self.assertIn(key, mono_result[0])
 
-        multi_result = [pipe(input, **self.pipeline_running_kwargs) for input in self.valid_inputs]
+        multi_result = [nlp(input, **self.pipeline_running_kwargs) for input in self.valid_inputs]
         self.assertIsInstance(multi_result, list)
         self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -243,4 +241,4 @@ class MonoInputPipelineCommonMixin(CustomInputPipelineCommonMixin):
             for key in self.mandatory_keys:
                 self.assertIn(key, result)
 
-        self.assertRaises(Exception, pipe, self.invalid_inputs)
+        self.assertRaises(Exception, nlp, self.invalid_inputs)

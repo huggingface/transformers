@@ -106,7 +106,7 @@ class TapasModelTester:
         average_logits_per_cell=True,
         select_one_column=True,
         allow_empty_column_selection=False,
-        init_cell_selection_weights_to_zero=True,
+        init_cell_selection_weights_to_zero=False,
         reset_position_index_per_cell=True,
         disable_per_token_loss=False,
         scope=None,

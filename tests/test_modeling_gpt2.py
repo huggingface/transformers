@@ -361,6 +361,7 @@ class GPT2ModelTester:
         model = GPT2ForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
+        print(config.num_labels, sequence_labels.size())
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
@@ -398,7 +399,6 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     )
     all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     all_parallelizable_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
-    fx_ready_model_classes = all_model_classes
     test_missing_keys = False
     test_model_parallel = True
 

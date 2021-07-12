@@ -67,8 +67,8 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
-        merges_file=None,
+        vocab_file,
+        merges_file,
         tokenizer_file=None,
         cls_token="<s>",
         unk_token="<unk>",

@@ -52,7 +52,7 @@ LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-LayoutLMLayerNorm = nn.LayerNorm
+LayoutLMLayerNorm = torch.nn.LayerNorm
 
 
 class LayoutLMEmbeddings(nn.Module):

@@ -67,7 +67,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" XLM-RoBERTa tokenizer (backed by HuggingFace's `tokenizers` library). Adapted from
-    :class:`~transformers.RobertaTokenizer` and :class:`~transformers.XLNetTokenizer`. Based on `BPE
+    :class:`~transformers.RobertaTokenizer` and class:`~transformers.XLNetTokenizer`. Based on `BPE
     <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
@@ -117,7 +117,7 @@ class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
+        vocab_file,
         tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",

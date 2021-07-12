@@ -310,23 +310,25 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     print("/!\\ Please note TensorFlow doesn't support exporting model > 2Gb /!\\")
 
     try:
-        import tensorflow as tf
-
-        from keras2onnx import __version__ as k2ov
-        from keras2onnx import convert_keras, save_model
-
-        print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
-
-        # Build
-        input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
-
-        # Forward
-        nlp.model.predict(tokens.data)
-        onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=opset)
-        save_model(onnx_model, output.as_posix())
-
+        _extracted_from_convert_tensorflow_9(nlp, opset, output)
     except ImportError as e:
         raise Exception(f"Cannot import {e.name} required to convert TF model to ONNX. Please install {e.name} first.")
+
+def _extracted_from_convert_tensorflow_9(nlp, opset, output):
+    import tensorflow as tf
+
+    from keras2onnx import __version__ as k2ov
+    from keras2onnx import convert_keras, save_model
+
+    print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
+
+    # Build
+    input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
+
+    # Forward
+    nlp.model.predict(tokens.data)
+    onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=opset)
+    save_model(onnx_model, output.as_posix())
 
 
 def convert(
