@@ -359,7 +359,7 @@ class LayoutLMv2Encoder(nn.Module):
             self.rel_pos_x_bias = nn.Linear(self.rel_2d_pos_onehot_size, config.num_attention_heads, bias=False)
             self.rel_pos_y_bias = nn.Linear(self.rel_2d_pos_onehot_size, config.num_attention_heads, bias=False)
 
-    def _cal_1d_pos_emb(self, hidden_states, position_ids):
+    def _calculate_1d_position_embeddings(self, hidden_states, position_ids):
         rel_pos_mat = position_ids.unsqueeze(-2) - position_ids.unsqueeze(-1)
         rel_pos = relative_position_bucket(
             rel_pos_mat,
@@ -371,7 +371,7 @@ class LayoutLMv2Encoder(nn.Module):
         rel_pos = rel_pos.contiguous()
         return rel_pos
 
-    def _cal_2d_pos_emb(self, hidden_states, bbox):
+    def _calculate_2d_position_embeddings(self, hidden_states, bbox):
         position_coord_x = bbox[:, :, 0]
         position_coord_y = bbox[:, :, 3]
         rel_pos_x_2d_mat = position_coord_x.unsqueeze(-2) - position_coord_x.unsqueeze(-1)
@@ -409,8 +409,14 @@ class LayoutLMv2Encoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        rel_pos = self._cal_1d_pos_emb(hidden_states, position_ids) if self.has_relative_attention_bias else None
-        rel_2d_pos = self._cal_2d_pos_emb(hidden_states, bbox) if self.has_spatial_attention_bias else None
+        rel_pos = (
+            self._calculate_1d_position_embeddings(hidden_states, position_ids)
+            if self.has_relative_attention_bias
+            else None
+        )
+        rel_2d_pos = (
+            self._calculate_2d_position_embeddings(hidden_states, bbox) if self.has_spatial_attention_bias else None
+        )
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -529,27 +535,6 @@ class VisualBackbone(nn.Module):
         model = META_ARCH_REGISTRY.get(meta_arch)(self.cfg)
         assert isinstance(model.backbone, detectron2.modeling.backbone.FPN)
         self.backbone = model.backbone
-        if (
-            config.convert_sync_batchnorm
-            and torch.distributed.is_available()
-            and torch.distributed.is_initialized()
-            and torch.distributed.get_rank() > -1
-        ):
-            self_rank = torch.distributed.get_rank()
-            node_size = torch.cuda.device_count()
-            world_size = torch.distributed.get_world_size()
-            assert world_size % node_size == 0
-
-            node_global_ranks = [
-                list(range(i * node_size, (i + 1) * node_size)) for i in range(world_size // node_size)
-            ]
-            sync_bn_groups = [
-                torch.distributed.new_group(ranks=node_global_ranks[i]) for i in range(world_size // node_size)
-            ]
-            node_rank = self_rank // node_size
-            assert self_rank in node_global_ranks[node_rank]
-
-            self.backbone = my_convert_sync_batchnorm(self.backbone, process_group=sync_bn_groups[node_rank])
 
         assert len(self.cfg.MODEL.PIXEL_MEAN) == len(self.cfg.MODEL.PIXEL_STD)
         num_channels = len(self.cfg.MODEL.PIXEL_MEAN)
@@ -581,6 +566,27 @@ class VisualBackbone(nn.Module):
         features = features[self.out_feature_key]
         features = self.pool(features).flatten(start_dim=2).transpose(1, 2).contiguous()
         return features
+
+    def synchronize_batch_norm(self):
+        assert (
+            torch.distributed.is_available()
+            and torch.distributed.is_initialized()
+            and torch.distributed.get_rank() > -1
+        ), "Please make sure torch.distributed is set up properly."
+
+        self_rank = torch.distributed.get_rank()
+        node_size = torch.cuda.device_count()
+        world_size = torch.distributed.get_world_size()
+        assert world_size % node_size == 0
+
+        node_global_ranks = [list(range(i * node_size, (i + 1) * node_size)) for i in range(world_size // node_size)]
+        sync_bn_groups = [
+            torch.distributed.new_group(ranks=node_global_ranks[i]) for i in range(world_size // node_size)
+        ]
+        node_rank = self_rank // node_size
+        assert self_rank in node_global_ranks[node_rank]
+
+        self.backbone = my_convert_sync_batchnorm(self.backbone, process_group=sync_bn_groups[node_rank])
 
 
 LAYOUTLMV2_START_DOCSTRING = r"""

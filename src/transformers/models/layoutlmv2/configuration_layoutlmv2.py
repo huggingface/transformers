@@ -80,8 +80,6 @@ class LayoutLMv2Config(PretrainedConfig):
             The maximum number of relative 2D positions in the self-attention mechanism.
         rel_2d_pos_bins (:obj:`int`, `optional`, defaults to 64):
             The number of 2D relative position bins in the self-attention mechanism.
-        convert_sync_batchnorm (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to convert BatchNorm layers to SyncNorm layers before wrapping the visual backbone with DDP.
         image_feature_pool_shape (:obj:`List[int]`, `optional`, defaults to [7, 7, 256]):
             The shape of the average-pooled feature map.
         coordinate_size (:obj:`int`, `optional`, defaults to 128):
