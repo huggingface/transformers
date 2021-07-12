@@ -322,7 +322,6 @@ def main():
         teacher_model = AutoModelForQuestionAnswering.from_pretrained(
             model_args.distill_teacher,
             from_tf=bool(".ckpt" in model_args.distill_teacher),
-            config=config,
             cache_dir=model_args.cache_dir,
         )
         teacher_model_parameters = filter(lambda p: p.requires_grad, teacher_model.parameters())
