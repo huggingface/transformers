@@ -308,7 +308,7 @@ from ..xlnet.modeling_xlnet import (
     XLNetLMHeadModel,
     XLNetModel,
 )
-from .auto_factory import auto_class_factory
+from .auto_factory import auto_class_factory, auto_class_update,_BaseAutoModelClass
 from .configuration_auto import (
     AlbertConfig,
     BartConfig,
@@ -780,7 +780,12 @@ MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
 )
 
 
-AutoModel = auto_class_factory("AutoModel", MODEL_MAPPING)
+
+class AutoModel(_BaseAutoModelClass):
+    _model_mapping = MODEL_MAPPING
+
+
+AutoModel = auto_class_update(AutoModel)
 
 AutoModelForPreTraining = auto_class_factory(
     "AutoModelForPreTraining", MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
