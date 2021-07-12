@@ -385,6 +385,7 @@ class TestMarian_MT_EN(AbstractMarianIntegrationTest):
     src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
     expected_text = ["Touching gently, Jesus healed a man who was affected by the sad disease of leprosy."]
 
+    @unittest.skip("Skipping until #12647 is resolved.")
     @slow
     def test_batch_generation_mt_en(self):
         self._assert_generated_batch_equal_expected()
