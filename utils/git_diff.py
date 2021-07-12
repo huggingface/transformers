@@ -232,16 +232,16 @@ def module_to_test_file(module_fname):
         module_name = module_name.replace("_fast.py", ".py")
 
     # Special case for pipelines submodules
-    if splits[-2] == "pipelines":
+    if len(splits) >= 2 and splits[-2] == "pipelines":
         default_test_file = f"tests/test_pipelines_{module_name}"
     # Special case for benchmarks submodules
-    elif splits[-2] == "benchmark":
+    elif len(splits) >= 2 and splits[-2] == "benchmark":
         return ["tests/test_benchmark.py", "tests/test_benchmark_tf.py"]
     # Special case for commands submodules
-    elif splits[-2] == "commands":
+    elif len(splits) >= 2 and splits[-2] == "commands":
         return "tests/test_cli.py"
     # Special case for utils (not the one in src/transformers, the ones at the root of the repo).
-    elif splits[0] == "utils":
+    elif len(splits) > 0 and splits[0] == "utils":
         default_test_file = f"tests/test_utils_{module_name}"
     else:
         default_test_file = f"tests/test_{module_name}"
