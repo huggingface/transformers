@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for sequence to sequence.
+Fine-tuning the library models for summarization.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
@@ -230,29 +230,8 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
         if self.val_max_target_length is None:
             self.val_max_target_length = self.max_target_length
-
-
-@dataclass
-@add_start_docstrings(TFTrainingArguments.__doc__)
-class Seq2SeqTrainingArguments(TFTrainingArguments):
-    """
-    sortish_sampler (:obj:`bool`, `optional`, defaults to :obj:`False`):
-        Whether to use a `sortish sampler` or not. Only possible if the underlying datasets are `Seq2SeqDataset` for
-        now but will become generally available in the near future.
-
-        It sorts the inputs according to lengths in order to minimize the padding size, with a bit of randomness for
-        the training set.
-    predict_with_generate (:obj:`bool`, `optional`, defaults to :obj:`False`):
-        Whether to use generate to calculate generative metrics (ROUGE, BLEU).
-    """
-
-    sortish_sampler: bool = field(default=False, metadata={"help": "Whether to use SortishSampler or not."})
-    predict_with_generate: bool = field(
-        default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
-    )
-
-
 # endregion
+
 
 # region Dataset name mappings
 summarization_name_mapping = {
@@ -342,7 +321,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
