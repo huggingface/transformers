@@ -501,7 +501,9 @@ jobs:
             - checkout
             - run: pip install --upgrade pip
             - run: pip install GitPython
-            - run: python utils/git_diff.py
+            - run: python utils/git_diff.py | tee test_preparation.txt
+            - store_artifacts:
+                path: test_preparation.txt
 
 workflow_filters: &workflow_filters
     filters:
