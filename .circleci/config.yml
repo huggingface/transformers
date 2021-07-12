@@ -501,6 +501,7 @@ jobs:
             - checkout
             - run: pip install --upgrade pip
             - run: pip install GitPython
+            - run: pip install -e .
             - run: python utils/git_diff.py
 
 workflow_filters: &workflow_filters
