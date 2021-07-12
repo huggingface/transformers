@@ -1715,10 +1715,10 @@ def is_tensor(x):
             return True
 
     if is_flax_available():
-        import jaxlib.xla_extension as jax_xla
+        import jax.numpy as jnp
         from jax.core import Tracer
 
-        if isinstance(x, (jax_xla.DeviceArray, Tracer)):
+        if isinstance(x, (jnp.ndarray, Tracer)):
             return True
 
     return isinstance(x, np.ndarray)
