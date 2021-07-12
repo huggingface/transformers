@@ -1370,6 +1370,7 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
                 lm_logits = module.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
             else:
                 lm_logits = module.lm_head(hidden_states)
+            lm_logits += module.final_logits_bias
 
             return lm_logits, outputs
 
