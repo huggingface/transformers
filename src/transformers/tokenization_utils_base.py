@@ -3275,10 +3275,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             Otherwise, input_ids, attention_mask will be the only keys.
         """
         warnings.warn(
-            "`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of 🤗 Transformers. Use the "
-            "regular `__call__` method to prepare your inputs and the tokenizer under the `as_target_tokenizer` "
-            "context manager to prepare your targets. See the documentation of your specific tokenizer for more "
-            "details",
+            """
+`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of HuggingFace Transformers. To continue using
+it copy-n-paste the internals of this function. The gist of which is:
+
+model_inputs = tokenizer(src_texts, ...) with tokenizer.as_target_tokenizer(): labels = tokenizer(tgt_texts, ...)
+model_inputs["labels"] = labels["input_ids"]
+
+See the documentation of your specific tokenizer for more details on the specific arguments to the tokenizer of choice
+""",
             FutureWarning,
         )
         # mBART-specific kwargs that should be ignored by other models.
