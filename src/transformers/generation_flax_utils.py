@@ -704,6 +704,11 @@ class FlaxGenerationMixin:
                 lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams), model_outputs.past_key_values
             )
 
+            if state.cur_len < 2:
+                import ipdb; ipdb.set_trace()
+                print(logits.shape)
+                print("Fx Next token", logits[0, :2, :5])
+
             # adapt logits for FlaxMarianMTModel
             logits = self._adapt_logits_for_beam_search(logits)
 
