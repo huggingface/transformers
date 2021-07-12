@@ -145,8 +145,10 @@ jobs:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch ./tests/ | tee tests_output.txt
+            - run: python utils/git_diff.py | tee test_preparation.txt
             - store_artifacts:
+                  path: test_preparation.txt
+            - run: python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports

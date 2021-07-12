@@ -312,7 +312,7 @@ def sanity_check():
         )
 
 
-def infer_tests_to_run():
+def infer_tests_to_run(output_file):
     modified_files = get_modified_python_files()
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
@@ -344,13 +344,16 @@ def infer_tests_to_run():
     # Remove duplicates
     test_files_to_run = sorted(list(set(test_files_to_run)))
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(" ".join(test_files_to_run))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--sanity_check", action="store_true", help="Whether to just perform a sanity check.")
+    parser.add_argument("--output_file", type=str, default="test_list.txt", help="Where to store the list of tests to run")
     args = parser.parse_args()
     if args.sanity_check:
         sanity_check()
     else:
-        infer_tests_to_run()
+        infer_tests_to_run(args.output_file)
