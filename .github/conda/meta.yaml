@@ -26,7 +26,7 @@ requirements:
     - regex !=2019.12.17
     - protobuf
     - tokenizers >=0.10.1,<0.11.0
-    - pyyaml
+    - pyyaml >= 5.1
   run:
     - python
     - numpy >=1.17
@@ -41,7 +41,7 @@ requirements:
     - regex !=2019.12.17
     - protobuf
     - tokenizers >=0.10.1,<0.11.0
-    - pyyaml
+    - pyyaml >= 5.1
 
 test:
   imports:
