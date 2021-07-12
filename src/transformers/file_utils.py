@@ -1938,7 +1938,7 @@ class _LazyModule(ModuleType):
         return importlib.import_module("." + module_name, self.__name__)
 
     def __reduce__(self):
-        return (self.__class__, (self._name, self._import_structure))
+        return (self.__class__, (self._name, self.__file__, self._import_structure))
 
 
 def copy_func(f):
