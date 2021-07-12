@@ -149,6 +149,7 @@ jobs:
             - store_artifacts:
                   path: test_preparation.txt
             - run: python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
+            - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
