@@ -226,7 +226,7 @@ conda install -c huggingface transformers
 
 目前的检查点数量： ![](https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen)
 
-🤗 Transformers 目前支持如下的架构（模型概述请阅 [here](https://huggingface.co/transformers/model_summary.html)）：
+🤗 Transformers 目前支持如下的架构（模型概述请阅[这里](https://huggingface.co/transformers/model_summary.html)）：
 
 1. **[ALBERT](https://huggingface.co/transformers/model_doc/albert.html)** (来自 Google Research and the Toyota Technological Institute at Chicago) 伴随论文 [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut 发布。
 1. **[BART](https://huggingface.co/transformers/model_doc/bart.html)** (来自 Facebook) 伴随论文 [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://arxiv.org/pdf/1910.13461.pdf) 由 Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov and Luke Zettlemoyer 发布。
