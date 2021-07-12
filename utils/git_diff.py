@@ -22,6 +22,7 @@ from pathlib import Path
 
 from git import Repo
 
+
 # This script is intended to be run from the root of the repo but you can adapt this constant if you need to.
 PATH_TO_TRANFORMERS = "."
 
@@ -351,9 +352,16 @@ def infer_tests_to_run(output_file):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--sanity_check", action="store_true", help="Whether to just perform a sanity check.")
-    parser.add_argument("--output_file", type=str, default="test_list.txt", help="Where to store the list of tests to run")
+    parser.add_argument(
+        "--output_file", type=str, default="test_list.txt", help="Where to store the list of tests to run"
+    )
     args = parser.parse_args()
     if args.sanity_check:
         sanity_check()
     else:
-        infer_tests_to_run(args.output_file)
+        try:
+            infer_tests_to_run(args.output_file)
+        except Exception as e:
+            print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
+            with open(args.output_file, "w", encoding="utf-8") as f:
+                f.write("./tests/")
