@@ -430,6 +430,7 @@ class TestMarian_en_ROMANCE(AbstractMarianIntegrationTest):
     def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
 
+    @unittest.skip("Skipping until #12647 is resolved.")
     @slow
     def test_pipeline(self):
         pipeline = TranslationPipeline(self.model, self.tokenizer, framework="tf")
