@@ -428,18 +428,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
 
-        # print(f"TRANSFORMER")
-        # for n,p in self.transformer.named_parameters(recurse=True):
-        #     print(f"{n} {p.shape}")
-
-        # import deepspeed
-        # with deepspeed.zero.GatheredParameters(list(self.transformer.parameters(recurse=True)), modifier_rank=None):
-        #     print(f"TRANSFORMER 2")
-        #     for n,p in self.transformer.named_parameters(recurse=True):
-        #         print(f"{n} {p.shape}")
-
-        # #die
-
         self.init_weights()
 
     def get_input_embeddings(self):

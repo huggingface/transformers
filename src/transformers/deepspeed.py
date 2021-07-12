@@ -393,8 +393,3 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
             logger.info(f"{resume_from_checkpoint} doesn't have deepspeed checkpoints, doing nothing")
 
     return model, optimizer, lr_scheduler
-
-
-# from functools import partial
-# gather_params_read_only = partial(deepspeed.zero.GatheredParameters, modifier_rank=None)
-# gather_params_read_write = partial(deepspeed.zero.GatheredParameters, modifier_rank=0)
