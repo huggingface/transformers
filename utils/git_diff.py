@@ -22,6 +22,11 @@ from pathlib import Path
 
 from git import Repo
 
+import transformers
+
+
+PATH_TO_TRANFORMERS = Path(transformers.__path__[0])
+
 
 @contextmanager
 def checkout_commit(repo, commit_id):
@@ -38,9 +43,9 @@ def checkout_commit(repo, commit_id):
         repo.git.checkout(current_head)
 
 
-def clean_code(code):
+def clean_code(content):
     """
-    Remove docstrings, empty line or comments from `code`.
+    Remove docstrings, empty line or comments from `content`.
     """
     # Remove docstrings by splitting on """ then ''':
     splits = content.split('"""')
@@ -80,7 +85,7 @@ def get_modified_python_files():
     """
     Return a list of python files that have been modified between the current head and the master branch.
     """
-    repo = Repo(".")
+    repo = Repo(PATH_TO_TRANFORMERS)
 
     print(f"Master is at {repo.refs.master.commit}")
     print(f"Current head is at {repo.head.commit}")
@@ -100,7 +105,7 @@ def get_modified_python_files():
             elif diff_obj.change_type == "D" and diff_obj.a_path.endswith(".py"):
                 code_diff.append(diff_obj.a_path)
             # Now for modified files
-            elif diff_obj.change_type == "M" and diff_obj.b_path.endswith(".py"):
+            elif diff_obj.change_type in ["M", "R"] and diff_obj.b_path.endswith(".py"):
                 # In case of renames, we'll look at the tests using both the old and new name.
                 if diff_obj.a_path != diff_obj.b_path:
                     code_diff.extend([diff_obj.a_path, diff_obj.b_path])
@@ -140,7 +145,10 @@ def create_reverse_dependency_map():
     """
     Create the dependency map from module filename to the list of modules that depend on it.
     """
-    modules = [str(f) for f in Path("src/transformers").glob("**/*.py")]
+    modules = [
+        str(f.relative_to(PATH_TO_TRANFORMERS))
+        for f in (Path(PATH_TO_TRANFORMERS) / "src/transformers").glob("**/*.py")
+    ]
     direct_deps = {m: get_module_dependencies(m) for m in modules}
 
     something_changed = True
@@ -270,8 +278,13 @@ def sanity_check():
     newly-added test files are properly mapped to some module or utils, so they can be run by the CI.
     """
     # Grab all module and utils
-    all_files = [str(p.relative_to(".")) for p in Path("src/transformers").glob("**/*.py")]
-    all_files += [str(p.relative_to(".")) for p in Path("utils").glob("**/*.py")]
+    all_files = [
+        str(p.relative_to(PATH_TO_TRANFORMERS))
+        for p in (Path(PATH_TO_TRANFORMERS) / "src/transformers").glob("**/*.py")
+    ]
+    all_files += [
+        str(p.relative_to(PATH_TO_TRANFORMERS)) for p in (Path(PATH_TO_TRANFORMERS) / "utils").glob("**/*.py")
+    ]
 
     # Compute all the test files we get from those.
     test_files_found = []
@@ -284,7 +297,9 @@ def sanity_check():
                 test_files_found.extend(test_f)
 
     # Compare to existing test files
-    existing_test_files = [str(p.relative_to(".")) for p in Path("tests").glob("**/test*.py")]
+    existing_test_files = [
+        str(p.relative_to(PATH_TO_TRANFORMERS)) for p in (Path(PATH_TO_TRANFORMERS) / "tests").glob("**/test*.py")
+    ]
     not_touched_test_files = [f for f in existing_test_files if f not in test_files_found]
 
     should_be_tested = set(not_touched_test_files) - set(EXPECTED_TEST_FILES_NEVER_TOUCHED)
