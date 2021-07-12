@@ -1255,6 +1255,8 @@ class FlaxMarianMTModule(nn.Module):
         else:
             lm_logits = self.lm_head(hidden_states)
 
+        lm_logits += self.final_logits_bias
+
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
             return output
