@@ -86,7 +86,10 @@ jobs:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf ./tests/ -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+            - run: python utils/git_diff.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -116,7 +119,10 @@ jobs:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax ./tests/ -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
+            - run: python utils/git_diff.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -140,7 +146,6 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,speech,vision,timm]
-            - run: pip install GitPython
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
@@ -148,7 +153,7 @@ jobs:
                       - '~/.cache/pip'
             - run: python utils/git_diff.py | tee test_preparation.txt
             - store_artifacts:
-                  path: test_preparation.txt
+                  path: ~/transformers/test_preparation.txt
             - run: python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -176,7 +181,10 @@ jobs:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf ./tests/ | tee tests_output.txt
+            - run: python utils/git_diff.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -203,7 +211,10 @@ jobs:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax ./tests/ | tee tests_output.txt
+            - run: python utils/git_diff.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -233,7 +244,10 @@ jobs:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test ./tests/ | tee tests_output.txt
+            - run: python utils/git_diff.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test $(cat test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -261,7 +275,10 @@ jobs:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf ./tests/ -m is_pipeline_test | tee tests_output.txt
+            - run: python utils/git_diff.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_list.txt) -m is_pipeline_test | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -347,7 +364,10 @@ jobs:
                   key: v0.4-hub-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -sv ./tests/ -m is_staging_test
+            - run: python utils/git_diff.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: python -m pytest -sv $(cat test_list.txt) -m is_staging_test
 
     run_tests_onnxruntime:
         working_directory: ~/transformers
@@ -452,6 +472,7 @@ jobs:
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
             - run: make deps_table_check_updated
+            - run: python utils/git_diff.py --sanity_check
 
     check_repository_consistency:
         working_directory: ~/transformers
