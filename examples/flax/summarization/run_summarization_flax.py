@@ -135,6 +135,10 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
+    test_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input predict data file to do prediction on (a text file)."},
+    )
     max_source_length: Optional[int] = field(
         default=1024,
         metadata={
