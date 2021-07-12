@@ -42,13 +42,12 @@ from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
+    AutoTokenizer,
     BatchEncoding,
-    ByT5Tokenizer,
     FlaxT5ForConditionalGeneration,
     HfArgumentParser,
     PreTrainedTokenizerBase,
     T5Config,
-    T5TokenizerFast,
     TrainingArguments,
     is_tensorboard_available,
     set_seed,
@@ -477,16 +476,12 @@ if __name__ == "__main__":
 
     # Load pretrained model and tokenizer
 
-    if model_args.model_type == "byt5":
-        tokenizer_type = ByT5Tokenizer
-    else:
-        tokenizer_type = T5TokenizerFast
     if model_args.tokenizer_name:
-        tokenizer = tokenizer_type.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     elif model_args.model_name_or_path:
-        tokenizer = tokenizer_type.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     else:
