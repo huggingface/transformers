@@ -22,10 +22,8 @@ from pathlib import Path
 
 from git import Repo
 
-import transformers
-
-
-PATH_TO_TRANFORMERS = Path(transformers.__path__[0])
+# This script is intended to be run from the root of the repo but you can adapt this constant if you need to.
+PATH_TO_TRANFORMERS = "."
 
 
 @contextmanager
