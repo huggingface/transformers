@@ -38,6 +38,27 @@ def checkout_commit(repo, commit_id):
         repo.git.checkout(current_head)
 
 
+def clean_code(code):
+    """
+    Remove docstrings, empty line or comments from `code`.
+    """
+    # Remove docstrings by splitting on """ then ''':
+    splits = content.split('"""')
+    content = "".join(splits[::2])
+    splits = content.split("'''")
+    content = "".join(splits[::2])
+
+    # Remove empty lines and comments
+    lines_to_keep = []
+    for line in content.split("\n"):
+        # remove anything that is after a # sign.
+        line = re.sub("#.*$", "", line)
+        if line.isspace():
+            continue
+        lines_to_keep.append(line)
+    return "\n".join(lines_to_keep)
+
+
 def diff_is_docstring_only(repo, branching_point, filename):
     """
     Check if the diff is only in docstrings in a filename.
@@ -49,14 +70,10 @@ def diff_is_docstring_only(repo, branching_point, filename):
     with open(filename, "r", encoding="utf-8") as f:
         new_content = f.read()
 
-    # To check if the diff is in docstrings, we remove all docstrings by splitting on """.
-    old_content_splits = old_content.split('"""')
-    old_content_no_doc = "".join(old_content_splits[::2])
+    old_content_clean = clean_code(old_content)
+    new_content_clean = clean_code(new_content)
 
-    new_content_splits = new_content.split('"""')
-    new_content_no_doc = "".join(new_content_splits[::2])
-
-    return old_content_no_doc == new_content_no_doc
+    return old_content_clean == new_content_clean
 
 
 def get_modified_python_files():
@@ -90,7 +107,7 @@ def get_modified_python_files():
                 else:
                     # Otherwise, we check modifications are in code and not docstrings.
                     if diff_is_docstring_only(repo, commit, diff_obj.b_path):
-                        print(f"Ignoring diff in {diff_obj.b_path} as it only concerns docstrings.")
+                        print(f"Ignoring diff in {diff_obj.b_path} as it only concerns docstrings or comments.")
                     else:
                         code_diff.append(diff_obj.a_path)
 
