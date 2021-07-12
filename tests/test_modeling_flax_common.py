@@ -539,8 +539,6 @@ class FlaxModelTesterMixin:
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(Exception):
                         new_model = FlaxAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
-                        # Right now it only fails when we try to use the model with mismatched weights.
-                        _ = new_model(**inputs_dict)
 
                     logger = logging.get_logger("transformers.modeling_flax_utils")
                     with CaptureLogger(logger) as cl:
