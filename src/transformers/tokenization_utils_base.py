@@ -3282,7 +3282,7 @@ it copy-n-paste the internals of this function. The gist of which is:
 model_inputs = tokenizer(src_texts, ...) with tokenizer.as_target_tokenizer(): labels = tokenizer(tgt_texts, ...)
 model_inputs["labels"] = labels["input_ids"]
 
-See the documentation of your specific tokenizer for more details on the specific arguments to the tokenizer of choice
+See the documentation of your specific tokenizer for more details on the specific arguments to the tokenizer of choice.
 """,
             FutureWarning,
         )
