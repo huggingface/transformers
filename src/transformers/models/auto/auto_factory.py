@@ -14,8 +14,6 @@
 # limitations under the License.
 """Factory function to build auto-model classes."""
 
-import types
-
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import copy_func
 from ...utils import logging
