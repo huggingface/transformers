@@ -246,9 +246,6 @@ class TestDeepSpeedModelZoo(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] + cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
-        # XXX: requires ds pr merge
-        # return
-
         # 2. test that the fp32 weights get reconsolidated
         chkpt_dir = f"{output_dir}/checkpoint-1"
         recovered_model_path = f"{chkpt_dir}/out.bin"
