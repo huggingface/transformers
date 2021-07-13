@@ -1765,7 +1765,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         if config_tokenizer_class is not None:
             if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
-                raise ValueError(
+                logger.warning(
                     "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. "
                     "It may result in unexpected tokenization. \n"
                     f"The tokenizer class you load from this checkpoint is '{config_tokenizer_class}'. \n"
