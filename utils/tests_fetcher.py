@@ -46,10 +46,12 @@ def clean_code(content):
     """
     Remove docstrings, empty line or comments from `content`.
     """
+    # fmt: off
     # Remove docstrings by splitting on triple " then triple ':
     splits = content.split('\"\"\"')
     content = "".join(splits[::2])
     splits = content.split("\'\'\'")
+    # fmt: on
     content = "".join(splits[::2])
 
     # Remove empty lines and comments
