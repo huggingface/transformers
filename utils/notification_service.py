@@ -44,7 +44,7 @@ def format_for_slack(total_results, results, scheduled: bool):
         "type": "header",
         "text": {
             "type": "plain_text",
-            "text": "🤗 Results of the scheduled tests, March 11, 2021." if scheduled else "🤗 Self-push results",
+            "text": "🤗 Results of the scheduled tests." if scheduled else "🤗 Self-push results",
             "emoji": True,
         },
     }

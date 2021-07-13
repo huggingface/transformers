@@ -122,7 +122,7 @@ _deps = [
     "pyyaml>=5.1",
     "pydantic",
     "pytest",
-    "pytest-sugar",
+    "pytest-timeout",
     "pytest-xdist",
     "python>=3.6.0",
     "ray[tune]",
@@ -259,7 +259,7 @@ extras["codecarbon"] = deps_list("codecarbon")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
-        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black", "sacrebleu", "rouge-score", "nltk"
+        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-timeout", "black", "sacrebleu", "rouge-score", "nltk"
     )
     + extras["retrieval"]
     + extras["modelcreation"]
