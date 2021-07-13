@@ -1715,10 +1715,10 @@ def is_tensor(x):
             return True
 
     if is_flax_available():
-        import jaxlib.xla_extension as jax_xla
+        import jax.numpy as jnp
         from jax.core import Tracer
 
-        if isinstance(x, (jax_xla.DeviceArray, Tracer)):
+        if isinstance(x, (jnp.ndarray, Tracer)):
             return True
 
     return isinstance(x, np.ndarray)
@@ -1938,7 +1938,7 @@ class _LazyModule(ModuleType):
         return importlib.import_module("." + module_name, self.__name__)
 
     def __reduce__(self):
-        return (self.__class__, (self._name, self._import_structure))
+        return (self.__class__, (self._name, self.__file__, self._import_structure))
 
 
 def copy_func(f):

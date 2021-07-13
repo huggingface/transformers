@@ -1469,7 +1469,7 @@ FLAX_MARIAN_MT_DOCSTRING = """
         >>> text = "My friends are cool but they eat too many carbs."
         >>> input_ids = tokenizer(text, max_length=64, return_tensors='jax').input_ids
 
-        >>> sequences = model.generate(inputs, max_length=64, num_beams=2).sequences
+        >>> sequences = model.generate(input_ids, max_length=64, num_beams=2).sequences
 
         >>> outputs = tokenizer.batch_decode(sequences, skip_special_tokens=True)
         >>> # should give `Meine Freunde sind cool, aber sie essen zu viele Kohlenhydrate.`
