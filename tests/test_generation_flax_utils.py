@@ -110,6 +110,11 @@ class FlaxGenerationTesterMixin:
     @is_pt_flax_cross_test
     def test_beam_search_generate_pt_fx(self):
         config, input_ids, _, max_length = self._get_input_ids_and_config()
+
+        # only test encoder-decoder models
+        if not config.is_encoder_decoder:
+            return
+
         config.do_sample = False
         config.max_length = max_length
         config.num_beams = 2
@@ -123,7 +128,7 @@ class FlaxGenerationTesterMixin:
             pt_model = pt_model_class(config).eval()
             pt_model = load_flax_weights_in_pytorch_model(pt_model, flax_model.params)
 
-            flax_generation_outputs = flax_model.generate(input_ids).sequences
+            flax_generation_outputs = flax_model.generate(input_ids, trace=False).sequences
             pt_generation_outputs = pt_model.generate(torch.tensor(input_ids, dtype=torch.long))
 
             if flax_generation_outputs.shape[-1] > pt_generation_outputs.shape[-1]:

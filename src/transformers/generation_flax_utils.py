@@ -15,6 +15,7 @@
 # limitations under the License.
 
 
+from functools import partial
 from typing import Dict, Optional
 
 import numpy as np
@@ -687,7 +688,7 @@ class FlaxGenerationMixin:
 
             return not_max_length_yet & still_open_beam & improvement_still_possible
 
-        def beam_search_body_fn(state):
+        def beam_search_body_fn(state, input_ids_length=1):
             """beam search state update fn."""
             # 1. Forward current tokens
             # Collect the current position slice along length to feed the fast
@@ -696,11 +697,15 @@ class FlaxGenerationMixin:
             # unflatten beam dimension
             # Unflatten beam dimension in attention cache arrays
             input_token = flatten_beam_dim(
-                lax.dynamic_slice(state.running_sequences, (0, 0, state.cur_len - 1), (batch_size, num_beams, 1))
+                lax.dynamic_slice(
+                    state.running_sequences,
+                    (0, 0, state.cur_len - input_ids_length),
+                    (batch_size, num_beams, input_ids_length),
+                )
             )
             model_outputs = model(input_token, params=params, **state.model_kwargs)
 
-            logits = unflatten_beam_dim(model_outputs.logits[:, 0], batch_size, num_beams)
+            logits = unflatten_beam_dim(model_outputs.logits[:, -1], batch_size, num_beams)
             cache = jax.tree_map(
                 lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams), model_outputs.past_key_values
             )
@@ -801,7 +806,8 @@ class FlaxGenerationMixin:
             )
 
         # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
-        state = beam_search_body_fn(state)
+        if input_ids.shape[-1] > 1:
+            state = partial(beam_search_body_fn, input_ids_length=input_ids.shape[-1])(state)
 
         if not trace:
             state = self._run_loop_in_debug(beam_search_cond_fn, beam_search_body_fn, state)
