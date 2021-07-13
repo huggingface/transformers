@@ -39,7 +39,7 @@ deps = {
     "pyyaml": "pyyaml>=5.1",
     "pydantic": "pydantic",
     "pytest": "pytest",
-    "pytest-sugar": "pytest-sugar",
+    "pytest-timeout": "pytest-timeout",
     "pytest-xdist": "pytest-xdist",
     "python": "python>=3.6.0",
     "ray[tune]": "ray[tune]",
