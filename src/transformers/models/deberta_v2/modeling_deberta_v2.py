@@ -881,10 +881,6 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["position_ids"]
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
 
-    def __init__(self, config):
-        super().__init__(config)
-        self._register_load_state_dict_pre_hook(self._pre_load_hook)
-
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
@@ -897,25 +893,6 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    def _pre_load_hook(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-        """
-        Removes the classifier if it doesn't have the correct number of labels.
-        """
-        self_state = self.state_dict()
-        if (
-            ("classifier.weight" in self_state)
-            and ("classifier.weight" in state_dict)
-            and self_state["classifier.weight"].size() != state_dict["classifier.weight"].size()
-        ):
-            logger.warning(
-                f"The checkpoint classifier head has a shape {state_dict['classifier.weight'].size()} and this model "
-                f"classifier head has a shape {self_state['classifier.weight'].size()}. Ignoring the checkpoint "
-                f"weights. You should train your model on new data."
-            )
-            del state_dict["classifier.weight"]
-            if "classifier.bias" in state_dict:
-                del state_dict["classifier.bias"]
 
 
 DEBERTA_START_DOCSTRING = r"""

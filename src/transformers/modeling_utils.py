@@ -1037,6 +1037,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             from_flax (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Load the model weights from a Flax checkpoint save file (see docstring of
                 ``pretrained_model_name_or_path`` argument).
+            ignore_mismatched_size (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to raise an error if some of the weights from the checkpoint do not have the same size
+                as the weights of the model (if for instance, you are instantiating a model with 10 labels from a
+                checkpoint with 3 labels).
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
@@ -1120,6 +1124,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         cache_dir = kwargs.pop("cache_dir", None)
         from_tf = kwargs.pop("from_tf", False)
         from_flax = kwargs.pop("from_flax", False)
+        ignore_mismatched_sizes = kwargs.pop("ignore_mismatched_sizes", False)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -1315,8 +1320,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 raise
         elif from_pt:
-            model, missing_keys, unexpected_keys, error_msgs = cls._load_state_dict_into_model(
-                model, state_dict, pretrained_model_name_or_path, _fast_init=_fast_init
+            model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_state_dict_into_model(
+                model,
+                state_dict,
+                pretrained_model_name_or_path,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+                _fast_init=_fast_init,
             )
 
         # make sure token embedding weights are still tied if needed
@@ -1329,6 +1338,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             loading_info = {
                 "missing_keys": missing_keys,
                 "unexpected_keys": unexpected_keys,
+                "mismatched_keys": mismatched_keys,
                 "error_msgs": error_msgs,
             }
             return model, loading_info
@@ -1336,7 +1346,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model
 
     @classmethod
-    def _load_state_dict_into_model(cls, model, state_dict, pretrained_model_name_or_path, _fast_init=True):
+    def _load_state_dict_into_model(
+        cls, model, state_dict, pretrained_model_name_or_path, ignore_mismatched_sizes=False, _fast_init=True
+    ):
 
         # Convert old format to new format if needed from a PyTorch state_dict
         old_keys = []
@@ -1354,7 +1366,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             state_dict[new_key] = state_dict.pop(old_key)
 
         # Retrieve missing & unexpected_keys
-        expected_keys = list(model.state_dict().keys())
+        model_state_dict = model.state_dict()
+        expected_keys = list(model_state_dict.keys())
         loaded_keys = list(state_dict.keys())
         prefix = model.base_model_prefix
 
@@ -1373,6 +1386,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
+
+        # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
+        # matching the weights in the model.
+        mismatched_keys = []
+        if ignore_mismatched_sizes:
+            for checkpoint_key in loaded_keys:
+                model_key = checkpoint_key
+                if remove_prefix and checkpoint_key.startswith(prefix):
+                    model_key = ".".join(checkpoint_key.split(".")[1:])
+                elif add_prefix:
+                    model_key = f"{prefix}.{checkpoint_key}"
+
+                if (
+                    model_key in model_state_dict
+                    and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
+                ):
+                    mismatched_keys.append(
+                        (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
+                    )
+                    del state_dict[checkpoint_key]
 
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
@@ -1452,14 +1485,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f"and are newly initialized: {missing_keys}\n"
                 f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
-        else:
+        elif len(mismatched_keys) == 0:
             logger.info(
                 f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
                 f"If your task is similar to the task the model of the checkpoint was trained on, "
                 f"you can already use {model.__class__.__name__} for predictions without further training."
             )
+        if len(mismatched_keys) > 0:
+            mismatched_warning = "\n".join(
+                [
+                    f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
+                    for key, shape1, shape2 in mismatched_keys
+                ]
+            )
+            logger.warning(
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"and are newly initialized because the shapes did not match:\n{mismatched_warning}\n"
+                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            )
 
-        return model, missing_keys, unexpected_keys, error_msgs
+        return model, missing_keys, unexpected_keys, mismatched_keys, error_msgs
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
         module_keys = set([".".join(key.split(".")[:-1]) for key in names])
