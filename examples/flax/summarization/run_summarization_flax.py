@@ -236,6 +236,7 @@ summarization_name_mapping = {
 class TrainState(train_state.TrainState):
     dropout_rng: jnp.ndarray
     grad_accum: jnp.ndarray
+    optimizer_step: int
 
     def replicate(self):
         return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
@@ -566,15 +567,16 @@ def main():
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
+    total_batch_size = int(train_batch_size) * training_args.gradient_accumulation_steps
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
     steps_per_epoch = len(train_dataset) // train_batch_size
     total_steps = steps_per_epoch * num_epochs
-    total_optimization_steps = len(train_dataset) // (train_batch_size * training_args.gradient_accumulation_steps)
+    total_optimization_steps = (len(train_dataset) // total_batch_size) * num_epochs
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
         len(train_dataset),
-        train_batch_size,
+        total_batch_size,
         training_args.num_train_epochs,
         training_args.warmup_steps,
         training_args.learning_rate,
@@ -612,6 +614,7 @@ def main():
         tx=adamw,
         dropout_rng=dropout_rng,
         grad_accum=jax.tree_map(jnp.zeros_like, model.params),
+        optimizer_step=0,
     )
 
     # label smoothed cross entropy
@@ -644,15 +647,18 @@ def main():
             labels = batch.pop("labels")
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
             loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
-            return loss / training_args.gradient_accumulation_steps
+            return loss
 
         grad_fn = jax.value_and_grad(compute_loss)
         loss, grads = grad_fn(state.params)
         grad_accum = jax.tree_multimap(lambda x, y: x + y, grads, state.grad_accum)
 
         def update_fn():
-            grads = jax.lax.pmean(grad_accum, "batch")
-            new_state = state.apply_gradients(grads=grads, grad_accum=jax.tree_map(jnp.zeros_like, grads))
+            grads = jax.tree_map(lambda x: x / training_args.gradient_accumulation_steps, grad_accum)
+            grads = jax.lax.pmean(grads, "batch")
+            new_state = state.apply_gradients(
+                grads=grads, grad_accum=jax.tree_map(jnp.zeros_like, grads), optimizer_step=state.optimizer_step
+            )
             return new_state
 
         new_state = jax.lax.cond(
@@ -662,7 +668,7 @@ def main():
             None,
         )
 
-        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
+        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.optimizer_step)}
         metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return new_state.replace(dropout_rng=new_dropout_rng), metrics

@@ -608,8 +608,8 @@ if __name__ == "__main__":
     num_epochs = int(training_args.num_train_epochs)
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
-
-    num_train_steps = len(tokenized_datasets["train"]) // train_batch_size * num_epochs
+    total_batch_size = train_batch_size * training_args.gradient_accumulation_steps
+    num_train_steps = len(tokenized_datasets["train"]) // total_batch_size * num_epochs
 
     # Create learning rate schedule
     warmup_fn = optax.linear_schedule(
@@ -655,12 +655,14 @@ if __name__ == "__main__":
     # Setup train state
     class TrainState(train_state.TrainState):
         grad_accum: jnp.ndarray
+        optimizer_step: int
 
     state = TrainState.create(
         apply_fn=model.__call__,
         params=model.params,
         tx=optimizer,
         grad_accum=jax.tree_map(jnp.zeros_like, model.params),
+        optimizer_step=0,
     )
 
     # Define gradient update step fn
@@ -675,15 +677,18 @@ if __name__ == "__main__":
             # compute loss
             loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
 
-            return loss / training_args.gradient_accumulation_steps
+            return loss
 
         grad_fn = jax.value_and_grad(loss_fn)
         loss, grads = grad_fn(state.params)
         grad_accum = jax.tree_multimap(lambda x, y: x + y, grads, state.grad_accum)
 
         def update_fn():
-            grads = jax.lax.pmean(grad_accum, "batch")
-            new_state = state.apply_gradients(grads=grads, grad_accum=jax.tree_map(jnp.zeros_like, grads))
+            grads = jax.tree_map(lambda x: x / training_args.gradient_accumulation_steps, grad_accum)
+            grads = jax.lax.pmean(grads, "batch")
+            new_state = state.apply_gradients(
+                grads=grads, grad_accum=jax.tree_map(jnp.zeros_like, grads), optimizer_step=state.optimizer_step + 1
+            )
             return new_state
 
         new_state = jax.lax.cond(
@@ -694,7 +699,7 @@ if __name__ == "__main__":
         )
 
         metrics = jax.lax.pmean(
-            {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch"
+            {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.optimizer_step)}, axis_name="batch"
         )
 
         return new_state, metrics, new_dropout_rng
