@@ -373,9 +373,15 @@ if __name__ == "__main__":
     if args.sanity_check:
         sanity_check()
     else:
-        try:
-            infer_tests_to_run(args.output_file)
-        except Exception as e:
-            print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
+        repo = Repo(PATH_TO_TRANFORMERS)
+        if not repo.head.is_detached and repo.head.ref == repo.refs.master:
+            print("Master branch detected, running all tests.")
             with open(args.output_file, "w", encoding="utf-8") as f:
                 f.write("./tests/")
+        else:
+            try:
+                infer_tests_to_run(args.output_file)
+            except Exception as e:
+                print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
+                with open(args.output_file, "w", encoding="utf-8") as f:
+                    f.write("./tests/")
