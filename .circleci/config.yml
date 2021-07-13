@@ -367,7 +367,7 @@ jobs:
             - run: python utils/git_diff.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
-            - run: python -m pytest -sv $(cat test_list.txt) -m is_staging_test
+            - run: if [-f test_list.txt]; then python -m pytest -sv $(cat test_list.txt) -m is_staging_test fi
 
     run_tests_onnxruntime:
         working_directory: ~/transformers
