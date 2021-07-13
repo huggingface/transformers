@@ -28,6 +28,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     is_detectron2_available,
     replace_return_docstrings,
+    requires_backends,
 )
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -41,6 +42,7 @@ from ...utils import logging
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
 
+# soft dependency
 if is_detectron2_available():
     import detectron2
     from detectron2.modeling import META_ARCH_REGISTRY
@@ -683,7 +685,8 @@ class LayoutLMv2Pooler(nn.Module):
 )
 class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     def __init__(self, config):
-        super(LayoutLMv2Model, self).__init__(config)
+        requires_backends(self, "detectron2")
+        super().__init__(config)
         self.config = config
         self.has_visual_segment_embedding = config.has_visual_segment_embedding
         self.embeddings = LayoutLMv2Embeddings(config)

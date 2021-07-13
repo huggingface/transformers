@@ -32,6 +32,7 @@ from transformers import logging as transformers_logging
 from .deepspeed import is_deepspeed_available
 from .file_utils import (
     is_datasets_available,
+    is_detectron2_available,
     is_faiss_available,
     is_flax_available,
     is_keras2onnx_available,
@@ -453,6 +454,14 @@ def require_datasets(test_case):
 
     if not is_datasets_available():
         return unittest.skip("test requires `datasets`")(test_case)
+    else:
+        return test_case
+
+
+def require_detectron2(test_case):
+    """Decorator marking a test that requires detectron2."""
+    if not is_detectron2_available():
+        return unittest.skip("test requires `detectron2`")(test_case)
     else:
         return test_case
 

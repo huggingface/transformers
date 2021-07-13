@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_detectron2_available, is_tokenizers_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -29,7 +29,7 @@ _import_structure = {
 if is_tokenizers_available():
     _import_structure["tokenization_layoutlmv2_fast"] = ["LayoutLMv2TokenizerFast"]
 
-if is_detectron2_available():
+if is_torch_available():
     _import_structure["modeling_layoutlmv2"] = [
         "LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LayoutLMv2ForQuestionAnswering",
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     if is_tokenizers_available():
         from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
 
-    if is_detectron2_available():
+    if is_torch_available():
         from .modeling_layoutlmv2 import (
             LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMv2ForQuestionAnswering,

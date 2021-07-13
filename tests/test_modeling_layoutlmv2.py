@@ -18,7 +18,7 @@
 import unittest
 
 from transformers.file_utils import is_detectron2_available, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_detectron2, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -35,7 +35,6 @@ if is_torch_available():
         LayoutLMv2Model,
     )
     from transformers.models.layoutlmv2.modeling_layoutlmv2 import LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST
-
 
 if is_detectron2_available():
     from detectron2.structures.image_list import ImageList
@@ -247,6 +246,7 @@ class LayoutLMv2ModelTester:
 
 
 @require_torch
+@require_detectron2
 class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_pruning = False
