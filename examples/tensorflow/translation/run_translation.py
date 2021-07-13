@@ -409,7 +409,6 @@ def main():
         forced_bos_token_id = (
             tokenizer.lang_code_to_id[data_args.forced_bos_token] if data_args.forced_bos_token is not None else None
         )
-        model.config.forced_bos_token_id = forced_bos_token_id
 
     # Get the language codes for input/target.
     source_lang = data_args.source_lang.split("_")[0]
@@ -490,6 +489,8 @@ def main():
         )
 
         model.resize_token_embeddings(len(tokenizer))
+        if isinstance(tokenizer, tuple(MULTILINGUAL_TOKENIZERS)):
+            model.config.forced_bos_token_id = forced_bos_token_id
         # endregion
 
         # region Set decoder_start_token_id
