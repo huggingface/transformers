@@ -653,7 +653,15 @@ if __name__ == "__main__":
         )
 
     # Setup train state
-    state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=optimizer)
+    class TrainState(train_state.TrainState):
+        grad_accum: jnp.ndarray
+
+    state = TrainState.create(
+        apply_fn=model.__call__,
+        params=model.params,
+        tx=optimizer,
+        grad_accum=jax.tree_map(jnp.zeros_like, model.params),
+    )
 
     # Define gradient update step fn
     def train_step(state, batch, dropout_rng):
@@ -667,12 +675,23 @@ if __name__ == "__main__":
             # compute loss
             loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
 
-            return loss
+            return loss / training_args.gradient_accumulation_steps
 
         grad_fn = jax.value_and_grad(loss_fn)
-        loss, grad = grad_fn(state.params)
-        grad = jax.lax.pmean(grad, "batch")
-        new_state = state.apply_gradients(grads=grad)
+        loss, grads = grad_fn(state.params)
+        grad_accum = jax.tree_multimap(lambda x, y: x + y, grads, state.grad_accum)
+
+        def update_fn():
+            grads = jax.lax.pmean(grad_accum, "batch")
+            new_state = state.apply_gradients(grads=grads, grad_accum=jax.tree_map(jnp.zeros_like, grads))
+            return new_state
+
+        new_state = jax.lax.cond(
+            state.step % training_args.gradient_accumulation_steps == 0,
+            lambda _: update_fn(),
+            lambda _: state.replace(grad_accum=grad_accum, step=state.step + 1),
+            None,
+        )
 
         metrics = jax.lax.pmean(
             {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch"
