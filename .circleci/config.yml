@@ -123,7 +123,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
-                  [ -f test_list.txt] && python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
+                  [ -f test_list.txt ] && python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -369,7 +369,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
-                  [ -f test_list.txt] && python -m pytest -sv $(cat test_list.txt) -m is_staging_test
+                  [ -f test_list.txt ] && python -m pytest -sv $(cat test_list.txt) -m is_staging_test
 
     run_tests_onnxruntime:
         working_directory: ~/transformers
