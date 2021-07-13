@@ -50,9 +50,9 @@ Tips:
   details for this can be found in the paper.
 -  Models:
 
-      - [google/canine-c](https://huggingface.co/google/canine-c) : Pre-trained with autoregressive character loss,
+      - `google/canine-c <https://huggingface.co/google/canine-c>`__: Pre-trained with autoregressive character loss,
         12-layer, 768-hidden, 12-heads, 121M parameters (size ~500 MB).
-      - [google/canine-s](https://huggingface.co/google/canine-s) : Pre-trained with subword loss, 12-layer,
+      - `google/canine-s <https://huggingface.co/google/canine-s>`__: Pre-trained with subword loss, 12-layer,
         768-hidden, 12-heads, 121M parameters (size ~500 MB).
 
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
