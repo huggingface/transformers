@@ -537,8 +537,7 @@ def main():
         grad_accum = jax.tree_multimap(lambda x, y: x + y, grads, state.grad_accum)
 
         def update_fn():
-            grads = jax.tree_map(lambda x: x / training_args.gradient_accumulation_steps, grad_accum)
-            grads = jax.lax.pmean(grads, "batch")
+            grads = jax.lax.pmean(grad_accum, "batch")
             new_state = state.apply_gradients(grads=grads, grad_accum=jax.tree_map(jnp.zeros_like, grads))
             return new_state
 
