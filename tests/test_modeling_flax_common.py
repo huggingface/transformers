@@ -537,7 +537,7 @@ class FlaxModelTesterMixin:
                     model.save_pretrained(tmp_dir)
 
                     # Fails when we don't set ignore_mismatched_sizes=True
-                    with self.assertRaises(Exception):
+                    with self.assertRaises(ValueError):
                         new_model = FlaxAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
 
                     logger = logging.get_logger("transformers.modeling_flax_utils")

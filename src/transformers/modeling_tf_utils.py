@@ -537,7 +537,7 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
                             # If the two shapes are not compatible we raise an issue
                             try:
                                 array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
-                            except Exception as e:
+                            except ValueError as e:
                                 if ignore_mismatched_sizes:
                                     mismatched_layers.append(
                                         (symbolic_weight_name, saved_weight_value.shape, K.int_shape(symbolic_weight))
