@@ -819,9 +819,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_lm_head
 
-        old_num_tokens, old_lm_head_dim = (
-            old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
-        )
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
+                old_num_tokens, old_lm_head_dim = (
+                    old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
+                )
+        else:
+            old_num_tokens, old_lm_head_dim = (
+                old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
+            )
 
         if old_num_tokens == new_num_tokens:
             return old_lm_head
@@ -829,7 +837,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if not isinstance(old_lm_head, nn.Linear):
             raise TypeError(
                 f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}."
-                f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Linear}."
+                f"You should either use a different resize function or make sure that `old_lm_head` are an instance of {nn.Linear}."
             )
 
         # Build new lm head
@@ -842,15 +850,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
-        # Copy old lm head weights to new lm head
-        if not transposed:
-            new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
-        else:
-            new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
+        # XXX: put the long block of code in a wrapper
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
 
-        # Copy bias weights to new lm head
-        if has_new_lm_head_bias:
-            new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
+            with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=0):
+                if torch.distributed.get_rank() == 0:
+                    # Copy old lm head weights to new lm head
+                    if not transposed:
+                        new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[
+                            :num_tokens_to_copy, :
+                        ]
+                    else:
+                        new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[
+                            :, :num_tokens_to_copy
+                        ]
+
+                    # Copy bias weights to new lm head
+                    if has_new_lm_head_bias:
+                        new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
+        else:
+            # Copy old lm head weights to new lm head
+            if not transposed:
+                new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
+            else:
+                new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
+
+            # Copy bias weights to new lm head
+            if has_new_lm_head_bias:
+                new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
 
         return new_lm_head
 

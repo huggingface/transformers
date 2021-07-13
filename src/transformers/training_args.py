@@ -799,10 +799,7 @@ class TrainingArguments:
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
         elif self.deepspeed:
-            # deepspeed performs its own DDP internally, and requires the program to be started with:
-            # deepspeed  ./program.py
-            # rather than:
-            # python -m torch.distributed.launch --nproc_per_node=2 ./program.py
+            # deepspeed inits torch.distributed internally
             from .deepspeed import is_deepspeed_available
 
             if not is_deepspeed_available():
