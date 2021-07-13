@@ -666,11 +666,7 @@ class FSMTDecoder(nn.Module):
                 embed_tokens_weight_shape = self.embed_tokens.weight.shape
         else:
             embed_tokens_weight_shape = self.embed_tokens.weight.shape
-        self.output_projection = nn.Linear(
-            embed_tokens_weight_shape[1],
-            embed_tokens_weight_shape[0],
-            bias=False,
-        )
+        self.output_projection = nn.Linear(embed_tokens_weight_shape[1], embed_tokens_weight_shape[0], bias=False)
         self.output_projection.weight = self.embed_tokens.weight
 
     def forward(
