@@ -402,8 +402,8 @@ class TestMarian_MT_EN(MarianIntegrationTest):
 
     src = "mt"
     tgt = "en"
-    src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil"]
-    expected_text = ["By touching him gently, Jesus healed a man who was affected by"]
+    src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
+    expected_text = ["Touching gently, Jesus healed a man who was affected by the sad disease of leprosy."]
 
     @slow
     def test_batch_generation_mt_en(self):
@@ -435,4 +435,56 @@ class TestMarian_EN_DE(MarianIntegrationTest):
 
     @slow
     def test_batch_generation_en_de(self):
+        self._assert_generated_batch_equal_expected()
+
+
+@require_flax
+@require_sentencepiece
+@require_tokenizers
+class TestMarian_en_zh(MarianIntegrationTest):
+    src = "en"
+    tgt = "zh"
+    src_text = ["My name is Wolfgang and I live in Berlin"]
+    expected_text = ["我叫沃尔夫冈 我住在柏林"]
+
+    @slow
+    def test_batch_generation_eng_zho(self):
+        self._assert_generated_batch_equal_expected()
+
+
+@require_flax
+@require_sentencepiece
+@require_tokenizers
+class TestMarian_RU_FR(MarianIntegrationTest):
+    src = "ru"
+    tgt = "fr"
+    src_text = ["Он показал мне рукопись своей новой пьесы."]
+    expected_text = ["Il m'a montré le manuscrit de sa nouvelle pièce."]
+
+    @slow
+    def test_batch_generation_ru_fr(self):
+        self._assert_generated_batch_equal_expected()
+
+
+@require_flax
+@require_sentencepiece
+@require_tokenizers
+class TestMarian_en_ROMANCE(MarianIntegrationTest):
+    """Multilingual on target side."""
+
+    src = "en"
+    tgt = "ROMANCE"
+    src_text = [
+        ">>fr<< Don't spend so much time watching TV.",
+        ">>pt<< Your message has been sent.",
+        ">>es<< He's two years older than me.",
+    ]
+    expected_text = [
+        "Ne passez pas autant de temps à regarder la télé.",
+        "A sua mensagem foi enviada.",
+        "Es dos años más viejo que yo.",
+    ]
+
+    @slow
+    def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
