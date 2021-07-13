@@ -39,7 +39,6 @@ Implementation Notes
 - Code to bulk convert models can be found in ``convert_marian_to_pytorch.py``.
 - This model was contributed by `sshleifer <https://huggingface.co/sshleifer>`__.
 
-
 Naming
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
