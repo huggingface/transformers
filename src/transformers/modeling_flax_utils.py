@@ -383,7 +383,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 else:
                     raise ValueError(
                         f"Trying to load the pretrained weight for {key} failed: checkpoint has shape "
-                        f"{state[key].shape} which is incompatible with the model shape ({random_state[key].shape}). "
+                        f"{state[key].shape} which is incompatible with the model shape {random_state[key].shape}. "
                         "Using `ignore_mismatched_sizes=True` if you really want to load this checkpoint inside this "
                         "model."
                     )
