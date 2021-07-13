@@ -49,6 +49,8 @@ this https URL.*
 
 Tips:
 
+- The main difference between LayoutLMv1 and LayoutLMv2 is that the latter incorporates visual embeddings during
+  pre-training (while LayoutLMv1 only adds visual embeddings during fine-tuning).
 - LayoutLMv2 uses Facebook AI's `Detectron2 <https://github.com/facebookresearch/detectron2/>`__ package for its visual
   backbone. See `this link <https://detectron2.readthedocs.io/en/latest/tutorials/install.html>`__ for installation
   instructions.
@@ -57,13 +59,14 @@ Tips:
   tokens occur. The model expects each document image to be of size 224x224. This means that if you have a batch of
   document images, :obj:`image` should be a tensor of shape (batch_size, 3, 224, 224). This can be either a
   :obj:`torch.Tensor` or a :obj:`Detectron2.structures.ImageList`. You don't need to normalize the channels, as this is
-  done by the model. The :obj:`bbox` input are the bounding boxes (i.e. 2D-positions) of the input text tokens. This is
-  identical to :class:`~transformer.LayoutLMModel`. These can be obtained using an external OCR engine such as Google's
-  `Tesseract <https://github.com/tesseract-ocr/tesseract>`__ (there's a `Python wrapper
-  <https://pypi.org/project/pytesseract/>`__ available). Each bounding box should be in (x0, y0, x1, y1) format, where
-  (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1, y1) represents the
-  position of the lower right corner. Note that one first needs to normalize the bounding boxes to be on a 0-1000
-  scale. To normalize, you can use the following function:
+  done by the model. Important to note is that the visual backbone expects BGR channels instead of RGB, as all models
+  in Detectron2 are pre-trained using the BGR format. The :obj:`bbox` input are the bounding boxes (i.e. 2D-positions)
+  of the input text tokens. This is identical to :class:`~transformer.LayoutLMModel`. These can be obtained using an
+  external OCR engine such as Google's `Tesseract <https://github.com/tesseract-ocr/tesseract>`__ (there's a `Python
+  wrapper <https://pypi.org/project/pytesseract/>`__ available). Each bounding box should be in (x0, y0, x1, y1)
+  format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1, y1)
+  represents the position of the lower right corner. Note that one first needs to normalize the bounding boxes to be on
+  a 0-1000 scale. To normalize, you can use the following function:
 
 .. code-block::
 
@@ -97,8 +100,19 @@ follows:
   parameter names that are not initialized. This is not a problem, as these parameters are batch normalization
   statistics, which are going to have values when fine-tuning on a custom dataset.
 
+In addition, there's LayoutXLM, which is a multilingual version of LayoutLMv2. LayoutXLM was proposed in `LayoutXLM:
+Multimodal Pre-training for Multilingual Visually-rich Document Understanding <https://arxiv.org/abs/2104.08836>`__ by
+Yiheng Xu, Tengchao Lv, Lei Cui, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Furu Wei. One can directly plug in
+the weights of LayoutXLM into a LayoutLMv2 model, like so:
+
+.. code-block::
+
+    from transformers import LayoutLMv2Model
+
+    model = LayoutLMv2Model.from_pretrained('microsoft/layoutxlm-base') 
+
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
-<https://github.com/microsoft/unilm/tree/master/layoutlmv2>`__.
+<https://github.com/microsoft/unilm>`__.
 
 LayoutLMv2Config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

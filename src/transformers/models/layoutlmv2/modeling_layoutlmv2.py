@@ -745,6 +745,41 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         embeddings = self.visual_dropout(embeddings)
         return embeddings
 
+    def _calc_visual_bbox(self, image_feature_pool_shape, bbox, device, final_shape):
+        visual_bbox_x = (
+            torch.arange(
+                0,
+                1000 * (image_feature_pool_shape[1] + 1),
+                1000,
+                device=device,
+                dtype=bbox.dtype,
+            )
+            // self.config.image_feature_pool_shape[1]
+        )
+        visual_bbox_y = (
+            torch.arange(
+                0,
+                1000 * (self.config.image_feature_pool_shape[0] + 1),
+                1000,
+                device=device,
+                dtype=bbox.dtype,
+            )
+            // self.config.image_feature_pool_shape[0]
+        )
+        visual_bbox = torch.stack(
+            [
+                visual_bbox_x[:-1].repeat(image_feature_pool_shape[0], 1),
+                visual_bbox_y[:-1].repeat(image_feature_pool_shape[1], 1).transpose(0, 1),
+                visual_bbox_x[1:].repeat(image_feature_pool_shape[0], 1),
+                visual_bbox_y[1:].repeat(image_feature_pool_shape[1], 1).transpose(0, 1),
+            ],
+            dim=-1,
+        ).view(-1, bbox.size(-1))
+
+        visual_bbox = visual_bbox.repeat(final_shape[0], 1, 1)
+
+        return visual_bbox
+
     @add_start_docstrings_to_model_forward(LAYOUTLMV2_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -818,36 +853,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         final_shape[1] += visual_shape[1]
         final_shape = torch.Size(final_shape)
 
-        visual_bbox_x = (
-            torch.arange(
-                0,
-                1000 * (self.config.image_feature_pool_shape[1] + 1),
-                1000,
-                device=device,
-                dtype=bbox.dtype,
-            )
-            // self.config.image_feature_pool_shape[1]
-        )
-        visual_bbox_y = (
-            torch.arange(
-                0,
-                1000 * (self.config.image_feature_pool_shape[0] + 1),
-                1000,
-                device=device,
-                dtype=bbox.dtype,
-            )
-            // self.config.image_feature_pool_shape[0]
-        )
-        visual_bbox = torch.stack(
-            [
-                visual_bbox_x[:-1].repeat(self.config.image_feature_pool_shape[0], 1),
-                visual_bbox_y[:-1].repeat(self.config.image_feature_pool_shape[1], 1).transpose(0, 1),
-                visual_bbox_x[1:].repeat(self.config.image_feature_pool_shape[0], 1),
-                visual_bbox_y[1:].repeat(self.config.image_feature_pool_shape[1], 1).transpose(0, 1),
-            ],
-            dim=-1,
-        ).view(-1, bbox.size(-1))
-        visual_bbox = visual_bbox.repeat(final_shape[0], 1, 1)
+        visual_bbox = self._calc_visual_bbox(self.config.image_feature_pool_shape, bbox, device, final_shape)
         final_bbox = torch.cat([bbox, visual_bbox], dim=1)
 
         if attention_mask is None:
@@ -1026,36 +1032,9 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         final_shape[1] += visual_shape[1]
         final_shape = torch.Size(final_shape)
 
-        visual_bbox_x = (
-            torch.arange(
-                0,
-                1000 * (self.config.image_feature_pool_shape[1] + 1),
-                1000,
-                device=device,
-                dtype=bbox.dtype,
-            )
-            // self.config.image_feature_pool_shape[1]
+        visual_bbox = self.layoutlmv2._calc_visual_bbox(
+            self.config.image_feature_pool_shape, bbox, device, final_shape
         )
-        visual_bbox_y = (
-            torch.arange(
-                0,
-                1000 * (self.config.image_feature_pool_shape[0] + 1),
-                1000,
-                device=device,
-                dtype=bbox.dtype,
-            )
-            // self.config.image_feature_pool_shape[0]
-        )
-        visual_bbox = torch.stack(
-            [
-                visual_bbox_x[:-1].repeat(self.config.image_feature_pool_shape[0], 1),
-                visual_bbox_y[:-1].repeat(self.config.image_feature_pool_shape[1], 1).transpose(0, 1),
-                visual_bbox_x[1:].repeat(self.config.image_feature_pool_shape[0], 1),
-                visual_bbox_y[1:].repeat(self.config.image_feature_pool_shape[1], 1).transpose(0, 1),
-            ],
-            dim=-1,
-        ).view(-1, bbox.size(-1))
-        visual_bbox = visual_bbox.repeat(final_shape[0], 1, 1)
 
         visual_position_ids = torch.arange(0, visual_shape[1], dtype=torch.long, device=device).repeat(
             input_shape[0], 1

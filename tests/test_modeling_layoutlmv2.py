@@ -414,6 +414,7 @@ def prepare_layoutlmv2_batch_inputs():
 
 
 @require_torch
+@require_detectron2
 class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
