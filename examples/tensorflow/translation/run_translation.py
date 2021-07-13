@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for summarization.
+Fine-tuning the library models for translation.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
@@ -26,18 +26,19 @@ from functools import partial
 from typing import Optional
 
 import datasets
-import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import tensorflow as tf
 from datasets import load_dataset, load_metric
 from tqdm import tqdm
 
 import transformers
-from filelock import FileLock
 from transformers import (
     AutoConfig,
     AutoTokenizer,
     HfArgumentParser,
+    M2M100Tokenizer,
+    MBart50Tokenizer,
+    MBart50TokenizerFast,
     MBartTokenizer,
     MBartTokenizerFast,
     TFAutoModelForSeq2SeqLM,
@@ -45,29 +46,19 @@ from transformers import (
     create_optimizer,
     set_seed,
 )
-from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
-# region Checking dependencies
+# region Dependencies and constants
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.9.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
 
 logger = logging.getLogger(__name__)
-
-try:
-    nltk.data.find("tokenizers/punkt")
-except (LookupError, OSError):
-    if is_offline_mode():
-        raise LookupError(
-            "Offline mode: run this script without TRANSFORMERS_OFFLINE first to download nltk data files"
-        )
-    with FileLock(".lock") as lock:
-        nltk.download("punkt", quiet=True)
+MULTILINGUAL_TOKENIZERS = [MBartTokenizer, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast, M2M100Tokenizer]
 # endregion
 
 
@@ -408,11 +399,17 @@ def main():
 
     # For translation we set the codes of our source and target languages (only useful for mBART, the others will
     # ignore those attributes).
-    if isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-        if data_args.source_lang is not None:
-            tokenizer.src_lang = data_args.source_lang
-        if data_args.target_lang is not None:
-            tokenizer.tgt_lang = data_args.target_lang
+    if isinstance(tokenizer, tuple(MULTILINGUAL_TOKENIZERS)):
+        assert data_args.target_lang is not None and data_args.source_lang is not None, (
+            f"{tokenizer.__class__.__name__} is a multilingual tokenizer which requires --source_lang and "
+            "--target_lang arguments."
+        )
+        tokenizer.src_lang = data_args.source_lang
+        tokenizer.tgt_lang = data_args.target_lang
+        forced_bos_token_id = (
+            tokenizer.lang_code_to_id[data_args.forced_bos_token] if data_args.forced_bos_token is not None else None
+        )
+        model.config.forced_bos_token_id = forced_bos_token_id
 
     # Get the language codes for input/target.
     source_lang = data_args.source_lang.split("_")[0]
@@ -510,9 +507,6 @@ def main():
         # endregion
 
         # region Prepare TF Dataset objects
-        if model.config.decoder_start_token_id is None:
-            raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
-
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
@@ -595,7 +589,7 @@ def main():
             data_args.val_max_target_length = data_args.max_target_length
 
         gen_kwargs = {
-            "max_length": data_args.val_max_target_length if data_args is not None else config.max_length,
+            "max_length": data_args.val_max_target_length,
             "num_beams": data_args.num_beams,
         }
         if training_args.do_eval:
