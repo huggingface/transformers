@@ -3277,8 +3277,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # docstyle-ignore
         formatted_warning = """
 `prepare_seq2seq_batch` is deprecated and will be removed in version 5 of HuggingFace Transformers. Use the regular
-`__call__` method to prepare your inputs and the tokenizer under the `as_target_tokenizer context manager to prepare
-your targets. Here is a short example:
+`__call__` method to prepare your inputs and the tokenizer under the `as_target_tokenizer` context manager to prepare
+your targets.
+
+Here is a short example:
 
 model_inputs = tokenizer(src_texts, ...)
 with tokenizer.as_target_tokenizer():
