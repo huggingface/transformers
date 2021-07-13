@@ -48,6 +48,12 @@ Tips:
   (which has a predefined Unicode code point). For token classification tasks however, the downsampled sequence of
   tokens needs to be upsampled again to match the length of the original character sequence (which is 2048). The
   details for this can be found in the paper.
+-  Models:
+
+      - `google/canine-c <https://huggingface.co/google/canine-c>`__: Pre-trained with autoregressive character loss,
+        12-layer, 768-hidden, 12-heads, 121M parameters (size ~500 MB).
+      - `google/canine-s <https://huggingface.co/google/canine-s>`__: Pre-trained with subword loss, 12-layer,
+        768-hidden, 12-heads, 121M parameters (size ~500 MB).
 
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
 <https://github.com/google-research/language/tree/master/language/canine>`__.
@@ -63,7 +69,7 @@ CANINE works on raw characters, so it can be used without a tokenizer:
     from transformers import CanineModel
     import torch
 
-    model = CanineModel.from_pretrained('google/canine-s') # model pre-trained with autoregressive character loss
+    model = CanineModel.from_pretrained('google/canine-c') # model pre-trained with autoregressive character loss
 
     text = "hello world"
     # use Python's built-in ord() function to turn each character into its unicode code point id
@@ -81,8 +87,8 @@ sequences to the same length):
 
     from transformers import CanineTokenizer, CanineModel
 
-    model = CanineModel.from_pretrained('google/canine-s')
-    tokenizer = CanineTokenizer.from_pretrained('google/canine-s')
+    model = CanineModel.from_pretrained('google/canine-c')
+    tokenizer = CanineTokenizer.from_pretrained('google/canine-c')
 
     inputs = ["Life is like a box of chocolates.", "You never know what you gonna get."]
     encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt")
