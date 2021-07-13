@@ -86,7 +86,7 @@ jobs:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python utils/git_diff.py | tee test_preparation.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
@@ -122,7 +122,7 @@ jobs:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python utils/git_diff.py | tee test_preparation.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
@@ -157,7 +157,7 @@ jobs:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/git_diff.py | tee test_preparation.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
@@ -190,7 +190,7 @@ jobs:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/git_diff.py | tee test_preparation.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
@@ -223,7 +223,7 @@ jobs:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/git_diff.py | tee test_preparation.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
@@ -259,7 +259,7 @@ jobs:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/git_diff.py | tee test_preparation.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
@@ -293,7 +293,7 @@ jobs:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/git_diff.py | tee test_preparation.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
@@ -353,7 +353,7 @@ jobs:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/git_diff.py | tee test_preparation.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
@@ -391,7 +391,7 @@ jobs:
                   key: v0.4-hub-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/git_diff.py | tee test_preparation.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
@@ -420,7 +420,7 @@ jobs:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/git_diff.py | tee test_preparation.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
@@ -508,7 +508,7 @@ jobs:
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
             - run: make deps_table_check_updated
-            - run: python utils/git_diff.py --sanity_check
+            - run: python utils/tests_fetcher.py --sanity_check
 
     check_repository_consistency:
         working_directory: ~/transformers

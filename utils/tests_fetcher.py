@@ -310,7 +310,7 @@ def sanity_check():
             "The following test files are not currently associated with any module or utils files, which means they "
             f"will never get run by the CI:\n{_print_list(should_be_tested)}\n. Make sure the names of these test "
             "files match the name of the module or utils they are testing, or adapt the constant "
-            "`SPECIAL_MODULE_TO_TEST_MAP` in `utils/git_diff.py` to add them. If your test file is triggered "
+            "`SPECIAL_MODULE_TO_TEST_MAP` in `utils/tests_fetcher.py` to add them. If your test file is triggered "
             "separately and is not supposed to be run by the regular CI, add it to the "
             "`EXPECTED_TEST_FILES_NEVER_TOUCHED` constant instead."
         )
