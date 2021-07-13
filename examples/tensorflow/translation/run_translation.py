@@ -38,12 +38,12 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     HfArgumentParser,
+    MBartTokenizer,
+    MBartTokenizerFast,
     TFAutoModelForSeq2SeqLM,
     TFTrainingArguments,
     create_optimizer,
     set_seed,
-    MBartTokenizer,
-    MBartTokenizerFast
 )
 from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint
@@ -107,11 +107,13 @@ class ModelArguments:
         },
     )
 
+
 @dataclass
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
+
     source_lang: str = field(default=None, metadata={"help": "Source language id for translation."})
     target_lang: str = field(default=None, metadata={"help": "Target language id for translation."})
     dataset_name: Optional[str] = field(
@@ -509,7 +511,7 @@ def main():
         # region Set decoder_start_token_id
         if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
             assert (
-                    data_args.target_lang is not None and data_args.source_lang is not None
+                data_args.target_lang is not None and data_args.source_lang is not None
             ), "mBart requires --target_lang and --source_lang"
             if isinstance(tokenizer, MBartTokenizer):
                 model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
@@ -550,7 +552,9 @@ def main():
         num_update_steps_per_epoch = len(train_dataset) // training_args.per_device_train_batch_size
         num_train_steps = training_args.num_train_epochs * num_update_steps_per_epoch
         optimizer, lr_schedule = create_optimizer(
-            init_lr=training_args.learning_rate, num_train_steps=num_train_steps, num_warmup_steps=training_args.warmup_steps
+            init_lr=training_args.learning_rate,
+            num_train_steps=num_train_steps,
+            num_warmup_steps=training_args.warmup_steps,
         )
 
         def masked_sparse_categorical_crossentropy(y_true, y_pred):
@@ -578,6 +582,7 @@ def main():
             labels = [[label.strip()] for label in labels]
 
             return preds, labels
+
         # endregion
 
         # region Training
@@ -621,14 +626,8 @@ def main():
                 decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
 
                 metric.add_batch(predictions=decoded_preds, references=decoded_labels)
-
-            result = metric.compute(use_stemmer=True)
-            # Extract a few results from SACREBLEU
-            result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
-
-            result = {k: round(v, 4) for k, v in result.items()}
-
-            logger.info(result)
+            eval_metric = metric.compute()
+            logger.info({"bleu": eval_metric["score"]})
         # endregion
 
         if training_args.output_dir is not None:
