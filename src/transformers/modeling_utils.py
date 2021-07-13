@@ -1037,7 +1037,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             from_flax (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Load the model weights from a Flax checkpoint save file (see docstring of
                 ``pretrained_model_name_or_path`` argument).
-            ignore_mismatched_size (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            ignore_mismatched_sizes (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to raise an error if some of the weights from the checkpoint do not have the same size
                 as the weights of the model (if for instance, you are instantiating a model with 10 labels from a
                 checkpoint with 3 labels).
