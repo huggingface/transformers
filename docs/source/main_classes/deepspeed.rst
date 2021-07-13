@@ -1488,8 +1488,8 @@ above:
 .. note::
 
     Note, that once ``load_state_dict_from_zero_checkpoint`` was run, the ``model`` will no longer be useable in the
-    deepspeed context of the same application. i.e. you will need to re-initialize the deepspeed engine, since
-    ``model.load_state_dict(state_dict)`` will remove all the deepspeed magic from it. So do this only at the very end
+    DeepSpeed context of the same application. i.e. you will need to re-initialize the deepspeed engine, since
+    ``model.load_state_dict(state_dict)`` will remove all the DeepSpeed magic from it. So do this only at the very end
     of the training.
 
 Of course, you don't have to use class:`~transformers.Trainer` and you can adjust the examples above to your own
