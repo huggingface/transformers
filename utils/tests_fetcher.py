@@ -102,7 +102,7 @@ def get_modified_python_files():
             # We always add new python files
             if diff_obj.change_type == "A" and diff_obj.b_path.endswith(".py"):
                 code_diff.append(diff_obj.b_path)
-            # We check that deleted python files won't break correspondping tests.
+            # We check that deleted python files won't break corresponding tests.
             elif diff_obj.change_type == "D" and diff_obj.a_path.endswith(".py"):
                 code_diff.append(diff_obj.a_path)
             # Now for modified files
@@ -178,8 +178,8 @@ def create_reverse_dependency_map():
     return reverse_map
 
 
-# Any module file that has a test name which is not obviously inferred from its name should go there (better name
-# your test file appropriately than add a new entry in this list if you can!)
+# Any module file that has a test name which can't be inferred automatically from its name should go here. A better 
+# approach is to (re-)name the test file accordingly, and second best to add the correspondence map here.
 SPECIAL_MODULE_TO_TEST_MAP = {
     "configuration_utils.py": "test_configuration_common.py",
     "convert_graph_to_onnx.py": "test_onnx.py",
@@ -365,7 +365,7 @@ def infer_tests_to_run(output_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sanity_check", action="store_true", help="Whether to just perform a sanity check.")
+    parser.add_argument("--sanity_check", action="store_true", help="Only test that all tests and modules are accounted for.")
     parser.add_argument(
         "--output_file", type=str, default="test_list.txt", help="Where to store the list of tests to run"
     )
