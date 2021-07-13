@@ -89,7 +89,10 @@ jobs:
             - run: python utils/git_diff.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -157,7 +160,10 @@ jobs:
             - run: python utils/git_diff.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
-            - run: python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -187,7 +193,10 @@ jobs:
             - run: python utils/git_diff.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_list.txt) | tee tests_output.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_list.txt) | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -217,7 +226,10 @@ jobs:
             - run: python utils/git_diff.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_list.txt) | tee tests_output.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_list.txt) | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -250,7 +262,10 @@ jobs:
             - run: python utils/git_diff.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test $(cat test_list.txt) | tee tests_output.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test $(cat test_list.txt) | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -281,7 +296,10 @@ jobs:
             - run: python utils/git_diff.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_list.txt) -m is_pipeline_test | tee tests_output.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_list.txt) -m is_pipeline_test | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -335,7 +353,13 @@ jobs:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee examples_output.txt
+            - run: python utils/git_diff.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee examples_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
@@ -371,7 +395,9 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
-                  [ -f test_list.txt ] && python -m pytest -sv $(cat test_list.txt) -m is_staging_test
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -sv $(cat test_list.txt) -m is_staging_test
+                  fi
 
     run_tests_onnxruntime:
         working_directory: ~/transformers
@@ -394,7 +420,13 @@ jobs:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch ./tests/* -k onnx | tee tests_output.txt
+            - run: python utils/git_diff.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) -k onnx | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -519,20 +551,6 @@ jobs:
                   cluster: $GKE_CLUSTER
                   perform-login: true
             - *delete_gke_jobs
-    
-    test_git_ci:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.6
-        resource_class: small
-        parallelism: 1
-        steps:
-            - checkout
-            - run: pip install --upgrade pip
-            - run: pip install GitPython
-            - run: python utils/git_diff.py | tee test_preparation.txt
-            - store_artifacts:
-                path: test_preparation.txt
 
 workflow_filters: &workflow_filters
     filters:
