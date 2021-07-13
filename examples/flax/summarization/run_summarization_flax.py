@@ -705,7 +705,7 @@ def main():
     logger.info(f"  Num Epochs = {num_epochs}")
     logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
     logger.info(
-        f"  Total train batch size (w. parallel & distributed) = {train_batch_size * training_args.gradient_accumulation_step}"
+        f"  Total train batch size (w. parallel & distributed) = {train_batch_size * training_args.gradient_accumulation_steps}"
     )
     logger.info(f"  Total global steps = {total_steps}")
     logger.info(f"  Total optimization steps = {total_optimization_steps}")
