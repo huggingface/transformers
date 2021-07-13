@@ -199,6 +199,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             from_pt (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Load the model weights from a PyTorch checkpoint save file (see docstring of
                 ``pretrained_model_name_or_path`` argument).
+            ignore_mismatched_size (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to raise an error if some of the weights from the checkpoint do not have the same size
+                as the weights of the model (if for instance, you are instantiating a model with 10 labels from a
+                checkpoint with 3 labels).
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
@@ -242,6 +246,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         config = kwargs.pop("config", None)
         cache_dir = kwargs.pop("cache_dir", None)
         from_pt = kwargs.pop("from_pt", False)
+        ignore_mismatched_sizes = kwargs.pop("ignore_mismatched_sizes", False)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -367,6 +372,22 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         missing_keys = model.required_params - set(state.keys())
         unexpected_keys = set(state.keys()) - model.required_params
 
+        # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
+        # matching the weights in the model.
+        mismatched_keys = []
+        for key in state.keys():
+            if key in random_state and state[key].shape != random_state[key].shape:
+                if ignore_mismatched_sizes:
+                    mismatched_keys.append((key, state[key].shape, random_state[key].shape))
+                    state[key] = random_state[key]
+                else:
+                    raise ValueError(
+                        f"Trying to load the pretrained weight for {key} failed: checkpoint has shape "
+                        f"{state[key].shape} which is incompatible with the model shape {random_state[key].shape}. "
+                        "Using `ignore_mismatched_sizes=True` if you really want to load this checkpoint inside this "
+                        "model."
+                    )
+
         # add missing keys as random parameters
         for missing_key in missing_keys:
             state[missing_key] = random_state[missing_key]
@@ -393,11 +414,23 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 f"and are newly initialized: {missing_keys}\n"
                 f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
-        else:
+        elif len(mismatched_keys) == 0:
             logger.info(
                 f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
                 f"If your task is similar to the task the model of the checkpoint was trained on, "
                 f"you can already use {model.__class__.__name__} for predictions without further training."
+            )
+        if len(mismatched_keys) > 0:
+            mismatched_warning = "\n".join(
+                [
+                    f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
+                    for key, shape1, shape2 in mismatched_keys
+                ]
+            )
+            logger.warning(
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"and are newly initialized because the shapes did not match:\n{mismatched_warning}\n"
+                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
 
         # set correct parameters
