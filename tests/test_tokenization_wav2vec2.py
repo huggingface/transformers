@@ -560,5 +560,5 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
-    def test_pt_encode_plus_sent_to_model(self):
+    def test_torch_encode_plus_sent_to_model(self):
         pass
