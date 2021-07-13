@@ -241,6 +241,9 @@ def module_to_test_file(module_fname):
     # Special case for commands submodules
     elif len(splits) >= 2 and splits[-2] == "commands":
         return "tests/test_cli.py"
+    # Special case for onnx submodules
+    elif len(splits) >= 2 and splits[-2] == "onnx":
+        return ["tests/test_onnx.py", "tests/test_onnx_v2.py"]
     # Special case for utils (not the one in src/transformers, the ones at the root of the repo).
     elif len(splits) > 0 and splits[0] == "utils":
         default_test_file = f"tests/test_utils_{module_name}"
@@ -345,8 +348,9 @@ def infer_tests_to_run(output_file):
     # Remove duplicates
     test_files_to_run = sorted(list(set(test_files_to_run)))
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(" ".join(test_files_to_run))
+    if len(test_files_to_run) > 0:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(" ".join(test_files_to_run))
 
 
 if __name__ == "__main__":
