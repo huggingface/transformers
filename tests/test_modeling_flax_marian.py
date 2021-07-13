@@ -304,7 +304,7 @@ class FlaxMarianModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneratio
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("Helsinki-NLP/opus-mt-en-de", from_pt=True)
+            model = model_class_name.from_pretrained("Helsinki-NLP/opus-mt-en-de")
             # FlaxMarianForSequenceClassification expects eos token in input_ids
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
@@ -333,7 +333,7 @@ class MarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model: FlaxMarianMTModel = FlaxMarianMTModel.from_pretrained(self.model_name, from_pt=True)
+        model: FlaxMarianMTModel = FlaxMarianMTModel.from_pretrained(self.model_name)
         self.assertEqual(model.config.decoder_start_token_id, model.config.pad_token_id)
         return model
 
@@ -348,7 +348,6 @@ class MarianIntegrationTest(unittest.TestCase):
             attention_mask=model_inputs.attention_mask,
             num_beams=2,
             max_length=128,
-            early_stopping=True,
         ).sequences
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
@@ -385,7 +384,7 @@ class TestMarian_FR_EN(MarianIntegrationTest):
         "Tom et Mary étaient assis à une table.",  # Accents
     ]
     expected_text = [
-        "Give me the microphone, please.",
+        "Give me the microphone.",
         "Tom and Mary were sitting at a table.",
     ]
 
@@ -425,12 +424,12 @@ class TestMarian_EN_DE(MarianIntegrationTest):
         "Turn around and close your eyes.",
     ]
     expected_text = [
-        "- Ich bin ein kleiner Frosch.",
+        "Ich bin ein kleiner Frosch.",
         "Jetzt kann ich die 100 Wörter des Deutschen vergessen, die ich kenne.",
-        "Tom fragte seinen Lehrer um Rat.",
+        "Tom bat seinen Lehrer um Rat.",
         "So würde ich das machen.",
         "Tom bewunderte Marias Mut wirklich.",
-        "Dreh dich um und schließe deine Augen.",
+        "Drehen Sie sich um und schließen Sie die Augen.",
     ]
 
     @slow
