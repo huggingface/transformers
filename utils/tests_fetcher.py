@@ -136,9 +136,17 @@ def get_module_dependencies(module_fname):
             imp = imp[1:]
             level += 1
 
-        dep_parts = module_parts[: len(module_parts) - level] + imp.split(".")
-        if os.path.isfile(os.path.sep.join(dep_parts) + ".py"):
-            dependencies.append(os.path.sep.join(dep_parts) + ".py")
+        if len(imp) > 0:
+            dep_parts = module_parts[: len(module_parts) - level] + imp.split(".")
+        else:
+            dep_parts = module_parts[: len(module_parts) - level] + ["__init__.py"]
+        imported_module = os.path.sep.join(dep_parts)
+        if imported_module.endswith("transformers/__init__.py"):
+            continue
+        if os.path.isfile(f"{imported_module}.py"):
+            dependencies.append(f"{imported_module}.py")
+        elif os.path.isdir(imported_module) and os.path.isfile(os.path.sep.join([imported_module, "__init__.py"])):
+            dependencies.append(os.path.sep.join([imported_module, "__init__.py"]))
     return dependencies
 
 
