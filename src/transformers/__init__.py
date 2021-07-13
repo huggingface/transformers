@@ -43,7 +43,6 @@ from typing import TYPE_CHECKING
 from . import dependency_versions_check
 from .file_utils import (
     _LazyModule,
-    is_detectron2_available,
     is_flax_available,
     is_sentencepiece_available,
     is_speech_available,
@@ -99,7 +98,6 @@ _import_structure = {
         "cached_path",
         "is_apex_available",
         "is_datasets_available",
-        "is_detectron2_available",
         "is_faiss_available",
         "is_flax_available",
         "is_psutil_available",
@@ -449,25 +447,6 @@ else:
 
     _import_structure["utils.dummy_timm_objects"] = [
         name for name in dir(dummy_timm_objects) if not name.startswith("_")
-    ]
-
-# Detectron2-backed objects
-if is_detectron2_available():
-    _import_structure["models.layoutlmv2"].extend(
-        [
-            "LAYOUTLM_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "LayoutLMv2ForQuestionAnswering",
-            "LayoutLMv2ForSequenceClassification",
-            "LayoutLMv2ForTokenClassification",
-            "LayoutLMv2Model",
-            "LayoutLMv2PreTrainedModel",
-        ]
-    )
-else:
-    from .utils import dummy_detectron2_objects
-
-    _import_structure["utils.dummy_detectron2_objects"] = [
-        name for name in dir(dummy_detectron2_objects) if not name.startswith("_")
     ]
 
 # PyTorch-backed objects
@@ -866,6 +845,16 @@ if is_torch_available():
             "LayoutLMForTokenClassification",
             "LayoutLMModel",
             "LayoutLMPreTrainedModel",
+        ]
+    )
+    _import_structure["models.layoutlmv2"].extend(
+        [
+            "LAYOUTLM_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LayoutLMv2ForQuestionAnswering",
+            "LayoutLMv2ForSequenceClassification",
+            "LayoutLMv2ForTokenClassification",
+            "LayoutLMv2Model",
+            "LayoutLMv2PreTrainedModel",
         ]
     )
     _import_structure["models.led"].extend(
@@ -1820,7 +1809,6 @@ if TYPE_CHECKING:
         cached_path,
         is_apex_available,
         is_datasets_available,
-        is_detectron2_available,
         is_faiss_available,
         is_flax_available,
         is_psutil_available,
@@ -2473,6 +2461,14 @@ if TYPE_CHECKING:
             LayoutLMForTokenClassification,
             LayoutLMModel,
             LayoutLMPreTrainedModel,
+        )
+        from .models.layoutlmv2 import (
+            LAYOUTLM_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LayoutLMv2ForQuestionAnswering,
+            LayoutLMv2ForSequenceClassification,
+            LayoutLMv2ForTokenClassification,
+            LayoutLMv2Model,
+            LayoutLMv2PreTrainedModel,
         )
         from .models.led import (
             LED_PRETRAINED_MODEL_ARCHIVE_LIST,
