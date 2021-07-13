@@ -325,7 +325,10 @@ jobs:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
