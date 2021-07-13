@@ -1474,8 +1474,7 @@ If you have saved at least one checkpoint, and you want to use the latest one, y
     checkpoint_dir = get_last_checkpoint(trainer.args.output_dir)
     fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 
-If you're using the ``--load_best_model_at_end`` class:`~transformers.TrainingArguments` argument (which disabled
-checkpoint saving), then you can finish the training by first saving a checkpoint explicitly and then do the same as
+If you're using the ``--load_best_model_at_end`` class:`~transformers.TrainingArguments` argument (to track the best checkpoint), then you can finish the training by first saving the final model explicitly and then do the same as
 above:
 
 .. code-block:: python
