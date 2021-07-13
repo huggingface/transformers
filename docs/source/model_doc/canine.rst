@@ -48,8 +48,10 @@ Tips:
   (which has a predefined Unicode code point). For token classification tasks however, the downsampled sequence of
   tokens needs to be upsampled again to match the length of the original character sequence (which is 2048). The
   details for this can be found in the paper.
-  Models:
-      - CANINE-C (~500 MB): Pre-trained with autoregressive character loss, 12-layer, 768-hidden, 12-heads, 121M parameters.
+-  Models:
+
+      - CANINE-C (~500 MB): Pre-trained with autoregressive character loss, 12-layer, 768-hidden, 12-heads, 121M
+        parameters.
       - CANINE-S (~500 MB): Pre-trained with subword loss, 12-layer, 768-hidden, 12-heads, 121M parameters.
 
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
