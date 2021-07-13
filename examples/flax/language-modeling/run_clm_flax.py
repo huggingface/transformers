@@ -169,7 +169,7 @@ class DataTrainingArguments:
 
 class TrainState(train_state.TrainState):
     dropout_rng: jnp.ndarray
-    rad_accum: jnp.ndarray
+    grad_accum: jnp.ndarray
 
     def replicate(self):
         return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
@@ -544,7 +544,7 @@ def main():
 
         new_state = jax.lax.cond(
             state.step % training_args.gradient_accumulation_steps == 0,
-            update_fn,
+            lambda _: update_fn(),
             lambda _: state.replace(grad_accum=grad_accum, step=state.step + 1),
             None,
         )
