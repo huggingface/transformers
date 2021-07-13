@@ -67,7 +67,7 @@ class BlenderbotConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         classifier_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for classifier.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 128):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
