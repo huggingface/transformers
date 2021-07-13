@@ -57,4 +57,4 @@ def pytest_terminal_summary(terminalreporter):
 def pytest_sessionfinish(session, exitstatus):
     # If no tests are collected, pytext exists with code 5, which makes the CI fail.
     if exitstatus == 5:
-        session.exitstatus == 0
+        session.exitstatus = 0
