@@ -676,7 +676,7 @@ class FlaxGenerationMixin:
             not_max_length_yet = state.cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = state.running_scores[:, -1:] / (max_length ** length_penalty)
+            best_running_score = state.running_scores[:, -1:] / (state.cur_len ** length_penalty)
             worst_finished_score = jnp.where(
                 state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
             )
@@ -699,6 +699,7 @@ class FlaxGenerationMixin:
                 lax.dynamic_slice(state.running_sequences, (0, 0, state.cur_len - 1), (batch_size, num_beams, 1))
             )
             model_outputs = model(input_token, params=params, **state.model_kwargs)
+
             logits = unflatten_beam_dim(model_outputs.logits[:, 0], batch_size, num_beams)
             cache = jax.tree_map(
                 lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams), model_outputs.past_key_values
@@ -747,14 +748,13 @@ class FlaxGenerationMixin:
             # set of active beam search sequences, set their log probs to a very large
             # negative value.
             did_topk_just_finished = topk_sequences[:, :, state.cur_len] == eos_token_id
-            topk_log_probs = topk_log_probs + did_topk_just_finished * np.array(-1.0e7)
-
+            running_topk_log_probs = topk_log_probs + did_topk_just_finished * np.array(-1.0e7)
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs
             # and gather top k beams (from top 2*k beams).
-            next_topk_indices = jnp.flip(lax.top_k(topk_log_probs, k=num_beams)[1], axis=1)
+            next_topk_indices = jnp.flip(lax.top_k(running_topk_log_probs, k=num_beams)[1], axis=1)
             next_running_sequences, next_running_scores = gather_beams(
-                [topk_sequences, topk_log_probs], next_topk_indices, batch_size, num_beams
+                [topk_sequences, running_topk_log_probs], next_topk_indices, batch_size, num_beams
             )
 
             # 6. Process topk logits
