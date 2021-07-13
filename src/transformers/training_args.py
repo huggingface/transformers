@@ -666,6 +666,11 @@ class TrainingArguments:
         if self.eval_steps is None:
             self.eval_steps = self.logging_steps
 
+        if self.load_best_model_at_end and self.evaluation_strategy == IntervalStrategy.NO:
+            raise ValueError(
+                "Using `load_best_model_at_end` will override your `save_strategy` by the `evaluation_strategy` you "
+                "picked, which can only be 'steps' or 'epoch' in this case."
+            )
         if self.load_best_model_at_end and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
