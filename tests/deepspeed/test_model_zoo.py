@@ -227,7 +227,7 @@ class TestDeepSpeedModelZoo(TestCasePlus):
         cmd = task_cmds[task]
         args_ds = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
 
-        output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False, before=False)
+        output_dir = self.get_auto_remove_tmp_dir()
         args_out = f"--output_dir {output_dir}".split()
 
         cmd += args_ds + args_out
