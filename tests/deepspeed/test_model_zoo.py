@@ -54,13 +54,13 @@ PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
 
 # causal lm
 GPT2_TINY = "sshleifer/tiny-gpt2"
-
-# question-answering
-DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased-distilled-squad"
-ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
 
+# question-answering
+ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
+
 # masked lm
+DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
 ELECTRA_TINY = "hf-internal-testing/tiny-electra"
 
 # classification
@@ -128,9 +128,9 @@ def make_task_cmds():
         ],
         mlm=[
             "electra",
+            "distilbert",
         ],
         qa=[
-            "distilbert",
             "roberta",
         ],
         clas=[
