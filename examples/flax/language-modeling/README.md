@@ -251,32 +251,32 @@ Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experi
 In the following, we demonstrate how to train a T5 model using the span-masked language model 
 objective as proposed in the [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683).
 More specifically, we demonstrate how JAX/Flax can be leveraged 
-to pre-train [**`t5-small`**](https://huggingface.co/t5-small)
+to pre-train [**`google/t5-v1_1-base`**](https://huggingface.co/google/t5-v1_1-base)
 in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
 Let's start by creating a model repository to save the trained model and logs.
-Here we call the model `"norwegian-t5-small"`, but you can change the model name as you like.
+Here we call the model `"norwegian-t5-base"`, but you can change the model name as you like.
 
 You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
 you are logged in) or via the command line:
 
 ```
-huggingface-cli repo create norwegian-t5-small
+huggingface-cli repo create norwegian-t5-base
 ```
 
 Next we clone the model repository to add the tokenizer and model files.
 
 ```
-git clone https://huggingface.co/<your-username>/norwegian-t5-small
+git clone https://huggingface.co/<your-username>/norwegian-t5-base
 ```
 
 To ensure that all tensorboard traces will be uploaded correctly, we need to 
 track them. You can run the following command inside your model repo to do so.
 
 ```
-cd norwegian-t5-small
+cd norwegian-t5-base
 git lfs track "*tfevents*"
 ```
 
@@ -286,7 +286,7 @@ push the training logs and model weights to the repo.
 Next, let's add a symbolic link to the `run_t5_mlm_flax.py` and `t5_tokenizer_model` scripts.
 
 ```bash
-export MODEL_DIR="./norwegian-t5-small"
+export MODEL_DIR="./norwegian-t5-base"
 ln -s ~/transformers/examples/flax/language-modeling/run_t5_mlm_flax.py run_t5_mlm_flax.py
 ln -s ~/transformers/examples/flax/language-modeling/t5_tokenizer_model.py t5_tokenizer_model.py
 ```
@@ -310,7 +310,7 @@ from t5_tokenizer_model import SentencePieceUnigramTokenizer
 
 vocab_size = 32_000
 input_sentence_size = None
-model_dir = "./norwegian-t5-small"  # ${MODEL_DIR}
+model_dir = "./norwegian-t5-base"  # ${MODEL_DIR}
 
 # Initialize a dataset
 dataset = datasets.load_dataset("oscar", name="unshuffled_deduplicated_no", split="train")
@@ -341,15 +341,15 @@ tokenizer.save(f"{model_dir}/tokenizer.json")
 ### Create configuration
 
 Next, we create the model's configuration file. This is as simple 
-as loading and storing [`**t5-small**`](https://huggingface.co/t5-small)
+as loading and storing [`**google/t5-v1_1-base**`](https://huggingface.co/google/t5-v1_1-base)
 in the local model folder:
 
 ```python
 from transformers import T5Config
 
-model_dir = "./norwegian-t5-small"  # ${MODEL_DIR}
+model_dir = "./norwegian-t5-base"  # ${MODEL_DIR}
 
-config = T5Config.from_pretrained("t5-small")
+config = T5Config.from_pretrained("google/t5-v1_1-base")
 config.save_pretrained(model_dir)
 ```
 
@@ -359,30 +359,30 @@ Next we can run the example script to pretrain the model:
 
 ```bash
 ./run_t5_mlm_flax.py \
-    --output_dir="${MODEL_DIR}" \
-    --model_type="t5" \
-    --config_name="${MODEL_DIR}" \
-    --tokenizer_name="${MODEL_DIR}" \
-    --dataset_name="oscar" \
-    --dataset_config_name="unshuffled_deduplicated_no" \
-    --max_seq_length="512" \
-    --per_device_train_batch_size="16" \
-    --per_device_eval_batch_size="16" \
-    --learning_rate="1e-3" \
-    --weight_decay="0.001" \
-    --warmup_steps="5000" \
-    --overwrite_output_dir \
-    --num_train_epochs="10" \
-    --logging_steps="500" \
-    --save_steps="2500" \
-    --eval_steps="2500" \
-    --push_to_hub
+	--output_dir="./" \
+	--model_type="t5" \
+	--config_name="./" \
+	--tokenizer_name="./" \
+	--dataset_name="oscar" \
+	--dataset_config_name="unshuffled_deduplicated_no" \
+	--max_seq_length="512" \
+	--per_device_train_batch_size="32" \
+	--per_device_eval_batch_size="32" \
+	--adafactor \
+	--learning_rate="0.005" \
+	--weight_decay="0.001" \
+	--warmup_steps="2000" \
+	--overwrite_output_dir \
+	--logging_steps="100" \
+	--save_steps="1000" \
+	--eval_steps="1000" \
+	--push_to_hub
 ```
 
 Training should converge at a loss and accuracy 
-of XXX and XXX respectively after 10 epochs on a single TPUv3-8.
-This should take less than 18 hours.
-Training statistics can be accessed on directly on the 🤗 [hub (TODO)]()
+of 2.2 and 58.0 respectively after 2 epochs on a single TPUv3-8.
+This should take around 24 hours.
+Training statistics can be accessed on directly on the 🤗 [hub](https://huggingface.co/patrickvonplaten/t5-base-norwegian/tensorboard)
 
 ## Runtime evaluation
 
