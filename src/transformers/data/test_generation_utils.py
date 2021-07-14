@@ -31,8 +31,7 @@ if is_torch_available():
 class GenerationUtilsTest(unittest.TestCase):
     @cached_property
     def config(self):
-        config = MarianConfig.from_pretrained("sshleifer/tiny-marian-en-de")
-        return config
+        return MarianConfig.from_pretrained("sshleifer/tiny-marian-en-de")
 
     @cached_property
     def model(self):

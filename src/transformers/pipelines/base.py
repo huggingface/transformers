@@ -114,7 +114,7 @@ def infer_framework_load_model(
                         classes.append(_class)
             class_tuple = class_tuple + tuple(classes)
 
-        if len(class_tuple) == 0:
+        if not class_tuple:
             raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
 
         for model_class in class_tuple:
@@ -139,8 +139,8 @@ def infer_framework_load_model(
             except (OSError, ValueError):
                 continue
 
-        if isinstance(model, str):
-            raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
+    if isinstance(model, str):
+        raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework, model
@@ -216,8 +216,7 @@ def get_framework(model, revision: Optional[str] = None):
             except OSError:
                 model = TFAutoModel.from_pretrained(model, revision=revision)
 
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
-    return framework
+    return "tf" if model.__class__.__name__.startswith("TF") else "pt"
 
 
 def get_default_model(targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]) -> str:
@@ -326,13 +325,15 @@ class PipelineDataFormat:
         if self.is_multi_columns:
             self.column = [tuple(c.split("=")) if "=" in c else (c, c) for c in self.column]
 
-        if output_path is not None and not overwrite:
-            if exists(abspath(self.output_path)):
-                raise OSError(f"{self.output_path} already exists on disk")
+        if (
+            output_path is not None
+            and not overwrite
+            and exists(abspath(self.output_path))
+        ):
+            raise OSError(f"{self.output_path} already exists on disk")
 
-        if input_path is not None:
-            if not exists(abspath(self.input_path)):
-                raise OSError(f"{self.input_path} doesnt exist on disk")
+        if input_path is not None and not exists(abspath(self.input_path)):
+            raise OSError(f"{self.input_path} doesnt exist on disk")
 
     @abstractmethod
     def __iter__(self):
@@ -443,7 +444,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
             data (:obj:`List[dict]`): The data to store.
         """
         with open(self.output_path, "w") as f:
-            if len(data) > 0:
+            if data:
                 writer = csv.DictWriter(f, list(data[0].keys()))
                 writer.writeheader()
                 writer.writerows(data)

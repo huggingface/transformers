@@ -108,7 +108,7 @@ def get_last_checkpoint(folder):
         for path in content
         if _re_checkpoint.search(path) is not None and os.path.isdir(os.path.join(folder, path))
     ]
-    if len(checkpoints) == 0:
+    if not checkpoints:
         return
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
 
@@ -159,10 +159,15 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_per_second")]
+    speed_metrics = [
+        m
+        for m in metrics
+        if m.endswith("_runtime") or m.endswith("_per_second")
+    ]
+
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
-    return loss if len(metrics) == 0 else sum(metrics.values())
+    return loss if not metrics else sum(metrics.values())
 
 
 def default_hp_space_optuna(trial) -> Dict[str, float]:

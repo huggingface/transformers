@@ -106,7 +106,7 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
     """
 
     def __init__(self, temperature: float):
-        if not isinstance(temperature, float) or not (temperature > 0):
+        if not isinstance(temperature, float) or temperature <= 0:
             raise ValueError(f"`temperature` has to be a strictly positive float, but is {temperature}")
 
         self.temperature = temperature
@@ -157,9 +157,7 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
         score_mask = jax.ops.index_update(score_mask, jax.ops.index[:, : self.min_tokens_to_keep], True)
 
         topk_next_scores = jnp.where(score_mask, topk_scores, mask_scores)
-        next_scores = jax.lax.sort_key_val(topk_indices, topk_next_scores)[-1]
-
-        return next_scores
+        return jax.lax.sort_key_val(topk_indices, topk_next_scores)[-1]
 
 
 class FlaxTopKLogitsWarper(FlaxLogitsWarper):
@@ -196,8 +194,7 @@ class FlaxTopKLogitsWarper(FlaxLogitsWarper):
         topk_indices_flat = topk_indices.flatten() + shift
 
         next_scores_flat = jax.ops.index_update(next_scores_flat, topk_indices_flat, topk_scores_flat)
-        next_scores = next_scores_flat.reshape(batch_size, vocab_size)
-        return next_scores
+        return next_scores_flat.reshape(batch_size, vocab_size)
 
 
 class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):

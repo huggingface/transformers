@@ -49,7 +49,10 @@ def main():
         elif (
             (dt.utcnow() - issue.updated_at).days > 23
             and (dt.utcnow() - issue.created_at).days >= 30
-            and not any(label.name.lower() in LABELS_TO_EXEMPT for label in issue.get_labels())
+            and all(
+                label.name.lower() not in LABELS_TO_EXEMPT
+                for label in issue.get_labels()
+            )
         ):
             # print(f"Would add stale comment to {issue.number}")
             issue.create_comment(

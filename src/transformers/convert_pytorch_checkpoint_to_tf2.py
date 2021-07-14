@@ -325,25 +325,30 @@ def convert_pt_checkpoint_to_tf(
     tf_model = load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
 
     if compare_with_pt_model:
-        tfo = tf_model(tf_model.dummy_inputs, training=False)  # build the network
-
-        state_dict = torch.load(pytorch_checkpoint_path, map_location="cpu")
-        pt_model = pt_model_class.from_pretrained(
-            pretrained_model_name_or_path=None, config=config, state_dict=state_dict
+        _extracted_from_convert_pt_checkpoint_to_tf_26(
+            tf_model, pytorch_checkpoint_path, pt_model_class, config
         )
-
-        with torch.no_grad():
-            pto = pt_model(**pt_model.dummy_inputs)
-
-        np_pt = pto[0].numpy()
-        np_tf = tfo[0].numpy()
-        diff = np.amax(np.abs(np_pt - np_tf))
-        print(f"Max absolute difference between models outputs {diff}")
-        assert diff <= 2e-2, f"Error, model absolute difference is >2e-2: {diff}"
 
     # Save pytorch-model
     print(f"Save TensorFlow model to {tf_dump_path}")
     tf_model.save_weights(tf_dump_path, save_format="h5")
+
+def _extracted_from_convert_pt_checkpoint_to_tf_26(tf_model, pytorch_checkpoint_path, pt_model_class, config):
+    tfo = tf_model(tf_model.dummy_inputs, training=False)  # build the network
+
+    state_dict = torch.load(pytorch_checkpoint_path, map_location="cpu")
+    pt_model = pt_model_class.from_pretrained(
+        pretrained_model_name_or_path=None, config=config, state_dict=state_dict
+    )
+
+    with torch.no_grad():
+        pto = pt_model(**pt_model.dummy_inputs)
+
+    np_pt = pto[0].numpy()
+    np_tf = tfo[0].numpy()
+    diff = np.amax(np.abs(np_pt - np_tf))
+    print(f"Max absolute difference between models outputs {diff}")
+    assert diff <= 2e-2, f"Error, model absolute difference is >2e-2: {diff}"
 
 
 def convert_all_pt_checkpoints_to_tf(

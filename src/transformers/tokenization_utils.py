@@ -53,24 +53,20 @@ def _is_whitespace(char):
     """Checks whether `char` is a whitespace character."""
     # \t, \n, and \r are technically control characters but we treat them
     # as whitespace since they are generally considered as such.
-    if char == " " or char == "\t" or char == "\n" or char == "\r":
+    if char in [" ", "\t", "\n", "\r"]:
         return True
     cat = unicodedata.category(char)
-    if cat == "Zs":
-        return True
-    return False
+    return cat == "Zs"
 
 
 def _is_control(char):
     """Checks whether `char` is a control character."""
     # These are technically control characters but we count them as whitespace
     # characters.
-    if char == "\t" or char == "\n" or char == "\r":
+    if char in ["\t", "\n", "\r"]:
         return False
     cat = unicodedata.category(char)
-    if cat.startswith("C"):
-        return True
-    return False
+    return bool(cat.startswith("C"))
 
 
 def _is_punctuation(char):
@@ -83,9 +79,7 @@ def _is_punctuation(char):
     if (cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126):
         return True
     cat = unicodedata.category(char)
-    if cat.startswith("P"):
-        return True
-    return False
+    return bool(cat.startswith("P"))
 
 
 def _is_end_of_word(text):
@@ -206,7 +200,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
 
-        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
+        added_tok_encoder = {tok: len(self) + i for i, tok in enumerate(tokens_to_add)}
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
@@ -217,12 +211,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 _insert_one_token_to_ordered_list(self.unique_no_split_tokens, new_tokens[0])
             else:
                 self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(new_tokens)))
+        elif len(tokens_to_add) == 1:
+            _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
         else:
-            # Or on the newly added tokens
-            if len(tokens_to_add) == 1:
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
-            else:
-                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
+            self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
 
         return len(tokens_to_add)
 
@@ -324,8 +316,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 elif i == len(split_text) - 1:
                     if sub_text:
                         result.append(sub_text)
-                    else:
-                        pass
                 else:
                     if sub_text:
                         result.append(sub_text)
@@ -388,10 +378,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
 
-        ids = []
-        for token in tokens:
-            ids.append(self._convert_token_to_id_with_added_voc(token))
-        return ids
+        return [self._convert_token_to_id_with_added_voc(token) for token in tokens]
 
     def _convert_token_to_id_with_added_voc(self, token):
         if token is None:
@@ -766,7 +753,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             text = "".join(sub_texts)
 
         if clean_up_tokenization_spaces:
-            clean_text = self.clean_up_tokenization(text)
-            return clean_text
+            return self.clean_up_tokenization(text)
         else:
             return text

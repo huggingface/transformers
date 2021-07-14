@@ -94,13 +94,14 @@ class TestCodeExamples(unittest.TestCase):
         self.analyze_directory(transformers_directory, identifier=files, ignore_files=ignore_files)
 
     def test_tokenization_examples(self):
-        transformers_directory = Path("src/transformers")
-        files = "tokenization"
-        self.analyze_directory(transformers_directory, identifier=files)
+        self._extracted_from_test_configuration_examples_2("tokenization")
 
     def test_configuration_examples(self):
-        transformers_directory = Path("src/transformers")
-        files = "configuration"
+        self._extracted_from_test_configuration_examples_2("configuration")
+
+    def _extracted_from_test_configuration_examples_2(self, arg0):
+        transformers_directory = Path('src/transformers')
+        files = arg0
         self.analyze_directory(transformers_directory, identifier=files)
 
     def test_remaining_examples(self):

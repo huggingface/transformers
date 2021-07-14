@@ -257,8 +257,8 @@ class PretrainedConfig(PushToHubMixin):
         self.label2id = kwargs.pop("label2id", None)
         if self.id2label is not None:
             kwargs.pop("num_labels", None)
-            self.id2label = dict((int(key), value) for key, value in self.id2label.items())
-            # Keys are always strings in JSON so convert ids to int here.
+            self.id2label = {int(key): value for key, value in self.id2label.items()}
+                # Keys are always strings in JSON so convert ids to int here.
         else:
             self.num_labels = kwargs.pop("num_labels", 2)
 
@@ -559,7 +559,10 @@ class PretrainedConfig(PushToHubMixin):
         config = cls(**config_dict)
 
         if hasattr(config, "pruned_heads"):
-            config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
+            config.pruned_heads = {
+                int(key): value for key, value in config.pruned_heads.items()
+            }
+
 
         # Update config with kwargs if needed
         to_remove = []
@@ -620,19 +623,12 @@ class PretrainedConfig(PushToHubMixin):
         # get class specific config dict
         class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
 
-        serializable_config_dict = {}
-
-        # only serialize values that differ from the default config
-        for key, value in config_dict.items():
-            if (
+        return {key: value for key, value in config_dict.items() if (
                 key not in default_config_dict
                 or key == "transformers_version"
                 or value != default_config_dict[key]
                 or (key in class_config_dict and value != class_config_dict[key])
-            ):
-                serializable_config_dict[key] = value
-
-        return serializable_config_dict
+            )}
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -662,10 +658,7 @@ class PretrainedConfig(PushToHubMixin):
         Returns:
             :obj:`str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
-        if use_diff is True:
-            config_dict = self.to_diff_dict()
-        else:
-            config_dict = self.to_dict()
+        config_dict = self.to_diff_dict() if use_diff else self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):

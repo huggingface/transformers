@@ -171,7 +171,7 @@ def is_copy_consistent(filename, overwrite=False):
                 lines = lines[:start_index] + [theoretical_code] + lines[line_index:]
                 line_index = start_index + 1
 
-    if overwrite and len(diffs) > 0:
+    if overwrite and diffs:
         # Warn the user a file has been modified.
         print(f"Detected changes, rewriting {filename}.")
         with open(filename, "w", encoding="utf-8", newline="\n") as f:
@@ -185,7 +185,7 @@ def check_copies(overwrite: bool = False):
     for filename in all_files:
         new_diffs = is_copy_consistent(filename, overwrite)
         diffs += [f"- {filename}: copy does not match {d[0]} at line {d[1]}" for d in new_diffs]
-    if not overwrite and len(diffs) > 0:
+    if not overwrite and diffs:
         diff = "\n".join(diffs)
         raise Exception(
             "Found the following copy inconsistencies:\n"
@@ -210,7 +210,7 @@ def check_full_copies(overwrite: bool = False):
             else:
                 diffs.append(f"- {target}: copy does not match {source}.")
 
-    if not overwrite and len(diffs) > 0:
+    if not overwrite and diffs:
         diff = "\n".join(diffs)
         raise Exception(
             "Found the following copy inconsistencies:\n"
@@ -273,10 +273,8 @@ def convert_to_rst(model_list, max_per_line=None):
         # Keep hard links for the models not released yet
         if "master" in link or not link.startswith("https://huggingface.co/transformers"):
             return f"`{title} <{link}>`__"
-        # Convert links to relative links otherwise
-        else:
-            link = link[len("https://huggingface.co/transformers/") : -len(".html")]
-            return f":doc:`{title} <{link}>`"
+        link = link[len("https://huggingface.co/transformers/") : -len(".html")]
+        return f":doc:`{title} <{link}>`"
 
     model_list = re.sub(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*", _rep_link, model_list)
 

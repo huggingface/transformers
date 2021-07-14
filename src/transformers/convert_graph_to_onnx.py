@@ -178,17 +178,16 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
         if isinstance(tensor, (tuple, list)):
             return [build_shape_dict(name, t, is_input, seq_len) for t in tensor]
 
-        else:
-            # Let's assume batch is the first axis with only 1 element (~~ might not be always true ...)
-            axes = {[axis for axis, numel in enumerate(tensor.shape) if numel == 1][0]: "batch"}
-            if is_input:
-                if len(tensor.shape) == 2:
-                    axes[1] = "sequence"
-                else:
-                    raise ValueError(f"Unable to infer tensor axes ({len(tensor.shape)})")
+        # Let's assume batch is the first axis with only 1 element (~~ might not be always true ...)
+        axes = {[axis for axis, numel in enumerate(tensor.shape) if numel == 1][0]: "batch"}
+        if is_input:
+            if len(tensor.shape) == 2:
+                axes[1] = "sequence"
             else:
-                seq_axes = [dim for dim, shape in enumerate(tensor.shape) if shape == seq_len]
-                axes.update({dim: "sequence" for dim in seq_axes})
+                raise ValueError(f"Unable to infer tensor axes ({len(tensor.shape)})")
+        else:
+            seq_axes = [dim for dim, shape in enumerate(tensor.shape) if shape == seq_len]
+            axes.update({dim: "sequence" for dim in seq_axes})
 
         print(f"Found {'input' if is_input else 'output'} {name} with shape: {axes}")
         return axes
@@ -310,23 +309,27 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     print("/!\\ Please note TensorFlow doesn't support exporting model > 2Gb /!\\")
 
     try:
-        import tensorflow as tf
-
-        from keras2onnx import __version__ as k2ov
-        from keras2onnx import convert_keras, save_model
-
-        print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
-
-        # Build
-        input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
-
-        # Forward
-        nlp.model.predict(tokens.data)
-        onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=opset)
-        save_model(onnx_model, output.as_posix())
-
+        _extracted_from_convert_tensorflow_9(nlp, opset, output)
     except ImportError as e:
-        raise Exception(f"Cannot import {e.name} required to convert TF model to ONNX. Please install {e.name} first.")
+        raise Exception(
+            f'Cannot import {e.name} required to convert TF model to ONNX. Please install {e.name} first.'
+        )
+
+def _extracted_from_convert_tensorflow_9(nlp, opset, output):
+    import tensorflow as tf
+
+    from keras2onnx import __version__ as k2ov
+    from keras2onnx import convert_keras, save_model
+
+    print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
+
+    # Build
+    input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
+
+    # Forward
+    nlp.model.predict(tokens.data)
+    onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=opset)
+    save_model(onnx_model, output.as_posix())
 
 
 def convert(

@@ -85,9 +85,7 @@ class HfApi:
         """
         path = f"{self.endpoint}/api/login"
         r = requests.post(path, json={"username": username, "password": password})
-        r.raise_for_status()
-        d = r.json()
-        return d["token"]
+        return self._extracted_from_create_repo_5(r, "token")
 
     def whoami(self, token: str) -> Tuple[str, List[str]]:
         """
@@ -162,9 +160,12 @@ class HfApi:
         )
         if exist_ok and r.status_code == 409:
             return ""
+        return self._extracted_from_create_repo_5(r, "url")
+
+    def _extracted_from_create_repo_5(self, r, arg1):
         r.raise_for_status()
         d = r.json()
-        return d["url"]
+        return d[arg1]
 
     def delete_repo(self, token: str, name: str, organization: Optional[str] = None):
         """

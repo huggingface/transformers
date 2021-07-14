@@ -110,9 +110,9 @@ class StoppingCriteriaList(list):
     @property
     def max_length(self) -> Optional[int]:
         for stopping_criterium in self:
-            if isinstance(stopping_criterium, MaxLengthCriteria):
-                return stopping_criterium.max_length
-            elif isinstance(stopping_criterium, MaxNewTokensCriteria):
+            if isinstance(
+                stopping_criterium, (MaxLengthCriteria, MaxNewTokensCriteria)
+            ):
                 return stopping_criterium.max_length
         return None
 

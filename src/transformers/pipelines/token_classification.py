@@ -145,19 +145,19 @@ class TokenClassificationPipeline(Pipeline):
 
                 if grouped_entities and ignore_subwords:
                     aggregation_strategy = AggregationStrategy.FIRST
-                elif grouped_entities and not ignore_subwords:
+                elif grouped_entities:
                     aggregation_strategy = AggregationStrategy.SIMPLE
                 else:
                     aggregation_strategy = AggregationStrategy.NONE
 
-                if grouped_entities is not None:
-                    warnings.warn(
-                        f'`grouped_entities` is deprecated and will be removed in version v5.0.0, defaulted to `aggregation_strategy="{aggregation_strategy}"` instead.'
-                    )
-                if ignore_subwords is not None:
-                    warnings.warn(
-                        f'`ignore_subwords` is deprecated and will be removed in version v5.0.0, defaulted to `aggregation_strategy="{aggregation_strategy}"` instead.'
-                    )
+            if grouped_entities is not None:
+                warnings.warn(
+                    f'`grouped_entities` is deprecated and will be removed in version v5.0.0, defaulted to `aggregation_strategy="{aggregation_strategy}"` instead.'
+                )
+            if ignore_subwords is not None:
+                warnings.warn(
+                    f'`ignore_subwords` is deprecated and will be removed in version v5.0.0, defaulted to `aggregation_strategy="{aggregation_strategy}"` instead.'
+                )
         if isinstance(aggregation_strategy, str):
             aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
 
@@ -334,14 +334,13 @@ class TokenClassificationPipeline(Pipeline):
             score = average_scores[entity_idx]
         else:
             raise ValueError("Invalid aggregation_strategy")
-        new_entity = {
+        return {
             "entity": entity,
             "score": score,
             "word": word,
             "start": entities[0]["start"],
             "end": entities[-1]["end"],
         }
-        return new_entity
 
     def aggregate_words(self, entities: List[dict], aggregation_strategy: AggregationStrategy) -> List[dict]:
         """
@@ -381,14 +380,13 @@ class TokenClassificationPipeline(Pipeline):
         scores = np.nanmean([entity["score"] for entity in entities])
         tokens = [entity["word"] for entity in entities]
 
-        entity_group = {
+        return {
             "entity_group": entity,
             "score": np.mean(scores),
             "word": self.tokenizer.convert_tokens_to_string(tokens),
             "start": entities[0]["start"],
             "end": entities[-1]["end"],
         }
-        return entity_group
 
     def get_tag(self, entity_name: str) -> Tuple[str, str]:
         if entity_name.startswith("B-"):

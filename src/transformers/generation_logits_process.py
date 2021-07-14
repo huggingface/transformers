@@ -132,7 +132,7 @@ class TemperatureLogitsWarper(LogitsWarper):
     """
 
     def __init__(self, temperature: float):
-        if not isinstance(temperature, float) or not (temperature > 0):
+        if not isinstance(temperature, float) or temperature <= 0:
             raise ValueError(f"`temperature` has to be a strictly positive float, but is {temperature}")
 
         self.temperature = temperature
@@ -153,7 +153,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, penalty: float):
-        if not isinstance(penalty, float) or not (penalty > 0):
+        if not isinstance(penalty, float) or penalty <= 0:
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
         self.penalty = penalty
@@ -267,11 +267,15 @@ def _calc_banned_ngram_tokens(
 
     generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos)
 
-    banned_tokens = [
-        _get_generated_ngrams(generated_ngrams[hypo_idx], prev_input_ids[hypo_idx], ngram_size, cur_len)
+    return [
+        _get_generated_ngrams(
+            generated_ngrams[hypo_idx],
+            prev_input_ids[hypo_idx],
+            ngram_size,
+            cur_len,
+        )
         for hypo_idx in range(num_hypos)
     ]
-    return banned_tokens
 
 
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
@@ -380,7 +384,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         return scores
 
     def _tokens_match(self, prev_tokens: torch.LongTensor, tokens: List[int]) -> bool:
-        if len(tokens) == 0:
+        if not tokens:
             # if bad word tokens is just one token always ban it
             return True
         elif len(tokens) > len(prev_tokens):
@@ -395,13 +399,12 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
     def _calc_banned_bad_words_ids(self, prev_input_ids: Iterable[int]) -> Iterable[int]:
         banned_tokens = []
         for prev_input_ids_slice in prev_input_ids:
-            banned_tokens_slice = []
-            for banned_token_seq in self.bad_words_ids:
-                if self._tokens_match(prev_input_ids_slice, banned_token_seq[:-1]) is False:
-                    # if tokens do not match continue
-                    continue
-
-                banned_tokens_slice.append(banned_token_seq[-1])
+            banned_tokens_slice = [
+                banned_token_seq[-1]
+                for banned_token_seq in self.bad_words_ids
+                if self._tokens_match(prev_input_ids_slice, banned_token_seq[:-1])
+                is not False
+            ]
 
             banned_tokens.append(banned_tokens_slice)
 
@@ -490,7 +493,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, diversity_penalty: float, num_beams: int, num_beam_groups: int):
-        if not isinstance(diversity_penalty, float) or (not diversity_penalty > 0.0):
+        if not isinstance(diversity_penalty, float) or diversity_penalty <= 0.0:
             raise ValueError("`diversity_penalty` should be a float strictly larger than 0.")
         self._diversity_penalty = diversity_penalty
         if not isinstance(num_beams, int) or num_beams < 2:

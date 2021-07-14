@@ -224,22 +224,21 @@ class ConversationalPipeline(Pipeline):
         if isinstance(conversations, Conversation):
             conversations = [conversations]
         # Input validation
-        if isinstance(conversations, list):
-            for conversation in conversations:
-                assert isinstance(
-                    conversation, Conversation
-                ), "ConversationalPipeline expects a Conversation or list of Conversations as an input"
-                if conversation.new_user_input is None:
-                    raise ValueError(
-                        f"Conversation with UUID {type(conversation.uuid)} does not contain new user input to process. "
-                        "Add user inputs with the conversation's `add_user_input` method"
-                    )
-            assert (
-                self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
-            ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
-        else:
+        if not isinstance(conversations, list):
             raise ValueError("ConversationalPipeline expects a Conversation or list of Conversations as an input")
 
+        for conversation in conversations:
+            assert isinstance(
+                conversation, Conversation
+            ), "ConversationalPipeline expects a Conversation or list of Conversations as an input"
+            if conversation.new_user_input is None:
+                raise ValueError(
+                    f"Conversation with UUID {type(conversation.uuid)} does not contain new user input to process. "
+                    "Add user inputs with the conversation's `add_user_input` method"
+                )
+        assert (
+            self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
+        ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
         with self.device_placement():
 
             inputs = self._parse_and_tokenize(conversations)
@@ -266,11 +265,7 @@ class ConversationalPipeline(Pipeline):
                 history = generated_responses
 
             history = self._clean_padding_history(history)
-            if self.model.config.is_encoder_decoder:
-                start_position = 1
-            else:
-                start_position = input_length
-
+            start_position = 1 if self.model.config.is_encoder_decoder else input_length
             output = []
             for conversation_index, conversation in enumerate(conversations):
                 conversation.mark_processed()
@@ -336,7 +331,9 @@ class ConversationalPipeline(Pipeline):
         else:
             # If the tokenizer cannot handle conversations, we default to only the old version
             input_ids = [self._legacy_parse_and_tokenize(conversation) for conversation in conversations]
-        inputs = self.tokenizer.pad(
-            {"input_ids": input_ids}, padding="longest", return_attention_mask=True, return_tensors=self.framework
+        return self.tokenizer.pad(
+            {"input_ids": input_ids},
+            padding="longest",
+            return_attention_mask=True,
+            return_tensors=self.framework,
         )
-        return inputs

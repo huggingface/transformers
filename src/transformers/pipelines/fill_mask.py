@@ -132,7 +132,7 @@ class FillMaskPipeline(Pipeline):
                 vocab = {}
             target_ids = []
             for target in targets:
-                id_ = vocab.get(target, None)
+                id_ = vocab.get(target)
                 if id_ is None:
                     input_ids = self.tokenizer(
                         target,
@@ -159,13 +159,11 @@ class FillMaskPipeline(Pipeline):
                     )
                 target_ids.append(id_)
             target_ids = list(set(target_ids))
-            if len(target_ids) == 0:
+            if not target_ids:
                 raise ValueError("At least one target must be provided when passed.")
             target_ids = np.array(target_ids)
             # Cap top_k if there are targets
-            if top_k > target_ids.shape[0]:
-                top_k = target_ids.shape[0]
-
+            top_k = min(top_k, target_ids.shape[0])
         for i in range(batch_size):
             input_ids = inputs["input_ids"][i]
             result = []

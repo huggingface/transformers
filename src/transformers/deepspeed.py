@@ -351,9 +351,8 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
             # to make this option work, we need to init DS optimizer first, then init HS scheduler,
             # then pass the HS scheduler to DS init, which is not possible at the moment
             raise ValueError("At the moment HF scheduler + DeepSpeed optimizer combination is not possible")
-        else:
-            trainer.create_scheduler(num_training_steps=num_training_steps)
-            lr_scheduler = trainer.lr_scheduler
+        trainer.create_scheduler(num_training_steps=num_training_steps)
+        lr_scheduler = trainer.lr_scheduler
 
     # keep for quick debug:
     # from pprint import pprint; pprint(config)

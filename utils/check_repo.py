@@ -215,7 +215,7 @@ def check_models_are_in_init():
 
     # Remove private models
     models_not_in_init = [model for model in models_not_in_init if not is_a_private_model(model)]
-    if len(models_not_in_init) > 0:
+    if models_not_in_init:
         raise Exception(f"The following models should be in the main init: {','.join(models_not_in_init)}.")
 
 
@@ -229,15 +229,13 @@ def get_model_test_files():
         "test_modeling_marian",
         "test_modeling_tf_common",
     ]
-    test_files = []
-    for filename in os.listdir(PATH_TO_TESTS):
-        if (
-            os.path.isfile(f"{PATH_TO_TESTS}/{filename}")
-            and filename.startswith("test_modeling")
-            and not os.path.splitext(filename)[0] in _ignore_files
-        ):
-            test_files.append(filename)
-    return test_files
+    return [
+        filename
+        for filename in os.listdir(PATH_TO_TESTS)
+        if os.path.isfile(f"{PATH_TO_TESTS}/{filename}")
+        and filename.startswith("test_modeling")
+        and os.path.splitext(filename)[0] not in _ignore_files
+    ]
 
 
 # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the tester class
@@ -273,16 +271,15 @@ def check_models_are_tested(module, test_file):
             + "If this intentional, add the test filename to `TEST_FILES_WITH_NO_COMMON_TESTS` in the file "
             + "`utils/check_repo.py`."
         ]
-    failures = []
-    for model_name, _ in defined_models:
-        if model_name not in tested_models and model_name not in IGNORE_NON_TESTED:
-            failures.append(
-                f"{model_name} is defined in {module.__name__} but is not tested in "
-                + f"{os.path.join(PATH_TO_TESTS, test_file)}. Add it to the all_model_classes in that file."
-                + "If common tests should not applied to that model, add its name to `IGNORE_NON_TESTED`"
-                + "in the file `utils/check_repo.py`."
-            )
-    return failures
+    return [
+        f"{model_name} is defined in {module.__name__} but is not tested in "
+        + f"{os.path.join(PATH_TO_TESTS, test_file)}. Add it to the all_model_classes in that file."
+        + "If common tests should not applied to that model, add its name to `IGNORE_NON_TESTED`"
+        + "in the file `utils/check_repo.py`."
+        for model_name, _ in defined_models
+        if model_name not in tested_models
+        and model_name not in IGNORE_NON_TESTED
+    ]
 
 
 def check_all_models_are_tested():
@@ -297,7 +294,7 @@ def check_all_models_are_tested():
         new_failures = check_models_are_tested(module, test_file)
         if new_failures is not None:
             failures += new_failures
-    if len(failures) > 0:
+    if failures:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
@@ -333,15 +330,14 @@ def ignore_unautoclassed(model_name):
 def check_models_are_auto_configured(module, all_auto_models):
     """Check models defined in module are each in an auto class."""
     defined_models = get_models(module)
-    failures = []
-    for model_name, _ in defined_models:
-        if model_name not in all_auto_models and not ignore_unautoclassed(model_name):
-            failures.append(
-                f"{model_name} is defined in {module.__name__} but is not present in any of the auto mapping. "
-                "If that is intended behavior, add its name to `IGNORE_NON_AUTO_CONFIGURED` in the file "
-                "`utils/check_repo.py`."
-            )
-    return failures
+    return [
+        f"{model_name} is defined in {module.__name__} but is not present in any of the auto mapping. "
+        "If that is intended behavior, add its name to `IGNORE_NON_AUTO_CONFIGURED` in the file "
+        "`utils/check_repo.py`."
+        for model_name, _ in defined_models
+        if model_name not in all_auto_models
+        and not ignore_unautoclassed(model_name)
+    ]
 
 
 def check_all_models_are_auto_configured():
@@ -353,7 +349,7 @@ def check_all_models_are_auto_configured():
         missing_backends.append("TensorFlow")
     if not is_flax_available():
         missing_backends.append("Flax")
-    if len(missing_backends) > 0:
+    if missing_backends:
         missing = ", ".join(missing_backends)
         if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
             raise Exception(
@@ -374,7 +370,7 @@ def check_all_models_are_auto_configured():
         new_failures = check_models_are_auto_configured(module, all_auto_models)
         if new_failures is not None:
             failures += new_failures
-    if len(failures) > 0:
+    if failures:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
@@ -407,7 +403,7 @@ def check_all_decorator_order():
             filename = os.path.join(PATH_TO_TESTS, fname)
             new_errors = check_decorator_order(filename)
             errors += [f"- {filename}, line {i}" for i in new_errors]
-    if len(errors) > 0:
+    if errors:
         msg = "\n".join(errors)
         raise ValueError(
             f"The parameterized decorator (and its variants) should always be first, but this is not the case in the following files:\n{msg}"
@@ -540,7 +536,7 @@ def check_all_objects_are_documented():
     modules = transformers._modules
     objects = [c for c in dir(transformers) if c not in modules and not c.startswith("_")]
     undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
-    if len(undocumented_objs) > 0:
+    if undocumented_objs:
         raise Exception(
             "The following objects are in the public init so should be documented:\n - "
             + "\n - ".join(undocumented_objs)

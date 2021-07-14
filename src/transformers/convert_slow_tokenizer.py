@@ -45,10 +45,10 @@ class SentencePieceExtractor:
 
         # Merges
         merges = []
-        for piece_l in vocab.keys():
-            for piece_r in vocab.keys():
+        for piece_l in vocab:
+            for piece_r in vocab:
                 merge = f"{piece_l}{piece_r}"
-                piece_id = vocab.get(merge, None)
+                piece_id = vocab.get(merge)
                 if piece_id:
                     merges += [(piece_l, piece_r, piece_id)]
         merges = sorted(merges, key=lambda val: val[2])
@@ -478,8 +478,7 @@ class AlbertConverter(SpmConverter):
 
 class BarthezConverter(SpmConverter):
     def unk_id(self, proto):
-        unk_id = 3
-        return unk_id
+        return 3
 
     def post_processor(self):
         return processors.TemplateProcessing(
@@ -616,8 +615,7 @@ class XLMRobertaConverter(SpmConverter):
         return vocab
 
     def unk_id(self, proto):
-        unk_id = 3
-        return unk_id
+        return 3
 
     def post_processor(self):
         return processors.TemplateProcessing(

@@ -80,8 +80,7 @@ def _create_recorded_proxy_method(proxy, method_name, cache_name):
 
     def method(self, *args, **kwargs):
         cache = getattr(self.tracer.root, cache_name)
-        res = cache.pop(0)
-        return res
+        return cache.pop(0)
 
     method.__name__ = method_name
     bound_method = method.__get__(proxy, proxy.__class__)
@@ -99,8 +98,7 @@ def _wrap_method_for_model_tracing(model, method_name, cache_name):
     @functools.wraps(original_method)
     def method(*args, **kwargs):
         cache = getattr(model, cache_name)
-        res = cache.pop(0)
-        return res
+        return cache.pop(0)
 
     setattr(torch.Tensor, method_name, method)
 
@@ -113,8 +111,8 @@ def _monkey_patch_tensor_methods_for_model_recording(model, method_names):
     Helper function that patches torch.Tensor methods (specified by the method_names list) to record model inference
     before symbolic tracing.
     """
-    cache_names = dict()
-    original_methods = dict()
+    cache_names = {}
+    original_methods = {}
     for method_name in method_names:
         cache_name = f"cache_{method_name}"
         cache_names[method_name] = cache_name
@@ -182,7 +180,7 @@ class HFTracer(Tracer):
         """Generates dummy input for model inference recording."""
         model_class = model.__class__
         device = model.device
-        inputs_dict = dict()
+        inputs_dict = {}
 
         if input_name in ["labels", "start_positions", "end_positions"]:
             batch_size = self.encoder_shape[0]
@@ -228,7 +226,7 @@ class HFTracer(Tracer):
         if method_names is None:
             method_names = self.default_methods_to_record
 
-        inputs = dict()
+        inputs = {}
         for input_name in input_names:
             inputs.update(self._generate_dummy_input(model, input_name))
 
@@ -303,23 +301,17 @@ class HFTracer(Tracer):
             path = self.submodule_paths.get(mod)
             if path is None:
                 path = self._insert_module_as_submodule(mod)
-            if path is None:
-                raise NameError("module is not installed as a submodule")
-            self.prev_module = path
-            return path
-
-        # O(N^2) fallback in the case that we didn't store the submodule
-        # paths.
         else:
             for n, p in self.root.named_modules():
                 if mod is p:
                     self.prev_module = n
                     return n
             path = self._insert_module_as_submodule(mod)
-            if path is None:
-                raise NameError("module is not installed as a submodule")
-            self.prev_module = path
-            return path
+
+        if path is None:
+            raise NameError("module is not installed as a submodule")
+        self.prev_module = path
+        return path
 
     def create_arg(self, a: Any) -> Argument:
         if isinstance(a, range):
@@ -375,6 +367,4 @@ def symbolic_trace(
     tracer = HFTracer(batch_size=batch_size, sequence_length=sequence_length, num_choices=num_choices)
 
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
-    traced = torch.fx.GraphModule(model, traced_graph)
-
-    return traced
+    return torch.fx.GraphModule(model, traced_graph)

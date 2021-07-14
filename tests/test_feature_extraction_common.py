@@ -36,9 +36,9 @@ def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify
 
     assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
 
-    if equal_resolution:
-        image_inputs = []
-        for i in range(feature_extract_tester.batch_size):
+    image_inputs = []
+    for _ in range(feature_extract_tester.batch_size):
+        if equal_resolution:
             image_inputs.append(
                 np.random.randint(
                     255,
@@ -50,9 +50,7 @@ def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify
                     dtype=np.uint8,
                 )
             )
-    else:
-        image_inputs = []
-        for i in range(feature_extract_tester.batch_size):
+        else:
             width, height = np.random.choice(
                 np.arange(feature_extract_tester.min_resolution, feature_extract_tester.max_resolution), 2
             )

@@ -70,7 +70,7 @@ def camel_case_split(identifier):
 
 
 def _center_text(text, width):
-    text_length = 2 if text == "✅" or text == "❌" else len(text)
+    text_length = 2 if text in ["✅", "❌"] else len(text)
     left_indent = (width - text_length) // 2
     right_indent = width - text_length - left_indent
     return " " * left_indent + text + " " * right_indent
@@ -134,13 +134,18 @@ def get_model_table_from_auto_modules():
     columns = ["Model", "Tokenizer slow", "Tokenizer fast", "PyTorch support", "TensorFlow support", "Flax Support"]
     # We'll need widths to properly display everything in the center (+2 is to leave one extra space on each side).
     widths = [len(c) + 2 for c in columns]
-    widths[0] = max([len(name) for name in model_names]) + 2
+    widths[0] = max(len(name) for name in model_names) + 2
 
     # Rst table per se
     table = ".. rst-class:: center-aligned-table\n\n"
     table += "+" + "+".join(["-" * w for w in widths]) + "+\n"
-    table += "|" + "|".join([_center_text(c, w) for c, w in zip(columns, widths)]) + "|\n"
-    table += "+" + "+".join(["=" * w for w in widths]) + "+\n"
+    table += (
+        "|"
+        + "|".join(_center_text(c, w) for c, w in zip(columns, widths))
+        + "|\n"
+    )
+
+    table += "+" + "+".join("=" * w for w in widths) + "+\n"
 
     check = {True: "✅", False: "❌"}
     for name in model_names:
@@ -153,8 +158,13 @@ def get_model_table_from_auto_modules():
             check[tf_models[prefix]],
             check[flax_models[prefix]],
         ]
-        table += "|" + "|".join([_center_text(l, w) for l, w in zip(line, widths)]) + "|\n"
-        table += "+" + "+".join(["-" * w for w in widths]) + "+\n"
+        table += (
+            "|"
+            + "|".join(_center_text(l, w) for l, w in zip(line, widths))
+            + "|\n"
+        )
+
+        table += "+" + "+".join("-" * w for w in widths) + "+\n"
     return table
 
 

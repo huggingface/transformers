@@ -59,7 +59,9 @@ def split_code_in_indented_blocks(code, indent_level="", start_prompt=None, end_
     index += 1
     while index < len(lines) and (end_prompt is None or not lines[index].startswith(end_prompt)):
         if len(lines[index]) > 0 and get_indent(lines[index]) == indent_level:
-            if len(current_block) > 0 and get_indent(current_block[-1]).startswith(indent_level + " "):
+            if current_block and get_indent(current_block[-1]).startswith(
+                indent_level + " "
+            ):
                 current_block.append(lines[index])
                 blocks.append("\n".join(current_block))
                 if index < len(lines) - 1:
@@ -75,7 +77,7 @@ def split_code_in_indented_blocks(code, indent_level="", start_prompt=None, end_
         index += 1
 
     # Adds current block if it's nonempty.
-    if len(current_block) > 0:
+    if current_block:
         blocks.append("\n".join(current_block))
 
     # Add final block after end_prompt if provided.
@@ -126,7 +128,7 @@ def sort_objects_in_import(import_statement):
         # We will have a final empty element if the line finished with a comma.
         if len(keys[-1]) == 0:
             keys = keys[:-1]
-        return "[" + ", ".join([f'"{k}"' for k in sort_objects(keys)]) + "]"
+        return "[" + ", ".join(f'"{k}"' for k in sort_objects(keys)) + "]"
 
     lines = import_statement.split("\n")
     if len(lines) > 3:
@@ -216,10 +218,9 @@ def sort_imports(file, check_only=True):
     if code != "\n".join(main_blocks):
         if check_only:
             return True
-        else:
-            print(f"Overwriting {file}.")
-            with open(file, "w") as f:
-                f.write("\n".join(main_blocks))
+        print(f"Overwriting {file}.")
+        with open(file, "w") as f:
+            f.write("\n".join(main_blocks))
 
 
 def sort_imports_in_all_inits(check_only=True):
@@ -229,7 +230,7 @@ def sort_imports_in_all_inits(check_only=True):
             result = sort_imports(os.path.join(root, "__init__.py"), check_only=check_only)
             if result:
                 failures = [os.path.join(root, "__init__.py")]
-    if len(failures) > 0:
+    if failures:
         raise ValueError(f"Would overwrite {len(failures)} files, run `make style`.")
 
 

@@ -48,11 +48,12 @@ def serve_command_factory(args: Namespace):
     """
     nlp = pipeline(
         task=args.task,
-        model=args.model if args.model else None,
+        model=args.model or None,
         config=args.config,
         tokenizer=args.tokenizer,
         device=args.device,
     )
+
     return ServeCommand(nlp, args.host, args.port, args.workers)
 
 
@@ -135,41 +136,40 @@ class ServeCommand(BaseTransformersCLICommand):
                 'Please install transformers with [serving]: pip install "transformers[serving]".'
                 "Or install FastAPI and unicorn separately."
             )
-        else:
-            logger.info(f"Serving model over {host}:{port}")
-            self._app = FastAPI(
-                routes=[
-                    APIRoute(
-                        "/",
-                        self.model_info,
-                        response_model=ServeModelInfoResult,
-                        response_class=JSONResponse,
-                        methods=["GET"],
-                    ),
-                    APIRoute(
-                        "/tokenize",
-                        self.tokenize,
-                        response_model=ServeTokenizeResult,
-                        response_class=JSONResponse,
-                        methods=["POST"],
-                    ),
-                    APIRoute(
-                        "/detokenize",
-                        self.detokenize,
-                        response_model=ServeDeTokenizeResult,
-                        response_class=JSONResponse,
-                        methods=["POST"],
-                    ),
-                    APIRoute(
-                        "/forward",
-                        self.forward,
-                        response_model=ServeForwardResult,
-                        response_class=JSONResponse,
-                        methods=["POST"],
-                    ),
-                ],
-                timeout=600,
-            )
+        logger.info(f"Serving model over {host}:{port}")
+        self._app = FastAPI(
+            routes=[
+                APIRoute(
+                    "/",
+                    self.model_info,
+                    response_model=ServeModelInfoResult,
+                    response_class=JSONResponse,
+                    methods=["GET"],
+                ),
+                APIRoute(
+                    "/tokenize",
+                    self.tokenize,
+                    response_model=ServeTokenizeResult,
+                    response_class=JSONResponse,
+                    methods=["POST"],
+                ),
+                APIRoute(
+                    "/detokenize",
+                    self.detokenize,
+                    response_model=ServeDeTokenizeResult,
+                    response_class=JSONResponse,
+                    methods=["POST"],
+                ),
+                APIRoute(
+                    "/forward",
+                    self.forward,
+                    response_model=ServeForwardResult,
+                    response_class=JSONResponse,
+                    methods=["POST"],
+                ),
+            ],
+            timeout=600,
+        )
 
     def run(self):
         run(self._app, host=self.host, port=self.port, workers=self.workers)

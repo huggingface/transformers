@@ -132,8 +132,7 @@ def tabulate(rows: List[List[Union[str, int]]], headers: List[str]) -> str:
     """
     col_widths = [max(len(str(x)) for x in col) for col in zip(*rows, headers)]
     row_format = ("{{:{}}} " * len(headers)).format(*col_widths)
-    lines = []
-    lines.append(row_format.format(*headers))
+    lines = [row_format.format(*headers)]
     lines.append(row_format.format(*["-" * w for w in col_widths]))
     for row in rows:
         lines.append(row_format.format(*row))
@@ -298,7 +297,7 @@ class RepoCreateCommand(BaseUserCommand):
 
         if not self.args.yes:
             choice = input("Proceed? [Y/n] ").lower()
-            if not (choice == "" or choice == "y" or choice == "yes"):
+            if choice not in ["", "y", "yes"]:
                 print("Abort")
                 exit()
         try:
@@ -379,7 +378,7 @@ class UploadCommand(BaseUserCommand):
 
         if not self.args.yes:
             choice = input("Proceed? [Y/n] ").lower()
-            if not (choice == "" or choice == "y" or choice == "yes"):
+            if choice not in ["", "y", "yes"]:
                 print("Abort")
                 exit()
         print(ANSI.bold("Uploading... This might take a while if files are large"))

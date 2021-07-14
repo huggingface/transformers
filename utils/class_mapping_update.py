@@ -56,13 +56,11 @@ from transformers.models.auto.modeling_auto import (  # noqa
 
 # Those constants don't have a name attribute, so we need to define it manually
 mappings = {
-    "MODEL_FOR_QUESTION_ANSWERING_MAPPING": MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     "MODEL_FOR_CAUSAL_LM_MAPPING": MODEL_FOR_CAUSAL_LM_MAPPING,
     "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     "MODEL_FOR_MASKED_LM_MAPPING": MODEL_FOR_MASKED_LM_MAPPING,
     "MODEL_FOR_MULTIPLE_CHOICE_MAPPING": MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
     "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING": MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-    "MODEL_FOR_OBJECT_DETECTION_MAPPING": MODEL_FOR_OBJECT_DETECTION_MAPPING,
     "MODEL_FOR_OBJECT_DETECTION_MAPPING": MODEL_FOR_OBJECT_DETECTION_MAPPING,
     "MODEL_FOR_QUESTION_ANSWERING_MAPPING": MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING": MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -89,7 +87,11 @@ content = [
 ]
 
 for name, mapping in mappings.items():
-    entries = "\n".join([f'        ("{k.__name__}", "{get_name(v)}"),' for k, v in mapping.items()])
+    entries = "\n".join(
+        f'        ("{k.__name__}", "{get_name(v)}"),'
+        for k, v in mapping.items()
+    )
+
 
     content += [
         "",

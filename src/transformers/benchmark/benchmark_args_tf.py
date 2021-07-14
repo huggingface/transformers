@@ -96,18 +96,14 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
             tf.config.experimental_connect_to_cluster(self._setup_tpu)
             tf.tpu.experimental.initialize_tpu_system(self._setup_tpu)
 
-            strategy = tf.distribute.TPUStrategy(self._setup_tpu)
+            return tf.distribute.TPUStrategy(self._setup_tpu)
+        elif self.is_gpu:
+            # TODO: Currently only single GPU is supported
+            tf.config.set_visible_devices(self.gpu_list[self.device_idx], "GPU")
+            return tf.distribute.OneDeviceStrategy(device=f"/gpu:{self.device_idx}")
         else:
-            # currently no multi gpu is allowed
-            if self.is_gpu:
-                # TODO: Currently only single GPU is supported
-                tf.config.set_visible_devices(self.gpu_list[self.device_idx], "GPU")
-                strategy = tf.distribute.OneDeviceStrategy(device=f"/gpu:{self.device_idx}")
-            else:
-                tf.config.set_visible_devices([], "GPU")  # disable GPU
-                strategy = tf.distribute.OneDeviceStrategy(device=f"/cpu:{self.device_idx}")
-
-        return strategy
+            tf.config.set_visible_devices([], "GPU")  # disable GPU
+            return tf.distribute.OneDeviceStrategy(device=f"/cpu:{self.device_idx}")
 
     @property
     @tf_required

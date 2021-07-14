@@ -164,7 +164,10 @@ class LfsUploadCommand:
         # sends initiation data to the process over stdin.
         # This tells the process useful information about the configuration.
         init_msg = json.loads(sys.stdin.readline().strip())
-        if not (init_msg.get("event") == "init" and init_msg.get("operation") == "upload"):
+        if (
+            init_msg.get("event") != "init"
+            or init_msg.get("operation") != "upload"
+        ):
             write_msg({"error": {"code": 32, "message": "Wrong lfs init operation"}})
             sys.exit(1)
 

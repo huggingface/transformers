@@ -81,9 +81,9 @@ def parse_init(init_file):
     while not lines[line_index].startswith("if TYPE_CHECKING"):
         # If the line is an if is_backend_available, we grab all objects associated.
         backend = find_backend(lines[line_index])
-        if backend is not None:
-            line_index += 1
+        line_index += 1
 
+        if backend is not None:
             objects = []
             # Until we unindent, add backend objects to the list
             while len(lines[line_index]) <= 1 or lines[line_index].startswith(" " * 4):
@@ -107,9 +107,6 @@ def parse_init(init_file):
                 line_index += 1
 
             import_dict_objects[backend] = objects
-        else:
-            line_index += 1
-
     # At this stage we are in the TYPE_CHECKING part, first grab the objects without a specific backend
     objects = []
     while (
@@ -130,9 +127,9 @@ def parse_init(init_file):
     while line_index < len(lines):
         # If the line is an if is_backemd_available, we grab all objects associated.
         backend = find_backend(lines[line_index])
-        if backend is not None:
-            line_index += 1
+        line_index += 1
 
+        if backend is not None:
             objects = []
             # Until we unindent, add backend objects to the list
             while len(lines[line_index]) <= 1 or lines[line_index].startswith(" " * 8):
@@ -145,9 +142,6 @@ def parse_init(init_file):
                 line_index += 1
 
             type_hint_objects[backend] = objects
-        else:
-            line_index += 1
-
     return import_dict_objects, type_hint_objects
 
 
@@ -198,7 +192,7 @@ def check_all_inits():
                 if len(errors) > 0:
                     errors[0] = f"Problem in {fname}, both halves do not define the same objects.\n{errors[0]}"
                     failures.append("\n".join(errors))
-    if len(failures) > 0:
+    if failures:
         raise ValueError("\n\n".join(failures))
 
 
