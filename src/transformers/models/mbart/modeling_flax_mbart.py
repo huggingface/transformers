@@ -227,7 +227,7 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int) -> jnp.ndarray
     prev_output_tokens = np.where(prev_output_tokens == -100, pad_token_id, input_ids)
     index_of_eos = (np.where(prev_output_tokens != pad_token_id, 1, 0).sum(axis=-1) - 1).reshape(-1, 1)
     decoder_start_tokens = np.array(
-        [prev_output_tokens[i, eos_idx] for i, eos_idx in enumerate(index_of_eos)]
+        [prev_output_tokens[i, eos_idx] for i, eos_idx in enumerate(index_of_eos)], dtype=np.int32
     ).squeeze()
 
     prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].copy()
