@@ -41,7 +41,7 @@ online demos: 線上Demo
 pipeline: pipeline（不翻譯）
 pretrained/pretrain: 預訓練
 Python data structures (e.g., list, set, dict): 翻譯為列表，集合，辭典，並用括號標註原英文
-repository: 不翻譯
+repository: repository（不翻譯）
 token-: token-（不翻譯）
 Trainer: Trainer（不翻譯）
 transformer: transformer（不翻譯）
@@ -178,7 +178,7 @@ Tokenizer 為所有的預訓練模型提供了預處理，並可以直接轉換�
 1. 便於使用的先進模型：
     - NLU 和 NLG 上性能卓越
     - 對教學和實作友好且低門檻
-    - 高度抽象，使用者只須學習３個類別
+    - 高度抽象，使用者只須學習 3 個類別
     - 對所有模型統一的API
 
 1. 更低的運算成本，更少的碳排放：
@@ -212,7 +212,7 @@ Tokenizer 為所有的預訓練模型提供了預處理，並可以直接轉換�
 
 首先，用你打算使用的版本的 Python 創建一個虛擬環境並進入。
 
-然後，你需要安裝 Flax、PyTorch 或 TensorFlow 其中之一。對於在你使用的平台上安裝這些框架，請參閱 [TensorFlow 安裝頁面](https://www.tensorflow.org/install/), [PyTorch 安裝頁面](https://pytorch.org/get-started/locally/#start-locally) 或 [Flax 安裝頁面](https://github.com/google/flax#quick-install)。
+然後，你需要安裝 Flax、PyTorch 或 TensorFlow 其中之一。對於該如何在你使用的平台上安裝這些框架，請參閱 [TensorFlow 安裝頁面](https://www.tensorflow.org/install/), [PyTorch 安裝頁面](https://pytorch.org/get-started/locally/#start-locally) 或 [Flax 安裝頁面](https://github.com/google/flax#quick-install)。
 
 當其中一個後端安裝成功後，🤗 Transformers 可依此安裝：
 
@@ -220,7 +220,7 @@ Tokenizer 為所有的預訓練模型提供了預處理，並可以直接轉換�
 pip install transformers
 ```
 
-如果你想要試試範例或者想在正式發布前使用最新開發中的程式碼，你必須 [從原始碼安裝](https://huggingface.co/transformers/installation.html#installing-from-source)。
+如果你想要試試範例或者想在正式發布前使用最新開發中的程式碼，你必須[從原始碼安裝](https://huggingface.co/transformers/installation.html#installing-from-source)。
 
 ### 使用 conda
 
