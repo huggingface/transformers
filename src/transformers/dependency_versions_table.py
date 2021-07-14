@@ -17,6 +17,7 @@ deps = {
     "flake8": "flake8>=3.8.3",
     "flax": "flax>=0.3.4",
     "fugashi": "fugashi>=1.0",
+    "GitPython": "GitPython",
     "huggingface-hub": "huggingface-hub==0.0.12",
     "importlib_metadata": "importlib_metadata",
     "ipadic": "ipadic>=1.0.0,<2.0",
