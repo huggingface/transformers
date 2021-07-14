@@ -1,5 +1,5 @@
 <!---
-Copyright 2020 The HuggingFace Team. All rights reserved.
+Copyright 2021 The HuggingFace Team. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -15,29 +15,30 @@ limitations under the License.
 
 # Examples
 
-This folder contains actively maintained examples of use of 🤗 Transformers using the TensorFlow backend, organized along NLP tasks. It is under construction so we thank you for your patience!
+This folder contains actively maintained examples of use of 🤗 Transformers organized into different NLP tasks. All examples in this folder are **TensorFlow** examples, and are written using native Keras rather than classes like `TFTrainer`, which we now consider deprecated. If you've previously only used 🤗 Transformers via `TFTrainer`, we highly recommend taking a look at the new style - we think it's a big improvement!
 
-Files containing `tf` such as `run_tf_glue.py` are the old-style files that will be rewritten very soon! Files without this such as `run_text_classification.py` are the newer ones. This message will be removed when the revamp is complete.
+In addition, all scripts here now support the [🤗 Datasets](https://github.com/huggingface/datasets) library - you can grab entire datasets just by changing one command-line argument!
+
+## A note on code folding
+
+Most of these examples have been formatted with #region blocks. In IDEs such as PyCharm and VSCode, these blocks mark
+named regions of code that can be folded for easier viewing. If you find any of these scripts overwhelming or difficult
+to follow, we highly recommend beginning with all regions folded and then examining regions one at a time!
 
 ## The Big Table of Tasks
 
 Here is the list of all our examples:
-- with information on whether they are **built on top of `Keras`** (if not, they still work, they might
-  just lack some features),
-- whether or not they leverage the [🤗 Datasets](https://github.com/huggingface/datasets) library.
-- links to **Colab notebooks** to walk through the scripts and run them easily,
-<!--
-Coming soon!
-- links to **Cloud deployments** to be able to deploy large-scale trainings in the Cloud with little to no setup.
--->
 
-| Task | Example datasets | Keras support | 🤗 Datasets | Colab
-|---|---|:---:|:---:|:---:|
-| **`language-modeling`** | WikiText-2 | - | - | -
-| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/multiple-choice) | SWAG | - | - | -
-| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/question-answering) | SQuAD | - | - | -
-| **`summarization`** | XSum | - | -  | -
-| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/text-classification) | GLUE | - | - | -
-| **`text-generation`** | n/a | - | n/a | -
-| **`token-classification`** | CoNLL NER | - | - | - 
-| **`translation`** | WMT | -  | - | -
+| Task | Example datasets |
+|---|---|
+| [**`language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/language-modeling) | WikiText-2
+| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/multiple-choice) | SWAG 
+| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/question-answering) | SQuAD
+| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/summarization) | XSum 
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/text-classification) | GLUE
+| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/token-classification) | CoNLL NER
+| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/tensorflow/translation) | WMT
+
+## Coming soon
+
+- **Colab notebooks** to easily run through these scripts! 
