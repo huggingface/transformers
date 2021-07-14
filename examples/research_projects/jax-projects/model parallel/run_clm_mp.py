@@ -24,7 +24,6 @@ https://huggingface.co/models?filter=causal-lm
 import logging
 import math
 import os
-import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -40,13 +39,8 @@ import jax
 import jax.numpy as jnp
 import optax
 import transformers
-from flax import jax_utils, traverse_util
 from flax.core.frozen_dict import freeze, unfreeze
-from flax.jax_utils import unreplicate
-from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key, stack_forest
-from flax.traverse_util import flatten_dict, unflatten_dict
-from jax.experimental import PartitionSpec as P
+from flax.training.common_utils import get_metrics, onehot, stack_forest
 from jax.experimental.maps import mesh
 from jax.experimental.pjit import pjit
 from partitions import set_partitions
@@ -193,14 +187,13 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
     for idx in batch_idx:
         batch = dataset[idx]
         batch = {k: jnp.array(v) for k, v in batch.items()}
-        #         batch = shard(batch)
         yield batch
 
 
 def write_train_metric(summary_writer, train_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
-    train_metrics = get_metrics(train_metrics)
+    train_metrics = stack_forest(train_metrics)
     for key, vals in train_metrics.items():
         tag = f"train_{key}"
         for i, val in enumerate(vals):
@@ -417,6 +410,24 @@ def main():
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
 
+    # Enable tensorboard only on the master node
+    has_tensorboard = is_tensorboard_available()
+    if has_tensorboard and jax.process_index() == 0:
+        try:
+            from flax.metrics.tensorboard import SummaryWriter
+
+            summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
+        except ImportError as ie:
+            has_tensorboard = False
+            logger.warning(
+                f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+            )
+    else:
+        logger.warning(
+            "Unable to display metrics through TensorBoard because the package is not installed: "
+            "Please run pip install tensorboard to enable."
+        )
+
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
     rng, dropout_rng = jax.random.split(rng)
@@ -499,6 +510,7 @@ def main():
         return loss.mean()
 
     # Define gradient update step fn
+    # TODO: try to use TrainState instead of passing params and opt_state individually
     def train_step(params, opt_state, input_ids, labels, dropout_rng, step):
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
 
@@ -513,8 +525,8 @@ def main():
         updates, new_opt_state = optimizer.update(grads, opt_state, params)
         new_params = optax.apply_updates(params, updates)
 
-        linear_decay_lr_schedule_fn(step + 1)
-        return new_params, tuple(new_opt_state), loss, new_dropout_rng, step + 1
+        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(step)}
+        return new_params, tuple(new_opt_state), metrics, new_dropout_rng, step + 1
 
     # Define eval fn
     def eval_step(input_ids, labels, params):
@@ -543,12 +555,14 @@ def main():
     logger.info(f"  Total train batch size (w. parallel & distributed) = {train_batch_size}")
     logger.info(f"  Total optimization steps = {total_train_steps}")
 
+    train_time = 0
     train_metrics = []
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
-    step = 0
+    global_step = 0
     with mesh(mesh_devices, ("dp", "mp")):
-        for epoch in epochs:
+        for _ in epochs:
             # ======================== Training ================================
+            train_start = time.time()
 
             # Create sampling rng
             rng, input_rng = jax.random.split(rng)
@@ -561,38 +575,64 @@ def main():
             # train
             for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
                 batch = next(train_loader)
-                params, opt_state, loss, dropout_rng, step = p_train_step(
+                params, opt_state, train_metric, dropout_rng, global_step = p_train_step(
                     params,
                     opt_state,
                     batch["input_ids"],
                     batch["labels"],
                     dropout_rng,
-                    step,
+                    global_step,
                 )
-                train_metrics.append(loss)
+                train_metrics.append(train_metric)
 
-            # ======================== Evaluating ==============================
-            eval_metrics = []
-            eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
-            eval_steps = len(eval_dataset) // eval_batch_size
+                cur_step = global_step
 
-            for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
-                batch = next(eval_loader)
-                metrics = p_eval_step(batch["input_ids"], batch["labels"], params)
-                eval_metrics.append(metrics)
+                if cur_step % training_args.logging_steps == 0 and cur_step > 0:
+                    # Save metrics
+                    train_time += time.time() - train_start
+                    if has_tensorboard and jax.process_index() == 0:
+                        write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
-            # normalize eval metrics
-            eval_metrics = stack_forest(eval_metrics)
-            eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+                    epochs.write(
+                        f"Step... ({cur_step} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+                    )
 
-            try:
-                eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
-            except OverflowError:
-                eval_metrics["perplexity"] = float("inf")
+                    train_metrics = []
 
-            logger.info(
-                f"Epoch: {epoch} | Eval loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']}"
-            )
+                if cur_step % training_args.eval_steps == 0 and cur_step > 0:
+                    # ======================== Evaluating ==============================
+                    eval_metrics = []
+                    eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
+                    eval_steps = len(eval_dataset) // eval_batch_size
+
+                    for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
+                        batch = next(eval_loader)
+                        metrics = p_eval_step(batch["input_ids"], batch["labels"], params)
+                        eval_metrics.append(metrics)
+
+                    # normalize eval metrics
+                    eval_metrics = stack_forest(eval_metrics)
+                    eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+
+                    try:
+                        eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
+                    except OverflowError:
+                        eval_metrics["perplexity"] = float("inf")
+
+                    logger.info(
+                        f"Step... ({cur_step} | Eval loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']}"
+                    )
+
+                if cur_step % training_args.save_steps == 0 and cur_step > 0:
+                    # save checkpoint after each epoch and push checkpoint to the hub
+                    if jax.process_index() == 0:
+                        params = jax.device_get(params)
+                        model.save_pretrained(
+                            training_args.output_dir,
+                            params=params,
+                            push_to_hub=training_args.push_to_hub,
+                            commit_message=f"Saving weights and logs of step {cur_step}",
+                        )
 
 
 if __name__ == "__main__":
