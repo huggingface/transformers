@@ -206,7 +206,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "configuration_utils.py": "test_configuration_common.py",
     "convert_graph_to_onnx.py": "test_onnx.py",
     "data/data_collator.py": "test_data_collator.py",
-    "deepspeed.py": "deepspeed/test_deepspeed.py",
+    "deepspeed.py": "deepspeed/",
     "feature_extraction_sequence_utils.py": "test_sequence_feature_extraction_common.py",
     "feature_extraction_utils.py": "test_feature_extraction_common.py",
     "file_utils.py": ["test_file_utils.py", "test_model_output.py"],
@@ -330,11 +330,24 @@ def sanity_check():
             else:
                 test_files_found.extend(test_f)
 
+    # Some of the test files might actually be subfolders so we grab the tests inside.
+    test_files = []
+    for test_f in test_files_found:
+        if os.path.isdir(os.path.join(PATH_TO_TRANFORMERS, test_f)):
+            test_files.extend(
+                [
+                    str(p.relative_to(PATH_TO_TRANFORMERS))
+                    for p in (Path(PATH_TO_TRANFORMERS) / test_f).glob("**/test*.py")
+                ]
+            )
+        else:
+            test_files.append(test_f)
+
     # Compare to existing test files
     existing_test_files = [
         str(p.relative_to(PATH_TO_TRANFORMERS)) for p in (Path(PATH_TO_TRANFORMERS) / "tests").glob("**/test*.py")
     ]
-    not_touched_test_files = [f for f in existing_test_files if f not in test_files_found]
+    not_touched_test_files = [f for f in existing_test_files if f not in test_files]
 
     should_be_tested = set(not_touched_test_files) - set(EXPECTED_TEST_FILES_NEVER_TOUCHED)
     if len(should_be_tested) > 0:
