@@ -14,6 +14,7 @@ env:
   RUN_SLOW: yes
   OMP_NUM_THREADS: 16
   MKL_NUM_THREADS: 16
+  PYTEST_TIMEOUT: 300
 
 jobs:
   run_all_tests_torch_gpu:
@@ -44,7 +45,7 @@ jobs:
 
       - name: Run all tests on GPU
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -60,7 +61,7 @@ jobs:
           TRANSFORMERS_IS_CI: yes
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
-          python -m pytest -n 1 --dist=loadfile --make-reports=examples_torch_gpu examples
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=examples_torch_gpu examples
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -71,7 +72,7 @@ jobs:
         env:
           RUN_PIPELINE_TESTS: yes
         run: |
-          python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -112,7 +113,7 @@ jobs:
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_tf_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -125,7 +126,7 @@ jobs:
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
         run: |
-          python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -168,7 +169,7 @@ jobs:
         env:
           MKL_SERVICE_FORCE_INTEL: 1
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -179,7 +180,7 @@ jobs:
         env:
           RUN_PIPELINE_TESTS: yes
         run: |
-          python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -220,7 +221,7 @@ jobs:
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_multi_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_tf_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -233,7 +234,7 @@ jobs:
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
         run: |
-          python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -274,7 +275,7 @@ jobs:
 
       - name: Run all tests on GPU
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -315,7 +316,7 @@ jobs:
 
       - name: Run all tests on GPU
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ always() }}

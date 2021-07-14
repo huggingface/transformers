@@ -18,6 +18,7 @@ env:
   TRANSFORMERS_IS_CI: yes
   OMP_NUM_THREADS: 8
   MKL_NUM_THREADS: 8
+  PYTEST_TIMEOUT: 60
 
 jobs:
   run_tests_torch_gpu:
@@ -48,7 +49,7 @@ jobs:
 
       - name: Run all non-slow tests on GPU
         run: |
-          python -m pytest -n 2 --dist=loadfile --make-reports=tests_torch_gpu tests
+          python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -134,7 +135,7 @@ jobs:
         env:
           MKL_SERVICE_FORCE_INTEL: 1
         run: |
-          python -m pytest -n 2 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
+          python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -217,7 +218,7 @@ jobs:
 
       - name: Run all tests on GPU
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+          python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -258,7 +259,7 @@ jobs:
 
       - name: Run all tests on GPU
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended
+          python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ always() }}
