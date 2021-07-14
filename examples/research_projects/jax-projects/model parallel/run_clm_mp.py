@@ -227,8 +227,14 @@ def create_learning_rate_fn(
 
 
 def main():
+    # See all possible arguments in src/transformers/training_args.py
+    # or by passing the --help flag to this script.
+    # We now keep distinct sets of args, for a cleaner separation of concerns.
+
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+        # If we pass only one argument to the script and it's the path to a json file,
+        # let's parse it to get our arguments.
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
@@ -244,11 +250,13 @@ def main():
             "Use --overwrite_output_dir to overcome."
         )
 
+    # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
+    # Setup logging, we only want one process per machine to log things on the screen.
     logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
     if jax.process_index() == 0:
         datasets.utils.logging.set_verbosity_warning()
@@ -257,9 +265,17 @@ def main():
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
 
+    # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info(f"Training/evaluation parameters {training_args}")
 
+    # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
+    # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
+    # (the dataset will be downloaded automatically from the datasets Hub).
+    #
+    # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
+    # 'text' is found. You can easily tweak this behavior (see below).
     if data_args.dataset_name is not None:
+        # Downloading and loading a dataset from the hub.
         dataset = load_dataset(
             data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir, keep_in_memory=False
         )
@@ -277,14 +293,41 @@ def main():
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
             )
+    else:
+        data_files = {}
+        if data_args.train_file is not None:
+            data_files["train"] = data_args.train_file
+        if data_args.validation_file is not None:
+            data_files["validation"] = data_args.validation_file
+        extension = data_args.train_file.split(".")[-1]
+        if extension == "txt":
+            extension = "text"
+        dataset = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+    # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
+    # https://huggingface.co/docs/datasets/loading_datasets.html.
 
-    config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, vocab_size=50264, cache_dir=model_args.cache_dir
-    )
+    # Load pretrained config and tokenizer
+    if model_args.config_name:
+        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
+    elif model_args.model_name_or_path:
+        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+    else:
+        config = CONFIG_MAPPING[model_args.model_type]()
+        logger.warning("You are instantiating a new config instance from scratch.")
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
-    )
+    if model_args.tokenizer_name:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+        )
+    elif model_args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+        )
+    else:
+        raise ValueError(
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You can do it from another script, save it, and load it from here, using --tokenizer_name."
+        )
 
     if training_args.do_train:
         column_names = dataset["train"].column_names
@@ -292,6 +335,7 @@ def main():
         column_names = dataset["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
+    # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
     tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
 
     def tokenize_function(examples):
@@ -328,16 +372,29 @@ def main():
             )
         block_size = min(data_args.block_size, tokenizer.model_max_length)
 
+    # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
+        # Concatenate all texts.
         concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
         total_length = len(concatenated_examples[list(examples.keys())[0]])
-        total_length = (total_length // block_size) * block_size
+        # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
+        # customize this part to your needs.
+        if total_length >= block_size:
+            total_length = (total_length // block_size) * block_size
+        # Split by chunks of max_len.
         result = {
             k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
             for k, t in concatenated_examples.items()
         }
         result["labels"] = result["input_ids"].copy()
         return result
+
+    # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
+    # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
+    # to preprocess.
+    #
+    # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
+    # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
     lm_datasets = tokenized_datasets.map(
         group_texts,
@@ -374,7 +431,9 @@ def main():
     # TODO: weights should be initialized in pjitted fun, this won't work for REALLY large models
     # TODO: when loading from pre-trained model we need to make sure the vocab is divisible by num_partitions
     # GPT2's vocab is odd, we need to resize it for fine-tuning
-    model = FlaxAutoModelForCausalLM.from_config(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+    model = FlaxAutoModelForCausalLM.from_pretrained(
+        model_args.model_name_or_path, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+    )
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
@@ -386,7 +445,7 @@ def main():
     )
 
     optimizer = optax.adamw(
-        learning_rate=4e-3,
+        learning_rate=linear_decay_lr_schedule_fn,
         b1=training_args.adam_beta1,
         b2=training_args.adam_beta2,
         eps=training_args.adam_epsilon,
@@ -395,10 +454,10 @@ def main():
 
     def get_initial_state(params):
         state = optimizer.init(params)
-        return state[0], params
+        return tuple(state), params
 
+    # Get PartitionSpec for model params
     param_spec = set_partitions(unfreeze(model.params))
-    mesh_devices = np.array(jax.devices()).reshape(1, 8)
 
     # Get the PyTree for opt_state, we don't actually initialize the opt_state yet.
     params_shapes = jax.tree_map(lambda x: x.shape, model.params)
@@ -412,13 +471,24 @@ def main():
             return param_spec
         return None
 
-    opt_state_spec, param_spec = jax.tree_map(get_opt_spec, state_shapes, is_leaf=lambda x: isinstance(x, dict))
+    opt_state_spec, param_spec = jax.tree_map(
+        get_opt_spec, state_shapes, is_leaf=lambda x: isinstance(x, (dict, optax.EmptyState))
+    )
 
+    # pjit the get_initial_state function to shard params and init
+    # optimizer state in sharded way
     p_get_initial_state = pjit(
-        get_initial_state, in_axis_resources=None, out_axis_resources=(opt_state_spec, param_spec)
+        get_initial_state,
+        in_axis_resources=None,
+        out_axis_resources=(opt_state_spec, param_spec),
     )
 
     # actually initialize the opt_state
+    # hack: move the inital params to CPU to free up device memory
+    # TODO: allow loading weights on CPU in pre-trained model
+    model.params = jax.tree_map(lambda x: np.asarray(x), model.params)
+    # mesh defination
+    mesh_devices = np.array(jax.devices()).reshape(1, jax.local_device_count())
     with mesh(mesh_devices, ("dp", "mp")):
         opt_state, params = p_get_initial_state(freeze(model.params))
 
@@ -429,7 +499,7 @@ def main():
         return loss.mean()
 
     # Define gradient update step fn
-    def train_step(input_ids, labels, dropout_rng, params, opt_state, step):
+    def train_step(params, opt_state, input_ids, labels, dropout_rng, step):
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
 
         def compute_loss(params):
@@ -440,15 +510,14 @@ def main():
         grad_fn = jax.value_and_grad(compute_loss)
         loss, grads = grad_fn(params)
 
-        updates, new_opt_state = optimizer.update(grads, (opt_state, optax.EmptyState(), optax.EmptyState()), params)
+        updates, new_opt_state = optimizer.update(grads, opt_state, params)
         new_params = optax.apply_updates(params, updates)
 
         linear_decay_lr_schedule_fn(step + 1)
-        return new_params, new_opt_state[0], loss, new_dropout_rng, step + 1
+        return new_params, tuple(new_opt_state), loss, new_dropout_rng, step + 1
 
     # Define eval fn
     def eval_step(input_ids, labels, params):
-        labels = batch.pop("labels")
         logits = model(input_ids=input_ids, params=params, train=False)[0]
         loss = loss_fn(logits, labels)
         # metrics
@@ -456,8 +525,9 @@ def main():
 
     p_train_step = pjit(
         train_step,
-        in_axis_resources=(None, None, None, param_spec, opt_state_spec, None),
+        in_axis_resources=(param_spec, opt_state_spec, None, None, None, None),
         out_axis_resources=(param_spec, opt_state_spec, None, None, None),
+        donate_argnums=(0, 1),
     )
 
     p_eval_step = pjit(
@@ -492,11 +562,11 @@ def main():
             for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
                 batch = next(train_loader)
                 params, opt_state, loss, dropout_rng, step = p_train_step(
+                    params,
+                    opt_state,
                     batch["input_ids"],
                     batch["labels"],
                     dropout_rng,
-                    params,
-                    opt_state,
                     step,
                 )
                 train_metrics.append(loss)

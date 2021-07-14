@@ -42,12 +42,12 @@ def _get_partition_rules():
         # atention
         (("attention", "(q_proj|k_proj|v_proj)", "kernel"), P(None, "mp")),
         (("attention", "out_proj", "kernel"), P("mp", None)),
-        (("attention", "out_proj", "bias"), P("mp")),
+        (("attention", "out_proj", "bias"), None),
         # mlp
         (("mlp", "c_fc", "kernel"), P(None, "mp")),
         (("mlp", "c_fc", "bias"), P("mp")),
         (("mlp", "c_proj", "kernel"), P("mp", None)),
-        (("mlp", "c_proj", "bias"), P("mp")),
+        (("mlp", "c_proj", "bias"), None),
         # layer norms
         ((r"ln_\d+", "bias"), None),
         ((r"\d+", r"ln_\d+", "scale"), None),
