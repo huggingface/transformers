@@ -315,9 +315,11 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     #
     # Unless Offload is enabled in which case it's:
     # 1. DS scheduler + DS optimizer: Yes
-    # 2. HF scheduler + HF optimizer: No
-    # 3. DS scheduler + HF optimizer: No
+    # 2. HF scheduler + HF optimizer: Mostly*
+    # 3. DS scheduler + HF optimizer: Mostly*
     # 4. HF scheduler + DS optimizer: No
+    #
+    # Mostly*: All non-native DeepSpeed optimizers that have both CPU and GPU implementation should work (except LAMB)
 
     optimizer = None
     if "optimizer" in config:
@@ -328,7 +330,9 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
             )
     else:
         if hf_deepspeed_config.is_offload():
-            raise ValueError("ZeRO Offload can only work with DeepSpeed optimizers")
+            logger.info(
+                "Detected ZeRO Offload and non-DeepSpeed optimizers: This combination should work as long as the custom optimizer has both CPU and GPU implementation (except LAMB)"
+            )
 
         # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
         # But trainer uses AdamW by default.

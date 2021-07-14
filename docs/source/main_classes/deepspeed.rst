@@ -1061,7 +1061,8 @@ optimizers, with the exception of using the combination of HuggingFace scheduler
 | DS Optimizer | No           | Yes          |
 +--------------+--------------+--------------+
 
-If ``offload_optimizer`` is enabled you must use both DeepSpeed scheduler and DeepSpeed optimizer.
+It is possible to use a non-DeepSpeed optimizer when ``offload_optimizer`` is enabled, as long as it has both CPU and
+GPU implementation (except LAMB).
 
 
 
