@@ -501,6 +501,7 @@ def main():
     with mesh(mesh_devices, ("dp", "mp")):
         opt_state, params = p_get_initial_state(freeze(model.params))
 
+    # cross-entropy with z loss
     def loss_fn(logits, labels, z_loss=0):
         shift_logits = logits[..., :-1, :]
         shift_labels = labels[..., 1:]
