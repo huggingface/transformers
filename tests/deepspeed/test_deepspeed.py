@@ -325,20 +325,16 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
     @parameterized.expand(stages)
     def test_hf_optimizer_with_offload(self, stage):
-        # must not allow non-DS optimizer when using ZERO-offload
+        # non-DS optimizers can be used with ZERO-offload (as long as they have both CPU and GPU implementation (except LAMB))
         ds_config_dict = self.get_config_dict(stage)
         del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
         # force cpu offload
         ds_config_dict["zero_optimization"]["offload_optimizer"]["device"] = "cpu"
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_dict)
-            with self.assertRaises(Exception) as context:
+            with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
-            self.assertIn(
-                "ZeRO Offload can only work with DeepSpeed optimizers",
-                str(context.exception),
-                f"got exception: {context.exception}",
-            )
+            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
     @parameterized.expand(stages)
     def test_fake_notebook_no_launcher(self, stage):
