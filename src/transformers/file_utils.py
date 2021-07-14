@@ -1671,6 +1671,10 @@ def get_list_of_files(
             list_of_files.extend([os.path.join(path, f) for f in file_names])
         return list_of_files
 
+    # Can't grab the files if we are on offline mode.
+    if is_offline_mode():
+        return []
+
     # Otherwise we grab the token and use the model_info method.
     if isinstance(use_auth_token, str):
         token = use_auth_token
