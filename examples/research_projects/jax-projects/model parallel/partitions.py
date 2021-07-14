@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 # coding=utf-8
 # Copyright 2021 The Google Research Authors and The HuggingFace Team All rights reserved.
@@ -20,7 +19,7 @@
 
 import re
 
-from flax.core.frozen_dict import freeze, unfreeze
+from flax.core.frozen_dict import freeze
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.experimental import PartitionSpec as P
 
@@ -53,6 +52,7 @@ def _replacement_rules(rules):
     return replace
 
 
+# PartitionSpec for GPTNeo
 def _get_partition_rules():
     return [
         # embeddings

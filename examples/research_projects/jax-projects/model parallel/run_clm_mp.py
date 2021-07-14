@@ -14,12 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Pre-training/Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
-
-Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=causal-lm
+Pre-training/Fine-tuning the GPTNeo model for causal language modeling on a text file or a dataset using model parallelism.
 """
-# You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 
 import logging
 import math
@@ -40,7 +36,7 @@ import jax.numpy as jnp
 import optax
 import transformers
 from flax.core.frozen_dict import freeze, unfreeze
-from flax.training.common_utils import get_metrics, onehot, stack_forest
+from flax.training.common_utils import onehot, stack_forest
 from jax.experimental.maps import mesh
 from jax.experimental.pjit import pjit
 from partitions import set_partitions
@@ -511,11 +507,12 @@ def main():
 
     # Define gradient update step fn
     # TODO: try to use TrainState instead of passing params and opt_state individually
-    def train_step(params, opt_state, input_ids, labels, dropout_rng, step):
+    def train_step(params, opt_state, dropout_rng, batch, step):
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
 
         def compute_loss(params):
-            logits = model(input_ids, params=params, dropout_rng=dropout_rng, train=True)[0]
+            labels = batch.pop("labels")
+            logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
             loss = loss_fn(logits, labels)
             return loss
 
@@ -526,7 +523,7 @@ def main():
         new_params = optax.apply_updates(params, updates)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(step)}
-        return new_params, tuple(new_opt_state), metrics, new_dropout_rng, step + 1
+        return new_params, tuple(new_opt_state), new_dropout_rng, metrics, step + 1
 
     # Define eval fn
     def eval_step(input_ids, labels, params):
@@ -537,7 +534,7 @@ def main():
 
     p_train_step = pjit(
         train_step,
-        in_axis_resources=(param_spec, opt_state_spec, None, None, None, None),
+        in_axis_resources=(param_spec, opt_state_spec, None, None, None),
         out_axis_resources=(param_spec, opt_state_spec, None, None, None),
         donate_argnums=(0, 1),
     )
@@ -559,6 +556,7 @@ def main():
     train_metrics = []
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     global_step = 0
+    # we are not doing 2D parallelism (yet!), this just does model parallelism
     with mesh(mesh_devices, ("dp", "mp")):
         for _ in epochs:
             # ======================== Training ================================
@@ -575,12 +573,11 @@ def main():
             # train
             for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
                 batch = next(train_loader)
-                params, opt_state, train_metric, dropout_rng, global_step = p_train_step(
+                params, opt_state, dropout_rng, train_metric, global_step = p_train_step(
                     params,
                     opt_state,
-                    batch["input_ids"],
-                    batch["labels"],
                     dropout_rng,
+                    batch,
                     global_step,
                 )
                 train_metrics.append(train_metric)
