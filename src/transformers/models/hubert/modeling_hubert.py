@@ -811,6 +811,7 @@ class HubertModel(HubertPreTrainedModel):
 
         self.init_weights()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self, hidden_states: torch.FloatTensor, mask_time_indices: Optional[torch.FloatTensor] = None
     ):
@@ -823,13 +824,13 @@ class HubertModel(HubertPreTrainedModel):
         if not getattr(self.config, "apply_spec_augment", True):
             return hidden_states
 
+        # generate indices & apply SpecAugment along time axis
+        batch_size, sequence_length, hidden_size = hidden_states.size()
+
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
         elif self.config.mask_time_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along time axis
-            batch_size, sequence_length, hidden_size = hidden_states.size()
-
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
                 mask_prob=self.config.mask_time_prob,
