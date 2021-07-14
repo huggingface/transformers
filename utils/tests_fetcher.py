@@ -171,14 +171,16 @@ def get_module_dependencies(module_fname):
 
 def create_reverse_dependency_map():
     """
-    Create the dependency map from module filename to the list of modules that depend on it.
+    Create the dependency map from module filename to the list of modules that depend on it (even recursively).
     """
     modules = [
         str(f.relative_to(PATH_TO_TRANFORMERS))
         for f in (Path(PATH_TO_TRANFORMERS) / "src/transformers").glob("**/*.py")
     ]
+    # We grab all the dependencies of each module.
     direct_deps = {m: get_module_dependencies(m) for m in modules}
 
+    # This recurses the dependencies
     something_changed = True
     while something_changed:
         something_changed = False
@@ -189,6 +191,7 @@ def create_reverse_dependency_map():
                         direct_deps[m].append(dep)
                         something_changed = True
 
+    # Finally we can build the reverse map.
     reverse_map = collections.defaultdict(list)
     for m in modules:
         for d in direct_deps[m]:
@@ -395,6 +398,9 @@ if __name__ == "__main__":
         sanity_check()
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
+        # For now we run all tests on the master branch. After testing this more and making sure it works most of the
+        # time, we will apply the same logic to the tests on the master branch and only run the whole suite once per
+        # day.
         if not repo.head.is_detached and repo.head.ref == repo.refs.master:
             print("Master branch detected, running all tests.")
             with open(args.output_file, "w", encoding="utf-8") as f:

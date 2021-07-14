@@ -994,7 +994,7 @@ class Trainer:
         **kwargs,
     ):
         """
-        Main training entry point. Lalalala.
+        Main training entry point.
 
         Args:
             resume_from_checkpoint (:obj:`str` or :obj:`bool`, `optional`):
