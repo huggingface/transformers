@@ -124,13 +124,15 @@ def get_module_dependencies(module_fname):
     """
     Get the dependencies of a module.
     """
-    with open(module_fname, "r", encoding="utf-8") as f:
+    with open(os.path.join(PATH_TO_TRANFORMERS, module_fname), "r", encoding="utf-8") as f:
         content = f.read()
 
-    imports = re.findall(r"from\s+(\.+\S+)\s+import\s+\S+\s", content)
     module_parts = module_fname.split(os.path.sep)
-    dependencies = []
-    for imp in imports:
+    imported_modules = []
+
+    # Let's start with relative imports
+    relative_imports = re.findall(r"from\s+(\.+\S+)\s+import\s+\S+\s", content)
+    for imp in relative_imports:
         level = 0
         while imp.startswith("."):
             imp = imp[1:]
@@ -141,11 +143,28 @@ def get_module_dependencies(module_fname):
         else:
             dep_parts = module_parts[: len(module_parts) - level] + ["__init__.py"]
         imported_module = os.path.sep.join(dep_parts)
-        if imported_module.endswith("transformers/__init__.py"):
-            continue
-        if os.path.isfile(f"{imported_module}.py"):
+        # We ignore the main init import as it's only for the __version__ that it's done
+        # and it would add everything as a dependency.
+        if not imported_module.endswith("transformers/__init__.py"):
+            imported_modules.append(imported_module)
+
+    # Let's continue with direct imports
+    # The import from the transformers module are ignored for the same reason we ignored the
+    # main init before.
+    direct_imports = re.findall(r"from\s+transformers\.(\S+)\s+import\s+\S+\s", content)
+    for imp in direct_imports:
+        import_parts = imp.split(".")
+        dep_parts = ["src", "transformers"] + import_parts
+        imported_modules.append(os.path.sep.join(dep_parts))
+
+    # Now let's just check that we have proper module files, or append an init for submodules
+    dependencies = []
+    for imported_module in imported_modules:
+        if os.path.isfile(os.path.join(PATH_TO_TRANFORMERS, f"{imported_module}.py")):
             dependencies.append(f"{imported_module}.py")
-        elif os.path.isdir(imported_module) and os.path.isfile(os.path.sep.join([imported_module, "__init__.py"])):
+        elif os.path.isdir(os.path.join(PATH_TO_TRANFORMERS, imported_module)) and os.path.isfile(
+            os.path.sep.join([PATH_TO_TRANFORMERS, imported_module, "__init__.py"])
+        ):
             dependencies.append(os.path.sep.join([imported_module, "__init__.py"]))
     return dependencies
 
@@ -178,7 +197,7 @@ def create_reverse_dependency_map():
     return reverse_map
 
 
-# Any module file that has a test name which can't be inferred automatically from its name should go here. A better 
+# Any module file that has a test name which can't be inferred automatically from its name should go here. A better
 # approach is to (re-)name the test file accordingly, and second best to add the correspondence map here.
 SPECIAL_MODULE_TO_TEST_MAP = {
     "configuration_utils.py": "test_configuration_common.py",
@@ -365,7 +384,9 @@ def infer_tests_to_run(output_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sanity_check", action="store_true", help="Only test that all tests and modules are accounted for.")
+    parser.add_argument(
+        "--sanity_check", action="store_true", help="Only test that all tests and modules are accounted for."
+    )
     parser.add_argument(
         "--output_file", type=str, default="test_list.txt", help="Where to store the list of tests to run"
     )
