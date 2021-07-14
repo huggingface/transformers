@@ -1682,7 +1682,7 @@ def get_list_of_files(
         token = HfFolder.get_token()
     else:
         token = None
-    model_info = HfApi().model_info(path_or_repo, revision=revision, token=token)
+    model_info = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).model_info(path_or_repo, revision=revision, token=token)
     return [f.rfilename for f in model_info.siblings]
 
 
