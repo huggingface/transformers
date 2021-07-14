@@ -17,7 +17,7 @@ limitations under the License.
 # Token classification
 
 Fine-tuning the library models for token classification task such as Named Entity Recognition (NER), Parts-of-speech
-tagging (POS) or phrase extraction (CHUNKS). The main script `run_ner.py` leverages the 🤗 Datasets library. You can easily
+tagging (POS) or phrase extraction (CHUNKS). The main script `run_ner.py` leverages the [🤗 Datasets](https://github.com/huggingface/datasets) library. You can easily
 customize it to your needs if you need extra processing on your datasets.
 
 It will either run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own text files for
