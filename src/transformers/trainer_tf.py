@@ -16,8 +16,8 @@
 import datetime
 import math
 import os
-from typing import Callable, Dict, Optional, Tuple
 import warnings
+from typing import Callable, Dict, Optional, Tuple
 
 from .file_utils import ENV_VARS_TRUE_VALUES
 
@@ -110,7 +110,8 @@ class TFTrainer:
             "The class `TFTrainer` is deprecated and will be removed in version 5 of Transformers. "
             "We recommend using native Keras instead, by calling methods like `fit()` and `predict()` "
             "directly on the model object. Detailed examples of the Keras style can be found in our "
-            "examples at https://github.com/huggingface/transformers/tree/master/examples/tensorflow", FutureWarning
+            "examples at https://github.com/huggingface/transformers/tree/master/examples/tensorflow",
+            FutureWarning,
         )
 
         if tb_writer is not None:
