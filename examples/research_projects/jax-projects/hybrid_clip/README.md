@@ -65,7 +65,7 @@ Next, let's add a symbolic link to the `run_hybrid_clip.py`.
 
 ```bash
 export MODEL_DIR="./clip-roberta-base
-ln -s ~/transformers/examples/flax/summarization/run_hybrid_clip.py run_hybrid_clip.py
+ln -s ~/transformers/examples/research_projects/jax-projects/hybrid_clip/run_hybrid_clip.py run_hybrid_clip.py
 ```
 
 ## How to use the `FlaxHybridCLIP` model:

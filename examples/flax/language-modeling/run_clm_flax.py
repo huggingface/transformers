@@ -398,7 +398,8 @@ def main():
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.
-        total_length = (total_length // block_size) * block_size
+        if total_length >= block_size:
+            total_length = (total_length // block_size) * block_size
         # Split by chunks of max_len.
         result = {
             k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
@@ -489,17 +490,24 @@ def main():
         return traverse_util.unflatten_dict(flat_mask)
 
     # create adam optimizer
-    adamw = optax.adamw(
-        learning_rate=linear_decay_lr_schedule_fn,
-        b1=training_args.adam_beta1,
-        b2=training_args.adam_beta2,
-        eps=training_args.adam_epsilon,
-        weight_decay=training_args.weight_decay,
-        mask=decay_mask_fn,
-    )
+    if training_args.adafactor:
+        # We use the default parameters here to initialize adafactor,
+        # For more details about the parameters please check https://github.com/deepmind/optax/blob/ed02befef9bf81cbbf236be3d2b0e032e9ed4a40/optax/_src/alias.py#L74
+        optimizer = optax.adafactor(
+            learning_rate=linear_decay_lr_schedule_fn,
+        )
+    else:
+        optimizer = optax.adamw(
+            learning_rate=linear_decay_lr_schedule_fn,
+            b1=training_args.adam_beta1,
+            b2=training_args.adam_beta2,
+            eps=training_args.adam_epsilon,
+            weight_decay=training_args.weight_decay,
+            mask=decay_mask_fn,
+        )
 
     # Setup train state
-    state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw, dropout_rng=dropout_rng)
+    state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=optimizer, dropout_rng=dropout_rng)
 
     def loss_fn(logits, labels):
         shift_logits = logits[..., :-1, :]
@@ -614,7 +622,6 @@ def main():
 
                 # Save metrics
                 if has_tensorboard and jax.process_index() == 0:
-                    cur_step = epoch * (len(train_dataset) // train_batch_size)
                     write_eval_metric(summary_writer, eval_metrics, cur_step)
 
             if cur_step % training_args.save_steps == 0 and cur_step > 0:

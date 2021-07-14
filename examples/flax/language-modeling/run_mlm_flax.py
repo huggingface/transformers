@@ -431,7 +431,8 @@ if __name__ == "__main__":
             total_length = len(concatenated_examples[list(examples.keys())[0]])
             # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
             # customize this part to your needs.
-            total_length = (total_length // max_seq_length) * max_seq_length
+            if total_length >= max_seq_length:
+                total_length = (total_length // max_seq_length) * max_seq_length
             # Split by chunks of max_len.
             result = {
                 k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
@@ -478,7 +479,14 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    model = FlaxAutoModelForMaskedLM.from_config(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+    if model_args.model_name_or_path:
+        model = FlaxAutoModelForMaskedLM.from_pretrained(
+            model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+        )
+    else:
+        model = FlaxAutoModelForMaskedLM.from_config(
+            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+        )
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
@@ -513,17 +521,24 @@ if __name__ == "__main__":
         return traverse_util.unflatten_dict(flat_mask)
 
     # create adam optimizer
-    adamw = optax.adamw(
-        learning_rate=linear_decay_lr_schedule_fn,
-        b1=training_args.adam_beta1,
-        b2=training_args.adam_beta2,
-        eps=1e-8,
-        weight_decay=training_args.weight_decay,
-        mask=decay_mask_fn,
-    )
+    if training_args.adafactor:
+        # We use the default parameters here to initialize adafactor,
+        # For more details about the parameters please check https://github.com/deepmind/optax/blob/ed02befef9bf81cbbf236be3d2b0e032e9ed4a40/optax/_src/alias.py#L74
+        optimizer = optax.adafactor(
+            learning_rate=linear_decay_lr_schedule_fn,
+        )
+    else:
+        optimizer = optax.adamw(
+            learning_rate=linear_decay_lr_schedule_fn,
+            b1=training_args.adam_beta1,
+            b2=training_args.adam_beta2,
+            eps=training_args.adam_epsilon,
+            weight_decay=training_args.weight_decay,
+            mask=decay_mask_fn,
+        )
 
     # Setup train state
-    state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw)
+    state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=optimizer)
 
     # Define gradient update step fn
     def train_step(state, batch, dropout_rng):
@@ -648,7 +663,6 @@ if __name__ == "__main__":
 
                 # Save metrics
                 if has_tensorboard and jax.process_index() == 0:
-                    cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
                     write_eval_metric(summary_writer, eval_metrics, cur_step)
 
             if cur_step % training_args.save_steps == 0 and cur_step > 0:
