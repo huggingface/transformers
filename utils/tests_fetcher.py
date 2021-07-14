@@ -59,7 +59,7 @@ def clean_code(content):
     for line in content.split("\n"):
         # remove anything that is after a # sign.
         line = re.sub("#.*$", "", line)
-        if line.isspace():
+        if len(line) == 0 or line.isspace():
             continue
         lines_to_keep.append(line)
     return "\n".join(lines_to_keep)
