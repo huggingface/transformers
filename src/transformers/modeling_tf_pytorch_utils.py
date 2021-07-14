@@ -225,7 +225,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         for pat in tf_model._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
-    if len(unexpected_keys) > 0:
+    if unexpected_keys:
         logger.warning(
             f"Some weights of the PyTorch model were not used when "
             f"initializing the TF 2.0 model {tf_model.__class__.__name__}: {unexpected_keys}\n"
@@ -236,7 +236,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         )
     else:
         logger.warning(f"All PyTorch model weights were used when initializing {tf_model.__class__.__name__}.\n")
-    if len(missing_keys) > 0:
+    if missing_keys:
         logger.warning(
             f"Some weights or buffers of the TF 2.0 model {tf_model.__class__.__name__} were not initialized from the PyTorch model "
             f"and are newly initialized: {missing_keys}\n"
@@ -319,7 +319,10 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     # Make sure we are able to load PyTorch base models as well as derived models (with heads)
     # TF models always have a prefix, some of PyTorch models (base ones) don't
     start_prefix_to_remove = ""
-    if not any(s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict.keys()):
+    if not any(
+        s.startswith(pt_model.base_model_prefix)
+        for s in current_pt_params_dict
+    ):
         start_prefix_to_remove = pt_model.base_model_prefix + "."
 
     # Build a map from potential PyTorch weight names to TF 2.0 Variables

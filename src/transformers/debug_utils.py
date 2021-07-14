@@ -87,9 +87,6 @@ class DebugUnderflowOverflow:
 
         debug_overflow = DebugUnderflowOverflow(model, max_frames_to_save=100)
 
-    To validate that you have set up this debugging feature correctly, and you intend to use it in a training that may
-    take hours to complete, first run it with normal tracing enabled for one of a few batches as explained in the next
-    section.
 
 
     Mode 2. Specific batch absolute min/max tracing without detection
@@ -107,19 +104,12 @@ class DebugUnderflowOverflow:
     fast-forward right to that area.
 
 
-    Early stopping:
 
     You can also specify the batch number after which to stop the training, with ::
 
         debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1,3], abort_after_batch_num=3)
 
-    This feature is mainly useful in the tracing mode, but you can use it for any mode.
-
-
-    **Performance**:
-
-    As this module measures absolute ``min``/``max`` of each weight of the model on every forward it'll slow the
-    training down. Therefore remember to turn it off once the debugging needs have been met.
+    This feature is mainly useful in the tracing mode, but you can use it for any more.
 
     Args:
         model (:obj:`nn.Module`):
@@ -239,7 +229,7 @@ class DebugUnderflowOverflow:
 
         last_frame_of_batch = False
 
-        trace_mode = True if self.batch_number in self.trace_batch_nums else False
+        trace_mode = self.batch_number in self.trace_batch_nums #simplified boolean expression
         if trace_mode:
             self.reset_saved_frames()
 
@@ -287,20 +277,20 @@ def get_abs_min_max(var, ctx):
 
 def detect_overflow(var, ctx):
     """
-    Report whether the tensor contains any ``nan`` or ``inf`` entries.
+    Report of the tensor contains any ``nan`` and ``inf`` entries.
 
     This is useful for detecting overflows/underflows and best to call right after the function that did some math that
-    modified the tensor in question.
+    modified the variable in question.
 
-    This function contains a few other helper features that you can enable and tweak directly if you want to track
+    The function contains a few other helper features that you can enable and tweak directly if you want to track
     various other things.
 
     Args:
-        var: the tensor variable to check
+        var: tensor variable to check
         ctx: the message to print as a context
 
     Return:
-        :obj:`True` if ``inf`` or ``nan`` was detected, :obj:`False` otherwise
+        True if ``inf`` or ``nan`` was detected, False otherwise
     """
     detected = False
     if torch.isnan(var).any().item():

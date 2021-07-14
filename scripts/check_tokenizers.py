@@ -29,15 +29,7 @@ def check_diff(spm_diff, tok_diff, slow, fast):
         return True
     spm_reencoded = slow.encode(slow.decode(spm_diff))
     tok_reencoded = fast.encode(fast.decode(spm_diff))
-    if spm_reencoded != spm_diff and spm_reencoded == tok_reencoded:
-        # Type 3 error.
-        # Snehagatha ->
-        #       Sne, h, aga, th, a
-        #       Sne, ha, gat, ha
-        # Encoding the wrong with sp does not even recover what spm gave us
-        # It fits tokenizer however...
-        return True
-    return False
+    return spm_reencoded != spm_diff and spm_reencoded == tok_reencoded
 
 
 def check_LTR_mark(line, idx, fast):
@@ -121,15 +113,14 @@ def test_string(slow, fast, text):
     skip_assert = False
     total += 1
 
-    if slow_ids != fast_ids:
-        if check_details(text, slow_ids, fast_ids, slow, fast):
-            skip_assert = True
-            imperfect += 1
-        else:
-            wrong += 1
-    else:
+    if slow_ids == fast_ids:
         perfect += 1
 
+    elif check_details(text, slow_ids, fast_ids, slow, fast):
+        skip_assert = True
+        imperfect += 1
+    else:
+        wrong += 1
     if total % 10000 == 0:
         print(f"({perfect} / {imperfect} / {wrong} ----- {perfect + imperfect + wrong})")
 
@@ -154,14 +145,14 @@ def test_tokenizer(slow, fast):
 
 
 if __name__ == "__main__":
+    imperfect = 0
+    perfect = 0
+    wrong = 0
+    total = 0
+
     for name, (slow_class, fast_class) in TOKENIZER_CLASSES.items():
         checkpoint_names = list(slow_class.max_model_input_sizes.keys())
         for checkpoint in checkpoint_names:
-            imperfect = 0
-            perfect = 0
-            wrong = 0
-            total = 0
-
             print(f"========================== Checking {name}: {checkpoint} ==========================")
             slow = slow_class.from_pretrained(checkpoint, force_download=True)
             fast = fast_class.from_pretrained(checkpoint, force_download=True)

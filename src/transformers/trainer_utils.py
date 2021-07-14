@@ -17,7 +17,6 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 """
 
 import copy
-import functools
 import gc
 import inspect
 import os
@@ -108,7 +107,7 @@ def get_last_checkpoint(folder):
         for path in content
         if _re_checkpoint.search(path) is not None and os.path.isdir(os.path.join(folder, path))
     ]
-    if len(checkpoints) == 0:
+    if not checkpoints:
         return
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
 
@@ -159,7 +158,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_per_second")]
+    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_samples_per_second")]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())
@@ -233,7 +232,7 @@ def total_processes_number(local_rank):
     return 1
 
 
-def speed_metrics(split, start_time, num_samples=None, num_steps=None):
+def speed_metrics(split, start_time, num_samples=None):
     """
     Measure and return speed performance metrics.
 
@@ -249,11 +248,8 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     runtime = time.time() - start_time
     result = {f"{split}_runtime": round(runtime, 4)}
     if num_samples is not None:
-        samples_per_second = num_samples / runtime
+        samples_per_second = 1 / (runtime / num_samples)
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
-    if num_steps is not None:
-        steps_per_second = num_steps / runtime
-        result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
     return result
 
 
@@ -467,16 +463,6 @@ def denumpify_detensorize(metrics):
     elif is_torch_available() and isinstance(metrics, torch.Tensor) and metrics.numel() == 1:
         return metrics.item()
     return metrics
-
-
-def number_of_arguments(func):
-    """
-    Return the number of arguments of the passed function, even if it's a partial function.
-    """
-    if isinstance(func, functools.partial):
-        total_args = len(inspect.signature(func.func).parameters)
-        return total_args - len(func.args) - len(func.keywords)
-    return len(inspect.signature(func).parameters)
 
 
 class ShardedDDPOption(ExplicitEnum):

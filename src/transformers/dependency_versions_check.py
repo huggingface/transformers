@@ -30,17 +30,17 @@ if sys.version_info < (3, 8):
     pkgs_to_check_at_runtime.append("importlib_metadata")
 
 for pkg in pkgs_to_check_at_runtime:
-    if pkg in deps:
-        if pkg == "tokenizers":
-            # must be loaded here, or else tqdm check may fail
-            from .file_utils import is_tokenizers_available
-
-            if not is_tokenizers_available():
-                continue  # not required, check version only if installed
-
-        require_version_core(deps[pkg])
-    else:
+    if pkg not in deps:
         raise ValueError(f"can't find {pkg} in {deps.keys()}, check dependency_versions_table.py")
+
+    if pkg == "tokenizers":
+        # must be loaded here, or else tqdm check may fail
+        from .file_utils import is_tokenizers_available
+
+        if not is_tokenizers_available():
+            continue  # not required, check version only if installed
+
+    require_version_core(deps[pkg])
 
 
 def dep_version_check(pkg, hint=None):
