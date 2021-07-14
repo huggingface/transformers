@@ -75,8 +75,8 @@ user: 使用者
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/">English</a> | 
-        <a href="https://github.com/huggingface/transformers/blob/master/README_zh-tw.md">简体中文</a> | 
+        <a href="https://github.com/huggingface/transformers/">English</a> |
+        <a href="https://github.com/huggingface/transformers/blob/master/README_zh-tw.md">简体中文</a> |
         <b>繁體中文</b>
     <p>
 </h4>

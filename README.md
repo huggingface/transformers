@@ -39,7 +39,11 @@ limitations under the License.
 </p>
 
 <h4 align="center">
-    <p><b>English</b> | <a href="https://github.com/huggingface/transformers/blob/master/README_zh-hans.md">简体中文</a><p>
+    <p>
+        <b>English</b> |
+        <a href="https://github.com/huggingface/transformers/blob/master/README_zh-hans.md">简体中文</a> |
+        <a href="https://github.com/huggingface/transformers/blob/master/README_zh-tw.md">繁體中文</a>
+    <p>
 </h4>
 
 <h3 align="center">
