@@ -490,19 +490,30 @@ def main():
         out_axis_resources=(opt_state_spec, param_spec),
     )
 
-    # actually initialize the opt_state
     # hack: move the inital params to CPU to free up device memory
     # TODO: allow loading weights on CPU in pre-trained model
     model.params = jax.tree_map(lambda x: np.asarray(x), model.params)
+
     # mesh defination
     mesh_devices = np.array(jax.devices()).reshape(1, jax.local_device_count())
+
+    # actually initialize the opt_state
     with mesh(mesh_devices, ("dp", "mp")):
         opt_state, params = p_get_initial_state(freeze(model.params))
 
-    def loss_fn(logits, labels):
+    def loss_fn(logits, labels, z_loss=0):
         shift_logits = logits[..., :-1, :]
         shift_labels = labels[..., 1:]
-        loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1]))
+
+        shift_labels = onehot(shift_labels, shift_logits.shape[-1])
+
+        shift_logits = shift_logits - jax.lax.stop_gradient(shift_logits.max(axis=-1, keepdims=True))
+        log_z = jnp.log(jnp.sum(jnp.exp(shift_logits), axis=-1, keepdims=True))
+        log_softmax = shift_logits - log_z
+        loss = -jnp.sum(shift_labels * log_softmax, axis=-1)
+
+        loss += (1e-4 * jnp.square(log_z.squeeze(-1))) * z_loss
+
         return loss.mean()
 
     # Define gradient update step fn
@@ -513,7 +524,7 @@ def main():
         def compute_loss(params):
             labels = batch.pop("labels")
             logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-            loss = loss_fn(logits, labels)
+            loss = loss_fn(logits, labels, z_loss=1.0)
             return loss
 
         grad_fn = jax.value_and_grad(compute_loss)
