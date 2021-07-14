@@ -42,7 +42,7 @@ limitations under the License.
     <p>
         <b>English</b> |
         <a href="https://github.com/huggingface/transformers/blob/master/README_zh-hans.md">简体中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/master/README_zh-tw.md">繁體中文</a>
+        <a href="https://github.com/huggingface/transformers/blob/master/README_zh-hant.md">繁體中文</a>
     <p>
 </h4>
 
