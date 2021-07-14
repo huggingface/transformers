@@ -165,8 +165,8 @@ class TestTrainerExt(TestCasePlus):
         # to reproduce the problem set distributed=False
         self.run_seq2seq_quick(distributed=True, extra_args_str="--fp16 --fp16_backend=apex")
 
-    @require_torch_multi_gpu
     @parameterized.expand(["base", "low", "high", "mixed"])
+    @require_torch_multi_gpu
     def test_trainer_log_level_replica(self, experiment_id):
         # as each sub-test is slow-ish split into multiple sub-tests to avoid CI timeout
         experiments = dict(
