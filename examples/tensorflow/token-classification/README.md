@@ -42,6 +42,6 @@ python run_ner.py \
   --output_dir /tmp/test-ner
 ```
 
-**Note:** This script only works with models that have a fast tokenizer (backed by the 🤗 Tokenizers library) as it
+**Note:** This script only works with models that have a fast tokenizer (backed by the [🤗 Tokenizers](https://github.com/huggingface/tokenizers) library) as it
 uses special features of those tokenizers. You can check if your favorite model has a fast tokenizer in
 [this table](https://huggingface.co/transformers/index.html#supported-frameworks).
