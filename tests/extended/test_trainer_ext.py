@@ -19,6 +19,8 @@ import sys
 import unittest
 from unittest.mock import patch
 
+import pytest
+
 from transformers.file_utils import is_apex_available
 from transformers.integrations import is_fairscale_available
 from transformers.testing_utils import (
@@ -164,6 +166,7 @@ class TestTrainerExt(TestCasePlus):
         # to reproduce the problem set distributed=False
         self.run_seq2seq_quick(distributed=True, extra_args_str="--fp16 --fp16_backend=apex")
 
+    @pytest.mark.timeout_timer(120)
     @require_torch_multi_gpu
     def test_trainer_log_level_replica(self):
         log_info_string = "Running training"
