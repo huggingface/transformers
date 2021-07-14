@@ -254,7 +254,6 @@ jobs:
           pip install --upgrade pip
           pip install .[testing,deepspeed,fairscale]
 
-
       - name: Are GPUs recognized by our DL frameworks
         run: |
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
