@@ -1177,9 +1177,9 @@ To trigger a self-push workflow CI job, you must:
 
 1. create a new branch on ``transformers`` origin (not a fork!)
 2. the branch name has to start with either ``ci_`` or ``ci-`` (``master`` triggers it too, but we can't do PRs on
-   ``master``.) It also gets triggered only for specific paths - you can find the up-to-date definition in case it
+   ``master``). It also gets triggered only for specific paths - you can find the up-to-date definition in case it
    changed since this document has been written `here
-   <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>__ under `push:`
+   <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__ under `push:`
 3. Create a PR from this branch
 4. Then you can see the job appear `here
    <https://github.com/huggingface/transformers/actions/workflows/self-push.yml>`__. It may not run right away if there
