@@ -911,11 +911,7 @@ class HubertModel(HubertPreTrainedModel):
             attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
 
         hidden_states = self.feature_projection(extract_features)
-
-        if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-
-        hidden_states = self._mask_hidden_states(hidden_states)
+        hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 
         encoder_outputs = self.encoder(
             hidden_states,
