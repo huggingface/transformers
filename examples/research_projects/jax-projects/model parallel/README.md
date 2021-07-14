@@ -27,7 +27,7 @@ To adapt the script for other models, we need to also change the `ParitionSpec` 
 
 TODO: Add more explantion.
 
-Before training, let's prepare out model first. To be able to shard the model, the sharded dimention needs to be a multiple of devices it'll be sharded on. But GPTNeo's vocab size is 50257, so we need to resize the embeddings accordingly. 
+Before training, let's prepare our model first. To be able to shard the model, the sharded dimention needs to be a multiple of devices it'll be sharded on. But GPTNeo's vocab size is 50257, so we need to resize the embeddings accordingly. 
 
 ```python
 from transformers import FlaxGPTNeoForCausalLM, GPTNeoConfig 
@@ -58,10 +58,10 @@ python run_pjit_clm.py \
     --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
     --do_train  --do_eval \
     --block_size 1024 \
-    --num_train_epochs 2 \
+    --num_train_epochs 5 \
     --learning_rate 4e-6 \
     --per_device_train_batch_size 3 --per_device_eval_batch_size 3 \
     --overwrite_output_dir --output_dir ~/tmp/flax-clm \
     --cache_dir ~/datasets_cache/wikitext --dtype bfloat16 \
-    --logging_steps 10 --eval_steps 10
+    --logging_steps 96 --eval_steps 96
 ```
