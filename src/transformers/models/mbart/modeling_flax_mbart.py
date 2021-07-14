@@ -219,7 +219,7 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int) -> jnp.ndarray
     Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
     have a single `decoder_start_token_id` in contrast to other Bart-like models.
     """
-    prev_output_tokens = np.array(input_ids).clone()
+    prev_output_tokens = np.array(input_ids).copy()
 
     assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
 
@@ -230,7 +230,7 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int) -> jnp.ndarray
         [prev_output_tokens[i, eos_idx] for i, eos_idx in enumerate(index_of_eos)]
     ).squeeze()
 
-    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
+    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].copy()
     prev_output_tokens[:, 0] = decoder_start_tokens
 
     return prev_output_tokens
