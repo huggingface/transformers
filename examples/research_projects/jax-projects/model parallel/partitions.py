@@ -53,6 +53,7 @@ def _replacement_rules(rules):
 
 
 # PartitionSpec for GPTNeo
+# replicate the hidden dim and shard feed-forward and head dim
 def _get_partition_rules():
     return [
         # embeddings
