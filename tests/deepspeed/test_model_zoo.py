@@ -62,6 +62,7 @@ ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 # masked lm
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
 ELECTRA_TINY = "hf-internal-testing/tiny-electra"
+ALBERT_TINY = "hf-internal-testing/tiny-albert"
 
 # classification
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
@@ -69,7 +70,6 @@ BERT_TINY = "hf-internal-testing/tiny-bert"
 
 
 # TODO: to add:
-# albert
 # deberta
 # funnel
 # longformer
@@ -129,6 +129,7 @@ def make_task_cmds():
         mlm=[
             "electra",
             "distilbert",
+            "albert",
         ],
         qa=[
             "roberta",
