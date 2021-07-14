@@ -118,7 +118,7 @@ user: 使用者
 
 ## 快速上手
 
-我們為快速使用模型提供了 `pipeline` API。 Pipeline 包含了預訓練模型和對應的文本預處理。下面是一個快速使用流水線去判斷正負面情緒的例子：
+我們為快速使用模型提供了 `pipeline` API。 Pipeline 包含了預訓練模型和對應的文本預處理。下面是一個快速使用 pipeline 去判斷正負面情緒的例子：
 
 ```python
 >>> from transformers import pipeline
