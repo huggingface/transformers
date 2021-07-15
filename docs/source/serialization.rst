@@ -72,8 +72,6 @@ The package may be used as a Python module:
       -h, --help            show this help message and exit
       -m MODEL, --model MODEL
                             Model's name of path on disk to load.
-      -f {pytorch}, --framework {pytorch}
-                            Framework to use when exporting. Possible values are: {'pytorch'}
       --features {default}  Export the model with some additional features.
       --opset OPSET         ONNX opset version to export the model with (default 12).
       --atol ATOL           Absolute difference tolerance when validating the model.
@@ -82,7 +80,7 @@ Exporting a checkpoint using a ready-made configuration can be done as follows:
 
 .. code-block::
 
-    python -m transformers.onnx -f pytorch --model=bert-base-cased onnx/bert-base-cased/
+    python -m transformers.onnx --model=bert-base-cased onnx/bert-base-cased/
 
 This exports an ONNX graph of the mentioned checkpoint. Here it is `bert-base-cased`, but it can be any model from the
 hub, or a local path.
