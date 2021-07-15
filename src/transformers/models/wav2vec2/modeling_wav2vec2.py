@@ -120,6 +120,7 @@ def _compute_mask_indices(
     mask_prob: float,
     mask_length: int,
     device: torch.device,
+    attention_mask: Optional[torch.tensor] = None,
     min_masks: int = 0,
 ) -> torch.tensor:
     """
@@ -178,6 +179,10 @@ def _compute_mask_indices(
 
     # scatter indices to mask
     spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, True)
+
+    if attention_mask is not None:
+        # make sure padded input ids cannot be masked
+        spec_aug_mask = torch.where(attention_mask.bool(), spec_aug_mask, False)
 
     return spec_aug_mask
 
@@ -950,7 +955,10 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         self.init_weights()
 
     def _mask_hidden_states(
-        self, hidden_states: torch.FloatTensor, mask_time_indices: Optional[torch.FloatTensor] = None
+        self,
+        hidden_states: torch.FloatTensor,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to `SpecAugment
@@ -973,6 +981,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
                 device=hidden_states.device,
+                attention_mask=attention_mask,
                 min_masks=2,
             )
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -984,6 +993,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
                 device=hidden_states.device,
+                attention_mask=attention_mask,
             )
             hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
 
@@ -1049,7 +1059,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
 
         hidden_states, extract_features = self.feature_projection(extract_features)
-        hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
+        hidden_states = self._mask_hidden_states(
+            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+        )
 
         encoder_outputs = self.encoder(
             hidden_states,

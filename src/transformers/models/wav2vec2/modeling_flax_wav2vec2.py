@@ -107,6 +107,7 @@ def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
     mask_length: int,
+    attention_mask: Optional[np.ndarray] = None,
     min_masks: int = 0,
 ) -> np.ndarray:
     """
@@ -165,6 +166,10 @@ def _compute_mask_indices(
 
     # scatter indices to mask
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
+
+    if attention_mask is not None:
+        # make sure padded input ids cannot be masked
+        spec_aug_mask = np.where(attention_mask, spec_aug_mask, False)
 
     return spec_aug_mask
 
@@ -873,6 +878,7 @@ class FlaxWav2Vec2Module(nn.Module):
         """
         extract_features = self.feature_extractor(input_values)
 
+        # make sure that no loss is computed on padded inputs
         if attention_mask is not None:
             # compute real output lengths according to convolution formula
             output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1).astype("i4"))
