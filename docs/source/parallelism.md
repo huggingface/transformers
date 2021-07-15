@@ -305,3 +305,46 @@ One very important aspect is that FlexFlow is designed for optimizing DNN parall
 So the promise is very attractive - it runs a 30min simulation on the cluster of choice and it comes up with the best strategy to utilise this specific environment. If you add/remove/replace any parts it'll run and re-optimize the plan for that. And then you can train. A different setup will have its own custom optimization.
 
 🤗 Transformers status: not yet integrated. We already have our models FX-trace-able via [transformers.utils.fx](https://github.com/huggingface/transformers/blob/master/src/transformers/utils/fx.py), which is a prerequisite for FlexFlow, so someone needs to figure out what needs to be done to make FlexFlow work with our models.
+
+
+## Which Strategy To Use When
+
+Here is a very rough outlook at which parallelism strategy to use when. The first on the list is typically faster.
+
+**⇨ Single GPU**
+
+* Model fits onto a single GPU:
+
+    1. Normal use
+
+* Model doesn't fit onto a single GPU:
+
+    1. ZeRO + Offload CPU and optionally NVMe
+
+
+**⇨ Single Node / Multi-GPU**
+
+* Model fits onto a single GPU:
+
+    1. DDP - Distributed DP
+    2. ZeRO - may or may not be faster depending on the situation and configuration used
+
+* Model doesn't fit onto a single GPU:
+
+    1. PP
+    2. ZeRO
+    3. TP
+
+    With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP and ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
+
+
+**⇨ Multi-Node / Multi-GPU**
+
+* When you have fast inter-node connectivity:
+
+    1. ZeRO - as it requires close to no modifications to the model
+    2. PP+TP+DP - less communications, but requires massive changes to the model
+
+* when you have slow inter-node connectivity and still low on GPU memory:
+
+    1. DP+PP+TP+ZeRO-1
