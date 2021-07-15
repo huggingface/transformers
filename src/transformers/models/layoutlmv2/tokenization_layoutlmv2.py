@@ -14,7 +14,10 @@
 # limitations under the License.
 """Tokenization class for LayoutLMv2."""
 
+import collections
 import os
+import unicodedata
+from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
 
 from ...file_utils import ExplicitEnum, PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
@@ -22,8 +25,10 @@ from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
     EncodedInput,
+    PaddingStrategy,
     PreTokenizedInput,
     TextInput,
+    TruncationStrategy,
 )
 from ...utils import logging
 
@@ -64,12 +69,19 @@ LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                   maximum acceptable input length for the model if that argument is not provided.
                 * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.TapasTruncationStrategy`, `optional`, defaults to :obj:`False`):
+            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`False`):
                 Activates and controls truncation. Accepts the following values:
 
-                * :obj:`True` or :obj:`'drop_rows_to_fit'`: Truncate to a maximum length specified with the argument
+                * :obj:`True` or :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
                   :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
-                  provided. This will truncate row by row, removing rows from the table.
+                  provided. This will truncate token by token, removing a token from the longest sequence in the pair
+                  if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
+                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
                 * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
                   sequence lengths greater than the model maximum admissible input size).
             max_length (:obj:`int`, `optional`):
@@ -77,7 +89,12 @@ LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 :obj:`None`, this will use the predefined model maximum length if a maximum length is required by one
                 of the truncation/padding parameters. If the model has no specific maximum input length (like XLNet)
                 truncation/padding to a maximum length will be deactivated.
-            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            stride (:obj:`int`, `optional`, defaults to 0):
+                If set to a number along with :obj:`max_length`, the overflowing tokens returned when
+                :obj:`return_overflowing_tokens=True` will contain some tokens from the end of the truncated sequence
+                returned to provide some overlap between truncated and overflowing sequences. The value of this
+                argument defines the number of overlapping tokens.
+            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the input is already pre-tokenized (e.g., split into words). If set to :obj:`True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
@@ -91,6 +108,26 @@ LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
 """
+
+
+def load_vocab(vocab_file):
+    """Loads a vocabulary file into a dictionary."""
+    vocab = collections.OrderedDict()
+    with open(vocab_file, "r", encoding="utf-8") as reader:
+        tokens = reader.readlines()
+    for index, token in enumerate(tokens):
+        token = token.rstrip("\n")
+        vocab[token] = index
+    return vocab
+
+
+def whitespace_tokenize(text):
+    """Runs basic whitespace cleaning and splitting on a piece of text."""
+    text = text.strip()
+    if not text:
+        return []
+    tokens = text.split()
+    return tokens
 
 
 class LayoutLMv2Tokenizer(PreTrainedTokenizer):
@@ -291,7 +328,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
         words: Union[PreTokenizedInput, List[PreTokenizedInput]],
@@ -428,7 +465,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 **kwargs,
             )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def batch_encode_plus(
         self,
         words,
@@ -453,14 +490,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Tokenize and prepare for the model a list of sequences or a list of pairs of sequences. .. warning:: This
-        method is deprecated, ``__call__`` should be used instead.
-
-        Args:
-            words (:obj:`List[str]`, :obj:`List[Tuple[str, str]]`, :obj:`List[List[str]]`, :obj:`List[Tuple[List[str], List[str]]]`, and for not-fast tokenizers, also :obj:`List[List[int]]`, :obj:`List[Tuple[List[int], List[int]]]`):
-                ...
-            questions
-                ...
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
@@ -580,7 +609,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         return BatchEncoding(batch_outputs)
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _batch_prepare_for_model(
         self,
         words,
@@ -648,7 +677,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         return batch_outputs
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
         self,
         words,
@@ -800,7 +829,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             verbose=verbose,
         )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def prepare_for_model(
         self,
         words,
@@ -884,13 +913,14 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 tokens.extend(word_tokens)
                 token_boxes.extend([box] * len(word_tokens))
 
-        # Account for [CLS] and [SEP] with "- 2" and with "- 3" for RoBERTa.
-        if questions is not None:
-            special_tokens_count = 3
-        else:
-            special_tokens_count = 2
+        # Create ids + pair_ids
+        ids = self.convert_tokens_to_ids(tokens)
+        pair_ids = None
 
         # Compute the total size of the returned encodings
+        pair = bool(pair_ids is not None)
+        len_ids = len(ids)
+        len_pair_ids = len(pair_ids) if pair else 0
         total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
 
         # Truncation: Handle max sequence length
@@ -1112,3 +1142,208 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 batch_outputs[key].append(value)
 
         return BatchEncoding(batch_outputs, tensor_type=return_tensors)
+
+
+# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
+class BasicTokenizer(object):
+    """
+    Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
+
+    Args:
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to lowercase the input when tokenizing.
+        never_split (:obj:`Iterable`, `optional`):
+            Collection of tokens which will never be split during tokenization. Only has an effect when
+            :obj:`do_basic_tokenize=True`
+        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see this
+            `issue <https://github.com/huggingface/transformers/issues/328>`__).
+        strip_accents: (:obj:`bool`, `optional`):
+            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
+            value for :obj:`lowercase` (as in the original BERT).
+    """
+
+    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+        if never_split is None:
+            never_split = []
+        self.do_lower_case = do_lower_case
+        self.never_split = set(never_split)
+        self.tokenize_chinese_chars = tokenize_chinese_chars
+        self.strip_accents = strip_accents
+
+    def tokenize(self, text, never_split=None):
+        """
+        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
+        WordPieceTokenizer.
+
+        Args:
+            **never_split**: (`optional`) list of str
+                Kept for backward compatibility purposes. Now implemented directly at the base class level (see
+                :func:`PreTrainedTokenizer.tokenize`) List of token not to split.
+        """
+        # union() returns a new set by concatenating the two sets.
+        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+        text = self._clean_text(text)
+
+        # This was added on November 1st, 2018 for the multilingual and Chinese
+        # models. This is also applied to the English models now, but it doesn't
+        # matter since the English models were not trained on any Chinese data
+        # and generally don't have any Chinese data in them (there are Chinese
+        # characters in the vocabulary because Wikipedia does have some Chinese
+        # words in the English Wikipedia.).
+        if self.tokenize_chinese_chars:
+            text = self._tokenize_chinese_chars(text)
+        orig_tokens = whitespace_tokenize(text)
+        split_tokens = []
+        for token in orig_tokens:
+            if token not in never_split:
+                if self.do_lower_case:
+                    token = token.lower()
+                    if self.strip_accents is not False:
+                        token = self._run_strip_accents(token)
+                elif self.strip_accents:
+                    token = self._run_strip_accents(token)
+            split_tokens.extend(self._run_split_on_punc(token, never_split))
+
+        output_tokens = whitespace_tokenize(" ".join(split_tokens))
+        return output_tokens
+
+    def _run_strip_accents(self, text):
+        """Strips accents from a piece of text."""
+        text = unicodedata.normalize("NFD", text)
+        output = []
+        for char in text:
+            cat = unicodedata.category(char)
+            if cat == "Mn":
+                continue
+            output.append(char)
+        return "".join(output)
+
+    def _run_split_on_punc(self, text, never_split=None):
+        """Splits punctuation on a piece of text."""
+        if never_split is not None and text in never_split:
+            return [text]
+        chars = list(text)
+        i = 0
+        start_new_word = True
+        output = []
+        while i < len(chars):
+            char = chars[i]
+            if _is_punctuation(char):
+                output.append([char])
+                start_new_word = True
+            else:
+                if start_new_word:
+                    output.append([])
+                start_new_word = False
+                output[-1].append(char)
+            i += 1
+
+        return ["".join(x) for x in output]
+
+    def _tokenize_chinese_chars(self, text):
+        """Adds whitespace around any CJK character."""
+        output = []
+        for char in text:
+            cp = ord(char)
+            if self._is_chinese_char(cp):
+                output.append(" ")
+                output.append(char)
+                output.append(" ")
+            else:
+                output.append(char)
+        return "".join(output)
+
+    def _is_chinese_char(self, cp):
+        """Checks whether CP is the codepoint of a CJK character."""
+        # This defines a "chinese character" as anything in the CJK Unicode block:
+        #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
+        #
+        # Note that the CJK Unicode block is NOT all Japanese and Korean characters,
+        # despite its name. The modern Korean Hangul alphabet is a different block,
+        # as is Japanese Hiragana and Katakana. Those alphabets are used to write
+        # space-separated words, so they are not treated specially and handled
+        # like the all of the other languages.
+        if (
+            (cp >= 0x4E00 and cp <= 0x9FFF)
+            or (cp >= 0x3400 and cp <= 0x4DBF)  #
+            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
+            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
+            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
+            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+            or (cp >= 0xF900 and cp <= 0xFAFF)
+            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
+        ):  #
+            return True
+
+        return False
+
+    def _clean_text(self, text):
+        """Performs invalid character removal and whitespace cleanup on text."""
+        output = []
+        for char in text:
+            cp = ord(char)
+            if cp == 0 or cp == 0xFFFD or _is_control(char):
+                continue
+            if _is_whitespace(char):
+                output.append(" ")
+            else:
+                output.append(char)
+        return "".join(output)
+
+
+# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
+class WordpieceTokenizer(object):
+    """Runs WordPiece tokenization."""
+
+    def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
+        self.vocab = vocab
+        self.unk_token = unk_token
+        self.max_input_chars_per_word = max_input_chars_per_word
+
+    def tokenize(self, text):
+        """
+        Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
+        tokenization using the given vocabulary. For example, :obj:`input = "unaffable"` wil return as output
+        :obj:`["un", "##aff", "##able"]`.
+
+        Args:
+          text: A single token or whitespace separated tokens. This should have
+            already been passed through `BasicTokenizer`.
+
+        Returns:
+          A list of wordpiece tokens.
+        """
+
+        output_tokens = []
+        for token in whitespace_tokenize(text):
+            chars = list(token)
+            if len(chars) > self.max_input_chars_per_word:
+                output_tokens.append(self.unk_token)
+                continue
+
+            is_bad = False
+            start = 0
+            sub_tokens = []
+            while start < len(chars):
+                end = len(chars)
+                cur_substr = None
+                while start < end:
+                    substr = "".join(chars[start:end])
+                    if start > 0:
+                        substr = "##" + substr
+                    if substr in self.vocab:
+                        cur_substr = substr
+                        break
+                    end -= 1
+                if cur_substr is None:
+                    is_bad = True
+                    break
+                sub_tokens.append(cur_substr)
+                start = end
+
+            if is_bad:
+                output_tokens.append(self.unk_token)
+            else:
+                output_tokens.extend(sub_tokens)
+        return output_tokens
