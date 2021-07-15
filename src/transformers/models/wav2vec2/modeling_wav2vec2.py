@@ -1188,6 +1188,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        fsq_negs=None,
     ):
         r"""
         mask_time_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1263,10 +1264,14 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         quantized_features = self.project_q(quantized_features)
 
         loss = None
-        if self.training:
+        if True or self.training:
             # for training, we sample negatives
             # 3. sample K negatives (distractors) quantized states for contrastive loss
             negative_quantized_features = self._sample_negatives(quantized_features, self.config.num_negatives)
+
+            negative_quantized_features[
+                mask_time_indices[None, :].broadcast_to(negative_quantized_features.shape[:-1])
+            ] = fsq_negs.reshape(-1, fsq_negs.shape[-1])
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
             # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
