@@ -221,11 +221,11 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     """
     Shift input ids one token to the right.
     """
-    shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
-    shifted_input_ids = jax.ops.index_update(shifted_input_ids, (..., 0), decoder_start_token_id)
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    shifted_input_ids = np.zeros_like(input_ids)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1]
+    shifted_input_ids[:, 0] = decoder_start_token_id
 
+    shifted_input_ids = np.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
     return shifted_input_ids
 
 
@@ -1213,6 +1213,7 @@ class FlaxMarianMTModule(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
         )
+        self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
     def _get_encoder_module(self):
         return self.model.encoder
@@ -1253,6 +1254,8 @@ class FlaxMarianMTModule(nn.Module):
             lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
         else:
             lm_logits = self.lm_head(hidden_states)
+
+        lm_logits += self.final_logits_bias
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -1367,6 +1370,7 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
                 lm_logits = module.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
             else:
                 lm_logits = module.lm_head(hidden_states)
+            lm_logits += module.final_logits_bias
 
             return lm_logits, outputs
 
@@ -1465,8 +1469,7 @@ FLAX_MARIAN_MT_DOCSTRING = """
         >>> text = "My friends are cool but they eat too many carbs."
         >>> input_ids = tokenizer(text, max_length=64, return_tensors='jax').input_ids
 
-        >>> # Marian has to make use of early_stopping=True
-        >>> sequences = model.generate(input_ids, early_stopping=True, max_length=64, num_beams=2).sequences
+        >>> sequences = model.generate(input_ids, max_length=64, num_beams=2).sequences
 
         >>> outputs = tokenizer.batch_decode(sequences, skip_special_tokens=True)
         >>> # should give `Meine Freunde sind cool, aber sie essen zu viele Kohlenhydrate.`
