@@ -463,7 +463,7 @@ class RemBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_model(self):
         # Test exact values at the last hidden layer
-        model = RemBertModel.from_pretrained("iwontbecreative/rembert")
+        model = RemBertModel.from_pretrained("google/rembert")
         input_ids = torch.tensor([[312, 56498, 313, 2125, 313]])
         segment_ids = torch.tensor([[0, 0, 0, 1, 1]])
         output = model(input_ids, token_type_ids=segment_ids, output_hidden_states=True)

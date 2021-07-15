@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "rembert-large": "https://huggingface.co/iwontbecreative/rembert/resolve/main/config.json",
+    "rembert-large": "https://huggingface.co/google/rembert/resolve/main/config.json",
     # See all RemBERT models at https://huggingface.co/models?filter=rembert
 }
 
