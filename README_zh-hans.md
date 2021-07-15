@@ -64,7 +64,11 @@ checkpoint: 检查点
 </p>
 
 <h4 align="center">
-    <p><a href="https://github.com/huggingface/transformers/">English</a> | <b>简体中文</b><p>
+    <p>
+        <a href="https://github.com/huggingface/transformers/">English</a> |
+        <b>简体中文</b> |
+        <a href="https://github.com/huggingface/transformers/blob/master/README_zh-hant.md">繁體中文</a>
+    <p>
 </h4>
 
 <h3 align="center">
