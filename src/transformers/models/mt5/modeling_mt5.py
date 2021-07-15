@@ -16,7 +16,7 @@
 
 import torch
 from torch import nn
-from torch.nn import MSELoss, CrossEntropyLoss, BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import T5PreTrainedModel
 from ...modeling_outputs import SequenceClassifierOutput

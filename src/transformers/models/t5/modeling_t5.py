@@ -22,7 +22,7 @@ import warnings
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss, BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
