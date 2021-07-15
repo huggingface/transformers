@@ -524,4 +524,4 @@ class DetrModelIntegrationTests(unittest.TestCase):
         expected_slice_masks = torch.tensor(
             [[-7.7558, -10.8788, -11.9797], [-11.8881, -16.4329, -17.7451], [-14.7316, -19.7383, -20.3004]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_masks[0, 0, :3, :3], expected_slice_masks, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.pred_masks[0, 0, :3, :3], expected_slice_masks, atol=1e-3))
