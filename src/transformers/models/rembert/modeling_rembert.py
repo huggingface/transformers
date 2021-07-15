@@ -196,6 +196,7 @@ class RemBertEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->RemBert
 class RemBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -433,6 +434,7 @@ class RemBertOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->RemBert
 class RemBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -616,6 +618,7 @@ class RemBertEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->RemBert
 class RemBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -649,6 +652,7 @@ class RemBertLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->RemBert
 class RemBertOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -659,6 +663,7 @@ class RemBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->RemBert
 class RemBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -750,6 +755,7 @@ REMBERT_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->RemBert
 @add_start_docstrings(
     "The bare RemBERT Model transformer outputting raw hidden-states without any specific head on top.",
     REMBERT_START_DOCSTRING,

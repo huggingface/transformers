@@ -224,6 +224,7 @@ class TFRemBertSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->RemBert
 class TFRemBertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -242,6 +243,7 @@ class TFRemBertSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->RemBert
 class TFRemBertAttention(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -275,6 +277,7 @@ class TFRemBertAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->RemBert
 class TFRemBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -295,6 +298,7 @@ class TFRemBertIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->RemBert
 class TFRemBertOutput(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -313,6 +317,7 @@ class TFRemBertOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->RemBert
 class TFRemBertLayer(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -399,6 +404,7 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
         )
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->RemBert
 class TFRemBertPooler(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -473,6 +479,7 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->RemBert
 class TFRemBertMLMHead(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
@@ -485,6 +492,7 @@ class TFRemBertMLMHead(tf.keras.layers.Layer):
         return prediction_scores
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer with Bert->RemBert
 @keras_serializable
 class TFRemBertMainLayer(tf.keras.layers.Layer):
     config_class = RemBertConfig
@@ -780,7 +788,7 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutput:
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
