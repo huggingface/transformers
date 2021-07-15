@@ -878,6 +878,7 @@ class FlaxWav2Vec2Module(nn.Module):
         """
         extract_features = self.feature_extractor(input_values)
 
+        # make sure that no loss is computed on padded inputs
         if attention_mask is not None:
             # compute real output lengths according to convolution formula
             output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1).astype("i4"))
