@@ -254,7 +254,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     @functools.wraps(trainable)
     def dynamic_modules_import_trainable(*args, **kwargs):
         """
-        Wrapper around ``tune.with_parameters`` to ensure dynamic_modules are loaded on each Actor.
+        Wrapper around ``tune.with_parameters`` to ensure datasets_modules are loaded on each Actor.
 
         Without this, an ImportError will be thrown. See https://github.com/huggingface/transformers/issues/11565.
 
