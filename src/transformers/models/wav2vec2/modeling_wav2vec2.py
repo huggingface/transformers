@@ -182,7 +182,7 @@ def _compute_mask_indices(
 
     if attention_mask is not None:
         # make sure padded input ids cannot be masked
-        spec_aug_mask = torch.where(attention_mask, spec_aug_mask, False)
+        spec_aug_mask = torch.where(attention_mask.bool(), spec_aug_mask, False)
 
     return spec_aug_mask
 

@@ -586,11 +586,11 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long)
+        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
         attention_mask[:2, sequence_length // 2 :] = 0
 
         mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
+            (batch_size, sequence_length), mask_prob, mask_length, device=torch_device, attention_mask=attention_mask
         )
 
         for batch_sum in mask.sum(axis=-1):
