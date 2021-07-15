@@ -114,6 +114,7 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     codevector_perplexity: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    sampled_negative_indices: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def _compute_mask_indices(
@@ -1155,7 +1156,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             2, 0, 1, 3
         )
 
-        return sampled_negatives
+        return sampled_negatives, sampled_negative_indices
 
     @staticmethod
     def compute_contrastive_logits(
@@ -1267,11 +1268,12 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         if True or self.training:
             # for training, we sample negatives
             # 3. sample K negatives (distractors) quantized states for contrastive loss
-            negative_quantized_features = self._sample_negatives(quantized_features, self.config.num_negatives)
+            negative_quantized_features, sampled_negative_indices = self._sample_negatives(quantized_features, self.config.num_negatives)
 
-            negative_quantized_features[
-                mask_time_indices[None, :].broadcast_to(negative_quantized_features.shape[:-1])
-            ] = fsq_negs.reshape(-1, fsq_negs.shape[-1])
+            if fsq_negs is not None:
+                negative_quantized_features[
+                    mask_time_indices[None, :].broadcast_to(negative_quantized_features.shape[:-1])
+                ] = fsq_negs.reshape(-1, fsq_negs.shape[-1])
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
             # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
@@ -1281,6 +1283,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
                 transformer_features,
                 self.config.contrastive_logits_temperature,
             )
+            np.save("/home/patrick/debug_repo/flax_wav2vec2/logits.npy", logits.detach().numpy())
 
             # 5. if a negative vector is identical to the positive (i.e. when codebook utilization is low),
             # its cosine similarity will be masked
@@ -1313,6 +1316,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             codevector_perplexity=codevector_perplexity,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            sampled_negative_indices=sampled_negative_indices,
         )
 
 
