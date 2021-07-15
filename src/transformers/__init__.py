@@ -494,6 +494,7 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
+    # PyTorch models structure
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -540,6 +541,7 @@ if is_torch_available():
             "AutoModelWithLMHead",
         ]
     )
+
     _import_structure["models.bart"].extend(
         [
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -578,7 +580,6 @@ if is_torch_available():
             "load_tf_weights_in_bert_generation",
         ]
     )
-
     _import_structure["models.big_bird"].extend(
         [
             "BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1191,7 +1192,6 @@ if is_tf_available():
     ]
 
     # TensorFlow models structure
-
     _import_structure["models.albert"].extend(
         [
             "TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
