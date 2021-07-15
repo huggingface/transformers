@@ -137,7 +137,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = DebertaV2Tokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                "model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
