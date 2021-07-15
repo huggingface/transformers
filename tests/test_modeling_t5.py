@@ -802,7 +802,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         model.config.do_sample = False
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
-        input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids
+        input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids.to(torch_device)
 
         sequences = model.generate(input_ids)
 
