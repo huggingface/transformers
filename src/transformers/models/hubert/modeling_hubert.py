@@ -47,6 +47,7 @@ def _compute_mask_indices(
     mask_prob: float,
     mask_length: int,
     device: torch.device,
+    attention_mask: Optional[torch.tensor] = None,
     min_masks: int = 0,
 ) -> torch.tensor:
     """
@@ -813,7 +814,10 @@ class HubertModel(HubertPreTrainedModel):
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
-        self, hidden_states: torch.FloatTensor, mask_time_indices: Optional[torch.FloatTensor] = None
+        self,
+        hidden_states: torch.FloatTensor,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to `SpecAugment
@@ -836,6 +840,7 @@ class HubertModel(HubertPreTrainedModel):
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
                 device=hidden_states.device,
+                attention_mask=attention_mask,
                 min_masks=2,
             )
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -847,6 +852,7 @@ class HubertModel(HubertPreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
                 device=hidden_states.device,
+                attention_mask=attention_mask,
             )
             hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
 
