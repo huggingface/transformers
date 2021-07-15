@@ -738,7 +738,7 @@ class LxmertModelIntegrationTest(unittest.TestCase):
         model = LxmertModel.from_pretrained(LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
         input_ids = torch.tensor([[101, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 102]])
         num_visual_features = 10
-        _, visual_feats = np.random.seed(0), np.random.rand(1, num_visual_features, LxmertModel.config.visual_feat_dim)
+        _, visual_feats = np.random.seed(0), np.random.rand(1, num_visual_features, model.config.visual_feat_dim)
         _, visual_pos = np.random.seed(0), np.random.rand(1, num_visual_features, 4)
         visual_feats = torch.as_tensor(visual_feats, dtype=torch.float32)
         visual_pos = torch.as_tensor(visual_pos, dtype=torch.float32)
