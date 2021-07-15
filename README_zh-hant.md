@@ -204,7 +204,7 @@ Tokenizer 為所有的預訓練模型提供了預處理，並可以直接轉換�
 - `Trainer` API 並非相容任何模型，它只為本函式庫中的模型最佳化。對於一般的機器學習用途，請使用其他函式庫。
 - 儘管我們已盡力而為，[examples 目錄](https://github.com/huggingface/transformers/tree/master/examples)中的腳本也僅為範例而已。對於特定問題，它們並不一定隨選即用，可能需要修改幾行程式碼以符合需求。
 
-## 安装
+## 安裝
 
 ### 使用 pip
 
