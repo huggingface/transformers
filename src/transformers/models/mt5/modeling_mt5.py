@@ -119,6 +119,7 @@ class MT5EncoderModel(T5EncoderModel):
     ]
 
 
+# TODO: src/transformers/models/mt5/modeling_mt5.py:122:0: W0223: Method '_reorder_cache' is abstract in class 'GenerationMixin' but is not overridden (abstract-method)
 class MT5ForSequenceClassification(T5PreTrainedModel):
     def __init__(self, config: MT5Config):
         super().__init__(config)
@@ -135,8 +136,8 @@ class MT5ForSequenceClassification(T5PreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        #token_type_ids=None,
-        #position_ids=None,
+        # token_type_ids=None,
+        # position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,

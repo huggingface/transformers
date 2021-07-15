@@ -38,7 +38,8 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
-    Seq2SeqModelOutput, SequenceClassifierOutput,
+    Seq2SeqModelOutput,
+    SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
@@ -1810,6 +1811,7 @@ class T5EncoderModel(T5PreTrainedModel):
         return encoder_outputs
 
 
+# TODO: src/transformers/models/t5/modeling_t5.py:1813:0: W0223: Method '_reorder_cache' is abstract in class 'GenerationMixin' but is not overridden (abstract-method)
 class T5ForSequenceClassification(T5PreTrainedModel):
     def __init__(self, config: T5Config):
         super().__init__(config)
@@ -1826,8 +1828,8 @@ class T5ForSequenceClassification(T5PreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        #token_type_ids=None,
-        #position_ids=None,
+        # token_type_ids=None,
+        # position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
