@@ -2004,7 +2004,7 @@ class LayoutLMPreTrainedModel:
         requires_backends(cls, ["torch"])
 
 
-LAYOUTLM_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class LayoutLMv2ForQuestionAnswering:

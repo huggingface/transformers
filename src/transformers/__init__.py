@@ -849,7 +849,7 @@ if is_torch_available():
     )
     _import_structure["models.layoutlmv2"].extend(
         [
-            "LAYOUTLM_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LayoutLMv2ForQuestionAnswering",
             "LayoutLMv2ForSequenceClassification",
             "LayoutLMv2ForTokenClassification",
@@ -2463,7 +2463,7 @@ if TYPE_CHECKING:
             LayoutLMPreTrainedModel,
         )
         from .models.layoutlmv2 import (
-            LAYOUTLM_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMv2ForQuestionAnswering,
             LayoutLMv2ForSequenceClassification,
             LayoutLMv2ForTokenClassification,

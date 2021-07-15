@@ -1,0 +1,189 @@
+# coding=utf-8
+# Copyright 2021 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Feature extractor class for LayoutLMv2.
+"""
+
+from typing import List, Optional, Union
+
+import numpy as np
+from PIL import Image
+
+import pytesseract
+
+from ...feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
+from ...file_utils import TensorType
+from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
+
+ImageInput = Union[
+    Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
+]
+
+
+def normalize_box(box, width, height):
+    return [
+        int(1000 * (box[0] / width)),
+        int(1000 * (box[1] / height)),
+        int(1000 * (box[2] / width)),
+        int(1000 * (box[3] / height)),
+    ]
+
+
+def apply_tesseract(image: Image.Image):
+    """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
+
+    width, height = image.size
+    w_scale = 1000 / width
+    h_scale = 1000 / height
+
+    ocr_df = pytesseract.image_to_data(image, output_type="data.frame")
+    ocr_df = ocr_df.dropna().assign(
+        left_scaled=ocr_df.left * w_scale,
+        width_scaled=ocr_df.width * w_scale,
+        top_scaled=ocr_df.top * h_scale,
+        height_scaled=ocr_df.height * h_scale,
+        right_scaled=lambda x: x.left_scaled + x.width_scaled,
+        bottom_scaled=lambda x: x.top_scaled + x.height_scaled,
+    )
+
+    float_cols = ocr_df.select_dtypes("float").columns
+    ocr_df[float_cols] = ocr_df[float_cols].round(0).astype(int)
+    ocr_df = ocr_df.replace(r"^\s*$", np.nan, regex=True)
+    ocr_df = ocr_df.dropna().reset_index(drop=True)
+
+    words = list(ocr_df["text"])
+
+    coordinates = ocr_df[["left", "top", "width", "height"]]
+    actual_boxes = []
+    for idx, row in coordinates.iterrows():
+        x, y, w, h = tuple(row)  # the row comes in (left, top, width, height) format
+        actual_box = [x, y, x + w, y + h]  # we turn it into (left, top, left+width, top+height) to get the actual box
+        actual_boxes.append(actual_box)
+
+    normalized_boxes = []
+    for box in actual_boxes:
+        normalized_boxes.append(normalize_box(box, width, height))  # finally, normalize the bounding boxes
+
+    assert len(words) == len(normalized_boxes), "Not as many words as there are bounding boxes"
+
+    return words, normalized_boxes
+
+
+class LayoutLMv2FeatureExtractor(PreTrainedFeatureExtractor, ImageFeatureExtractionMixin):
+    r"""
+    Constructs a LayoutLMv2 feature extractor.
+
+    This feature extractor inherits from :class:`~transformers.feature_extraction_utils.PreTrainedFeatureExtractor`
+    which contains most of the main methods. Users should refer to this superclass for more information regarding those
+    methods.
+
+    Args:
+        do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to resize the input to a certain :obj:`size`.
+        size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 224):
+            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
+            integer is provided, then the input will be resized to (size, size). Only has an effect if :obj:`do_resize`
+            is set to :obj:`True`.
+        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
+            An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
+            :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
+            Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+        apply_ocr (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
+
+            .. note::
+
+                LayoutLMv2FeatureExtractor uses Google's Tesseract OCR engine under the hood.
+    """
+
+    model_input_names = ["pixel_values"]
+
+    def __init__(self, do_resize=True, size=224, resample=Image.BILINEAR, apply_ocr=True, **kwargs):
+        super().__init__(**kwargs)
+        self.do_resize = do_resize
+        self.size = size
+        self.resample = resample
+        self.apply_ocr = apply_ocr
+
+    def __call__(
+        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
+    ) -> BatchFeature:
+        """
+        Main method to prepare for the model one or several image(s).
+
+        Args:
+            images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`, defaults to :obj:`'np'`):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
+                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
+                * :obj:`'np'`: Return NumPy :obj:`np.ndarray` objects.
+                * :obj:`'jax'`: Return JAX :obj:`jnp.ndarray` objects.
+        """
+
+        # Input type checking for clearer error
+        valid_images = False
+
+        # Check that images has a valid type
+        if isinstance(images, (Image.Image, np.ndarray)) or is_torch_tensor(images):
+            valid_images = True
+        elif isinstance(images, (list, tuple)):
+            if len(images) == 0 or isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]):
+                valid_images = True
+
+        if not valid_images:
+            raise ValueError(
+                "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example),"
+                "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
+            )
+
+        is_batched = bool(
+            isinstance(images, (list, tuple))
+            and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
+        )
+
+        if not is_batched:
+            images = [images]
+
+        # Tesseract OCR to get words + normalized bounding boxes
+        if self.apply_ocr:
+            words_batch = []
+            boxes_batch = []
+            for image in images:
+                words, boxes = apply_tesseract(self.to_pil_image(image))
+                words_batch.append(words)
+                boxes_batch.append(boxes)
+
+        # transformations (resizing)
+        if self.do_resize and self.size is not None:
+            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+
+        # return as BatchFeature
+        data = {"pixel_values": images}
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+
+        if self.apply_ocr:
+            encoded_inputs["words"] = words_batch
+            encoded_inputs["boxes"] = boxes_batch
+
+        return encoded_inputs

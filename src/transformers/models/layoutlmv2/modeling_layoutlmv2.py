@@ -82,7 +82,7 @@ class LayoutLMv2Embeddings(nn.Module):
 
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-    def _cal_spatial_position_embeddings(self, bbox):
+    def _calc_spatial_position_embeddings(self, bbox):
         try:
             left_position_embeddings = self.x_position_embeddings(bbox[:, :, 0])
             upper_position_embeddings = self.y_position_embeddings(bbox[:, :, 1])
@@ -726,7 +726,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings.word_embeddings(input_ids)
         position_embeddings = self.embeddings.position_embeddings(position_ids)
-        spatial_position_embeddings = self.embeddings._cal_spatial_position_embeddings(bbox)
+        spatial_position_embeddings = self.embeddings._calc_spatial_position_embeddings(bbox)
         token_type_embeddings = self.embeddings.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + position_embeddings + spatial_position_embeddings + token_type_embeddings
@@ -737,7 +737,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     def _calc_img_embeddings(self, image, bbox, position_ids):
         visual_embeddings = self.visual_proj(self.visual(image))
         position_embeddings = self.embeddings.position_embeddings(position_ids)
-        spatial_position_embeddings = self.embeddings._cal_spatial_position_embeddings(bbox)
+        spatial_position_embeddings = self.embeddings._calc_spatial_position_embeddings(bbox)
         embeddings = visual_embeddings + position_embeddings + spatial_position_embeddings
         if self.has_visual_segment_embedding:
             embeddings += self.visual_segment_embedding
