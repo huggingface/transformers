@@ -18,11 +18,12 @@ limitations under the License.
 A useful guide for English-Traditional Chinese translation of Hugging Face documentation
 - Add space around English words and numbers when they appear between Chinese characters. E.g., 共 100 多種語言; 使用 transformers 函式庫。
 - Use square quotes, e.g.,「引用」
+- Some of terms in the file can be found at National Academy for Educational Research (https://terms.naer.edu.tw/), an official website providing bilingual translations between English and Traditional Chinese.
 
 Dictionary
 
 API: API (不翻譯）
-add: 新增
+add: 加入
 checkpoint: 檢查點
 code: 程式碼
 community: 社群
@@ -33,15 +34,16 @@ example: 基本翻譯為「範例」，或依語意翻為「例子」
 finetune: 微調
 Hugging Face: Hugging Face（不翻譯）
 implementation: 實作
-inference: 推理
+inference: 推論
 library: 函式庫
 module: 模組
 NLP/Natural Language Processing: 以 NLP 出現時不翻譯，以 Natural Language Processing 出現時翻譯為自然語言處理
 online demos: 線上Demo
 pipeline: pipeline（不翻譯）
 pretrained/pretrain: 預訓練
-Python data structures (e.g., list, set, dict): 翻譯為列表，集合，辭典，並用括號標註原英文
+Python data structures (e.g., list, set, dict): 翻譯為串列，集合，字典，並用括號標註原英文
 repository: repository（不翻譯）
+summary: 概覽
 token-: token-（不翻譯）
 Trainer: Trainer（不翻譯）
 transformer: transformer（不翻譯）
@@ -93,17 +95,17 @@ user: 使用者
 
 🤗 Transformers 提供了便於快速下載和使用的API，讓你可以將預訓練模型用在給定文本、在你的資料集上微調然後經由 [model hub](https://huggingface.co/models) 與社群共享。同時，每個定義的 Python 模組架構均完全獨立，方便修改和快速研究實驗。
 
-🤗 Transformers 支援三個最熱門的深度學習函式庫： [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/) 以及 [TensorFlow](https://www.tensorflow.org/) — 並與之完美整合。你可以直接使用其中一個框架訓練你的模型，然後用另一個載入和推理。
+🤗 Transformers 支援三個最熱門的深度學習函式庫： [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/) 以及 [TensorFlow](https://www.tensorflow.org/) — 並與之完美整合。你可以直接使用其中一個框架訓練你的模型，然後用另一個載入和推論。
 
 ## 線上Demo
 
-你可以直接在 [model hub](https://huggingface.co/models) 上測試大多數的模型。我們也提供了 [私有模型託管、模型版本管理以及推理API](https://huggingface.co/pricing)。
+你可以直接在 [model hub](https://huggingface.co/models) 上測試大多數的模型。我們也提供了 [私有模型託管、模型版本管理以及推論API](https://huggingface.co/pricing)。
 
 這裡是一些範例：
 - [用 BERT 做遮蓋填詞](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
 - [用 Electra 做專有名詞辨識](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
 - [用 GPT-2 做文本生成](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
-- [用 RoBERTa 做自然語言推理](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
+- [用 RoBERTa 做自然語言推論](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
 - [用 BART 做文本摘要](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
 - [用 DistilBERT 做問答](https://huggingface.co/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
 - [用 T5 做翻譯](https://huggingface.co/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
@@ -169,7 +171,7 @@ user: 使用者
 >>> outputs = model(**inputs)
 ```
 
-Tokenizer 為所有的預訓練模型提供了預處理，並可以直接轉換單一字串（比如上面的例子）或列表 (list)。它會輸出一個的詞典 (dict) 讓你可以在下游程式碼裡使用或直接藉由 `**` 運算式傳給模型。
+Tokenizer 為所有的預訓練模型提供了預處理，並可以直接轉換單一字串（比如上面的例子）或串列 (list)。它會輸出一個的字典 (dict) 讓你可以在下游程式碼裡使用或直接藉由 `**` 運算式傳給模型。
 
 模型本身是一個常規的 [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) 或 [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)（取決於你的後端），可依常規方式使用。 [這個教學](https://huggingface.co/transformers/training.html)解釋了如何將這樣的模型整合到一般的 PyTorch 或 TensorFlow 訓練迴圈中，或是如何使用我們的 `Trainer` API 在一個新的資料集上快速進行微調。
 
@@ -179,7 +181,7 @@ Tokenizer 為所有的預訓練模型提供了預處理，並可以直接轉換�
     - NLU 和 NLG 上性能卓越
     - 對教學和實作友好且低門檻
     - 高度抽象，使用者只須學習 3 個類別
-    - 對所有模型統一的API
+    - 對所有模型使用的制式化API
 
 1. 更低的運算成本，更少的碳排放：
     - 研究人員可以分享預訓練的模型而非從頭開始訓練
@@ -240,7 +242,7 @@ conda install -c huggingface transformers
 
 目前的檢查點數量： ![](https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen)
 
-🤗 Transformers 目前支援以下的架構（模型概述請參閱[這裡](https://huggingface.co/transformers/model_summary.html)）：
+🤗 Transformers 目前支援以下的架構（模型概覽請參閱[這裡](https://huggingface.co/transformers/model_summary.html)）：
 
 1. **[ALBERT](https://huggingface.co/transformers/model_doc/albert.html)** (from Google Research and the Toyota Technological Institute at Chicago) released with the paper [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut.
 1. **[BART](https://huggingface.co/transformers/model_doc/bart.html)** (from Facebook) released with the paper [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://arxiv.org/pdf/1910.13461.pdf) by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov and Luke Zettlemoyer.
@@ -307,7 +309,7 @@ Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
 1. **[XLM-RoBERTa](https://huggingface.co/transformers/model_doc/xlmroberta.html)** (from Facebook AI), released together with the paper [Unsupervised Cross-lingual Representation Learning at Scale](https://arxiv.org/abs/1911.02116) by Alexis Conneau*, Kartikay Khandelwal*, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard Grave, Myle Ott, Luke Zettlemoyer and Veselin Stoyanov.
 1. **[XLNet](https://huggingface.co/transformers/model_doc/xlnet.html)** (from Google/CMU) released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 1. **[XLSR-Wav2Vec2](https://huggingface.co/transformers/model_doc/xlsr_wav2vec2.html)** (from Facebook AI) released with the paper [Unsupervised Cross-Lingual Representation Learning For Speech Recognition](https://arxiv.org/abs/2006.13979) by Alexis Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
-1. 想要貢獻新的模型？我們這裡有一份**詳細指引和模板**來引導你新增新的模型。你可以在 [`templates`](./templates) 目錄中找到它們。記得查看 [貢獻指南](./CONTRIBUTING.md) 並在開始寫 PR 前聯繫維護人員或開一個新的 issue 來獲得 feedbacks。
+1. 想要貢獻新的模型？我們這裡有一份**詳細指引和模板**來引導你加入新的模型。你可以在 [`templates`](./templates) 目錄中找到它們。記得查看 [貢獻指引](./CONTRIBUTING.md) 並在開始寫 PR 前聯繫維護人員或開一個新的 issue 來獲得 feedbacks。
 
 要檢查某個模型是否已有 Flax、PyTorch 或 TensorFlow 的實作，或其是否在🤗 Tokenizers 函式庫中有對應的 tokenizer，敬請參閱[此表](https://huggingface.co/transformers/index.html#supported-frameworks)。
 
