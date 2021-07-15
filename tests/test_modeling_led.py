@@ -279,11 +279,6 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         self.model_tester = LEDModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LEDConfig)
 
-    @slow
-    def test_torchscript(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._create_and_check_torchscript(config, inputs_dict)
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
