@@ -19,6 +19,8 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
+
+# Add modeling imports here
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -237,8 +239,6 @@ from ..reformer.modeling_reformer import (
     ReformerModel,
     ReformerModelWithLMHead,
 )
-
-# Add modeling imports here
 from ..rembert.modeling_rembert import (
     RemBertForCausalLM,
     RemBertForMaskedLM,

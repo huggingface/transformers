@@ -554,7 +554,6 @@ if is_torch_available():
             "PretrainedBartModel",
         ]
     )
-    # PyTorch models structure
     _import_structure["models.bert"].extend(
         [
             "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1190,7 +1189,6 @@ if is_tf_available():
         "TFSharedEmbeddings",
         "shape_list",
     ]
-
     # TensorFlow models structure
     _import_structure["models.albert"].extend(
         [
