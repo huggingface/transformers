@@ -58,6 +58,7 @@ XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
 
 # question-answering
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
+DEBERTA_TINY = "hf-internal-testing/tiny-deberta"
 
 # masked lm
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
@@ -70,7 +71,7 @@ BERT_TINY = "hf-internal-testing/tiny-bert"
 
 
 # TODO: to add:
-# deberta
+#
 # funnel
 # longformer
 # dpr
@@ -133,6 +134,7 @@ def make_task_cmds():
         ],
         qa=[
             "roberta",
+            "deberta",
         ],
         clas=[
             "bert",
