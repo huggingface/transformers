@@ -18,13 +18,17 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available, is_pytesseract_available
 
 
 _import_structure = {
     "configuration_layoutlmv2": ["LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config"],
     "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
 }
+
+if is_pytesseract_available():
+    _import_structure["feature_extraction_layoutlmv2"] = ["LayoutLMv2FeatureExtractor"]
+    _import_structure["processing_layoutlmv2"] = ["LayoutLMv2Processor"]
 
 if is_tokenizers_available():
     _import_structure["tokenization_layoutlmv2_fast"] = ["LayoutLMv2TokenizerFast"]
@@ -46,6 +50,10 @@ if TYPE_CHECKING:
 
     if is_tokenizers_available():
         from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
+
+    if is_pytesseract_available():
+        from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
+        from .processing_layoutlmv2 import LayoutLMv2Processor
 
     if is_torch_available():
         from .modeling_layoutlmv2 import (
