@@ -186,6 +186,7 @@ class FlaxDataCollatorForWav2Vec2Pretraining:
         batch["sampled_negative_indices"] = _sample_negative_indices(
             (batch["mask_time_indices"].shape + (self.model.config.proj_codevector_dim,)),
             self.model.config.num_negatives,
+            attention_mask=attention_mask,
         )
 
         return batch
