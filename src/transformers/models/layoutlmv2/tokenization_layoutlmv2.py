@@ -98,9 +98,10 @@ LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 returned to provide some overlap between truncated and overflowing sequences. The value of this
                 argument defines the number of overlapping tokens.
             is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the input is already pre-tokenized (e.g., split into words). If set to :obj:`True`, the
-                tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
-                which it will tokenize. This is useful for NER or token classification.
+                Whether or not the first sequence is already pre-tokenized (e.g., split into words). If set to
+                :obj:`True`, the tokenizer assumes the first sequence is already split into words (for instance, by
+                splitting it on whitespace) which it will tokenize. Only relevant in case two sequences are provided to
+                the tokenizer (e.g. for visual question answering).
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
@@ -375,10 +376,9 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 :obj:`is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                :obj:`is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_pair (:obj:`List[str]`, :obj:`List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
+                (pretokenized string).
             boxes (:obj:`List[List[int]]`, :obj:`List[List[List[int]]]`):
                 Word-level bounding boxes.
             word_labels (:obj:`List[str]`, :obj:`List[List[str]]`
@@ -427,10 +427,15 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     "or `List[List[str]]` (batch of pretokenized examples)."
                 )
 
-        if is_split_into_words:
-            is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+        if text_pair is not None:
+            if is_split_into_words:
+                is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+            else:
+                is_batched = isinstance(text, (list, tuple))
         else:
-            is_batched = isinstance(text, (list, tuple))
+            is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+
+        print("is_batched:", is_batched)
 
         words = text if text_pair is None else text_pair
         if is_batched:
@@ -928,6 +933,9 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         # pair = bool(pair_ids is not None)
         # len_ids = len(ids)
         # len_pair_ids = len(pair_ids) if pair else 0
+
+        print("Text:", text)
+        print("Text pair:", text_pair)
 
         tokens = []
         pair_tokens = []
