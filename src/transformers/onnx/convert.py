@@ -87,6 +87,7 @@ def export(
     logger.info(f"Using framework PyTorch: {torch.__version__}")
     torch.set_grad_enabled(False)
     model.config.return_dict = True
+    model.eval()
 
     # Check if we need to override certain configuration item
     if config.values_override is not None:
