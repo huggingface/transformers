@@ -123,7 +123,11 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
     Cover the tests for model which have use_cache feature (i.e. "with_past" for ONNX)
     """
 
-    SUPPORTED_WITH_PAST_CONFIGS = {("BART", BartConfig), ("GPT2", GPT2Config), ("T5", T5Config)}
+    SUPPORTED_WITH_PAST_CONFIGS = {
+        ("BART", BartConfig),
+        ("GPT2", GPT2Config),
+        # ("T5", T5Config)
+    }
 
     @patch.multiple(OnnxConfigWithPast, __abstractmethods__=set())
     def test_use_past(self):
