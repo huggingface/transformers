@@ -877,6 +877,18 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         return input_lengths
 
+    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
+        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+        batch_size = attention_mask.shape[0]
+
+        attention_mask = torch.zeros(
+            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        # these two operations makes sure that all values before the output lengths idxs are attended to
+        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        return attention_mask
+
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
     Wav2Vec2 was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
@@ -1044,19 +1056,8 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         extract_features = extract_features.transpose(1, 2)
 
         if attention_mask is not None:
-            # compute real output lengths according to convolution formula
-            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-
-            attention_mask = torch.zeros(
-                extract_features.shape[:2], dtype=extract_features.dtype, device=extract_features.device
-            )
-
-            # these two operations makes sure that all values
-            # before the output lengths indices are attended to
-            attention_mask[
-                (torch.arange(attention_mask.shape[0], device=extract_features.device), output_lengths - 1)
-            ] = 1
-            attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+            # compute reduced attention_mask correponding to feature vectors
+            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
         hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(
@@ -1111,7 +1112,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         self.wav2vec2.feature_extractor._freeze_parameters()
 
     @staticmethod
-    def _sample_negatives(features: torch.FloatTensor, num_negatives: int):
+    def _sample_negatives(
+        features: torch.FloatTensor, num_negatives: int, attention_mask: Optional[torch.LongTensor] = None
+    ):
         """
         Sample `num_negatives` vectors from feature vectors.
         """
@@ -1125,12 +1128,15 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         with torch.no_grad():
             # get `num_negatives` random vector indices from the same utterance
-            sampled_negative_indices = torch.randint(
-                low=0,
-                high=sequence_length - 1,
-                size=(batch_size, num_negatives * sequence_length),
-                device=features.device,
-            )
+            sampled_negative_indices = []
+            for batch_idx in range(batch_size):
+                high = attention_mask[batch_idx].sum() - 1 if attention_mask is not None else sequence_length - 1
+                sampled_indices_slice = torch.randint(
+                    0, high, size=(num_negatives * sequence_length,), device=features.device
+                )
+                sampled_negative_indices.append(sampled_indices_slice)
+
+            sampled_negative_indices = torch.stack(sampled_negative_indices)
 
             # generate indices of the positive vectors themselves, repeat them `num_negatives` times
             feature_indices = (
@@ -1263,7 +1269,14 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         if self.training:
             # for training, we sample negatives
             # 3. sample K negatives (distractors) quantized states for contrastive loss
-            negative_quantized_features = self._sample_negatives(quantized_features, self.config.num_negatives)
+            # if attention_mask is passed, make sure that padded feature vectors cannot be sampled
+            if attention_mask is not None:
+                # compute reduced attention_mask correponding to feature vectors
+                attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
+
+            negative_quantized_features = self._sample_negatives(
+                quantized_features, self.config.num_negatives, attention_mask=attention_mask
+            )
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
             # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf

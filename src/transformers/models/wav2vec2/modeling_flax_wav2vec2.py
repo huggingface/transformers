@@ -174,7 +174,7 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _sample_negative_indices(features_shape: Tuple, num_negatives: int):
+def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attention_mask: Optional[np.ndarray] = None):
     """
     Sample `num_negatives` vectors from feature vectors.
     """
@@ -186,11 +186,13 @@ def _sample_negative_indices(features_shape: Tuple, num_negatives: int):
         )
 
     # get `num_negatives` random vector indices from the same utterance
-    sampled_negative_indices = np.random.randint(
-        low=0,
-        high=sequence_length - 1,
-        size=(batch_size, num_negatives * sequence_length),
-    )
+    sampled_negative_indices = []
+    for batch_idx in range(batch_size):
+        high = attention_mask[batch_idx].sum() - 1 if attention_mask is not None else sequence_length - 1
+        sampled_indices_slice = np.random.randint(0, high, size=(num_negatives * sequence_length,))
+        sampled_negative_indices.append(sampled_indices_slice)
+
+    sampled_negative_indices = np.asarray(sampled_negative_indices, dtype=np.int32)
 
     # generate indices of the positive vectors themselves, repeat them `num_negatives` times
     feature_indices = np.broadcast_to(np.arange(sequence_length)[:, None], (sequence_length, num_negatives)).flatten()
