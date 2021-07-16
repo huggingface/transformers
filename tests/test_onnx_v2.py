@@ -3,15 +3,13 @@ from tempfile import NamedTemporaryFile
 from unittest import TestCase
 from unittest.mock import patch
 
-from transformers import (
+from transformers import (  # LongformerConfig,; T5Config,
     AlbertConfig,
     AutoTokenizer,
     BartConfig,
     DistilBertConfig,
     GPT2Config,
-    # LongformerConfig,
     RobertaConfig,
-    # T5Config,
     XLMRobertaConfig,
     is_torch_available,
 )
@@ -23,6 +21,7 @@ from transformers.models.distilbert import DistilBertOnnxConfig
 # from transformers.models.longformer import LongformerOnnxConfig
 from transformers.models.gpt2 import GPT2OnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
+
 # from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
 from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat, validate_model_outputs
@@ -170,14 +169,13 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 
 
 if is_torch_available():
-    from transformers import (
+    from transformers import (  # T5Model,
         AlbertModel,
         BartModel,
         BertModel,
         DistilBertModel,
         GPT2Model,
         RobertaModel,
-        # T5Model,
         XLMRobertaModel,
     )
 
