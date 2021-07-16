@@ -48,37 +48,30 @@ def normalize_box(box, width, height):
 def apply_tesseract(image: Image.Image):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
 
-    width, height = image.size
-    w_scale = 1000 / width
-    h_scale = 1000 / height
+    # apply OCR
+    data = pytesseract.image_to_data(image, output_type="dict")
+    words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
 
-    ocr_df = pytesseract.image_to_data(image, output_type="data.frame")
-    ocr_df = ocr_df.dropna().assign(
-        left_scaled=ocr_df.left * w_scale,
-        width_scaled=ocr_df.width * w_scale,
-        top_scaled=ocr_df.top * h_scale,
-        height_scaled=ocr_df.height * h_scale,
-        right_scaled=lambda x: x.left_scaled + x.width_scaled,
-        bottom_scaled=lambda x: x.top_scaled + x.height_scaled,
-    )
+    # filter empty words and corresponding coordinates
+    irrelevant_indices = [idx for idx, word in enumerate(words) if not word]
+    words = [word for idx, word in enumerate(words) if idx not in irrelevant_indices]
+    left = [coord for idx, coord in enumerate(left) if idx not in irrelevant_indices]
+    top = [coord for idx, coord in enumerate(top) if idx not in irrelevant_indices]
+    width = [coord for idx, coord in enumerate(width) if idx not in irrelevant_indices]
+    height = [coord for idx, coord in enumerate(height) if idx not in irrelevant_indices]
 
-    float_cols = ocr_df.select_dtypes("float").columns
-    ocr_df[float_cols] = ocr_df[float_cols].round(0).astype(int)
-    ocr_df = ocr_df.replace(r"^\s*$", np.nan, regex=True)
-    ocr_df = ocr_df.dropna().reset_index(drop=True)
-
-    words = list(ocr_df["text"])
-
-    coordinates = ocr_df[["left", "top", "width", "height"]]
+    # turn coordinates into (left, top, left+width, top+height) format
     actual_boxes = []
-    for idx, row in coordinates.iterrows():
-        x, y, w, h = tuple(row)  # the row comes in (left, top, width, height) format
-        actual_box = [x, y, x + w, y + h]  # we turn it into (left, top, left+width, top+height) to get the actual box
+    for x, y, w, h in zip(left, top, width, height):
+        actual_box = [x, y, x + w, y + h]
         actual_boxes.append(actual_box)
 
+    image_width, image_height = image.size
+
+    # finally, normalize the bounding boxes
     normalized_boxes = []
     for box in actual_boxes:
-        normalized_boxes.append(normalize_box(box, width, height))  # finally, normalize the bounding boxes
+        normalized_boxes.append(normalize_box(box, image_width, image_height))
 
     assert len(words) == len(normalized_boxes), "Not as many words as there are bounding boxes"
 
