@@ -1,12 +1,20 @@
+import inspect
+import collections
 import math
+import os
+from typing import Any
 
+import numpy
 import torch
 import torch.nn.functional as F
 
+import onnxruntime
 from sparseml.pytorch.optim.manager import ScheduledModifierManager
 from sparseml.pytorch.optim.optimizer import ScheduledOptimizer
 from sparseml.pytorch.utils import ModuleExporter, logger
 from trainer_qa import QuestionAnsweringTrainer
+from transformers.modeling_outputs import QuestionAnsweringModelOutput
+from transformers.models.bert.modeling_bert import BertForQuestionAnswering
 
 
 class SparseMLQATrainer(QuestionAnsweringTrainer):
@@ -107,15 +115,61 @@ class SparseMLQATrainer(QuestionAnsweringTrainer):
         return (loss, outputs) if return_outputs else loss
 
 
-def export_model(model, dataloader, output_dir):
+class QuestionAnsweringModuleExporter(ModuleExporter):
+    """
+    Module exporter class for Question Answering
+    """
+    @classmethod
+    def get_output_names(self, out: Any):
+        if not isinstance(out, QuestionAnsweringModelOutput):
+            raise ValueError("Expected QuestionAnsweringModelOutput, got {type(out)}")
+        expected = ["start_logits", "end_logits"]
+        if numpy.any([name for name in expected if name not in out]):
+            raise ValueError("Expected output names not found in model output")
+        return expected
+
+
+def export_model(model, dataloader, output_dir, num_exported_samples):
     """
     Export a trained model to ONNX
     :param model: trained model
     :param dataloader: dataloader to get sample batch
     :param output_dir: output directory for ONNX model
     """
-    exporter = ModuleExporter(model, output_dir=output_dir)
+    exporter = QuestionAnsweringModuleExporter(model, output_dir=output_dir)
+
+    sess = None
+    num_samples = 0
+
+    sample_inputs = os.path.join(output_dir, "sample-inputs")
+    sample_outputs = os.path.join(output_dir, "sample-outputs")
+    os.makedirs(sample_inputs, exist_ok=True)
+    os.makedirs(sample_outputs, exist_ok=True)
+
+    forward_args_spec = inspect.getfullargspec(BertForQuestionAnswering.forward)
     for _, sample_batch in enumerate(dataloader):
-        sample_input = (sample_batch["input_ids"], sample_batch["attention_mask"], sample_batch["token_type_ids"])
-        exporter.export_onnx(sample_batch=sample_input, convert_qat=True)
-        break
+        if sess is None:
+            one_sample_input = collections.OrderedDict(
+                [(f, sample_batch[f][0].reshape(1, -1)) for f in forward_args_spec.args if f in sample_batch]
+            )
+
+            try:
+                exporter.export_onnx(sample_batch=one_sample_input, convert_qat=True)
+                onnx_file = os.path.join(output_dir, "model.onnx")
+            except Exception:
+                raise RuntimeError("Error exporting ONNX models and/or inputs/outputs")
+
+            sess = onnxruntime.InferenceSession(onnx_file)
+
+        input_names = list(sample_batch.keys())
+        output_names = [o.name for o in sess.get_outputs()]
+        for input_vals in zip(*sample_batch.values()):
+            input_feed = {k: v.reshape(1, -1).numpy() for k, v in zip(input_names, input_vals)}
+            output_vals = sess.run(output_names, input_feed)
+            output_dict = {name: val for name, val in zip(output_names, output_vals)}
+            file_idx = f"{num_samples}".zfill(4)
+            numpy.savez(f"{sample_inputs}/inp-{file_idx}.npz", **input_feed)
+            numpy.savez(f"{sample_outputs}/out-{file_idx}.npz", **output_dict)
+            num_samples += 1
+            if num_samples >= num_exported_samples:
+                return
