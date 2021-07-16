@@ -168,6 +168,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         cls_token_box=[0, 0, 0, 0],
         sep_token_box=[1000, 1000, 1000, 1000],
         pad_token_box=[0, 0, 0, 0],
+        pad_token_label=-100,
         tokenize_chinese_chars=True,
         strip_accents=None,
         model_max_length: int = 512,
@@ -210,6 +211,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         self.cls_token_box = cls_token_box
         self.sep_token_box = sep_token_box
         self.pad_token_box = pad_token_box
+        self.pad_token_label = pad_token_label
 
     @property
     def do_lower_case(self):
@@ -421,7 +423,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             # in case only text is provided => must be words
             if not isinstance(text, (list, tuple)):
                 raise ValueError(
-                    "words must of type `List[str]` (single pretokenized example),"
+                    "Words must of type `List[str]` (single pretokenized example), "
                     "or `List[List[str]]` (batch of pretokenized examples)."
                 )
 
@@ -430,11 +432,17 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         else:
             is_batched = isinstance(text, (list, tuple))
 
+        words = text if text_pair is None else text_pair
         if is_batched:
-            if isinstance(text_pair, str):
-                raise TypeError(
-                    "when tokenizing batches of text, `text_pair` must be a list or tuple with the same length as `text`."
-                )
+            assert len(words) == len(boxes), "You must provide words and boxes for an equal amount of examples"
+            for words_example, boxes_example in zip(words, boxes):
+                assert len(words_example) == len(
+                    boxes_example
+                ), "You must provide as many words as there are bounding boxes"
+        else:
+            assert len(words) == len(boxes), "You must provide as many words as there are bounding boxes"
+
+        if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
                 raise ValueError(
                     f"batch length of `text`: {len(text)} does not match batch length of `text_pair`: {len(text_pair)}."
@@ -922,14 +930,16 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         # len_pair_ids = len(pair_ids) if pair else 0
 
         tokens = []
+        pair_tokens = []
         token_boxes = []
+        pair_token_boxes = []
         labels = []
         start_position = None
         end_position = None
 
         if text_pair is None:
             if word_labels is None:
-                # CASE 1: document image classification + token classification (inference)
+                # CASE 1: document image classification (training + inference) + CASE 2: token classification (inference)
                 for word, box in zip(text, boxes):
                     if len(word) < 1:  # skip empty words
                         continue
@@ -938,7 +948,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     token_boxes.extend([box] * len(word_tokens))
             else:
                 # CASE 2: token classification (training)
-                for word, box, label in zip(words, boxes, word_labels):
+                for word, box, label in zip(text, boxes, word_labels):
                     if len(word) < 1:  # skip empty words
                         continue
                     word_tokens = self.tokenize(word)
@@ -949,23 +959,28 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         else:
             if answers is None:
                 # CASE 3: document visual question answering (inference)
-                # text = questions
+                # text = question
                 # text_pair = words
+                tokens = self.tokenize(text)
+                token_boxes = [self.pad_token_box for _ in range(len(tokens))]
+
                 for word, box in zip(text_pair, boxes):
                     if len(word) < 1:  # skip empty words
                         continue
                     word_tokens = self.tokenize(word)
-                    tokens.extend(word_tokens)
-                    token_boxes.extend([box] * len(word_tokens))
+                    pair_tokens.extend(word_tokens)
+                    pair_token_boxes.extend([box] * len(word_tokens))
             else:
                 # CASE 3: document visual question answering (training)
-                # TODO find answers in context, create start_position and end_position
+                # text = questions
+                # text_pair = words
+                # TODO find answers in text_pair, create start_position and end_position
                 # that indicate which tokens are the start and end of the answer
                 pass
 
         # Create ids + pair_ids
         ids = self.convert_tokens_to_ids(tokens)
-        pair_ids = None
+        pair_ids = self.convert_tokens_to_ids(pair_tokens) if pair_tokens else None
 
         # Compute the total size of the returned encodings
         pair = bool(pair_ids is not None)
@@ -1008,6 +1023,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
             token_boxes = [self.cls_token_box] + token_boxes + [self.sep_token_box]
+            if labels:
+                labels = [self.pad_token_label] + labels + [self.pad_token_label]
         else:
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
@@ -1023,7 +1040,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             else:
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
 
-        if labels is not None:
+        if labels:
             encoded_inputs["labels"] = labels
         if start_position is not None and end_position is not None:
             encoded_inputs["start_positions"] = start_positions
@@ -1105,6 +1122,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     )
                 if "bbox" in encoded_inputs:
                     encoded_inputs["bbox"] = encoded_inputs["bbox"] + [self.pad_token_box] * difference
+                if "labels" in encoded_inputs:
+                    encoded_inputs["labels"] = encoded_inputs["labels"] + [self.pad_token_label] * difference
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
@@ -1117,6 +1136,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     ]
                 if "bbox" in encoded_inputs:
                     encoded_inputs["bbox"] = [self.pad_token_box] * difference + encoded_inputs["bbox"]
+                if "labels" in encoded_inputs:
+                    encoded_inputs["labels"] = [self.pad_token_label] * difference + encoded_inputs["bbox"]
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
