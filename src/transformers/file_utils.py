@@ -88,6 +88,7 @@ if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VA
             "tf-nightly-cpu",
             "tf-nightly-gpu",
             "intel-tensorflow",
+            "intel-tensorflow-avx512",
             "tensorflow-rocm",
             "tensorflow-macos",
         )
