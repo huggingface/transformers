@@ -97,11 +97,6 @@ LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 :obj:`return_overflowing_tokens=True` will contain some tokens from the end of the truncated sequence
                 returned to provide some overlap between truncated and overflowing sequences. The value of this
                 argument defines the number of overlapping tokens.
-            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the first sequence is already pre-tokenized (e.g., split into words). If set to
-                :obj:`True`, the tokenizer assumes the first sequence is already split into words (for instance, by
-                splitting it on whitespace) which it will tokenize. Only relevant in case two sequences are provided to
-                the tokenizer (e.g. for visual question answering).
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
@@ -355,7 +350,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -373,9 +367,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         Args:
             text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                :obj:`is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+                The sequence or batch of sequences to be encoded. Each sequence can be a string.
             text_pair (:obj:`List[str]`, :obj:`List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
                 (pretokenized string).
@@ -428,10 +420,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 )
 
         if text_pair is not None:
-            if is_split_into_words:
-                is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
-            else:
-                is_batched = isinstance(text, (list, tuple))
+            is_batched = isinstance(text, (list, tuple))
         else:
             is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
 
@@ -463,7 +452,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 truncation=truncation,
                 max_length=max_length,
                 stride=stride,
-                is_split_into_words=is_split_into_words,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
@@ -487,7 +475,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 truncation=truncation,
                 max_length=max_length,
                 stride=stride,
-                is_split_into_words=is_split_into_words,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
@@ -519,7 +506,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -553,7 +539,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
-            is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
@@ -584,7 +569,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -738,7 +722,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -786,7 +769,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
-            is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
@@ -811,7 +793,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
