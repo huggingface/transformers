@@ -166,7 +166,7 @@ class MT5ForSequenceClassification(T5PreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[1]
+        pooled_output = outputs[0][:, 0, :]
 
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
