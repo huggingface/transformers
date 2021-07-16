@@ -52,7 +52,7 @@ model.save_pretrained("gpt-neo-1.3B")
 ### Train Model
 
 ```bash
-python run_pjit_clm.py \
+python run_clm_mp.py \
     --model_name_or_path gpt-neo-1.3B  \
     --tokenizer_name gpt2 \
     --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
