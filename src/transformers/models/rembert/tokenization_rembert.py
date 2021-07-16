@@ -31,12 +31,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "rembert-large": "https://huggingface.co/rembert-large/resolve/main/sentencepiece.model",
+        "rembert": "https://huggingface.co/rembert/resolve/main/sentencepiece.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "rembert-large": 256,
+    "rembert": 256,
 }
 
 

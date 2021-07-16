@@ -661,7 +661,6 @@ class RemBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->RemBert
 class RemBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -753,7 +752,6 @@ REMBERT_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->RemBert
 @add_start_docstrings(
     "The bare RemBERT Model transformer outputting raw hidden-states without any specific head on top.",
     REMBERT_START_DOCSTRING,
@@ -800,7 +798,7 @@ class RemBertModel(RemBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert-large",
+        checkpoint="rembert",
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -953,7 +951,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert-large",
+        checkpoint="rembert",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1101,10 +1099,10 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
             >>> from transformers import RemBertTokenizer, RemBertForCausalLM, RemBertConfig
             >>> import torch
 
-            >>> tokenizer = RemBertTokenizer.from_pretrained('rembert-large')
-            >>> config = RemBertConfig.from_pretrained("rembert-large")
+            >>> tokenizer = RemBertTokenizer.from_pretrained('rembert')
+            >>> config = RemBertConfig.from_pretrained("rembert")
             >>> config.is_decoder = True
-            >>> model = RemBertForCausalLM.from_pretrained('rembert-large', config=config)
+            >>> model = RemBertForCausalLM.from_pretrained('rembert', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1195,7 +1193,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert-large",
+        checkpoint="rembert",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1279,7 +1277,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert-large",
+        checkpoint="rembert",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1371,7 +1369,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert-large",
+        checkpoint="rembert",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1460,7 +1458,7 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert-large",
+        checkpoint="rembert",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
