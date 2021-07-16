@@ -130,6 +130,9 @@ class MT5ForSequenceClassification(T5PreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        # FIXME: this is a hack
+        self.model_parallel = self.encoder_model.model_parallel
+
         self.init_weights()
 
     def forward(
