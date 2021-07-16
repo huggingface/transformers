@@ -16,6 +16,7 @@
 
 import collections
 import os
+import sys
 import unicodedata
 from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
 
@@ -127,6 +128,22 @@ def whitespace_tokenize(text):
         return []
     tokens = text.split()
     return tokens
+
+
+table = dict.fromkeys(i for i in range(sys.maxunicode) if unicodedata.category(chr(i)).startswith("P"))
+
+
+def subfinder(mylist, pattern):
+    matches = []
+    indices = []
+    for idx, i in enumerate(range(len(mylist))):
+        if mylist[i] == pattern[0] and mylist[i : i + len(pattern)] == pattern:
+            matches.append(pattern)
+            indices.append(idx)
+    if matches:
+        return matches[0], indices[0]
+    else:
+        return None, 0
 
 
 class LayoutLMv2Tokenizer(PreTrainedTokenizer):
@@ -442,8 +459,10 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     f"batch length of `text`: {len(text)} does not match batch length of `text_pair`: {len(text_pair)}."
                 )
             batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
+            is_pair = bool(text_pair is not None)
             return self.batch_encode_plus(
                 batch_text_or_text_pairs=batch_text_or_text_pairs,
+                is_pair=is_pair,
                 boxes=boxes,
                 word_labels=word_labels,
                 answers=answers,
@@ -498,6 +517,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             List[EncodedInput],
             List[EncodedInputPair],
         ],
+        is_pair,
         boxes,
         word_labels: Optional[Union[List[str], List[List[str]]]] = None,
         answers=None,
@@ -531,6 +551,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         return self._batch_encode_plus(
             batch_text_or_text_pairs=batch_text_or_text_pairs,
+            is_pair=is_pair,
             boxes=boxes,
             word_labels=word_labels,
             answers=answers,
@@ -561,6 +582,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             List[EncodedInput],
             List[EncodedInputPair],
         ],
+        is_pair,
         boxes,
         word_labels=None,
         answers=None,
@@ -621,6 +643,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         batch_outputs = self._batch_prepare_for_model(
             batch_text_or_text_pairs=batch_text_or_text_pairs,
+            is_pair=is_pair,
             boxes=boxes,
             word_labels=word_labels,
             answers=answers,
@@ -645,6 +668,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def _batch_prepare_for_model(
         self,
         batch_text_or_text_pairs,
+        is_pair,
         boxes,
         word_labels=None,
         answers=None,
@@ -672,10 +696,14 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         """
 
         batch_outputs = {}
-        for batch_text_or_text_pair, boxes_example in zip(batch_text_or_text_pairs, boxes):
+        for idx, example in enumerate(zip(batch_text_or_text_pairs, boxes)):
+            batch_text_or_text_pair, boxes_example = example
             outputs = self.prepare_for_model(
-                batch_text_or_text_pair,
+                batch_text_or_text_pair[0] if is_pair else batch_text_or_text_pair,
                 boxes_example,
+                batch_text_or_text_pair[1] if is_pair else None,
+                word_labels=word_labels[idx] if word_labels is not None else None,
+                answers=answers[idx] if answers is not None else None,
                 add_special_tokens=add_special_tokens,
                 padding=PaddingStrategy.DO_NOT_PAD.value,  # we pad in batch afterward
                 truncation=truncation_strategy.value,
@@ -915,9 +943,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         # len_ids = len(ids)
         # len_pair_ids = len(pair_ids) if pair else 0
 
-        print("Text:", text)
-        print("Text pair:", text_pair)
-
         tokens = []
         pair_tokens = []
         token_boxes = []
@@ -944,7 +969,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     tokens.extend(word_tokens)
                     token_boxes.extend([box] * len(word_tokens))
                     # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-                    labels.extend([label] + [self.pad_token_id] * (len(word_tokens) - 1))
+                    labels.extend([label] + [self.pad_token_label] * (len(word_tokens) - 1))
         else:
             if answers is None:
                 # CASE 3: document visual question answering (inference)
@@ -961,11 +986,82 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     pair_token_boxes.extend([box] * len(word_tokens))
             else:
                 # CASE 3: document visual question answering (training)
-                # text = questions
+                # text = question
                 # text_pair = words
-                # TODO find answers in text_pair, create start_position and end_position
-                # that indicate which tokens are the start and end of the answer
-                pass
+
+                # TODO find answers in text_pair to create start_position and end_position
+                # first, create word labels that indicate which word is the start and which is the end of the answer
+                answers = [answer.lower() for answer in answers]
+                context = " ".join(text_pair).lower()
+                # find the answers in context, return first match
+                for answer in answers:
+                    start_char_idx = context.find(answer)
+                    if start_char_idx != -1:
+                        end_char_idx = start_char_idx + len(answer)
+                        break
+                # in case no answer was found already, try the following:
+                # for each answer: remove a single character, try to find this in the context
+                # this is to take into account for cases when OCR context and answer don't perfectly match:
+                if start_char_idx == -1:
+                    for answer in answers:
+                        for i in range(len(answer)):
+                            # drop the ith character from the answer
+                            answer_i = answer[:i] + answer[i + 1 :]
+                            # check if we can find this one in the context
+                            start_idx = context.find(answer_i)
+                            if start_idx != -1:
+                                start_char_idx = start_idx
+                                end_char_idx = start_char_idx + len(answer_i)
+                                break
+                # if the answer was found:
+                if start_char_idx != -1:
+                    # get found words from context as list
+                    found_words = context[start_char_idx:end_char_idx].split()
+                    words = [word.lower() for word in text_pair]
+                    # remove punctuation from both found_words and words elements
+                    found_words = [x.translate(table) for x in found_words]
+                    words = [x.translate(table) for x in words]
+                    # find found words list in words list
+                    match, index = subfinder(words, found_words)
+                    if match is not None:
+                        # finally, create word labels (first word is labeled with 1, last word with 2)
+                        # so if only 1 word is labeled, it will be labeled with a 2
+                        word_labels = [0 for _ in range(len(words))]
+                        word_labels[index] = 1
+                        word_labels[index + len(match) - 1] = 2
+                    else:
+                        word_labels = [0 for _ in range(len(words))]
+                else:
+                    word_labels = [0 for _ in range(len(words))]
+
+                # finally, create start_position and end_position based on word_labels
+                assert len(text_pair) == len(boxes) == len(word_labels)
+
+                only_one_word_labeled = 1 not in word_labels and 2 in word_labels
+                token_index = 0
+                for word, box, label in zip(text_pair, boxes, word_labels):
+                    word_tokens = self.tokenize(word)
+                    pair_tokens.extend(word_tokens)
+                    pair_token_boxes.extend([box] * len(word_tokens))
+                    if label == 1:
+                        # mark first token of word as start position
+                        start_position = token_index
+                        token_index += len(word_tokens)
+                    elif label == 2:
+                        if only_one_word_labeled:
+                            start_position = token_index
+                            end_position = token_index + len(word_tokens)
+                        else:
+                            # mark last token of word as end position
+                            end_position = token_index + len(word_tokens)
+                    else:
+                        token_index += len(word_tokens)
+
+                # tokenize the question
+                tokens = self.tokenize(text)
+                token_boxes = [self.pad_token_box for _ in range(len(tokens))]
+                start_position = start_position + len(tokens)
+                end_position = end_position + len(tokens)
 
         # Create ids + pair_ids
         ids = self.convert_tokens_to_ids(tokens)
@@ -987,6 +1083,11 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 truncation_strategy=truncation_strategy,
                 stride=stride,
             )
+        special_tokens_count = self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0
+        if start_position is not None and start_position > (max_length - special_tokens_count):
+            start_position = 0
+        if end_position is not None and end_position > (max_length - special_tokens_count):
+            end_position = 0
 
         if return_token_type_ids and not add_special_tokens:
             raise ValueError(
@@ -1014,6 +1115,9 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             token_boxes = [self.cls_token_box] + token_boxes + [self.sep_token_box]
             if labels:
                 labels = [self.pad_token_label] + labels + [self.pad_token_label]
+            if start_position is not None and end_position is not None:
+                start_position += 2
+                end_position += 1
         else:
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
@@ -1032,8 +1136,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         if labels:
             encoded_inputs["labels"] = labels
         if start_position is not None and end_position is not None:
-            encoded_inputs["start_positions"] = start_positions
-            encoded_inputs["end_positions"] = end_positions
+            encoded_inputs["start_positions"] = start_position
+            encoded_inputs["end_positions"] = end_position
 
         # Check lengths
         self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
