@@ -23,9 +23,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.deepspeed import is_deepspeed_zero3_enabled
-
 from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
@@ -121,6 +120,7 @@ def _compute_mask_indices(
     mask_prob: float,
     mask_length: int,
     device: torch.device,
+    attention_mask: Optional[torch.tensor] = None,
     min_masks: int = 0,
 ) -> torch.tensor:
     """
@@ -179,6 +179,10 @@ def _compute_mask_indices(
 
     # scatter indices to mask
     spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, True)
+
+    if attention_mask is not None:
+        # make sure padded input ids cannot be masked
+        spec_aug_mask = torch.where(attention_mask.bool(), spec_aug_mask, False)
 
     return spec_aug_mask
 
@@ -853,17 +857,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
-
-                if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
-                    with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight.data)
-                else:
-                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight.data)
-            else:
-                nn.init.kaiming_normal_(module.weight.data)
+            nn.init.kaiming_normal_(module.weight.data)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
@@ -961,7 +955,10 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         self.init_weights()
 
     def _mask_hidden_states(
-        self, hidden_states: torch.FloatTensor, mask_time_indices: Optional[torch.FloatTensor] = None
+        self,
+        hidden_states: torch.FloatTensor,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to `SpecAugment
@@ -972,18 +969,19 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         if not getattr(self.config, "apply_spec_augment", True):
             return hidden_states
 
+        # generate indices & apply SpecAugment along time axis
+        batch_size, sequence_length, hidden_size = hidden_states.size()
+
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
         elif self.config.mask_time_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along time axis
-            batch_size, sequence_length, hidden_size = hidden_states.size()
-
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
                 device=hidden_states.device,
+                attention_mask=attention_mask,
                 min_masks=2,
             )
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -995,6 +993,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
                 device=hidden_states.device,
+                attention_mask=attention_mask,
             )
             hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
 
@@ -1060,11 +1059,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
 
         hidden_states, extract_features = self.feature_projection(extract_features)
-
-        if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-
-        hidden_states = self._mask_hidden_states(hidden_states)
+        hidden_states = self._mask_hidden_states(
+            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+        )
 
         encoder_outputs = self.encoder(
             hidden_states,
