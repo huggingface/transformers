@@ -1192,7 +1192,11 @@ class SpecialTokensMixin:
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
             attr_value = getattr(self, "_" + attr)
             if attr_value:
-                set_attr[attr] = str(attr_value)
+                set_attr[attr] = (
+                    type(attr_value)(str(attr_value_sub) for attr_value_sub in attr_value)
+                    if isinstance(attr_value, (list, tuple))
+                    else str(attr_value)
+                )
         return set_attr
 
     @property

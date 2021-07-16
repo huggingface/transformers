@@ -1076,6 +1076,9 @@ class Trainer:
                 # If the model is on the GPU, it still works!
                 self._load_state_dict_in_model(state_dict)
 
+                # release memory
+                del state_dict
+
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
             if self.place_model_on_device:

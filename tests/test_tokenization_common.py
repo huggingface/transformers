@@ -2462,6 +2462,10 @@ class TokenizerTesterMixin:
                 self.assertEqual(
                     tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
                 )
+                self.assertIn("<testtoken3>", tokenizer_r.special_tokens_map["additional_special_tokens"])
+                self.assertIsInstance(tokenizer_r.special_tokens_map["additional_special_tokens"], list)
+                self.assertGreaterEqual(len(tokenizer_r.special_tokens_map["additional_special_tokens"]), 2)
+
                 self.assertEqual(len(tokenizer_r), vocab_size + 8)
 
     def test_offsets_mapping(self):

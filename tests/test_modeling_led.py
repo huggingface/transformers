@@ -273,6 +273,7 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = LEDModelTester(self)
