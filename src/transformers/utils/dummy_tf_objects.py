@@ -1014,6 +1014,32 @@ class TFGPT2PreTrainedModel:
         requires_backends(cls, ["tf"])
 
 
+TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFHubertForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFHubertModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFHubertPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 class TFLEDForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])

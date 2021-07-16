@@ -42,12 +42,12 @@ from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
+    AutoTokenizer,
     BatchEncoding,
     FlaxT5ForConditionalGeneration,
     HfArgumentParser,
     PreTrainedTokenizerBase,
     T5Config,
-    T5TokenizerFast,
     TrainingArguments,
     is_tensorboard_available,
     set_seed,
@@ -430,10 +430,6 @@ if __name__ == "__main__":
 
     # Log on each process the small summary:
     logger = logging.getLogger(__name__)
-    logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
-    )
 
     # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info(f"Training/evaluation parameters {training_args}")
@@ -481,11 +477,11 @@ if __name__ == "__main__":
     # Load pretrained model and tokenizer
 
     if model_args.tokenizer_name:
-        tokenizer = T5TokenizerFast.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     elif model_args.model_name_or_path:
-        tokenizer = T5TokenizerFast.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     else:
@@ -545,7 +541,8 @@ if __name__ == "__main__":
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.
-        total_length = (total_length // expanded_inputs_length) * expanded_inputs_length
+        if total_length >= expanded_inputs_length:
+            total_length = (total_length // expanded_inputs_length) * expanded_inputs_length
         # Split by chunks of max_len.
         result = {
             k: [t[i : i + expanded_inputs_length] for i in range(0, total_length, expanded_inputs_length)]
@@ -774,7 +771,6 @@ if __name__ == "__main__":
 
                 # Save metrics
                 if has_tensorboard and jax.process_index() == 0:
-                    cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
                     write_eval_metric(summary_writer, eval_metrics, cur_step)
 
             if cur_step % training_args.save_steps == 0 and cur_step > 0:
