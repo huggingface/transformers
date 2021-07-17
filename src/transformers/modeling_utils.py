@@ -38,6 +38,7 @@ from .file_utils import (
     ModelOutput,
     PushToHubMixin,
     cached_path,
+    copy_func,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
@@ -1553,6 +1554,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 retrieved_modules.append(module)
 
         return retrieved_modules
+
+
+# To update the docstring, we need to copy the method, otherwise we change the original docstring.
+PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
+PreTrainedModel.push_to_hub.__doc__ = PreTrainedModel.push_to_hub.__doc__.format(
+    object="model", object_class="AutoModel", object_files="model checkpoint"
+)
 
 
 class Conv1D(nn.Module):

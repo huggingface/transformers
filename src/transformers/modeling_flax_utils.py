@@ -490,6 +490,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             logger.info(f"Model pushed to the hub in this commit: {url}")
 
 
+# To update the docstring, we need to copy the method, otherwise we change the original docstring.
+FlaxPreTrainedModel.push_to_hub = copy_func(FlaxPreTrainedModel.push_to_hub)
+FlaxPreTrainedModel.push_to_hub.__doc__ = FlaxPreTrainedModel.push_to_hub.__doc__.format(
+    object="model", object_class="FlaxAutoModel", object_files="model checkpoint"
+)
+
+
 def overwrite_call_docstring(model_class, docstring):
     # copy __call__ function to be sure docstring is changed only for this function
     model_class.__call__ = copy_func(model_class.__call__)

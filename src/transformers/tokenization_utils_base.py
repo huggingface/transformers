@@ -43,6 +43,7 @@ from .file_utils import (
     _is_torch_device,
     add_end_docstrings,
     cached_path,
+    copy_func,
     hf_bucket_url,
     is_flax_available,
     is_offline_mode,
@@ -3371,3 +3372,10 @@ For a more complete example, see the implementation of `prepare_seq2seq_batch`.
             )
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
+
+
+# To update the docstring, we need to copy the method, otherwise we change the original docstring.
+PreTrainedTokenizerBase.push_to_hub = copy_func(PreTrainedTokenizerBase.push_to_hub)
+PreTrainedTokenizerBase.push_to_hub.__doc__ = PreTrainedTokenizerBase.push_to_hub.__doc__.format(
+    object="tokenizer", object_class="AutoTokenizer", object_files="tokenizer files"
+)

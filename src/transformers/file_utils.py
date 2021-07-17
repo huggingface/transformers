@@ -1991,14 +1991,14 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
         """
-        Upload model checkpoint or tokenizer files to the 🤗 Model Hub while synchronizing a local clone of the repo in
+        Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
         :obj:`repo_path_or_name`.
 
         Parameters:
             repo_path_or_name (:obj:`str`, `optional`):
-                Can either be a repository name for your model or tokenizer in the Hub or a path to a local folder (in
-                which case the repository will have the name of that local folder). If not specified, will default to
-                the name given by :obj:`repo_url` and a local directory with that name will be created.
+                Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
+                the repository will have the name of that local folder). If not specified, will default to the name
+                given by :obj:`repo_url` and a local directory with that name will be created.
             repo_url (:obj:`str`, `optional`):
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
                 repository will be created in your namespace (unless you specify an :obj:`organization`) with
@@ -2008,11 +2008,9 @@ class PushToHubMixin:
                 the current working directory. This will slow things down if you are making changes in an existing repo
                 since you will need to clone the repo before every push.
             commit_message (:obj:`str`, `optional`):
-                Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
-                :obj:`"add model"` depending on the type of the class.
+                Message to commit while pushing. Will default to :obj:`"add {object}"`.
             organization (:obj:`str`, `optional`):
-                Organization in which you want to push your model or tokenizer (you must be a member of this
-                organization).
+                Organization in which you want to push your {object} (you must be a member of this organization).
             private (:obj:`bool`, `optional`):
                 Whether or not the repository created should be private (requires a paying subscription).
             use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
@@ -2022,29 +2020,27 @@ class PushToHubMixin:
 
 
         Returns:
-            The url of the commit of your model in the given repository.
+            :obj:`str`: The url of the commit of your {object} in the given repository.
 
         Examples::
 
-            # Upload a model to the Hub:
-            from transformers import AutoModel
+            from transformers import {object_class}
 
-            model = BertModel.from_pretrained("bert-base-cased")
-            # Fine-tuning code
+            {object} = {object_class}.from_pretrained("bert-base-cased")
 
-            # Push the model to your namespace with the name "my-finetuned-bert" and have a local clone in the
+            # Push the {object} to your namespace with the name "my-finetuned-bert" and have a local clone in the
             # `my-finetuned-bert` folder.
-            model.push_to_hub("my-finetuned-bert")
+            {object}.push_to_hub("my-finetuned-bert")
 
-            # Push the model to your namespace with the name "my-finetuned-bert" with no local clone.
-            model.push_to_hub("my-finetuned-bert", use_temp_dir=True)
+            # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
+            {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
 
-            # Push the model to an organization with the name "my-finetuned-bert" and have a local clone in the
+            # Push the {object} to an organization with the name "my-finetuned-bert" and have a local clone in the
             # `my-finetuned-bert` folder.
-            model.push_to_hub("my-finetuned-bert", organization="huggingface")
+            {object}.push_to_hub("my-finetuned-bert", organization="huggingface")
 
             # Make a change to an existing repo that has been cloned locally in `my-finetuned-bert`.
-            model.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
+            {object}.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
         """
         if use_temp_dir:
             # Make sure we use the right `repo_name` for the `repo_url` before replacing it.
