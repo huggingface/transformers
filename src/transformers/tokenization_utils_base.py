@@ -1760,7 +1760,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
             try:
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
                 config_tokenizer_class = config.tokenizer_class
             except ValueError:
                 # skip if config.json doesn't exist
