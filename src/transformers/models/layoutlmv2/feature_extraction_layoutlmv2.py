@@ -21,13 +21,15 @@ from typing import List, Optional, Union
 import numpy as np
 from PIL import Image
 
-import pytesseract
-
-from ...feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
-from ...file_utils import TensorType, requires_backends
+from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
+from ...file_utils import TensorType, is_pytesseract_available, requires_backends
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 
+
+# soft dependency
+if is_pytesseract_available():
+    import pytesseract
 
 logger = logging.get_logger(__name__)
 
@@ -78,7 +80,7 @@ def apply_tesseract(image: Image.Image):
     return words, normalized_boxes
 
 
-class LayoutLMv2FeatureExtractor(PreTrainedFeatureExtractor, ImageFeatureExtractionMixin):
+class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a LayoutLMv2 feature extractor.
 
