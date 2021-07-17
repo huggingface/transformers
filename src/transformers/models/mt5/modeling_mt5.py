@@ -20,6 +20,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import T5PreTrainedModel
 from ...modeling_outputs import SequenceClassifierOutput
+from ...modeling_utils import SequenceSummary
 from ...utils import logging
 from ..t5.modeling_t5 import T5EncoderModel, T5ForConditionalGeneration, T5Model
 from .configuration_mt5 import MT5Config
@@ -127,8 +128,13 @@ class MT5ForSequenceClassification(T5PreTrainedModel):
         self.config = config
 
         self.encoder_model = MT5EncoderModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        # self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # from XLNet
+        self.sequence_summary = SequenceSummary(config)
+        self.logits_proj = nn.Linear(config.d_model, config.num_labels)
+
 
         # FIXME: this is a hack
         self.model_parallel = self.encoder_model.model_parallel
@@ -166,10 +172,13 @@ class MT5ForSequenceClassification(T5PreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[0][:, 0, :]
+        # pooled_output = outputs[0][:, 0, :]
+        # pooled_output = self.dropout(pooled_output)
+        # logits = self.classifier(pooled_output)
 
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
+        output = outputs[0]
+        output = self.sequence_summary(output)
+        logits = self.logits_proj(output)
 
         loss = None
         if labels is not None:
