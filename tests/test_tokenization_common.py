@@ -29,7 +29,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
 from transformers import (
+    AlbertTokenizer,
+    AlbertTokenizerFast,
     BertTokenizer,
+    BertTokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
@@ -3291,6 +3294,41 @@ class TokenizerTesterMixin:
         if tokenizer.backend_tokenizer.normalizer is not None:
             expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
         self.assertEqual(expected_result, decoded_input)
+
+    def test_tokenizer_mismatch_warning(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                with self.assertLogs("transformers", level="WARNING") as cm:
+                    try:
+                        if self.tokenizer_class == BertTokenizer:
+                            AlbertTokenizer.from_pretrained(pretrained_name)
+                        else:
+                            BertTokenizer.from_pretrained(pretrained_name)
+                    except (TypeError, AttributeError):
+                        # Some tokenizers cannot be loaded into the target tokenizer at all and errors are returned,
+                        # here we just check that the warning has been logged before the error is raised
+                        pass
+                    finally:
+                        self.assertTrue(
+                            cm.records[0].message.startswith(
+                                "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
+                            )
+                        )
+                    try:
+                        if self.rust_tokenizer_class == BertTokenizerFast:
+                            AlbertTokenizerFast.from_pretrained(pretrained_name)
+                        else:
+                            BertTokenizerFast.from_pretrained(pretrained_name)
+                    except (TypeError, AttributeError):
+                        # Some tokenizers cannot be loaded into the target tokenizer at all and errors are returned,
+                        # here we just check that the warning has been logged before the error is raised
+                        pass
+                    finally:
+                        self.assertTrue(
+                            cm.records[0].message.startswith(
+                                "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
+                            )
+                        )
 
 
 @is_staging_test
