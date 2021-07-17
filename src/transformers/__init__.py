@@ -935,7 +935,9 @@ if is_torch_available():
             "MPNetPreTrainedModel",
         ]
     )
-    _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
+    _import_structure["models.mt5"].extend(
+        ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5ForSequenceClassification", "MT5Model"]
+    )
     _import_structure["models.openai"].extend(
         [
             "OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1034,6 +1036,7 @@ if is_torch_available():
             "T5_PRETRAINED_MODEL_ARCHIVE_LIST",
             "T5EncoderModel",
             "T5ForConditionalGeneration",
+            "T5ForSequenceClassification",
             "T5Model",
             "T5PreTrainedModel",
             "load_tf_weights_in_t5",
