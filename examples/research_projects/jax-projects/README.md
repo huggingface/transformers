@@ -1259,6 +1259,8 @@ More to come!
 
 ## Project evaluation
 
+For your project to be evaluated, please fill out [this google form](https://forms.gle/jQaMkj3JJdD4Xcwn9).
+Please make sure that your submitted project includes a demo as well as information about the model, data, training methods, etc.
 
 ### Criteria
 
