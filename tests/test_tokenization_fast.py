@@ -44,6 +44,11 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = PreTrainedTokenizerFast.from_pretrained(model_paths[0])
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_tokenizer_mismatch_warning(self):
+        # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
+        # model
+        pass
+
     def test_pretrained_model_lists(self):
         # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
         # model
