@@ -1762,8 +1762,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             try:
                 config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
                 config_tokenizer_class = config.tokenizer_class
-            except (OSError, ValueError):
-                # skip if config.json doesn't exist
+            except (OSError, ValueError, KeyError):
+                # skip if an error occured.
                 config = None
             if config_tokenizer_class is None:
                 # Third attempt. If we have not yet found the original type of the tokenizer,
@@ -1772,7 +1772,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 from .models.auto.tokenization_auto import TOKENIZER_MAPPING
 
                 if hasattr(config, "model_type"):
-                    config_class = CONFIG_MAPPING[config.model_type]
+                    config_class = CONFIG_MAPPING.get(config.model_type)
                 else:
                     # Fallback: use pattern matching on the string.
                     config_class = None
