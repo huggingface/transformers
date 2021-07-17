@@ -1652,7 +1652,7 @@ def get_list_of_files(
     Args:
         path_or_repo (:obj:`str` or :obj:`os.PathLike`):
             Can be either the id of a repo on huggingface.co or a path to a `directory`.
-        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+        revision (:obj:`str`, `optional`, defaults to :obj:`"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
             identifier allowed by git.
