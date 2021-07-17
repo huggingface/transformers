@@ -1762,7 +1762,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             try:
                 config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
                 config_tokenizer_class = config.tokenizer_class
-            except ValueError:
+            except (OSError, ValueError):
                 # skip if config.json doesn't exist
                 config = None
             if config_tokenizer_class is None:
