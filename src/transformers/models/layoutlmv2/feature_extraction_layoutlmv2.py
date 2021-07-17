@@ -24,7 +24,7 @@ from PIL import Image
 import pytesseract
 
 from ...feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
-from ...file_utils import TensorType
+from ...file_utils import TensorType, requires_backends
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 
@@ -113,6 +113,8 @@ class LayoutLMv2FeatureExtractor(PreTrainedFeatureExtractor, ImageFeatureExtract
         self.size = size
         self.resample = resample
         self.apply_ocr = apply_ocr
+        if apply_ocr:
+            requires_backends(self, "pytesseract")
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs

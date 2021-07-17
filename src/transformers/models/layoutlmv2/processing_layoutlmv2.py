@@ -21,18 +21,20 @@ from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 
 class LayoutLMv2Processor:
     r"""
-    Constructs a LayoutLMv2 processor which combines a LayoutLMv2 feature extractor and a LayoutLMv2 tokenizer into a single
-    processor.
+    Constructs a LayoutLMv2 processor which combines a LayoutLMv2 feature extractor and a LayoutLMv2 tokenizer into a
+    single processor.
 
     :class:`~transformers.LayoutLMv2Processor` offers all the functionalities you need to prepare data for the model.
-    
-    It first uses :class:`~transformers.LayoutLMv2FeatureExtractor` to apply OCR on document images to get words and 
-    normalized bounding boxes. These are then provided to :class:`~transformers.LayoutLMv2Tokenizer`, which turns the words
-    and bounding boxes into token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`token_type_ids`.
+
+    It first uses :class:`~transformers.LayoutLMv2FeatureExtractor` to apply OCR on document images to get words and
+    normalized bounding boxes. These are then provided to :class:`~transformers.LayoutLMv2Tokenizer`, which turns the
+    words and bounding boxes into token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`,
+    :obj:`token_type_ids`.
 
     Args:
         feature_extractor (:obj:`LayoutLMv2FeatureExtractor`):
-            An instance of :class:`~transformers.LayoutLMv2FeatureExtractor`. The feature extractor is a required input.
+            An instance of :class:`~transformers.LayoutLMv2FeatureExtractor`. The feature extractor is a required
+            input.
         tokenizer (:obj:`LayoutLMv2Tokenizer`):
             An instance of :class:`~transformers.LayoutLMv2Tokenizer`. The tokenizer is a required input.
     """
@@ -52,8 +54,8 @@ class LayoutLMv2Processor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a LayoutLMv2 feature_extractor object and LayoutLMv2 tokenizer object to the directory ``save_directory``, so
-        that it can be re-loaded using the :func:`~transformers.LayoutLMv2Processor.from_pretrained` class method.
+        Save a LayoutLMv2 feature_extractor object and LayoutLMv2 tokenizer object to the directory ``save_directory``,
+        so that it can be re-loaded using the :func:`~transformers.LayoutLMv2Processor.from_pretrained` class method.
 
         .. note::
 
@@ -108,17 +110,17 @@ class LayoutLMv2Processor:
         """
         This method first forwards all its arguments to LayoutLMv2FeatureExtractor's
         :meth:`~transformers.LayoutLMv2FeatureExtractor.__call__`. Next, it passes the obtained features to
-        :meth:`~transformers.LayoutLMv2Processor.__call__` and returns the output. Please refer to the docstring of
-        the above two methods for more information.
+        :meth:`~transformers.LayoutLMv2Processor.__call__` and returns the output. Please refer to the docstring of the
+        above two methods for more information.
         """
         # first, apply the feature extractor
         features = self.feature_extractor(*args, **kwargs)
 
         pixel_values = features.pop("pixel_values")
-        
+
         # second, apply the tokenizer
-        encoded_inputs = self.tokenizer(**features, *args, **kwargs)
-        
+        # encoded_inputs = self.tokenizer(**features, *args, **kwargs)
+
         encoded_inputs["image"] = pixel_values
 
         return encoded_inputs

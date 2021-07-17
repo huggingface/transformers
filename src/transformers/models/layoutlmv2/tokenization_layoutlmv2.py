@@ -1254,8 +1254,10 @@ class BasicTokenizer(object):
             Collection of tokens which will never be split during tokenization. Only has an effect when
             :obj:`do_basic_tokenize=True`
         tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see this
-            `issue <https://github.com/huggingface/transformers/issues/328>`__).
+            Whether or not to tokenize Chinese characters.
+
+            This should likely be deactivated for Japanese (see this `issue
+            <https://github.com/huggingface/transformers/issues/328>`__).
         strip_accents: (:obj:`bool`, `optional`):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for :obj:`lowercase` (as in the original BERT).
@@ -1402,8 +1404,9 @@ class WordpieceTokenizer(object):
     def tokenize(self, text):
         """
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
-        tokenization using the given vocabulary. For example, :obj:`input = "unaffable"` wil return as output
-        :obj:`["un", "##aff", "##able"]`.
+        tokenization using the given vocabulary.
+
+        For example, :obj:`input = "unaffable"` wil return as output :obj:`["un", "##aff", "##able"]`.
 
         Args:
           text: A single token or whitespace separated tokens. This should have
