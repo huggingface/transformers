@@ -175,8 +175,6 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         if self.do_resize and self.size is not None:
             images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
 
-        for image in images:
-            print(type(image))
         images = [self.to_numpy_array(image, rescale=False) for image in images]
         # flip color channels from RGB to BGR (as Detectron2 requires this)
         images = [image[::-1, :, :] for image in images]

@@ -15,6 +15,21 @@
 """
 Processor class for LayoutLMv2
 """
+from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
+
+from ...file_utils import TensorType
+from ...tokenization_utils_base import (
+    ENCODE_KWARGS_DOCSTRING,
+    BatchEncoding,
+    EncodedInput,
+    EncodedInputPair,
+    PaddingStrategy,
+    PreTokenizedInput,
+    PreTokenizedInputPair,
+    TextInput,
+    TextInputPair,
+    TruncationStrategy,
+)
 from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
 from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 
@@ -106,21 +121,57 @@ class LayoutLMv2Processor:
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(
+        self,
+        images,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs
+    ):
         """
-        This method first forwards all its arguments to LayoutLMv2FeatureExtractor's
+        This method first forwards the :obj:`images` argument to LayoutLMv2FeatureExtractor's
         :meth:`~transformers.LayoutLMv2FeatureExtractor.__call__`. Next, it passes the obtained features to
         :meth:`~transformers.LayoutLMv2Processor.__call__` and returns the output. Please refer to the docstring of the
         above two methods for more information.
         """
         # first, apply the feature extractor
-        features = self.feature_extractor(*args, **kwargs)
-
-        pixel_values = features.pop("pixel_values")
+        features = self.feature_extractor(images=images, return_tensors=return_tensors)
 
         # second, apply the tokenizer
-        # encoded_inputs = self.tokenizer(**features, *args, **kwargs)
+        encoded_inputs = self.tokenizer(
+            text=text if text is not None else features["words"],
+            boxes=features["boxes"],
+            text_pair=features["words"] if text is not None else None,
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+            return_tensors=return_tensors,
+            **kwargs,
+        )
 
-        encoded_inputs["image"] = pixel_values
+        encoded_inputs["image"] = features.pop("pixel_values")
 
         return encoded_inputs

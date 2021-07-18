@@ -101,10 +101,6 @@ class ImageFeatureExtractionMixin:
         if rescale:
             image = image.astype(np.float32) / 255.0
 
-        print(image.shape)
-
-        print(image.dtype)
-        
         if channel_first:
             image = image.transpose(2, 0, 1)
 
