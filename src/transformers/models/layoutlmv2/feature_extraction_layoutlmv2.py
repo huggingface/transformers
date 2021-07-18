@@ -175,6 +175,10 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         if self.do_resize and self.size is not None:
             images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
 
+        images = [self.to_numpy_array(image) for image in images]
+        # flip color channels from RGB to BGR (as Detectron2 requires this)
+        images = [image[::-1, :, :] for image in images]
+
         # return as BatchFeature
         data = {"pixel_values": images}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
