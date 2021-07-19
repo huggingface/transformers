@@ -43,6 +43,7 @@ from .file_utils import (
     _is_torch_device,
     add_end_docstrings,
     cached_path,
+    copy_func,
     hf_bucket_url,
     is_flax_available,
     is_offline_mode,
@@ -1192,7 +1193,11 @@ class SpecialTokensMixin:
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
             attr_value = getattr(self, "_" + attr)
             if attr_value:
-                set_attr[attr] = str(attr_value)
+                set_attr[attr] = (
+                    type(attr_value)(str(attr_value_sub) for attr_value_sub in attr_value)
+                    if isinstance(attr_value, (list, tuple))
+                    else str(attr_value)
+                )
         return set_attr
 
     @property
@@ -1745,12 +1750,57 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
+            # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
+            config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
         else:
+            config_tokenizer_class = None
             init_kwargs = init_configuration
+
+        if config_tokenizer_class is None:
+            from .models.auto.configuration_auto import AutoConfig
+
+            # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
+            try:
+                config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+                config_tokenizer_class = config.tokenizer_class
+            except (OSError, ValueError, KeyError):
+                # skip if an error occured.
+                config = None
+            if config_tokenizer_class is None:
+                # Third attempt. If we have not yet found the original type of the tokenizer,
+                # we are loading we see if we can infer it from the type of the configuration file
+                from .models.auto.configuration_auto import CONFIG_MAPPING
+                from .models.auto.tokenization_auto import TOKENIZER_MAPPING
+
+                if hasattr(config, "model_type"):
+                    config_class = CONFIG_MAPPING.get(config.model_type)
+                else:
+                    # Fallback: use pattern matching on the string.
+                    config_class = None
+                    for pattern, config_class_tmp in CONFIG_MAPPING.items():
+                        if pattern in str(pretrained_model_name_or_path):
+                            config_class = config_class_tmp
+                            break
+
+                if config_class in TOKENIZER_MAPPING.keys():
+                    config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING[config_class]
+                    if config_tokenizer_class is not None:
+                        config_tokenizer_class = config_tokenizer_class.__name__
+                    else:
+                        config_tokenizer_class = config_tokenizer_class_fast.__name__
+
+        if config_tokenizer_class is not None:
+            if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
+                logger.warning(
+                    "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. "
+                    "It may result in unexpected tokenization. \n"
+                    f"The tokenizer class you load from this checkpoint is '{config_tokenizer_class}'. \n"
+                    f"The class this function is called from is '{cls.__name__}'."
+                )
 
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
@@ -3322,3 +3372,10 @@ For a more complete example, see the implementation of `prepare_seq2seq_batch`.
             )
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
+
+
+# To update the docstring, we need to copy the method, otherwise we change the original docstring.
+PreTrainedTokenizerBase.push_to_hub = copy_func(PreTrainedTokenizerBase.push_to_hub)
+PreTrainedTokenizerBase.push_to_hub.__doc__ = PreTrainedTokenizerBase.push_to_hub.__doc__.format(
+    object="tokenizer", object_class="AutoTokenizer", object_files="tokenizer files"
+)

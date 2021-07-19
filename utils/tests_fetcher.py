@@ -194,6 +194,8 @@ def create_reverse_dependency_map():
     # Finally we can build the reverse map.
     reverse_map = collections.defaultdict(list)
     for m in modules:
+        if m.endswith("__init__.py"):
+            reverse_map[m].extend(direct_deps[m])
         for d in direct_deps[m]:
             reverse_map[d].append(m)
 
