@@ -31,6 +31,10 @@ logger = logging.get_logger(__name__)
     PIPELINE_INIT_ARGS,
     r"""
         top_k (:obj:`int`, defaults to 5): The number of predictions to return.
+        targets (:obj:`str` or :obj:`List[str]`, `optional`):
+            When passed, the model will limit the scores to the passed targets instead of looking up in the whole
+            vocab. If the provided targets are not in the model vocab, they will be tokenized and the first
+            resulting token will be used (with a warning, and that might be slower).
     """,
 )
 class FillMaskPipeline(Pipeline):
@@ -59,6 +63,7 @@ class FillMaskPipeline(Pipeline):
         args_parser: ArgumentHandler = None,
         device: int = -1,
         top_k=5,
+        targets=None,
         task: str = "",
     ):
         super().__init__(
@@ -74,6 +79,7 @@ class FillMaskPipeline(Pipeline):
 
         self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING)
         self.top_k = top_k
+        self.targets = targets
 
     def ensure_exactly_one_mask_token(self, masked_index: np.ndarray):
         numel = np.prod(masked_index.shape)
@@ -122,6 +128,8 @@ class FillMaskPipeline(Pipeline):
         results = []
         batch_size = outputs.shape[0] if self.framework == "tf" else outputs.size(0)
 
+        if targets is None and self.targets is not None:
+            targets = self.targets
         if targets is not None:
             if isinstance(targets, str):
                 targets = [targets]
