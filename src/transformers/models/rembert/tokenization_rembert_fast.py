@@ -31,19 +31,20 @@ else:
     RemBertTokenizer = None
 
 logger = logging.get_logger(__name__)
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.model", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "rembert": "https://huggingface.co/rembert/resolve/main/sentencepiece.model",
-    }
+        "google/rembert": "https://huggingface.co/google/rembert/resolve/main/sentencepiece.model",
+    },
+    "tokenizer_file": {
+        "google/rembert": "https://huggingface.co/google/rembert/resolve/main/tokenizer.json",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "rembert": 256,
+    "google/rembert": 256,
 }
-# "tokenizer_file": {
-#     "albert-base-v1": "https://huggingface.co/albert-base-v1/resolve/main/tokenizer.json",
 
 SPIECE_UNDERLINE = "▁"
 

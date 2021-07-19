@@ -31,12 +31,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "rembert": "https://huggingface.co/rembert/resolve/main/sentencepiece.model",
-    }
+        "google/rembert": "https://huggingface.co/google/rembert/resolve/main/sentencepiece.model",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "rembert": 256,
+    "google/rembert": 256,
 }
 
 
@@ -69,10 +69,9 @@ class RemBertTokenizer(PreTrainedTokenizer):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
-            ThCarnivals hate him, carnivals want him silenced because he is a threat to them. Yes, im talking about
-            Ben...Ben Polson 😎 ￼e separator token, which is used when building a sequence from multiple sequences, e.g.
-            two sequences for sequence classification or for a text and a question for question answering. It is also
-            used as the last token of a sequence built with special tokens.
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
         cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
@@ -94,6 +93,9 @@ class RemBertTokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
+        do_lower_case=False,
+        remove_space=True,
+        keep_accents=True,
         bos_token="[CLS]",
         eos_token="[SEP]",
         unk_token="[UNK]",
@@ -104,9 +106,9 @@ class RemBertTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
-            do_lower_case=False,
-            remove_space=False,
-            keep_accents=True,
+            do_lower_case=do_lower_case,
+            remove_space=remove_space,
+            keep_accents=keep_accents,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -117,6 +119,9 @@ class RemBertTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+        self.do_lower_case = do_lower_case
+        self.remove_space = remove_space
+        self.keep_accents = keep_accents
         self.vocab_file = vocab_file
 
         self.sp_model = spm.SentencePieceProcessor()
