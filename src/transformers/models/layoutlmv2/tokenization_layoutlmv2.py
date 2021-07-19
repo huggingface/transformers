@@ -157,8 +157,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     optionally :obj:`word_labels` (for token classification) or :obj:`start_positions` and :obj:`end_positions` (for
     question answering).
 
-    :class:`~transformers.TapasTokenizer` runs end-to-end tokenization on a table and associated sentences: punctuation
-    splitting and wordpiece.
+    :class:`~transformers.LayoutLMv2Tokenizer` runs end-to-end tokenization: punctuation splitting and wordpiece. It
+    also turns the word-level bounding boxes into token-level bounding boxes.
 
     """
 
@@ -358,7 +358,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        boxes,
+        boxes: Union[List[int], List[List[int]]],
         text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         word_labels: Optional[Union[List[str], List[List[str]]]] = None,
         answers: Optional[Union[List[str], List[List[str]]]] = None,

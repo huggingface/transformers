@@ -124,7 +124,11 @@ class LayoutLMv2Processor:
     def __call__(
         self,
         images,
+        boxes: Union[List[int], List[List[int]]] = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        word_labels: Optional[Union[List[str], List[List[str]]]] = None,
+        answers: Optional[Union[List[str], List[List[str]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -147,14 +151,24 @@ class LayoutLMv2Processor:
         :meth:`~transformers.LayoutLMv2Processor.__call__` and returns the output. Please refer to the docstring of the
         above two methods for more information.
         """
+        # verify input
+        if self.feature_extractor.apply_ocr and (boxes is not None or text is not None):
+            raise ValueError(
+                "You cannot provide bounding boxes or words "
+                "if you initialized the feature extractor with apply_ocr set to True."
+            )
+
         # first, apply the feature extractor
         features = self.feature_extractor(images=images, return_tensors=return_tensors)
 
         # second, apply the tokenizer
         encoded_inputs = self.tokenizer(
             text=text if text is not None else features["words"],
-            boxes=features["boxes"],
-            text_pair=features["words"] if text is not None else None,
+            boxes=boxes if boxes is not None else features["boxes"],
+            # text_pair=features["words"] if text is not None else None,
+            text_pair=text_pair if text_pair is not None else features["words"],
+            word_labels=word_labels,
+            answers=answers,
             add_special_tokens=add_special_tokens,
             padding=padding,
             truncation=truncation,

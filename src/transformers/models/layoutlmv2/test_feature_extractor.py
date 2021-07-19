@@ -9,14 +9,14 @@ processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=t
 
 image = Image.open("src/transformers/models/layoutlmv2/document.png").convert("RGB")
 
-# encoding = processor(images=image, padding="max_length", return_tensors="pt")
+encoding = processor(images=image, padding="max_length", return_tensors="pt")
 
-# print(encoding.keys())
+print(encoding.keys())
 
-# for k, v in encoding.items():
-#     print(k, v.shape)
+for k, v in encoding.items():
+    print(k, v.shape)
 
-# print(tokenizer.decode(encoding.input_ids.squeeze().tolist()))
+print(tokenizer.decode(encoding.input_ids.squeeze().tolist()))
 
 encoding = processor(
     images=image, text=["How old is he?"], padding="max_length", max_length=20, truncation=True, return_tensors="pt"

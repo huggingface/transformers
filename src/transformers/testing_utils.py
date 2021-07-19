@@ -38,6 +38,7 @@ from .file_utils import (
     is_keras2onnx_available,
     is_onnx_available,
     is_pandas_available,
+    is_pytesseract_available,
     is_rjieba_available,
     is_scatter_available,
     is_sentencepiece_available,
@@ -345,6 +346,16 @@ def require_pandas(test_case):
     """
     if not is_pandas_available():
         return unittest.skip("test requires pandas")(test_case)
+    else:
+        return test_case
+
+
+def require_pytesseract(test_case):
+    """
+    Decorator marking a test that requires PyTesseract. These tests are skipped when PyTesseract isn't installed.
+    """
+    if not is_pytesseract_available():
+        return unittest.skip("test requires PyTesseract")(test_case)
     else:
         return test_case
 
