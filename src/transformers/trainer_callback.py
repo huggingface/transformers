@@ -411,7 +411,11 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_log = True
 
         # Evaluate
-        if args.evaluation_strategy == IntervalStrategy.STEPS and state.global_step % args.eval_steps == 0:
+        if (
+            args.evaluation_strategy == IntervalStrategy.STEPS
+            and args.eval_steps > 0
+            and state.global_step % args.eval_steps == 0
+        ):
             control.should_evaluate = True
             if args.load_best_model_at_end:
                 control.should_save = True
