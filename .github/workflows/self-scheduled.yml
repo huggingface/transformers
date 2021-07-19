@@ -14,7 +14,7 @@ env:
   RUN_SLOW: yes
   OMP_NUM_THREADS: 16
   MKL_NUM_THREADS: 16
-  PYTEST_TIMEOUT: 300
+  PYTEST_TIMEOUT: 600
 
 jobs:
   run_all_tests_torch_gpu:
