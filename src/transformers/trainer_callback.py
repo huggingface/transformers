@@ -403,19 +403,11 @@ class DefaultFlowCallback(TrainerCallback):
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
-        if (
-            args.logging_strategy == IntervalStrategy.STEPS
-            and args.logging_steps > 0
-            and state.global_step % args.logging_steps == 0
-        ):
+        if args.logging_strategy == IntervalStrategy.STEPS and state.global_step % args.logging_steps == 0:
             control.should_log = True
 
         # Evaluate
-        if (
-            args.evaluation_strategy == IntervalStrategy.STEPS
-            and args.eval_steps > 0
-            and state.global_step % args.eval_steps == 0
-        ):
+        if args.evaluation_strategy == IntervalStrategy.STEPS and state.global_step % args.eval_steps == 0:
             control.should_evaluate = True
             if args.load_best_model_at_end:
                 control.should_save = True
