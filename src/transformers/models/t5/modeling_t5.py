@@ -41,7 +41,8 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     SequenceClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, \
+    prune_linear_layer, SequenceSummary
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
@@ -1818,9 +1819,14 @@ class T5ForSequenceClassification(T5PreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.bert = T5EncoderModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.encoder_model = T5EncoderModel(config)
+
+        # from XLNet
+        self.sequence_summary = SequenceSummary(config)
+        self.logits_proj = nn.Linear(config.d_model, config.num_labels)
+
+        # FIXME: this is a hack
+        self.model_parallel = self.encoder_model.model_parallel
 
         self.init_weights()
 
@@ -1828,8 +1834,6 @@ class T5ForSequenceClassification(T5PreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        # token_type_ids=None,
-        # position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -1845,7 +1849,7 @@ class T5ForSequenceClassification(T5PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.encoder_model(
             input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -1855,10 +1859,9 @@ class T5ForSequenceClassification(T5PreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
+        output = outputs[0]
+        output = self.sequence_summary(output)
+        logits = self.logits_proj(output)
 
         loss = None
         if labels is not None:

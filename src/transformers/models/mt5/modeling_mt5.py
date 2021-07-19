@@ -128,8 +128,6 @@ class MT5ForSequenceClassification(T5PreTrainedModel):
         self.config = config
 
         self.encoder_model = MT5EncoderModel(config)
-        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        # self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # from XLNet
         self.sequence_summary = SequenceSummary(config)
@@ -144,8 +142,6 @@ class MT5ForSequenceClassification(T5PreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        # token_type_ids=None,
-        # position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -170,10 +166,6 @@ class MT5ForSequenceClassification(T5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        # pooled_output = outputs[0][:, 0, :]
-        # pooled_output = self.dropout(pooled_output)
-        # logits = self.classifier(pooled_output)
 
         output = outputs[0]
         output = self.sequence_summary(output)
