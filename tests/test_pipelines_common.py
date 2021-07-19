@@ -109,8 +109,6 @@ class PipelineTestCaseMeta(type):
         for configuration, model_architecture in dct.get("tf_model_mapping", {}).items():
             checkpoint = get_checkpoint_from_architecture(model_architecture)
             tiny_config = get_tiny_config_from_class(configuration)
-            if checkpoint is None or tiny_config is None:
-                continue
             tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
             for tokenizer_class in tokenizer_classes:
                 if tokenizer_class is not None and tokenizer_class.__name__.endswith("Fast"):
