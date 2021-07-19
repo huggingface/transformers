@@ -14,8 +14,8 @@
 
 import unittest
 
-from transformers import MODEL_MAPPING, TF_MODEL_MAPPING, FeatureExtractionPipeline
-from transformers.testing_utils import is_pipeline_test
+from transformers import MODEL_MAPPING, TF_MODEL_MAPPING, FeatureExtractionPipeline, pipeline
+from transformers.testing_utils import is_pipeline_test, nested_simplify
 
 from .test_pipelines_common import PipelineTestCaseMeta
 
@@ -24,6 +24,13 @@ from .test_pipelines_common import PipelineTestCaseMeta
 class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_MAPPING
     tf_model_mapping = TF_MODEL_MAPPING
+
+    def test_small_model(self):
+        feature_extractor = pipeline(task="feature-extraction", model="sshleifer/tiny-distilbert-base-cased")
+        outputs = feature_extractor("This is a test")
+        self.assertEqual(
+            nested_simplify(outputs), [[[-1.0, 1.0], [-1.0, 1.0], [-1.0, 1.0], [1.0, -1.0], [-1.0, 1.0], [-1.0, 1.0]]]
+        )
 
     def run_pipeline_test(self, model, tokenizer):
         feature_extractor = FeatureExtractionPipeline(model=model, tokenizer=tokenizer)
