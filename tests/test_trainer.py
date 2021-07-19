@@ -915,6 +915,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=0.1,
                 eval_steps=5,
                 evaluation_strategy="steps",
+                save_steps=5,
                 load_best_model_at_end=True,
             )
             self.assertFalse(trainer.args.greater_is_better)
@@ -930,6 +931,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=0.1,
                 eval_steps=5,
                 evaluation_strategy="steps",
+                save_steps=5,
                 load_best_model_at_end=True,
                 metric_for_best_model="accuracy",
                 compute_metrics=AlmostAccuracy(),
@@ -939,7 +941,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_saved_checkpoints(tmpdir, 5, total)
             self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_accuracy", greater_is_better=True)
 
-        # Save is done every eval regardless of the strategy
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
                 a=1.5,
@@ -947,6 +948,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 output_dir=tmpdir,
                 learning_rate=0.1,
                 evaluation_strategy="epoch",
+                save_strategy="epoch",
                 load_best_model_at_end=True,
                 metric_for_best_model="accuracy",
                 compute_metrics=AlmostAccuracy(),
@@ -965,6 +967,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=0.1,
                 eval_steps=5,
                 evaluation_strategy="steps",
+                save_steps=5,
                 load_best_model_at_end=True,
                 pretrained=False,
             )
@@ -1083,6 +1086,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 per_device_train_batch_size=16,
                 load_best_model_at_end=True,
                 evaluation_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
                 compute_metrics=AlmostAccuracy(),
                 metric_for_best_model="accuracy",
             )
@@ -1140,13 +1144,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_checkpoint_deletion(trainer, tmp_dir, [20, 25])
 
             # With best model at end
-            trainer = get_regression_trainer(output_dir=tmp_dir, load_best_model_at_end=True, save_total_limit=2)
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir, evaluation_strategy="steps", load_best_model_at_end=True, save_total_limit=2
+            )
             trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-5")
             self.check_checkpoint_deletion(trainer, tmp_dir, [5, 25])
 
             # Edge case: we don't always honor save_total_limit=1 if load_best_model_at_end=True to be able to resume
             # from checkpoint
-            trainer = get_regression_trainer(output_dir=tmp_dir, load_best_model_at_end=True, save_total_limit=1)
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir, evaluation_strategy="steps", load_best_model_at_end=True, save_total_limit=1
+            )
             trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-25")
             self.check_checkpoint_deletion(trainer, tmp_dir, [25])
 
@@ -1350,6 +1358,7 @@ class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
                 learning_rate=0.1,
                 logging_steps=1,
                 evaluation_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
@@ -1400,6 +1409,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
                 learning_rate=0.1,
                 logging_steps=1,
                 evaluation_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
