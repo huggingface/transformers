@@ -135,7 +135,6 @@ class MT5ForSequenceClassification(T5PreTrainedModel):
         self.sequence_summary = SequenceSummary(config)
         self.logits_proj = nn.Linear(config.d_model, config.num_labels)
 
-
         # FIXME: this is a hack
         self.model_parallel = self.encoder_model.model_parallel
 
