@@ -296,14 +296,15 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-        words, boxes = self.get_words_and_boxes()
+        question, words, boxes = self.get_question_words_and_boxes()
 
-        text = tokenizer.encode(words, boxes, add_special_tokens=False)
-        text_2 = tokenizer.encode(words, boxes, "multi-sequence build", add_special_tokens=False)
+        text = tokenizer.encode(question.split(), [tokenizer.pad_token_box for _ in range(len(question.split()))], 
+                                add_special_tokens=False)
+        text_2 = tokenizer.encode(words, boxes, add_special_tokens=False)
 
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
-
-        assert encoded_pair == [101] + text + [102] + text_2
+        
+        assert encoded_pair == [101] + text + [102] + text_2 + [102]
 
     def test_offsets_with_special_characters(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -1200,6 +1201,12 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer(question, boxes, words, answers=answers, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding), expected_results)
 
+        start_position = encoding.start_positions
+        end_position = encoding.end_positions
+        
+        decoded_answer = tokenizer.decode(encoding.input_ids[start_position : end_position + 1])
+        self.assertEqual(decoded_answer, answers[0])
+
         # CASE 4: batched
         questions, answers, words, boxes = self.get_questions_answers_words_and_boxes()
 
@@ -1209,3 +1216,13 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         encoding = tokenizer(questions, boxes, words, answers=answers, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding), expected_results)
+
+        start_position = encoding.start_positions[1]
+        end_position = encoding.end_positions[1]
+        
+        decoded_answer = tokenizer.decode(encoding.input_ids[1][start_position : end_position + 1])
+        self.assertEqual(decoded_answer, answers[1][0])
+
+    @unittest.skip("Doesn't support another framework than PyTorch")
+    def test_np_encode_plus_sent_to_model(self):
+        pass
