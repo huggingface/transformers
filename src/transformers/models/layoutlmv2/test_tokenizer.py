@@ -59,23 +59,23 @@ print(encoding)
 
 print(tokenizer.decode(encoding.input_ids))
 
-# print("--------------------------------------------------------------------")
-# print("CASE 2: batch of examples (training)")
-# encoding = tokenizer(
-#     [["a", "weirdly", "test"], ["i", "am", "niels", "rogge"]],
-#     boxes=[
-#         [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
-#         [[256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69]],
-#     ],
-#     word_labels=[[1, 2, 3], [46, 17, 22, 3]],
-#     padding="max_length",
-#     max_length=20,
-# )
+print("--------------------------------------------------------------------")
+print("CASE 2: batch of examples (training)")
+encoding = tokenizer(
+    [["a", "weirdly", "test"], ["i", "am", "niels", "rogge"]],
+    boxes=[
+        [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
+        [[256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69]],
+    ],
+    word_labels=[[1, 2, 3], [46, 17, 22, 3]],
+    padding="max_length",
+    max_length=20,
+)
 
-# print(encoding)
+print(encoding)
 
-# print(tokenizer.decode(encoding.input_ids[0]))
-# print(encoding.labels[0])
+print(tokenizer.decode(encoding.input_ids[0]))
+print(encoding.labels[0])
 
 # print("----------------------------------")
 # print("CASE 3: single example (inference)")
