@@ -14,13 +14,36 @@
 
 import unittest
 
-from .test_pipelines_common import MonoInputPipelineCommonMixin
+from transformers import MODEL_MAPPING, TF_MODEL_MAPPING, FeatureExtractionPipeline
+from transformers.testing_utils import is_pipeline_test
+
+from .test_pipelines_common import PipelineTestCaseMeta
 
 
-class FeatureExtractionPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
-    pipeline_task = "feature-extraction"
-    small_models = [
-        "sshleifer/tiny-distilbert-base-cased"
-    ]  # Default model - Models tested without the @slow decorator
-    large_models = [None]  # Models tested with the @slow decorator
-    mandatory_keys = {}  # Keys which should be in the output
+@is_pipeline_test
+class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = MODEL_MAPPING
+    tf_model_mapping = TF_MODEL_MAPPING
+
+    def run_pipeline_test(self, model, tokenizer):
+        feature_extractor = FeatureExtractionPipeline(model=model, tokenizer=tokenizer)
+
+        outputs = feature_extractor("This is a test")
+        # Output shape is NxTxE where
+        # N = number of sequences passed
+        # T = number of tokens in sequence (depends on the tokenizer)
+        # E = number of embedding dimensions
+        self.assertIsInstance(outputs, list)
+        self.assertEqual(len(outputs), 1)
+        self.assertIsInstance(outputs[0], list)
+        self.assertIsInstance(outputs[0][0], list)
+        self.assertIsInstance(outputs[0][0][0], float)
+        self.assertTrue(all(isinstance(el, float) for row in outputs for col in row for el in col))
+
+        outputs = feature_extractor(["This is a test", "Another test"])
+        self.assertIsInstance(outputs, list)
+        self.assertEqual(len(outputs), 2)
+        self.assertIsInstance(outputs[0], list)
+        self.assertIsInstance(outputs[0][0], list)
+        self.assertIsInstance(outputs[0][0][0], float)
+        self.assertTrue(all(isinstance(el, float) for row in outputs for col in row for el in col))
