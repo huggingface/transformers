@@ -418,8 +418,7 @@ class DefaultFlowCallback(TrainerCallback):
 
         # Save
         if (
-            not args.load_best_model_at_end
-            and args.save_strategy == IntervalStrategy.STEPS
+            args.save_strategy == IntervalStrategy.STEPS
             and args.save_steps > 0
             and state.global_step % args.save_steps == 0
         ):
@@ -439,8 +438,6 @@ class DefaultFlowCallback(TrainerCallback):
         # Evaluate
         if args.evaluation_strategy == IntervalStrategy.EPOCH:
             control.should_evaluate = True
-            if args.load_best_model_at_end:
-                control.should_save = True
 
         # Save
         if args.save_strategy == IntervalStrategy.EPOCH:
