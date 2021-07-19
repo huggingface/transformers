@@ -1172,7 +1172,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
             token_boxes = [self.cls_token_box] + token_boxes + [self.sep_token_box]
-            pair_token_boxes = pair_token_boxes + [self.sep_token_box]
+            if pair_token_boxes:
+                pair_token_boxes = pair_token_boxes + [self.sep_token_box]
             if labels:
                 labels = [self.pad_token_label] + labels + [self.pad_token_label]
             if start_position is not None and end_position is not None:
