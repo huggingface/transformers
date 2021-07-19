@@ -60,7 +60,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return words, boxes
 
     def get_words_and_boxes_batch(self):
-        words = ([["a", "weirdly", "test"], ["hello", "my", "name", "is", "bob"]],)
+        words = [["a", "weirdly", "test"], ["hello", "my", "name", "is", "bob"]]
         boxes = [
             [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
             [[961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69]],
@@ -74,6 +74,16 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
 
         return question, words, boxes
+
+    def get_question_words_and_boxes_batch(self):
+        questions = ["what's his name?", "how is he called?"]
+        words = [["a", "weirdly", "test"], ["what", "a", "laif", "gastn"]]
+        boxes = [
+        [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
+        [[256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69]],
+        ]    
+
+        return questions, words, boxes
 
     def setUp(self):
         super().setUp()
@@ -255,9 +265,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
-        self.assertListEqual(
-            [tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], ["[EMPTY]"], ["[UNK]"]]
-        )
+        self.assertListEqual([tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]])
 
     @slow
     def test_sequence_builders(self):
@@ -328,12 +336,14 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers: List[LayoutLMv2Tokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes()
 
                 special_token = "[SPECIAL_TOKEN]"
+                special_token_box = [1000, 1000, 1000, 1000]
 
                 tokenizer.add_special_tokens({"cls_token": special_token})
-                encoded_special_token = tokenizer.encode_plus(words, boxes, special_token, add_special_tokens=False)
+                encoded_special_token = tokenizer.encode(
+                    [special_token], [special_token_box], add_special_tokens=False
+                )
                 self.assertEqual(len(encoded_special_token), 1)
 
                 decoded = tokenizer.decode(encoded_special_token, skip_special_tokens=True)
@@ -343,7 +353,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers: List[LayoutLMv2Tokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes()
                 vocab_size = tokenizer.vocab_size
                 all_size = len(tokenizer)
 
@@ -353,7 +362,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # smaller than the original vocabs - let's not assert this
                 # self.assertEqual(vocab_size, all_size)
 
-                new_toks = ["aaaaa bbbbbb", "cccccccccdddddddd"]
+                new_toks = ["aaaaa", "bbbbbb", "cccccccccdddddddd"]
                 added_toks = tokenizer.add_tokens(new_toks)
                 vocab_size_2 = tokenizer.vocab_size
                 all_size_2 = len(tokenizer)
@@ -363,9 +372,10 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(added_toks, len(new_toks))
                 self.assertEqual(all_size_2, all_size + len(new_toks))
 
-                tokens = tokenizer.encode(
-                    words, boxes, "aaaaa bbbbbb low cccccccccdddddddd l", add_special_tokens=False
-                )
+                words = "aaaaa bbbbbb low cccccccccdddddddd l".split()
+                boxes = ([1000, 1000, 1000, 1000] for _ in range(len(words)))
+
+                tokens = tokenizer.encode(words, boxes, add_special_tokens=False)
 
                 self.assertGreaterEqual(len(tokens), 4)
                 self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
@@ -381,10 +391,12 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(added_toks_2, len(new_toks_2))
                 self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
 
+                words = ">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l".split()
+                boxes = ([1000, 1000, 1000, 1000] for _ in range(len(words)))
+
                 tokens = tokenizer.encode(
                     words,
                     boxes,
-                    ">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l",
                     add_special_tokens=False,
                 )
 
@@ -421,7 +433,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 words, boxes = self.get_words_and_boxes()
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, sequence)
+                self._check_no_pad_token_padding(tokenizer, words)
 
                 padding_size = 10
                 padding_idx = tokenizer.pad_token_id
@@ -505,11 +517,11 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     token_type_ids = encoded_sequence["token_type_ids"]
                     left_padded_token_type_ids = left_padded_sequence["token_type_ids"]
                     right_padded_token_type_ids = right_padded_sequence["token_type_ids"]
-
+                    
                     assert (
-                        token_type_ids + [[token_type_padding_idx] * 7] * padding_size == right_padded_token_type_ids
+                        token_type_ids + [0] * padding_size == right_padded_token_type_ids
                     )
-                    assert [[token_type_padding_idx] * 7] * padding_size + token_type_ids == left_padded_token_type_ids
+                    assert [0] * padding_size + token_type_ids == left_padded_token_type_ids
 
                 if "attention_mask" in tokenizer.model_input_names:
                     attention_mask = encoded_sequence["attention_mask"]
@@ -557,10 +569,23 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
 
+                # test 1: single sequence
                 words, boxes = self.get_words_and_boxes()
 
                 sequences = tokenizer.encode(words, boxes, add_special_tokens=False)
                 attached_sequences = tokenizer.encode(words, boxes, add_special_tokens=True)
+
+                # Method is implemented (e.g. not GPT-2)
+                if len(attached_sequences) != 2:
+                    self.assertEqual(
+                        tokenizer.num_special_tokens_to_add(pair=False), len(attached_sequences) - len(sequences)
+                    )
+
+                # test 2: two sequences
+                question, words, boxes = self.get_question_words_and_boxes()
+
+                sequences = tokenizer.encode(question, boxes, words, add_special_tokens=False)
+                attached_sequences = tokenizer.encode(question, boxes, words, add_special_tokens=True)
 
                 # Method is implemented (e.g. not GPT-2)
                 if len(attached_sequences) != 2:
@@ -613,14 +638,14 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(encoded_sequences_1, encoded_sequences_2)
 
                 # Test not batched pairs
-                words, boxes = self.get_words_and_boxes()
+                question, words, boxes = self.get_question_words_and_boxes()
                 encoded_sequences_1 = tokenizer.encode_plus(words, boxes)
                 encoded_sequences_2 = tokenizer(words, boxes)
                 self.assertEqual(encoded_sequences_1, encoded_sequences_2)
 
                 # Test batched
-                words, boxes = self.get_words_and_boxes()
-                encoded_sequences_1 = tokenizer.batch_encode_plus(words, boxes)
+                words, boxes = self.get_words_and_boxes_batch()
+                encoded_sequences_1 = tokenizer.batch_encode_plus(words, is_pair=False, boxes=boxes)
                 encoded_sequences_2 = tokenizer(words, boxes)
                 self.assertEqual(encoded_sequences_1, encoded_sequences_2)
 
@@ -629,10 +654,13 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes()
+                words, boxes = self.get_words_and_boxes_batch()
 
-                encoded_sequences = [tokenizer.encode_plus(words, boxes) for sequence in sequences]
-                encoded_sequences_batch = tokenizer.batch_encode_plus([words, words], [boxes, boxes], padding=False)
+                encoded_sequences = [
+                    tokenizer.encode_plus(words_example, boxes_example)
+                    for words_example, boxes_example in zip(words, boxes)
+                ]
+                encoded_sequences_batch = tokenizer.batch_encode_plus(words, is_pair=False, boxes=boxes, padding=False)
                 self.assertListEqual(
                     encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
                 )
@@ -642,23 +670,29 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, sequences)
+                self._check_no_pad_token_padding(tokenizer, words)
 
                 encoded_sequences_padded = [
-                    tokenizer.encode_plus(words, boxes, max_length=maximum_length, padding="max_length")
-                    for sequence in sequences
+                    tokenizer.encode_plus(
+                        words_example, boxes_example, max_length=maximum_length, padding="max_length"
+                    )
+                    for words_example, boxes_example in zip(words, boxes)
                 ]
 
-                encoded_sequences_batch_padded = tokenizer.batch_encode_plus(words, boxes, padding=True)
+                encoded_sequences_batch_padded = tokenizer.batch_encode_plus(
+                    words, is_pair=False, boxes=boxes, padding=True
+                )
                 self.assertListEqual(
                     encoded_sequences_padded,
                     self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch_padded),
                 )
 
                 # check 'longest' is unsensitive to a max length
-                encoded_sequences_batch_padded_1 = tokenizer.batch_encode_plus(words, boxes, padding=True)
+                encoded_sequences_batch_padded_1 = tokenizer.batch_encode_plus(
+                    words, is_pair=False, boxes=boxes, padding=True
+                )
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
-                    words, boxes, max_length=maximum_length + 10, padding="longest"
+                    words, is_pair=False, boxes=boxes, max_length=maximum_length + 10, padding="longest"
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
@@ -667,9 +701,11 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
 
                 # check 'no_padding' is unsensitive to a max length
-                encoded_sequences_batch_padded_1 = tokenizer.batch_encode_plus(words, boxes, padding=False)
+                encoded_sequences_batch_padded_1 = tokenizer.batch_encode_plus(
+                    words, is_pair=False, boxes=boxes, padding=False
+                )
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
-                    words, boxes, max_length=maximum_length + 10, padding=False
+                    words, is_pair=False, boxes=boxes, max_length=maximum_length + 10, padding=False
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
@@ -688,24 +724,19 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes()
-                sequences = [
-                    "Testing batch encode plus",
-                    "Testing batch encode plus with different sequence lengths",
-                    "Testing batch encode plus with different sequence lengths correctly pads",
-                ]
+                words, boxes = self.get_words_and_boxes_batch()
 
                 max_length = 100
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, sequences)
+                self._check_no_pad_token_padding(tokenizer, words)
 
                 encoded_sequences = [
-                    tokenizer.encode_plus(words, boxes, max_length=max_length, padding="max_length")
-                    for sequence in sequences
+                    tokenizer.encode_plus(words_example, boxes_example, max_length=max_length, padding="max_length")
+                    for words_example, boxes_example in zip(words, boxes)
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(
-                    words, boxes, max_length=max_length, padding="max_length"
+                    words, is_pair=False, boxes=boxes, max_length=max_length, padding="max_length"
                 )
                 self.assertListEqual(
                     encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
@@ -716,23 +747,19 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 tokenizer.padding_side = "left"
-                sequences = [
-                    "Testing batch encode plus",
-                    "Testing batch encode plus with different sequence lengths",
-                    "Testing batch encode plus with different sequence lengths correctly pads",
-                ]
+                words, boxes = self.get_words_and_boxes_batch()
 
                 max_length = 100
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, sequences)
+                self._check_no_pad_token_padding(tokenizer, words)
 
                 encoded_sequences = [
-                    tokenizer.encode_plus(words, boxes, max_length=max_length, padding="max_length")
-                    for sequence in sequences
+                    tokenizer.encode_plus(words_example, boxes_example, max_length=max_length, padding="max_length")
+                    for words_example, boxes_example in zip(words, boxes)
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(
-                    words, boxes, max_length=max_length, padding="max_length"
+                    words, is_pair=False, boxes=boxes, max_length=max_length, padding="max_length"
                 )
                 self.assertListEqual(
                     encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
