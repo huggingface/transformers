@@ -342,17 +342,24 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-
-        return (out_vocab_file,)
+        index = 0
+        if os.path.isdir(save_directory):
+            vocab_file = os.path.join(
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            )
+        else:
+            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
+        with open(vocab_file, "w", encoding="utf-8") as writer:
+            for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
+                if index != token_index:
+                    logger.warning(
+                        f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
+                        " Please check that the vocabulary is not corrupted!"
+                    )
+                    index = token_index
+                writer.write(token + "\n")
+                index += 1
+        return (vocab_file,)
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
@@ -734,6 +741,58 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         batch_outputs = BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
         return batch_outputs
+
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING)
+    def encode(
+        self,
+        text,
+        boxes,
+        text_pair=None,
+        word_labels=None,
+        answers=None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> List[int]:
+        """
+        ...
+        """
+        encoded_inputs = self.encode_plus(
+            text=text,
+            boxes=boxes,
+            text_pair=text_pair,
+            word_labels=word_labels,
+            answers=answers,
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+            **kwargs,
+        )
+
+        return encoded_inputs["input_ids"]
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
