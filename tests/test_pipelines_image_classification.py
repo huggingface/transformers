@@ -54,11 +54,29 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             [
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
+                # RGBA
+                "./tests/fixtures/tests_samples/tree.png",
+                # LA
+                "./tests/fixtures/tests_samples/lena.png",
+                # L
+                "./tests/fixtures/tests_samples/parrots.png",
             ]
         )
         self.assertEqual(
             outputs,
             [
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
                 [
                     {"score": ANY(float), "label": ANY(str)},
                     {"score": ANY(float), "label": ANY(str)},
