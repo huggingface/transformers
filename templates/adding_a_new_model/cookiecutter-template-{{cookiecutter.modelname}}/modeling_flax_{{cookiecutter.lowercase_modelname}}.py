@@ -2605,3 +2605,5 @@ append_call_sample_docstring(
     FlaxSeq2SeqQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+{% endif -%}
