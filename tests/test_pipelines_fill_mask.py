@@ -159,12 +159,11 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         # Score equivalence
         outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets=targets)
         tokens = [top_mask["token_str"] for top_mask in outputs]
-        _ = [top_mask["score"] for top_mask in outputs]
+        scores = [top_mask["score"] for top_mask in outputs]
 
         unmasked_targets = fill_masker(f"This is a {tokenizer.mask_token}", targets=tokens)
-        _ = [top_mask["score"] for top_mask in unmasked_targets]
-        # TODO
-        # self.assertEqual(nested_simplify(scores), nested_simplify(target_scores))
+        target_scores = [top_mask["score"] for top_mask in unmasked_targets]
+        self.assertEqual(nested_simplify(scores), nested_simplify(target_scores))
 
         # Raises with invalid
         with self.assertRaises(ValueError):
@@ -194,10 +193,7 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
                 {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
             ],
         )
-        # TODO it does not work right now because of random high variance ?
-        # running `fill_masker(f"This is a {tokenizer.mask_token}", top_k=2, targets=targets)` multiple times
-        # will also lead to different results for some reason
-        # self.assertEqual(nested_simplify(outputs, decimals=2), nested_simplify(outputs2, decimals=2))
+        self.assertEqual(nested_simplify(outputs), nested_simplify(outputs2))
 
     def run_test_top_k_targets(self, model, tokenizer):
         vocab = tokenizer.get_vocab()
@@ -210,13 +206,10 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         # If we use the most probably targets, and filter differently, we should still
         # have the same results
         targets2 = [el["token_str"] for el in sorted(outputs, key=lambda x: x["score"], reverse=True)]
-        _ = fill_masker(f"This is a {tokenizer.mask_token}", top_k=3, targets=targets2)
+        outputs2 = fill_masker(f"This is a {tokenizer.mask_token}", top_k=3, targets=targets2)
 
         # They should yield exactly the same result
-        # TODO it does not work right now because of random high variance ?
-        # running `fill_masker(f"This is a {tokenizer.mask_token}", top_k=2, targets=targets)` multiple times
-        # will also lead to different results for some reason
-        # self.assertEqual(nested_simplify(outputs, decimals=2), nested_simplify(outputs2, decimals=2))
+        self.assertEqual(nested_simplify(outputs), nested_simplify(outputs2))
 
     def fill_mask_with_duplicate_targets_and_top_k(self, model, tokenizer):
         fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer)
