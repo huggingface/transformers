@@ -1076,6 +1076,27 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(new_encoded_inputs, dropped_encoded_inputs)
         self.assertLessEqual(len(new_encoded_inputs), 20)
 
+    @slow
+    def test_min_max_question_length(self):
+        data = {
+            "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+            "Age": ["56", "45", "59"],
+            "Number of movies": ["87", "53", "69"],
+            "Date of birth": ["18 december 1963", "11 november 1974", "6 may 1961"],
+        }
+        queries = [
+            "When was Brad Pitt born?",
+            "Which actor appeared in the least number of movies?",
+            "What is the average number of movies?",
+        ]
+        table = pd.DataFrame.from_dict(data)
+
+        tokenizer = TapasTokenizer.from_pretrained("lysandre/tapas-temporary-repo", max_question_length=2)
+
+        encoding = tokenizer(table=table, queries=queries)
+
+        print(tokenizer.decode(encoding.input_ids[0]))
+
     @is_pt_tf_cross_test
     def test_batch_encode_plus_tensors(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
