@@ -55,7 +55,7 @@ def apply_tesseract(image: Image.Image):
     words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
 
     # filter empty words and corresponding coordinates
-    irrelevant_indices = [idx for idx, word in enumerate(words) if not word]
+    irrelevant_indices = [idx for idx, word in enumerate(words) if not word.strip()]
     words = [word for idx, word in enumerate(words) if idx not in irrelevant_indices]
     left = [coord for idx, coord in enumerate(left) if idx not in irrelevant_indices]
     top = [coord for idx, coord in enumerate(top) if idx not in irrelevant_indices]
