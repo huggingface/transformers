@@ -107,16 +107,15 @@ class PipelineTestCaseMeta(type):
                         dct[test_name] = gen_test(model_architecture, checkpoint, tiny_config, tokenizer_class)
 
         tf_mapping = dct.get("tf_model_mapping", {})
-        for configuration, model_architecture in tf_mapping.items():
-            checkpoint = get_checkpoint_from_architecture(model_architecture)
-            tiny_config = get_tiny_config_from_class(configuration)
-            tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
-            for tokenizer_class in tokenizer_classes:
-                if tokenizer_class is not None and tokenizer_class.__name__.endswith("Fast"):
-                    test_name = (
-                        f"test_tf_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_class.__name__}"
-                    )
-                    dct[test_name] = gen_test(model_architecture, checkpoint, tiny_config, tokenizer_class)
+        if tf_mapping:
+            for configuration, model_architecture in tf_mapping.items():
+                checkpoint = get_checkpoint_from_architecture(model_architecture)
+                tiny_config = get_tiny_config_from_class(configuration)
+                tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
+                for tokenizer_class in tokenizer_classes:
+                    if tokenizer_class is not None and tokenizer_class.__name__.endswith("Fast"):
+                        test_name = f"test_tf_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_class.__name__}"
+                        dct[test_name] = gen_test(model_architecture, checkpoint, tiny_config, tokenizer_class)
 
         return type.__new__(mcs, name, bases, dct)
 
