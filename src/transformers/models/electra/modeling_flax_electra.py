@@ -783,7 +783,12 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
-        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
+        classifier_dropout = (
+            self.config.classifier_dropout
+            if self.config.classifier_dropout is not None
+            else self.config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Dense(self.config.num_labels)
 
     def __call__(
