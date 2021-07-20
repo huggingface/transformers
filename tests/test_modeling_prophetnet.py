@@ -13,12 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import copy
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import ProphetNetConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -30,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        ProphetNetConfig,
         ProphetNetDecoder,
         ProphetNetEncoder,
         ProphetNetForCausalLM,
@@ -124,7 +122,19 @@ class ProphetNetModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = ProphetNetConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        )
+
+    def get_config(self):
+        return ProphetNetConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_encoder_layers=self.num_encoder_layers,
@@ -143,15 +153,6 @@ class ProphetNetModelTester:
             disable_ngram_loss=self.disable_ngram_loss,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
