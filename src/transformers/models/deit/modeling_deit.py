@@ -47,6 +47,7 @@ DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/deit-base-distilled-patch16-224",
     # See all DeiT models at https://huggingface.co/models?filter=deit
 ]
+_CHECKPOINT_FOR_DOC = "facebook/deit-base-distilled-patch16-224"
 
 
 # Copied from transformers.models.vit.modeling_vit.to_2tuple
