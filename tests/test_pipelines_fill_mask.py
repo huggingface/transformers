@@ -25,6 +25,84 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_MASKED_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_MASKED_LM_MAPPING
 
+    @require_tf
+    def test_small_model_tf(self):
+        unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", top_k=2, framework="tf")
+        outputs = unmasker("My name is <mask>")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {"sequence": "My name is grouped", "score": 2.1e-05, "token": 38015, "token_str": " grouped"},
+                {"sequence": "My name is accuser", "score": 2.1e-05, "token": 25506, "token_str": " accuser"},
+            ],
+        )
+
+        outputs = unmasker("The largest city in France is <mask>")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {
+                    "sequence": "The largest city in France is grouped",
+                    "score": 2.1e-05,
+                    "token": 38015,
+                    "token_str": " grouped",
+                },
+                {
+                    "sequence": "The largest city in France is accuser",
+                    "score": 2.1e-05,
+                    "token": 25506,
+                    "token_str": " accuser",
+                },
+            ],
+        )
+
+        outputs = unmasker("My name is <mask>", targets=[" Patrick", " Clara", " Teven"], top_k=3)
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {"sequence": "My name is Clara", "score": 2e-05, "token": 13606, "token_str": " Clara"},
+                {"sequence": "My name is Patrick", "score": 2e-05, "token": 3499, "token_str": " Patrick"},
+                {"sequence": "My name is Te", "score": 1.9e-05, "token": 2941, "token_str": " Te"},
+            ],
+        )
+
+    @require_torch
+    def test_small_model_pt(self):
+        unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", top_k=2, framework="pt")
+
+        outputs = unmasker("My name is <mask>")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {"sequence": "My name is Maul", "score": 2.2e-05, "token": 35676, "token_str": " Maul"},
+                {"sequence": "My name isELS", "score": 2.2e-05, "token": 16416, "token_str": "ELS"},
+            ],
+        )
+
+        outputs = unmasker("The largest city in France is <mask>")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {
+                    "sequence": "The largest city in France is Maul",
+                    "score": 2.2e-05,
+                    "token": 35676,
+                    "token_str": " Maul",
+                },
+                {"sequence": "The largest city in France isELS", "score": 2.2e-05, "token": 16416, "token_str": "ELS"},
+            ],
+        )
+
+        outputs = unmasker("My name is <mask>", targets=[" Patrick", " Clara", " Teven"], top_k=3)
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {"sequence": "My name is Patrick", "score": 2.1e-05, "token": 3499, "token_str": " Patrick"},
+                {"sequence": "My name is Te", "score": 2e-05, "token": 2941, "token_str": " Te"},
+                {"sequence": "My name is Clara", "score": 2e-05, "token": 13606, "token_str": " Clara"},
+            ],
+        )
+
     @slow
     @require_torch
     def test_large_model_pt(self):
