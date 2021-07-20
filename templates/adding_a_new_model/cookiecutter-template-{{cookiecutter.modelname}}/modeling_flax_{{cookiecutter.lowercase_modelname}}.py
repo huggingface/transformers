@@ -1052,35 +1052,38 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+{% if False %}
+# encoder_decoder, this is a cookiecutter comment to make finding this else easier
+{% endif -%}
 {% else %}
-import random
-from typing import Dict, Optional, Tuple, Union
+import copy
+from typing import Callable, Optional, Tuple
 
-import tensorflow as tf
+import numpy as np
 
-from ...activations_tf import get_tf_activation
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
+import flax.linen as nn
+import jax
+import jax.numpy as jnp
+from flax.core.frozen_dict import FrozenDict, unfreeze
+from flax.linen import combine_masks, make_causal_mask
+from flax.linen.attention import dot_product_attention_weights
+from jax import lax
+from jax.random import PRNGKey
+
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutput,
+    FlaxBaseModelOutputWithPastAndCrossAttentions,
+    FlaxCausalLMOutputWithCrossAttentions,
+    FlaxSeq2SeqLMOutput,
+    FlaxSeq2SeqModelOutput,
 )
-from ...modeling_tf_outputs import (
-    TFBaseModelOutput,
-    TFBaseModelOutputWithPast,
-    TFSeq2SeqLMOutput,
-    TFSeq2SeqModelOutput,
-)
-
-# Public API
-from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
-    TFPreTrainedModel,
-    TFSharedEmbeddings,
-    TFWrappedEmbeddings,
-    input_processing,
-    keras_serializable,
-    shape_list,
+from ...modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_call_sample_docstring,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
 )
 from ...utils import logging
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
@@ -1093,1420 +1096,1512 @@ _CONFIG_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Config"
 _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 
 
-LARGE_NEGATIVE = -1e8
 
-
-def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    shifted_input_ids = tf.roll(input_ids, 1, axis=-1)
-    start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
-    shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
+def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
+    shifted_input_ids = jax.ops.index_update(shifted_input_ids, (..., 0), decoder_start_token_id)
     # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = tf.where(
-        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
-    )
-
-    if tf.executing_eagerly():
-        # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0))
-
-        # Make sure the assertion op is called by wrapping the result in an identity no-op
-        with tf.control_dependencies([assert_gte0]):
-            shifted_input_ids = tf.identity(shifted_input_ids)
+    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
 
     return shifted_input_ids
+    
 
 
-def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: int = 0):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
-    mask_cond = tf.range(shape_list(mask)[-1])
+class Flax{{cookiecutter.camelcase_modelname}}Attention(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    embed_dim: int
+    num_heads: int
+    dropout: float = 0.0
+    causal: bool = False
+    bias: bool = True
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
+    def setup(self) -> None:
+        self.head_dim = self.embed_dim // self.num_heads
+        assert (
+            self.head_dim * self.num_heads == self.embed_dim
+        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
 
-    if past_key_values_length > 0:
-        mask = tf.concat([tf.zeros((tgt_len, past_key_values_length)), mask], axis=-1)
-
-    return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
-
-
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    src_len = shape_list(mask)[1]
-    tgt_len = tgt_len if tgt_len is not None else src_len
-    one_cst = tf.constant(1.0)
-    mask = tf.cast(mask, dtype=one_cst.dtype)
-    expanded_mask = tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1))
-
-    return (one_cst - expanded_mask) * LARGE_NEGATIVE
-
-
-class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(TFSharedEmbeddings):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, **kwargs):
-        super().__init__(num_embeddings, embedding_dim, **kwargs)
-
-    def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_shape[:2]
-
-        positions = tf.range(
-            past_key_values_length, seq_len + past_key_values_length, delta=1, name="range"
+        dense = partial(
+            nn.Dense,
+            self.embed_dim,
+            use_bias=self.bias,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
         )
-        return super().call(positions)
 
+        self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
+        self.out_proj = dense()
 
-class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
-    """Multi-headed attention from "Attention Is All You Need"""
+        self.dropout_layer = nn.Dropout(rate=self.dropout)
 
-    def __init__(
+        if self.causal:
+            self.causal_mask = make_causal_mask(
+                jnp.ones((1, self.config.max_position_embeddings), dtype="bool"), dtype="bool"
+            )
+
+    def _split_heads(self, hidden_states):
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
+
+    def _merge_heads(self, hidden_states):
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
+
+    @nn.compact
+    def _concatenate_to_cache(self, key, value, query, attention_mask):
+        """
+        This function takes projected key, value states from a single input token and concatenates the states to cached
+        states from previous steps. This function is slighly adapted from the official Flax repository:
+        https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
+        """
+        # detect if we're initializing by absence of existing cache data.
+        is_initialized = self.has_variable("cache", "cached_key")
+        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
+        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
+        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+
+        if is_initialized:
+            *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
+            # update key, value caches with our new 1d spatial slices
+            cur_index = cache_index.value
+            indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
+            key = lax.dynamic_update_slice(cached_key.value, key, indices)
+            value = lax.dynamic_update_slice(cached_value.value, value, indices)
+            cached_key.value = key
+            cached_value.value = value
+            num_updated_cache_vectors = query.shape[1]
+            cache_index.value = cache_index.value + num_updated_cache_vectors
+            # causal mask for cached decoder self-attention: our single query position should only attend to those key positions that have already been generated and cached, not the remaining zero elements.
+            pad_mask = jnp.broadcast_to(
+                jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
+                tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
+            )
+            attention_mask = combine_masks(pad_mask, attention_mask)
+        return key, value, attention_mask
+
+    def __call__(
         self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.embed_dim = embed_dim
-
-        self.num_heads = num_heads
-        self.dropout = tf.keras.layers.Dropout(dropout)
-        self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
-        self.is_decoder = is_decoder
-
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
-        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
-
-    def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
-        return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
-
-    def call(
-        self,
-        hidden_states: tf.Tensor,
-        key_value_states: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        training=False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+        hidden_states: jnp.ndarray,
+        key_value_states: Optional[jnp.ndarray] = None,
+        attention_mask: Optional[jnp.ndarray] = None,
+        init_cache: bool = False,
+        deterministic: bool = True,
+    ) -> Tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = shape_list(hidden_states)
+        batch_size = hidden_states.shape[0]
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self.q_proj(hidden_states)
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
+        if is_cross_attention:
             # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = tf.concat([past_key_value[0], key_states], axis=2)
-            value_states = tf.concat([past_key_value[1], value_states], axis=2)
+            key_states = self.k_proj(key_value_states)
+            value_states = self.v_proj(key_value_states)
         else:
             # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self.k_proj(hidden_states)
+            value_states = self.v_proj(hidden_states)
 
-        if self.is_decoder:
-            # if cross_attention save Tuple(tf.Tensor, tf.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(tf.Tensor, tf.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
+        query_states = self._split_heads(query_states)
+        key_states = self._split_heads(key_states)
+        value_states = self._split_heads(value_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = tf.reshape(self._shape(query_states, tgt_len, bsz), proj_shape)
-        key_states = tf.reshape(key_states, proj_shape)
-        value_states = tf.reshape(value_states, proj_shape)
-
-        src_len = shape_list(key_states)[1]
-        attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
-
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_weights),
-                [bsz * self.num_heads, tgt_len, src_len],
-                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
-            )
-
-        if attention_mask is not None:
-            # The tf.debugging asserts are not compliant with XLA then they
-            # have to be disabled in other modes than eager.
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(attention_mask),
-                    [bsz, 1, tgt_len, src_len],
-                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+        # handle cache prepare causal attention mask
+        if self.causal:
+            query_length, key_length = query_states.shape[1], key_states.shape[1]
+            if self.has_variable("cache", "cached_key"):
+                mask_shift = self.variables["cache"]["cache_index"]
+                max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
+                causal_mask = lax.dynamic_slice(
+                    self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
                 )
+            else:
+                causal_mask = self.causal_mask[:, :, :query_length, :key_length]
+            causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
 
-            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
-            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+        # combine masks if needed
+        if attention_mask is not None and self.causal:
+            attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
+            attention_mask = combine_masks(attention_mask, causal_mask)
+        elif self.causal:
+            attention_mask = causal_mask
+        elif attention_mask is not None:
+            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
 
-        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
-
-        attn_probs = self.dropout(attn_weights, training=training)
-
-        attn_output = tf.matmul(attn_probs, value_states)
-
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_output),
-                [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+        # During fast autoregressive decoding, we feed one position at a time,
+        # and cache the keys and values step by step.
+        if self.causal and (self.has_variable("cache", "cached_key") or init_cache):
+            key_states, value_states, attention_mask = self._concatenate_to_cache(
+                key_states, value_states, query_states, attention_mask
             )
 
-        attn_output = tf.transpose(
-            tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
-        )
-        attn_output = tf.reshape(attn_output, (bsz, tgt_len, embed_dim))
+        # Convert the boolean attention mask to an attention bias.
+        if attention_mask is not None:
+            # attention mask in the form of attention bias
+            attention_bias = lax.select(
+                attention_mask > 0,
+                jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+            )
+        else:
+            attention_bias = None
 
+        dropout_rng = None
+        if not deterministic and self.dropout > 0.0:
+            dropout_rng = self.make_rng("dropout")
+
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            bias=attention_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.dropout,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+            precision=None,
+        )
+
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = self._merge_heads(attn_output)
         attn_output = self.out_proj(attn_output)
-        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
-class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
-        self.embed_dim = config.d_model
-        self.self_attn = TF{{cookiecutter.camelcase_modelname}}Attention(
-            self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
+class Flax{{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self) -> None:
+        self.embed_dim = self.config.d_model
+        self.self_attn = Flax{{cookiecutter.camelcase_modelname}}Attention(
+            config=self.config,
+            embed_dim=self.embed_dim,
+            num_heads=self.config.encoder_attention_heads,
+            dropout=self.config.attention_dropout,
         )
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
-        self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+        self.activation_fn = ACT2FN[self.config.activation_function]
+        self.acticvation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
+        self.fc1 = nn.Dense(
+            self.config.encoder_ffn_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+        )
+        self.fc2 = nn.Dense(
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+        )
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
-    def call(self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training=False):
-        """
-        Args:
-            hidden_states (:obj:`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (:obj:`tf.Tensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`tf.Tensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`
-        """
+    def __call__(
+        self,
+        hidden_states: jnp.ndarray,
+        attention_mask: jnp.ndarray,
+        output_attentions: bool = True,
+        deterministic: bool = True,
+    ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
-        hidden_states, self_attn_weights, _ = self.self_attn(
-            hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
-        )
+        hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(hidden_states),
-                shape_list(residual),
-                message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
-            )
-
-        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = self.activation_dropout(hidden_states, training=training)
+        hidden_states = self.acticvation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        return hidden_states, self_attn_weights
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
-class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
-        self.embed_dim = config.d_model
-        self.self_attn = TF{{cookiecutter.camelcase_modelname}}Attention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            name="self_attn",
-            is_decoder=True,
-        )
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
+class Flax{{cookiecutter.camelcase_modelname}}EncoderLayerCollection(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.encoder_attn = TF{{cookiecutter.camelcase_modelname}}Attention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            name="encoder_attn",
-            is_decoder=True,
-        )
-        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
-        self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+    def setup(self):
+        self.layers = [
+            Flax{{cookiecutter.camelcase_modelname}}EncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.encoder_layers)
+        ]
+        self.layerdrop = self.config.encoder_layerdrop
 
-    def call(
+    def __call__(
         self,
         hidden_states,
-        attention_mask: Optional[tf.Tensor] = None,
-        encoder_hidden_states: Optional[tf.Tensor] = None,
-        encoder_attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[tf.Tensor]] = None,
-        training=False,
-    ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
-        """
-        Args:
-            hidden_states (:obj:`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (:obj:`tf.Tensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (:obj:`tf.Tensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (:obj:`tf.Tensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`tf.Tensor`): mask for attention heads in a given layer of size
-                `(decoder_attention_heads,)`
-            cross_attn_layer_head_mask (:obj:`tf.Tensor`): mask for heads of the cross-attention module.
-                `(decoder_attention_heads,)`
-            past_key_value (:obj:`Tuple(tf.Tensor)`): cached past key and value projection states
-        """
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
+
+        for encoder_layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = random.uniform(0, 1)
+            if not deterministic and (dropout_probability < self.layerdrop):  # skip the layer
+                layer_outputs = (None, None)
+            else:
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    output_attentions,
+                    deterministic,
+                )
+            hidden_states = layer_outputs[0]
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        outputs = (hidden_states, all_hidden_states, all_attentions)
+
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
+
+
+class Flax{{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self) -> None:
+        self.embed_dim = self.config.d_model
+        self.self_attn = Flax{{cookiecutter.camelcase_modelname}}Attention(
+            config=self.config,
+            embed_dim=self.embed_dim,
+            num_heads=self.config.decoder_attention_heads,
+            dropout=self.config.attention_dropout,
+            causal=True,
+        )
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+        self.activation_fn = ACT2FN[self.config.activation_function]
+        self.acticvation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
+
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.encoder_attn = Flax{{cookiecutter.camelcase_modelname}}Attention(
+            config=self.config,
+            embed_dim=self.embed_dim,
+            num_heads=self.config.decoder_attention_heads,
+            dropout=self.config.attention_dropout,
+        )
+        self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.fc1 = nn.Dense(
+            self.config.encoder_ffn_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+        )
+        self.fc2 = nn.Dense(
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+        )
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
+
+    def __call__(
+        self,
+        hidden_states: jnp.ndarray,
+        attention_mask: jnp.ndarray,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        init_cache: bool = False,
+        output_attentions: bool = True,
+        deterministic: bool = True,
+    ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
 
         # Self Attention
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        # add present self-attn cache to positions 1,2 of present_key_value tuple
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            past_key_value=self_attn_past_key_value,
-            attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
+        hidden_states, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states, attention_mask=attention_mask, init_cache=init_cache
         )
-        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
-        cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
 
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+            hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
             )
-            hidden_states = self.dropout(hidden_states, training=training)
+            hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
-
-            # add cross-attn to positions 3,4 of present_key_value tuple
-            present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = self.activation_dropout(hidden_states, training=training)
+        hidden_states = self.acticvation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        return (
-            hidden_states,
-            self_attn_weights,
-            cross_attn_layer_head_mask,
-            present_key_value,
-        )
+        outputs = (hidden_states,)
 
-
-class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
-    config_class = {{cookiecutter.camelcase_modelname}}Config
-    base_model_prefix = "model"
-
-    @property
-    def dummy_inputs(self):
-        pad_token = 1
-        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        dummy_inputs = {
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.math.not_equal(input_ids, pad_token),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
-            }
-        ]
-    )
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.serving
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-
-{{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
-
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
-
-    .. note::
-
-        TF 2.0 models accepts two formats as inputs:
-
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
-
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
-
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
-
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(input_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
-
-    Args:
-        config (:class:`~transformers.{{cookiecutter.camelcase_modelname}}Config`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
-            model weights.
-"""
-
-{{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
-
-            {{cookiecutter.camelcase_modelname}} uses the :obj:`eos_token_id` as the starting token for
-            :obj:`decoder_input_ids` generation. If :obj:`past_key_values` is used, optionally only the last
-            :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`).
-
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
-            the right for denoising pre-training following the paper.
-        decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
-        head_mask (:obj:`tf.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        encoder_outputs (:obj:`tf.FloatTensor`, `optional`):
-            hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-            of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
-        past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
-            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`). Set to :obj:`False` during training, :obj:`True` during generation
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
-            config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
-            used instead.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
-            argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to use the model in training mode (some modules like dropout modules have different
-            behaviors between training and evaluation).
-"""
-
-
-@keras_serializable
-class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
-    config_class = {{cookiecutter.camelcase_modelname}}Config
-    """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`TF{{cookiecutter.camelcase_modelname}}EncoderLayer`.
-
-    Args:
-        config: {{cookiecutter.camelcase_modelname}}Config
-    """
-
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
-        super().__init__(**kwargs)
-        self.config = config
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.layerdrop = config.encoder_layerdrop
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
-
-        self.embed_tokens = embed_tokens
-        self.embed_positions = TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            name="embed_positions",
-        )
-        self.layers = [TF{{cookiecutter.camelcase_modelname}}EncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-
-    def get_embed_tokens(self):
-        return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
-
-    def call(
-        self,
-        input_ids=None,
-        inputs_embeds=None,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-        **kwargs,
-    ):
-        """
-        Args:
-            input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`tf.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
-                in the config will be used instead.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail. This argument can be used only in eager mode, in graph mode the value in the config
-                will be used instead.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
-                argument can be used in eager mode, in graph mode the value will always be set to True.
-            training (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to use the model in training mode (some modules like dropout modules have different
-                behaviors between training and evaluation).
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif inputs["input_ids"] is not None:
-            input_shape = shape_list(inputs["input_ids"])
-        elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if inputs["inputs_embeds"] is None:
-            inputs_embeds = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
-
-        embed_pos = self.embed_positions(input_shape)
-        hidden_states = inputs["inputs_embeds"] + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=inputs["training"])
-
-        # check attention mask and invert
-        if inputs["attention_mask"] is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            inputs["attention_mask"] = _expand_mask(inputs["attention_mask"])
-
-        encoder_states = () if inputs["output_hidden_states"] else None
-        all_attentions = () if inputs["output_attentions"] else None
-
-        # check if head_mask has a correct number of layers specified if desired
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if inputs["head_mask"] is not None and tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(inputs["head_mask"])[0],
-                len(self.layers),
-                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
-            )
-
-        # encoder layers
-        for encoder_layer in self.layers:
-
-            if inputs["output_hidden_states"]:
-                encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if inputs["training"] and (dropout_probability < self.layerdrop):  # skip the layer
-                continue
-
-            hidden_states, attn = encoder_layer(
-                hidden_states,
-                inputs["attention_mask"],
-                inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
-            )
-
-            if inputs["output_attentions"]:
-                all_attentions += (attn,)
-
-        if inputs["output_hidden_states"]:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not inputs["return_dict"]:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
-
-
-@keras_serializable
-class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
-    config_class = {{cookiecutter.camelcase_modelname}}Config
-    """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`TF{{cookiecutter.camelcase_modelname}}DecoderLayer`
-
-    Args:
-        config: {{cookiecutter.camelcase_modelname}}Config
-        embed_tokens: output embedding
-    """
-
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
-        super().__init__(**kwargs)
-        self.config = config
-        self.padding_idx = config.pad_token_id
-        self.embed_tokens = embed_tokens
-        self.layerdrop = config.decoder_layerdrop
-        self.embed_positions = TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            name="embed_positions",
-        )
-        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
-        self.layers = [TF{{cookiecutter.camelcase_modelname}}DecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
-        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-
-    def get_embed_tokens(self):
-        return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
-
-    def call(
-        self,
-        input_ids=None,
-        inputs_embeds=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-        **kwargs,
-    ):
-        r"""
-        Args:
-            input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            encoder_hidden_states (:obj:`tf.Tensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, encoder_sequence_length)`, `optional`):
-                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
-                selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            cross_attn_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
-                decoding.
-
-                If :obj:`past_key_values` are used, the user can optionally input only the last
-                :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of
-                shape :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size,
-                sequence_length)`.
-            inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
-                in the config will be used instead.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail. This argument can be used only in eager mode, in graph mode the value in the config
-                will be used instead.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
-                argument can be used in eager mode, in graph mode the value will always be set to True.
-            training (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to use the model in training mode (some modules like dropout modules have different
-                behaviors between training and evaluation).
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            inputs_embeds=inputs_embeds,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif inputs["input_ids"] is not None:
-            input_shape = shape_list(inputs["input_ids"])
-        elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-
-        past_key_values_length = (
-            shape_list(inputs["past_key_values"][0][0])[2] if inputs["past_key_values"] is not None else 0
-        )
-
-        # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
-
-        if inputs["inputs_embeds"] is None:
-            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"])
-
-        hidden_states = inputs["inputs_embeds"]
-
-        inputs["attention_mask"], combined_attention_mask = self.compute_combined_attns_mask(
-            inputs, input_shape, past_key_values_length
-        )
-
-        if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            inputs["encoder_attention_mask"] = _expand_mask(inputs["encoder_attention_mask"], tgt_len=input_shape[-1])
-
-        hidden_states = self.layernorm_embedding(hidden_states + positions)
-        hidden_states = self.dropout(hidden_states, training=inputs["training"])
-
-        # decoder layers
-        all_hidden_states = () if inputs["output_hidden_states"] else None
-        all_self_attns = () if inputs["output_attentions"] else None
-        all_cross_attns = () if (inputs["output_attentions"] and inputs["encoder_hidden_states"] is not None) else None
-        present_key_values = () if inputs["use_cache"] else None
-
-        # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        for attn_mask in ["head_mask", "cross_attn_head_mask"]:
-            if inputs[attn_mask] is not None and tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(inputs[attn_mask])[0],
-                    len(self.layers),
-                    message=f"The {attn_mask} should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs[attn_mask])[0]}.",
-                )
-
-        for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            if inputs["output_hidden_states"]:
-                all_hidden_states += (hidden_states,)
-
-            dropout_probability = random.uniform(0, 1)
-
-            if inputs["training"] and (dropout_probability < self.layerdrop):
-                continue
-
-            past_key_value = inputs["past_key_values"][idx] if inputs["past_key_values"] is not None else None
-
-            hidden_states, layer_self_attn, layer_cross_attn, present_key_value = decoder_layer(
-                hidden_states,
-                attention_mask=combined_attention_mask,
-                encoder_hidden_states=inputs["encoder_hidden_states"],
-                encoder_attention_mask=inputs["encoder_attention_mask"],
-                layer_head_mask=inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
-                cross_attn_layer_head_mask=inputs["cross_attn_head_mask"][idx]
-                if inputs["cross_attn_head_mask"] is not None
-                else None,
-                past_key_value=past_key_value,
-            )
-
-            if inputs["use_cache"]:
-                present_key_values += (present_key_value,)
-
-            if inputs["output_attentions"]:
-                all_self_attns += (layer_self_attn,)
-
-                if inputs["encoder_hidden_states"] is not None:
-                    all_cross_attns += (layer_cross_attn,)
-
-        if inputs["output_hidden_states"]:
-            all_hidden_states += (hidden_states,)
-
-        if inputs["output_attentions"]:
-            all_self_attns = list(all_self_attns)
-
-            if inputs["encoder_hidden_states"] is not None:
-                all_cross_attns = list(all_cross_attns)
-
-        if inputs["use_cache"]:
-            present_key_values = (inputs["encoder_hidden_states"], present_key_values)
-
-        if not inputs["return_dict"]:
-            return hidden_states, present_key_values, all_hidden_states, all_self_attns, all_cross_attns
-        else:
-            return TFBaseModelOutputWithPastAndCrossAttentions(
-                last_hidden_state=hidden_states,
-                past_key_values=present_key_values,
-                hidden_states=all_hidden_states,
-                attentions=all_self_attns,
-                cross_attentions=all_cross_attns,
-            )
-
-    @tf.function
-    def compute_combined_attns_mask(self, inputs, input_shape, past_key_values_length):
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
-                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
-            )
-
-        if inputs["attention_mask"] is None and inputs["input_ids"] is not None and input_shape[-1] > 1:
-            attention_mask = tf.cast(
-                tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
-            )
-            attention_mask = tf.concat(
-                [
-                    tf.ones((input_shape[0], past_key_values_length), dtype=attention_mask.dtype),
-                    attention_mask,
-                ],
-                axis=-1,
-            )
-        else:
-            attention_mask = tf.ones((input_shape[0], input_shape[1] + past_key_values_length))
-
-        return attention_mask, combined_attention_mask
-
-
-@keras_serializable
-class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
-    config_class = {{cookiecutter.camelcase_modelname}}Config
-
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
-
-        self.config = config
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
-
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        embed_tokens.vocab_size = self.shared.vocab_size
-        embed_tokens.hidden_size = self.shared.hidden_size
-
-        self.encoder = TF{{cookiecutter.camelcase_modelname}}Encoder(config, embed_tokens, name="encoder")
-        self.decoder = TF{{cookiecutter.camelcase_modelname}}Decoder(config, embed_tokens, name="decoder")
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, new_embeddings):
-        self.shared.weight = new_embeddings
-        self.shared.vocab_size = self.shared.weight.shape[0]
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        self.encoder.set_embed_tokens(embed_tokens)
-        self.decoder.set_embed_tokens(embed_tokens)
-
-    def call(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-        **kwargs
-    ):
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        if inputs["decoder_input_ids"] is None and inputs["decoder_inputs_embeds"] is None:
-            inputs["use_cache"] = False
-
-        if inputs["encoder_outputs"] is None:
-            inputs["encoder_outputs"] = self.encoder(
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                head_mask=inputs["head_mask"],
-                inputs_embeds=inputs["inputs_embeds"],
-                output_attentions=inputs["output_attentions"],
-                output_hidden_states=inputs["output_hidden_states"],
-                return_dict=inputs["return_dict"],
-                training=inputs["training"],
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
-        elif inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], TFBaseModelOutput):
-            inputs["encoder_outputs"] = TFBaseModelOutput(
-                last_hidden_state=inputs["encoder_outputs"][0],
-                hidden_states=inputs["encoder_outputs"][1] if len(inputs["encoder_outputs"]) > 1 else None,
-                attentions=inputs["encoder_outputs"][2] if len(inputs["encoder_outputs"]) > 2 else None,
-            )
-        # If the user passed a TFBaseModelOutput for encoder_outputs, we wrap it in a tuple when return_dict=False
-        elif not inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], tuple):
-            inputs["encoder_outputs"] = inputs["encoder_outputs"].to_tuple()
-
-        decoder_outputs = self.decoder(
-            inputs["decoder_input_ids"],
-            attention_mask=inputs["decoder_attention_mask"],
-            encoder_hidden_states=inputs["encoder_outputs"][0],
-            encoder_attention_mask=inputs["attention_mask"],
-            head_mask=inputs["decoder_head_mask"],
-            cross_attn_head_mask=inputs["cross_attn_head_mask"],
-            past_key_values=inputs["past_key_values"],
-            inputs_embeds=inputs["decoder_inputs_embeds"],
-            use_cache=inputs["use_cache"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-
-        if not inputs["return_dict"]:
-            return decoder_outputs + inputs["encoder_outputs"]
-
-        return TFSeq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
-            encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
-            encoder_attentions=inputs["encoder_outputs"].attentions,
-        )
-
-
-@add_start_docstrings(
-    "The bare {{cookiecutter.uppercase_modelname}} Model outputting raw hidden-states without any specific head on top.",
-    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
-)
-class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        self.model = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="model")
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
-    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFSeq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-        **kwargs
-    ):
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        outputs = self.model(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            decoder_input_ids=inputs["decoder_input_ids"],
-            decoder_attention_mask=inputs["decoder_attention_mask"],
-            head_mask=inputs["head_mask"],
-            decoder_head_mask=inputs["decoder_head_mask"],
-            cross_attn_head_mask=inputs["cross_attn_head_mask"],
-            encoder_outputs=inputs["encoder_outputs"],
-            past_key_values=inputs["past_key_values"],
-            inputs_embeds=inputs["inputs_embeds"],
-            decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
-            use_cache=inputs["use_cache"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
+        if output_attentions:
+            outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
 
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartModel.serving_output
-    def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
-        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
-        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
-        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
-        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
 
-        return TFSeq2SeqModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            past_key_values=pkv,
-            decoder_hidden_states=dec_hs,
-            decoder_attentions=dec_attns,
-            cross_attentions=cross_attns,
-            encoder_last_hidden_state=output.encoder_last_hidden_state,
-            encoder_hidden_states=enc_hs,
-            encoder_attentions=enc_attns,
+class Flax{{cookiecutter.camelcase_modelname}}DecoderLayerCollection(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.layers = [
+            Flax{{cookiecutter.camelcase_modelname}}DecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
+        ]
+        self.layerdrop = self.config.decoder_layerdrop
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        deterministic: bool = True,
+        init_cache: bool = False,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+
+        for decoder_layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+                # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = random.uniform(0, 1)
+            if not deterministic and (dropout_probability < self.layerdrop):
+                layer_outputs = (None, None, None)
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    init_cache=init_cache,
+                    output_attentions=output_attentions,
+                    deterministic=deterministic,
+                )
+
+            hidden_states = layer_outputs[0]
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+                if encoder_hidden_states is not None:
+                    all_cross_attentions += (layer_outputs[2],)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        outputs = [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions]
+
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attentions,
+        )
+
+
+class Flax{{cookiecutter.camelcase_modelname}}ClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    config: {{cookiecutter.camelcase_modelname}}Config
+    inner_dim: int
+    num_classes: int
+    pooler_dropout: float
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.dense = nn.Dense(
+            self.inner_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+        )
+        self.dropout = nn.Dropout(rate=self.pooler_dropout)
+        self.out_proj = nn.Dense(
+            self.num_classes,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+        )
+
+    def __call__(self, hidden_states: jnp.ndarray, deterministic: bool):
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = jnp.tanh(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.out_proj(hidden_states)
+        return hidden_states
+
+
+class Flax{{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    embed_tokens: Optional[nn.Embed] = None
+
+    def setup(self):
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+
+        embed_dim = self.config.d_model
+        self.padding_idx = self.config.pad_token_id
+        self.max_source_positions = self.config.max_position_embeddings
+        self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
+
+        if self.embed_tokens is None:
+            self.embed_tokens = nn.Embed(
+                self.config.vocab_size,
+                embed_dim,
+                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+                dtype=self.dtype,
+            )
+
+        # {{cookiecutter.camelcase_modelname}} is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+        self.embed_positions = nn.Embed(
+            self.config.max_position_embeddings + self.offset,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype,
+        )
+        self.layers = Flax{{cookiecutter.camelcase_modelname}}EncoderLayerCollection(self.config, self.dtype)
+        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        position_ids,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+        input_shape = input_ids.shape
+        input_ids = input_ids.reshape(-1, input_shape[-1])
+
+        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+
+        embed_pos = self.embed_positions(position_ids + self.offset)
+
+        hidden_states = inputs_embeds + embed_pos
+        hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+
+        outputs = self.layers(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if not return_dict:
+            return outputs
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class Flax{{cookiecutter.camelcase_modelname}}Decoder(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    embed_tokens: Optional[nn.Embed] = None
+
+    def setup(self):
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+
+        embed_dim = self.config.d_model
+        self.padding_idx = self.config.pad_token_id
+        self.max_target_positions = self.config.max_position_embeddings
+        self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
+
+        if self.embed_tokens is None:
+            self.embed_tokens = nn.Embed(
+                self.config.vocab_size,
+                embed_dim,
+                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+                dtype=self.dtype,
+            )
+
+        # {{cookiecutter.camelcase_modelname}} is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+        self.embed_positions = nn.Embed(
+            self.config.max_position_embeddings + self.offset,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype,
+        )
+
+        self.layers = Flax{{cookiecutter.camelcase_modelname}}DecoderLayerCollection(self.config, self.dtype)
+        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        position_ids,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        init_cache: bool = False,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+        input_shape = input_ids.shape
+        input_ids = input_ids.reshape(-1, input_shape[-1])
+
+        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+
+        # embed positions
+        positions = self.embed_positions(position_ids + self.offset)
+
+        hidden_states = inputs_embeds + positions
+        hidden_states = self.layernorm_embedding(hidden_states)
+
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+
+        outputs = self.layers(
+            hidden_states,
+            attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            deterministic=deterministic,
+            init_cache=init_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if not return_dict:
+            return outputs
+
+        return FlaxBaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+
+class Flax{{cookiecutter.camelcase_modelname}}Module(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.shared = nn.Embed(
+            self.config.vocab_size,
+            self.config.d_model,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype,
+        )
+
+        self.encoder = Flax{{cookiecutter.camelcase_modelname}}Encoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+        self.decoder = Flax{{cookiecutter.camelcase_modelname}}Decoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+
+    def _get_encoder_module(self):
+        return self.encoder
+
+    def _get_decoder_module(self):
+        return self.decoder
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        decoder_input_ids,
+        decoder_attention_mask,
+        position_ids,
+        decoder_position_ids,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+        encoder_outputs = self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
+
+        return FlaxSeq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
+
+
+class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedModel):
+    config_class = {{cookiecutter.camelcase_modelname}}Config
+    base_model_prefix: str = "model"
+    module_class: nn.Module = None
+
+    def __init__(
+        self,
+        config: {{cookiecutter.camelcase_modelname}}Config,
+        input_shape: Tuple[int] = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs
+    ):
+        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+        # init input tensors
+        input_ids = jnp.zeros(input_shape, dtype="i4")
+        # make sure initialization pass will work for Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassificationModule
+        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
+        attention_mask = jnp.ones_like(input_ids)
+        decoder_input_ids = input_ids
+        decoder_attention_mask = jnp.ones_like(input_ids)
+
+        batch_size, sequence_length = input_ids.shape
+        position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+        decoder_position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        return self.module.init(
+            rngs,
+            input_ids,
+            attention_mask,
+            decoder_input_ids,
+            decoder_attention_mask,
+            position_ids,
+            decoder_position_ids,
+        )["params"]
+
+    def init_cache(self, batch_size, max_length, encoder_outputs):
+        r"""
+        Args:
+            batch_size (:obj:`int`):
+                batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized cache.
+            max_length (:obj:`int`):
+                maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized
+                cache.
+            encoder_outputs (:obj:`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
+                ``encoder_outputs`` consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`,
+                `optional`: :obj:`attentions`). :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length,
+                hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the
+                encoder. Used in the cross-attention of the decoder.
+        """
+        # init input variables to retrieve cache
+        decoder_input_ids = jnp.ones((batch_size, max_length), dtype="i4")
+        decoder_attention_mask = jnp.ones_like(decoder_input_ids)
+        decoder_position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(decoder_input_ids).shape[-1]), decoder_input_ids.shape
+        )
+
+        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
+            decoder_module = module._get_decoder_module()
+            return decoder_module(
+                decoder_input_ids,
+                decoder_attention_mask,
+                decoder_position_ids,
+                **kwargs,
+            )
+
+        init_variables = self.module.init(
+            jax.random.PRNGKey(0),
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
+            encoder_hidden_states=encoder_outputs[0],
+            init_cache=True,
+            method=_decoder_forward,  # we only need to call the decoder to init the cache
+        )
+        return unfreeze(init_variables["cache"])
+
+    @add_start_docstrings({{cookiecutter.uppercase_modelname}}_ENCODE_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class={{cookiecutter.camelcase_modelname}}Config)
+    def encode(
+        self,
+        input_ids: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        train: bool = False,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+    ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+
+            >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('facebook/bart-large-cnn')
+
+            >>> text = "My friends are cool but they eat too many carbs."
+            >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+            >>> encoder_outputs = model.encode(**inputs)
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+        if position_ids is None:
+            batch_size, sequence_length = input_ids.shape
+            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        def _encoder_forward(module, input_ids, attention_mask, position_ids, **kwargs):
+            encode_module = module._get_encoder_module()
+            return encode_module(input_ids, attention_mask, position_ids, **kwargs)
+
+        return self.module.apply(
+            {"params": params or self.params},
+            input_ids=jnp.array(input_ids, dtype="i4"),
+            attention_mask=jnp.array(attention_mask, dtype="i4"),
+            position_ids=jnp.array(position_ids, dtype="i4"),
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=not train,
+            rngs=rngs,
+            method=_encoder_forward,
+        )
+
+    @add_start_docstrings({{cookiecutter.uppercase_modelname}}_DECODE_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class={{cookiecutter.camelcase_modelname}}Config)
+    def decode(
+        self,
+        decoder_input_ids,
+        encoder_outputs,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
+        past_key_values: dict = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        train: bool = False,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+    ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+
+            >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('facebook/bart-large-cnn')
+
+            >>> text = "My friends are cool but they eat too many carbs."
+            >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+            >>> encoder_outputs = model.encode(**inputs)
+
+            >>> decoder_start_token_id = model.config.decoder_start_token_id
+            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+            >>> last_decoder_hidden_states = outputs.last_hidden_state
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        encoder_hidden_states = encoder_outputs[0]
+        if encoder_attention_mask is None:
+            batch_size, sequence_length = encoder_hidden_states.shape[:2]
+            encoder_attention_mask = jnp.ones((batch_size, sequence_length))
+
+        batch_size, sequence_length = decoder_input_ids.shape
+        if decoder_attention_mask is None:
+            decoder_attention_mask = jnp.ones((batch_size, sequence_length))
+
+        if decoder_position_ids is None:
+            if past_key_values is not None:
+                raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
+
+            decoder_position_ids = jnp.broadcast_to(
+                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+            )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        inputs = {"params": params or self.params}
+
+        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be
+        # passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that
+        # it can be changed by Flax{{cookiecutter.camelcase_modelname}}Attention module
+        if past_key_values:
+            inputs["cache"] = past_key_values
+            mutable = ["cache"]
+        else:
+            mutable = False
+
+        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
+            decoder_module = module._get_decoder_module()
+            return decoder_module(
+                decoder_input_ids,
+                decoder_attention_mask,
+                decoder_position_ids,
+                **kwargs,
+            )
+
+        outputs = self.module.apply(
+            inputs,
+            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
+            decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
+            decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=jnp.array(encoder_attention_mask, dtype="i4"),
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=not train,
+            rngs=rngs,
+            mutable=mutable,
+            method=_decoder_forward,
+        )
+
+        # add updated cache to model output
+        if past_key_values is not None and return_dict:
+            outputs, past = outputs
+            outputs["past_key_values"] = unfreeze(past["cache"])
+            return outputs
+        elif past_key_values is not None and not return_dict:
+            outputs, past = outputs
+            outputs = outputs[:1] + (unfreeze(past["cache"]),) + outputs[1:]
+
+        return outputs
+
+    def __call__(
+        self,
+        input_ids: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        decoder_input_ids: Optional[jnp.ndarray] = None,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        train: bool = False,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # prepare encoder inputs
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+        if position_ids is None:
+            batch_size, sequence_length = input_ids.shape
+            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+
+        # prepare decoder inputs
+        if decoder_input_ids is None:
+            decoder_input_ids = shift_tokens_right(
+                input_ids, self.config.pad_token_id, decoder_start_token_id=self.config.decoder_start_token_id
+            )
+        if decoder_attention_mask is None:
+            decoder_attention_mask = jnp.ones_like(decoder_input_ids)
+        if decoder_position_ids is None:
+            batch_size, sequence_length = decoder_input_ids.shape
+            decoder_position_ids = jnp.broadcast_to(
+                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+            )
+
+        # Handle any PRNG if needed
+        rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
+
+        return self.module.apply(
+            {"params": params or self.params},
+            input_ids=jnp.array(input_ids, dtype="i4"),
+            attention_mask=jnp.array(attention_mask, dtype="i4"),
+            position_ids=jnp.array(position_ids, dtype="i4"),
+            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
+            decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
+            decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=not train,
+            rngs=rngs,
         )
 
 
 @add_start_docstrings(
-    "The {{cookiecutter.uppercase_modelname}} Model with a language modeling head. Can be used for summarization.",
+    "The bare {{cookiecutter.camelcase_modelname}} Model transformer outputting raw hidden-states without any specific head on top.",
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [
-        r"model.encoder.embed_tokens.weight",
-        r"model.decoder.embed_tokens.weight",
-    ]
+class Flax{{cookiecutter.camelcase_modelname}}Model(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    module_class = Flax{{cookiecutter.camelcase_modelname}}Module
 
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        self.model = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="model")
-        self.model._set_save_spec(inputs=self.serving.input_signature)
-        self.use_cache = config.use_cache
-        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
-        self.final_logits_bias = self.add_weight(
-            name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
+
+append_call_sample_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}Model, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
+)
+
+
+class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGenerationModule(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+    bias_init: Callable[..., jnp.ndarray] = jax.nn.initializers.zeros
+
+    def setup(self):
+        self.model = Flax{{cookiecutter.camelcase_modelname}}Module(config=self.config, dtype=self.dtype)
+        self.lm_head = nn.Dense(
+            self.model.shared.num_embeddings,
+            use_bias=False,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
         )
+        self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
-    def get_decoder(self):
-        return self.model.decoder
-
-    def get_encoder(self):
+    def _get_encoder_module(self):
         return self.model.encoder
 
-    def get_bias(self):
-        return {"final_logits_bias": self.final_logits_bias}
+    def _get_decoder_module(self):
+        return self.model.decoder
 
-    def set_bias(self, value):
-        self.final_logits_bias = value["final_logits_bias"]
-
-    def get_output_embeddings(self):
-        return self.get_input_embeddings()
-
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
-
-    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    def call(
+    def __call__(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
-        **kwargs,
+        input_ids,
+        attention_mask,
+        decoder_input_ids,
+        decoder_attention_mask,
+        position_ids,
+        decoder_position_ids,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        deterministic: bool = True,
     ):
-        """
-        Returns:
-
-        Examples::
-
-            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
-            >>> import tensorflow as tf
-            >>> mname = '{{cookiecutter.checkpoint_identifier}}'
-            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained(mname)
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-            >>> model = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained(mname)
-            >>> batch = tokenizer([TXT], return_tensors='tf')
-            >>> logits = model(inputs=batch.input_ids).logits
-            >>> probs = tf.nn.softmax(logits[0])
-            >>> # probs[5] is associated with the mask token
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
+            position_ids=position_ids,
+            decoder_position_ids=decoder_position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
-            training=training,
-            kwargs_call=kwargs,
+            deterministic=deterministic,
         )
 
-        if inputs["labels"] is not None:
-            inputs["use_cache"] = False
-            if inputs["decoder_input_ids"] is None:
-                inputs["decoder_input_ids"] = shift_tokens_right(
-                    inputs["labels"], self.config.pad_token_id, self.config.decoder_start_token_id
-                )
+        hidden_states = outputs[0]
 
-        outputs = self.model(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            decoder_input_ids=inputs["decoder_input_ids"],
-            encoder_outputs=inputs["encoder_outputs"],
-            decoder_attention_mask=inputs["decoder_attention_mask"],
-            head_mask=inputs["head_mask"],
-            decoder_head_mask=inputs["decoder_head_mask"],
-            cross_attn_head_mask=inputs["cross_attn_head_mask"],
-            past_key_values=inputs["past_key_values"],
-            inputs_embeds=inputs["inputs_embeds"],
-            decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
-            use_cache=inputs["use_cache"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"]
-        )
-        lm_logits = self.model.shared(outputs[0], mode="linear")
-        lm_logits = lm_logits + self.final_logits_bias
-        masked_lm_loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], lm_logits)
-
-        if not inputs["return_dict"]:
-            output = (lm_logits,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-        return TFSeq2SeqLMOutput(
-            loss=masked_lm_loss,
-            logits=lm_logits,
-            past_key_values=outputs.past_key_values,  # index 1 of d outputs
-            decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
-            decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
-            cross_attentions=outputs.cross_attentions,  # index 4 of d outputs
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,  # index 0 of encoder outputs
-            encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
-            encoder_attentions=outputs.encoder_attentions,  # 2 of e out
-        )
-
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.serving_output
-    def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
-        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
-        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
-        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
-        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
-
-        return TFSeq2SeqLMOutput(
-            logits=output.logits,
-            past_key_values=pkv,
-            decoder_hidden_states=dec_hs,
-            decoder_attentions=dec_attns,
-            cross_attentions=cross_attns,
-            encoder_last_hidden_state=output.encoder_last_hidden_state,
-            encoder_hidden_states=enc_hs,
-            encoder_attentions=enc_attns,
-        )
-
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs) -> Dict:
-        assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
-        if len(past) == 1:
-            assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
-            encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
-            past_key_values = None
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.model.variables["params"]["shared"]["embedding"]
+            lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
         else:
-            assert (
-                len(past) == 2
-            ), "`past` has to be of length 2 with the encoder_outputs at the first position and past_key_values at the second position."
-            encoder_outputs, past_key_values = past
-            if isinstance(encoder_outputs, tuple):
-                assert isinstance(
-                    encoder_outputs[0], tf.Tensor
-                ), f"`encoder_outputs[0]` has to be of type `tf.Tensor`, but is {type(encoder_outputs[0])}"
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
-            elif isinstance(encoder_outputs, tf.Tensor):
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
-            assert (
-                past_key_values
-            ), f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            lm_logits = self.lm_head(hidden_states)
 
-        assert isinstance(
-            encoder_outputs, TFBaseModelOutput
-        ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
+        lm_logits += self.final_logits_bias
+
+        if not return_dict:
+            output = (lm_logits,) + outputs[1:]
+            return output
+
+        return FlaxSeq2SeqLMOutput(
+            logits=lm_logits,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+
+@add_start_docstrings(
+    "The {{cookiecutter.uppercase_modelname}} Model with a language modeling head. Can be used for summarization.", {{cookiecutter.uppercase_modelname}}_START_DOCSTRING
+)
+class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    module_class = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGenerationModule
+    dtype: jnp.dtype = jnp.float32
+
+    @add_start_docstrings({{cookiecutter.uppercase_modelname}}_DECODE_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class={{cookiecutter.camelcase_modelname}}Config)
+    def decode(
+        self,
+        decoder_input_ids,
+        encoder_outputs,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
+        past_key_values: dict = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        deterministic: bool = True,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+    ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+
+            >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('facebook/bart-large-cnn')
+
+            >>> text = "My friends are cool but they eat too many carbs."
+            >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+            >>> encoder_outputs = model.encode(**inputs)
+
+            >>> decoder_start_token_id = model.config.decoder_start_token_id
+            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+            >>> logits = outputs.logits
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        encoder_hidden_states = encoder_outputs[0]
+        if encoder_attention_mask is None:
+            batch_size, sequence_length = encoder_hidden_states.shape[:2]
+            encoder_attention_mask = jnp.ones((batch_size, sequence_length))
+
+        batch_size, sequence_length = decoder_input_ids.shape
+        if decoder_attention_mask is None:
+            decoder_attention_mask = jnp.ones((batch_size, sequence_length))
+
+        if decoder_position_ids is None:
+            if past_key_values is not None:
+                raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
+
+            decoder_position_ids = jnp.broadcast_to(
+                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+            )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        inputs = {"params": params or self.params}
+
+        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be
+        # passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that
+        # it can be changed by Flax{{cookiecutter.camelcase_modelname}}Attention module
+        if past_key_values:
+            inputs["cache"] = past_key_values
+            mutable = ["cache"]
+        else:
+            mutable = False
+
+        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
+            decoder_module = module._get_decoder_module()
+            outputs = decoder_module(
+                decoder_input_ids,
+                decoder_attention_mask,
+                decoder_position_ids,
+                **kwargs,
+            )
+            hidden_states = outputs[0]
+
+            if self.config.tie_word_embeddings:
+                shared_embedding = module.model.variables["params"]["shared"]["embedding"]
+                lm_logits = module.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+            else:
+                lm_logits = module.lm_head(hidden_states)
+
+            lm_logits += module.final_logits_bias
+            return lm_logits, outputs
+
+        outputs = self.module.apply(
+            inputs,
+            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
+            decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
+            decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=jnp.array(encoder_attention_mask, dtype="i4"),
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+            rngs=rngs,
+            mutable=mutable,
+            method=_decoder_forward,
+        )
+
+        if past_key_values is None:
+            lm_logits, decoder_outputs = outputs
+        else:
+            (lm_logits, decoder_outputs), past = outputs
+
+        if return_dict:
+            outputs = FlaxCausalLMOutputWithCrossAttentions(
+                logits=lm_logits,
+                hidden_states=decoder_outputs.hidden_states,
+                attentions=decoder_outputs.attentions,
+                cross_attentions=decoder_outputs.cross_attentions,
+            )
+        else:
+            outputs = (lm_logits,) + decoder_outputs[1:]
+
+        # add updated cache to model output
+        if past_key_values is not None and return_dict:
+            outputs["past_key_values"] = unfreeze(past["cache"])
+            return outputs
+        elif past_key_values is not None and not return_dict:
+            outputs = outputs[:1] + (unfreeze(past["cache"]),) + outputs[1:]
+
+        return outputs
+
+    def prepare_inputs_for_generation(
+        self,
+        decoder_input_ids,
+        max_length,
+        attention_mask: Optional[jnp.DeviceArray] = None,
+        decoder_attention_mask: Optional[jnp.DeviceArray] = None,
+        encoder_outputs=None,
+        **kwargs
+    ):
+        # initializing the cache
+        batch_size, seq_length = decoder_input_ids.shape
+
+        past_key_values = self.init_cache(batch_size, max_length, encoder_outputs)
+        # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
+        # But since the decoder uses a causal mask, those positions are masked anyways.
+        # Thus we can create a single static attention_mask here, which is more efficient for compilation
+        extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
+        if decoder_attention_mask is not None:
+            position_ids = decoder_attention_mask.cumsum(axis=-1) - 1
+            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, decoder_attention_mask, (0, 0))
+        else:
+            position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
+
         return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
+            "encoder_outputs": encoder_outputs,
+            "encoder_attention_mask": attention_mask,
+            "decoder_attention_mask": extended_attention_mask,
+            "decoder_position_ids": position_ids,
         }
 
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        if len(past) == 1:
-            return past
+    def update_inputs_for_generation(self, model_outputs, model_kwargs):
+        model_kwargs["past_key_values"] = model_outputs.past_key_values
+        model_kwargs["decoder_position_ids"] = model_kwargs["decoder_position_ids"][:, -1:] + 1
+        return model_kwargs
 
-        past_key_values = past[1]
 
-        reordered_past = ()
-        for layer_past_key_values in past_key_values:
-            reordered_past += (
-                tuple(tf.gather(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values[:2]) + layer_past_key_values[2:],
-            )
-        return (past[0], reordered_past)
+FLAX_{{cookiecutter.uppercase_modelname}}_CONDITIONAL_GENERATION_DOCSTRING = """
+    Returns:
 
-    def compute_loss(self, labels, logits):
-        """CrossEntropyLoss that ignores pad tokens"""
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True,
-            reduction=tf.keras.losses.Reduction.NONE,
+    Summarization example::
+
+        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+
+        >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('facebook/bart-large-cnn')
+
+        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='jax')
+
+        >>> # Generate Summary
+        >>> summary_ids = model.generate(inputs['input_ids']).sequences
+        >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+
+    Mask filling example::
+
+        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('facebook/bart-large')
+        >>> TXT = "My friends are <mask> but they eat too many carbs."
+
+        >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('facebook/bart-large')
+        >>> input_ids = tokenizer([TXT], return_tensors='jax')['input_ids']
+        >>> logits = model(input_ids).logits
+
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
+        >>> values, predictions = jax.lax.top_k(probs)
+
+        >>> tokenizer.decode(predictions).split()
+"""
+
+overwrite_call_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, {{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING + FLAX_{{cookiecutter.uppercase_modelname}}_CONDITIONAL_GENERATION_DOCSTRING
+)
+append_replace_return_docstrings(
+    Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+)
+
+
+class Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassificationModule(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+    num_labels: Optional[int] = None
+
+    def setup(self):
+        self.model = Flax{{cookiecutter.camelcase_modelname}}Module(config=self.config, dtype=self.dtype)
+        self.classification_head = Flax{{cookiecutter.camelcase_modelname}}ClassificationHead(
+            config=self.config,
+            inner_dim=self.config.d_model,
+            num_classes=self.num_labels if self.num_labels is not None else self.config.num_labels,
+            pooler_dropout=self.config.classifier_dropout,
         )
-        melted_labels = tf.reshape(labels, (-1,))
-        active_loss = tf.not_equal(melted_labels, self.config.pad_token_id)
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-        labels = tf.boolean_mask(melted_labels, active_loss)
-        return loss_fn(labels, reduced_logits)
-{% endif -%}
+
+    def _get_encoder_module(self):
+        return self.model.encoder
+
+    def _get_decoder_module(self):
+        return self.model.decoder
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        decoder_input_ids,
+        decoder_attention_mask,
+        position_ids,
+        decoder_position_ids,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            position_ids=position_ids,
+            decoder_position_ids=decoder_position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
+        hidden_states = outputs[0]  # last hidden state
+
+        eos_mask = jnp.where(input_ids == self.config.eos_token_id, 1, 0)
+
+        # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError during JIT compilation
+        if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
+            if len(jnp.unique(eos_mask.sum(1))) > 1:
+                raise ValueError("All examples must have the same number of <eos> tokens.")
+
+            if any(eos_mask.sum(1) == 0):
+                raise ValueError("There are missing <eos> tokens in input_ids")
+
+            # Ensure to keep 1 only for the last <eos> token for each example
+            eos_mask_noised = eos_mask + jnp.arange(eos_mask.shape[1]) * 1e-6
+            eos_mask = jnp.where(eos_mask_noised == eos_mask_noised.max(1).reshape(-1, 1), 1, 0)
+
+        sentence_representation = jnp.einsum("ijk, ij -> ijk", hidden_states, eos_mask).sum(1)
+        logits = self.classification_head(sentence_representation, deterministic=deterministic)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return output
+
+        return FlaxSeq2SeqSequenceClassifierOutput(
+            logits=logits,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    {{cookiecutter.camelcase_modelname}} model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
+    tasks.
+    """,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
+)
+class Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    module_class = Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassificationModule
+    dtype = jnp.float32
+
+
+append_call_sample_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxSeq2SeqSequenceClassifierOutput,
+    _CONFIG_FOR_DOC,
+)
+
+
+class Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnsweringModule(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+    num_labels = 2
+
+    def setup(self):
+        self.model = Flax{{cookiecutter.camelcase_modelname}}Module(config=self.config, dtype=self.dtype)
+        self.qa_outputs = nn.Dense(
+            self.num_labels, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+        )
+
+    def _get_encoder_module(self):
+        return self.model.encoder
+
+    def _get_decoder_module(self):
+        return self.model.decoder
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        decoder_input_ids,
+        decoder_attention_mask,
+        position_ids,
+        decoder_position_ids,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            position_ids=position_ids,
+            decoder_position_ids=decoder_position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
+        sequence_output = outputs[0]
+
+        logits = self.qa_outputs(sequence_output)
+        start_logits, end_logits = jnp.split(logits, logits.shape[-1], axis=-1)
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
+
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[1:]
+            return output
+
+        return FlaxSeq2SeqQuestionAnsweringModelOutput(
+            start_logits=start_logits,
+            end_logits=end_logits,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    {{cookiecutter.uppercase_modelname}} Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
+)
+class Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    module_class = Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnsweringModule
+    dtype = jnp.float32
+
+
+append_call_sample_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxSeq2SeqQuestionAnsweringModelOutput,
+    _CONFIG_FOR_DOC,
+)
