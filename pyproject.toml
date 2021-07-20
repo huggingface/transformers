@@ -1,3 +1,3 @@
 [tool.black]
 line-length = 119
-target-version = ['py35']
+target-version = ['py36']
