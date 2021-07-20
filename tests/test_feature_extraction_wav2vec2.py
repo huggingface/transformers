@@ -83,6 +83,7 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
         if equal_length:
             speech_inputs = floats_list((self.batch_size, self.max_seq_length))
         else:
+            # make sure that inputs increase in size
             speech_inputs = [
                 _flatten(floats_list((x, self.feature_size)))
                 for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)

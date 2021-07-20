@@ -205,11 +205,125 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
             < 1e-3
         )
 
+    def _check_truncation(self, numpify=False):
+        def _inputs_have_equal_length(input):
+            length = len(input[0])
+            for input_slice in input[1:]:
+                if len(input_slice) != length:
+                    return False
+            return True
+
+        def _inputs_are_equal(input_1, input_2):
+            if len(input_1) != len(input_2):
+                return False
+
+            for input_slice_1, input_slice_2 in zip(input_1, input_2):
+                if not np.allclose(np.asarray(input_slice_1), np.asarray(input_slice_2), atol=1e-3):
+                    return False
+            return True
+
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
+        speech_inputs = self.feat_extract_tester.prepare_inputs_for_common(numpify=numpify)
+        input_name = feat_extract.model_input_names[0]
+
+        processed_features = BatchFeature({input_name: speech_inputs})
+
+        # test truncate for List[int] + numpy
+        input_1 = feat_extract.pad(processed_features, padding="longest")[input_name]
+        input_2 = feat_extract.pad(processed_features, padding="longest", truncation=True)[input_name]
+
+        self.assertTrue(_inputs_have_equal_length(input_1))
+        self.assertTrue(_inputs_have_equal_length(input_2))
+        self.assertTrue(_inputs_are_equal(input_1, input_2))
+
+        # truncate to smallest
+        input_3 = feat_extract.pad(
+            processed_features, padding="max_length", max_length=len(speech_inputs[0]), truncation=True
+        )[input_name]
+        input_4 = feat_extract.pad(processed_features, padding="max_length", max_length=len(speech_inputs[0]))[
+            input_name
+        ]
+
+        self.assertTrue(_inputs_have_equal_length(input_3))
+        self.assertFalse(_inputs_have_equal_length(input_4))
+        self.assertFalse(_inputs_are_equal(input_3, input_4))
+
+        # truncate to smallest with np
+        input_5 = feat_extract.pad(
+            processed_features,
+            padding="max_length",
+            max_length=len(speech_inputs[0]),
+            return_tensors="np",
+            truncation=True,
+        )[input_name]
+        input_6 = feat_extract.pad(
+            processed_features, padding="max_length", max_length=len(speech_inputs[0]), return_tensors="np"
+        )[input_name]
+
+        self.assertTrue(_inputs_have_equal_length(input_5))
+        self.assertTrue(_inputs_have_equal_length(input_6))
+        self.assertFalse(_inputs_are_equal(input_5, input_6))
+        self.assertTrue(input_5.shape[-1] == len(speech_inputs[0]))
+        self.assertTrue(input_6.shape[-1] == len(speech_inputs[-1]))
+
+        # truncate to middle
+        input_7 = feat_extract.pad(
+            processed_features,
+            padding="max_length",
+            max_length=len(speech_inputs[1]),
+            truncation=True,
+            return_tensors="np",
+        )[input_name]
+        input_8 = feat_extract.pad(
+            processed_features, padding="max_length", max_length=len(speech_inputs[1]), truncation=True
+        )[input_name]
+        input_9 = feat_extract.pad(
+            processed_features, padding="max_length", max_length=len(speech_inputs[1]), return_tensors="np"
+        )[input_name]
+
+        self.assertTrue(input_7.shape[-1] == len(speech_inputs[1]))
+        self.assertTrue(_inputs_have_equal_length(input_7))
+        self.assertTrue(_inputs_have_equal_length(input_8))
+        self.assertTrue(_inputs_are_equal(input_7, input_8))
+        self.assertTrue(_inputs_have_equal_length(input_9))
+        self.assertTrue(input_9.shape[-1] == len(speech_inputs[-1]))
+
+        # max_length parameter has to be provided when setting `truncation=True`
+        with self.assertRaises(ValueError):
+            feat_extract.pad(processed_features, truncation=True)[input_name]
+
+        # test truncation for `pad_to_multiple_of` for List[int] + numpy
+        pad_to_multiple_of = 10
+        input_10 = feat_extract.pad(
+            processed_features,
+            padding="max_length",
+            max_length=len(speech_inputs[0]),
+            pad_to_multiple_of=pad_to_multiple_of,
+            truncation=True,
+        )[input_name]
+        input_11 = feat_extract.pad(
+            processed_features,
+            padding="max_length",
+            max_length=len(speech_inputs[0]),
+            pad_to_multiple_of=pad_to_multiple_of,
+        )[input_name]
+
+        expected_length = ((len(speech_inputs[0]) // pad_to_multiple_of) + 1) * pad_to_multiple_of
+        self.assertTrue(len(input_10[0]) == expected_length)
+        self.assertTrue(_inputs_have_equal_length(input_10))
+        self.assertFalse(_inputs_have_equal_length(input_11))
+
     def test_padding_from_list(self):
         self._check_padding(numpify=False)
 
     def test_padding_from_array(self):
         self._check_padding(numpify=True)
+
+    def test_truncation_from_list(self):
+        self._check_truncation(numpify=False)
+
+    def test_truncation_from_array(self):
+        self._check_truncation(numpify=True)
 
     @require_torch
     def test_padding_accepts_tensors_pt(self):
@@ -251,3 +365,21 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         self.assertIn("attention_mask", processed)
         self.assertListEqual(list(processed.attention_mask.shape), list(processed[input_name].shape[:2]))
         self.assertListEqual(processed.attention_mask.sum(-1).tolist(), input_lenghts)
+
+    def test_attention_mask_with_truncation(self):
+        feat_dict = self.feat_extract_dict
+        feat_dict["return_attention_mask"] = True
+        feat_extract = self.feature_extraction_class(**feat_dict)
+        speech_inputs = self.feat_extract_tester.prepare_inputs_for_common()
+        input_lenghts = [len(x) for x in speech_inputs]
+        input_name = feat_extract.model_input_names[0]
+
+        processed = BatchFeature({input_name: speech_inputs})
+        max_length = 32
+
+        processed = feat_extract.pad(
+            processed, padding="max_length", max_length=max_length, truncation=True, return_tensors="np"
+        )
+        self.assertIn("attention_mask", processed)
+        self.assertListEqual(list(processed.attention_mask.shape), list(processed[input_name].shape[0], max_length))
+        self.assertListEqual(processed.attention_mask[:, :max_length].sum(-1).tolist(), input_lenghts)
