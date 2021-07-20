@@ -665,8 +665,9 @@ class TrainingArguments:
             self.do_eval = True
 
         # eval_steps has to be defined and non-zero, fallbacks to logging_steps if the latter is non-zero
-        if self.do_eval and (self.eval_steps is None or self.eval_steps == 0):
+        if self.evaluation_strategy == IntervalStrategy.STEPS and (self.eval_steps is None or self.eval_steps == 0):
             if self.logging_steps > 0:
+                logger.info(f"using `logging_steps` to initialize `eval_steps` to {self.logging_steps}")
                 self.eval_steps = self.logging_steps
             else:
                 raise ValueError(
