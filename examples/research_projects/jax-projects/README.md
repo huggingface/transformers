@@ -1274,6 +1274,7 @@ Please make sure that your submitted project includes a demo as well as informat
 * [Niki Parmar](https://research.google/people/NikiParmar/): Staff Research Scientist at Google.
 * [Ross Wightman](https://www.linkedin.com/in/wightmanr/): Angel Investor.
 * [Thomas Wolf](https://www.linkedin.com/in/thomas-wolf-a056857/): Co-founder and CSO at Hugging Face.
+* [Ashish Vaswani](https://research.google/people/AshishVaswani/): Staff Research Scientist at Google Brain.
 
 ### Process
 
