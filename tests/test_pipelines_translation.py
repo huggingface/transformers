@@ -16,30 +16,82 @@ import unittest
 
 import pytest
 
-from transformers import pipeline
-from transformers.testing_utils import is_pipeline_test, is_torch_available, require_torch, slow
+from transformers import (
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    TranslationPipeline,
+    pipeline,
+)
+from transformers.testing_utils import is_pipeline_test, is_torch_available, require_tf, require_torch, slow
 
-from .test_pipelines_common import MonoInputPipelineCommonMixin
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
 if is_torch_available():
     from transformers.models.mbart import MBart50TokenizerFast, MBartForConditionalGeneration
 
 
-class TranslationEnToDePipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
-    pipeline_task = "translation_en_to_de"
-    small_models = ["patrickvonplaten/t5-tiny-random"]  # Default model - Models tested without the @slow decorator
-    large_models = [None]  # Models tested with the @slow decorator
-    invalid_inputs = [4, "<mask>"]
-    mandatory_keys = ["translation_text"]
+@is_pipeline_test
+class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
+    def run_pipeline_test(self, model, tokenizer):
+        translator = TranslationPipeline(model=model, tokenizer=tokenizer)
+        outputs = translator("Some string")
+        self.assertEqual(outputs, [{"translation_text": ANY(str)}])
 
-class TranslationEnToRoPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
-    pipeline_task = "translation_en_to_ro"
-    small_models = ["patrickvonplaten/t5-tiny-random"]  # Default model - Models tested without the @slow decorator
-    large_models = [None]  # Models tested with the @slow decorator
-    invalid_inputs = [4, "<mask>"]
-    mandatory_keys = ["translation_text"]
+    @require_torch
+    def test_en_to_ro_pt(self):
+        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="pt")
+        outputs = translator("This is a test string", max_length=20)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "translation_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                }
+            ],
+        )
+
+    @require_tf
+    def test_en_to_ro_tf(self):
+        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="tf")
+        outputs = translator("This is a test string", max_length=20)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "translation_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                }
+            ],
+        )
+
+    @require_torch
+    def test_en_to_de_pt(self):
+        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="pt")
+        outputs = translator("This is a test string", max_length=20)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "translation_text": "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine urine urine urine urine urine urine urine"
+                }
+            ],
+        )
+
+    @require_tf
+    def test_en_to_de_tf(self):
+        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="tf")
+        outputs = translator("This is a test string", max_length=20)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "translation_text": "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine urine urine urine urine urine urine urine"
+                }
+            ],
+        )
 
 
 @is_pipeline_test
@@ -91,8 +143,8 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
         with pytest.warns(UserWarning, match=r".*translation_en_to_de.*"):
             translator = pipeline(task="translation", model=model)
         self.assertEqual(translator.task, "translation_en_to_de")
-        self.assertEquals(translator.src_lang, "en")
-        self.assertEquals(translator.tgt_lang, "de")
+        self.assertEqual(translator.src_lang, "en")
+        self.assertEqual(translator.tgt_lang, "de")
 
     @require_torch
     def test_translation_with_no_language_no_model_fails(self):
