@@ -23,6 +23,7 @@ from PIL import Image
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME
 from transformers.models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor, LayoutLMv2Tokenizer
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
+from transformers.testing_utils import slow
 
 
 class LayoutLMv2ProcessorTest(unittest.TestCase):
@@ -100,17 +101,104 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
-    # integration tests (3 cases)
-
+    # integration tests (7 cases)
+    @slow
     def test_processor_case_1(self):
+        # case 1: document image classification (training, inference) + token classification (inference), apply_ocr = True
+
         feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
+        tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
         processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
         image = Image.open("tests/fixtures/tests_samples/DocVQA/document.png").convert("RGB")
 
-        input_feat_extract = feature_extractor(image, return_tensors="np")
-        input_processor = processor(image, return_tensors="np")
+        input_feat_extract = feature_extractor(image, return_tensors="pt")
+        input_processor = processor(image, return_tensors="pt")
 
-        self.assertAlmostEqual(input_feat_extract["image"].sum(), input_processor["image"].sum(), delta=1e-2)
+        # verify keys
+        expected_keys = ["input_ids", "bbox", "token_type_ids", "attention_mask", "image"]
+        self.assertListEqual(list(input_processor.keys()), expected_keys)
+
+        # verify image
+        self.assertAlmostEqual(input_feat_extract["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2)
+
+        # verify input_ids
+        # fmt: off
+        expected_decoding = "[CLS] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]" # noqa: E231
+        # fmt: on
+        decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+        self.assertSequenceEqual(decoding, expected_decoding)
+
+    def test_processor_case_2(self):
+        # case 2: document image classification (training, inference) + token classification (inference), apply_ocr=False
+
+        feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+        tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
+
+        processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
+        image = Image.open("tests/fixtures/tests_samples/DocVQA/document.png").convert("RGB")
+
+        words = ["hello", "world"]
+        boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
+        input_processor = processor(image, words, boxes=boxes, return_tensors="pt")
+
+        # verify keys
+        expected_keys = ["input_ids", "bbox", "token_type_ids", "attention_mask", "image"]
+        self.assertListEqual(list(input_processor.keys()), expected_keys)
+
+        # verify input_ids
+        expected_decoding = "[CLS] hello world [SEP]"
+        decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+        self.assertSequenceEqual(decoding, expected_decoding)
+
+    def test_processor_case_3(self):
+        # case 3: token classification (training), apply_ocr=False
+
+        feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+        tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
+
+        processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
+        image = Image.open("tests/fixtures/tests_samples/DocVQA/document.png").convert("RGB")
+
+        words = ["weirdly", "world"]
+        boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
+        word_labels = [1, 2]
+        input_processor = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+
+        # verify keys
+        expected_keys = ["input_ids", "bbox", "token_type_ids", "labels", "attention_mask", "image"]
+        self.assertListEqual(list(input_processor.keys()), expected_keys)
+
+        # verify input_ids
+        expected_decoding = "[CLS] weirdly world [SEP]"
+        decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+        self.assertSequenceEqual(decoding, expected_decoding)
+
+        # verify labels
+        expected_labels = [-100, 1, -100, 2, -100]
+        self.assertListEqual(input_processor.labels.squeeze().tolist(), expected_labels)
+
+    def test_processor_case_4(self):
+        # case 4: visual question answering (inference), apply_ocr=True
+
+        feature_extractor = LayoutLMv2FeatureExtractor()
+        tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
+
+        processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
+        image = Image.open("tests/fixtures/tests_samples/DocVQA/document.png").convert("RGB")
+
+        question = "What's his name?"
+        input_processor = processor(image, question, return_tensors="pt")
+
+        # verify keys
+        expected_keys = ["input_ids", "bbox", "token_type_ids", "attention_mask", "image"]
+        self.assertListEqual(list(input_processor.keys()), expected_keys)
+
+        # verify input_ids
+        expected_decoding = "[CLS] what's his name? [SEP]"
+        decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+        self.assertSequenceEqual(decoding, expected_decoding)

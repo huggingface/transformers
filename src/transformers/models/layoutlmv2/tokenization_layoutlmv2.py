@@ -365,8 +365,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        boxes: Union[List[int], List[List[int]]],
         text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        boxes: Union[List[int], List[List[int]]] = None,
         word_labels: Optional[Union[List[str], List[List[str]]]] = None,
         answers: Optional[Union[List[str], List[List[str]]]] = None,
         add_special_tokens: bool = True,
@@ -391,7 +391,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         Args:
             text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string.
+                The sequence or batch of sequences to be encoded. Each sequence can be a string, a list of strings
+                (words of a single example) or a list of list of strings (batch of words).
             text_pair (:obj:`List[str]`, :obj:`List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
                 (pretokenized string).
@@ -426,10 +427,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = words
             if not _is_valid_text_input(text):
-                raise ValueError(
-                    "text input must of type `str` (single example), `List[str]` (batch or single pretokenized example) "
-                    "or `List[List[str]]` (batch of pretokenized examples)."
-                )
+                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
                     "words must of type `List[str]` (single pretokenized example),"
@@ -449,6 +447,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
 
         words = text if text_pair is None else text_pair
+        assert boxes is not None, "You must provide corresponding bounding boxes"
         if is_batched:
             assert len(words) == len(boxes), "You must provide words and boxes for an equal amount of examples"
             for words_example, boxes_example in zip(words, boxes):
@@ -705,8 +704,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             batch_text_or_text_pair, boxes_example = example
             outputs = self.prepare_for_model(
                 batch_text_or_text_pair[0] if is_pair else batch_text_or_text_pair,
-                boxes_example,
                 batch_text_or_text_pair[1] if is_pair else None,
+                boxes_example,
                 word_labels=word_labels[idx] if word_labels is not None else None,
                 answers=answers[idx] if answers is not None else None,
                 add_special_tokens=add_special_tokens,
@@ -746,8 +745,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def encode(
         self,
         text,
-        boxes,
         text_pair=None,
+        boxes=None,
         word_labels=None,
         answers=None,
         add_special_tokens: bool = True,
@@ -771,8 +770,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         """
         encoded_inputs = self.encode_plus(
             text=text,
-            boxes=boxes,
             text_pair=text_pair,
+            boxes=boxes,
             word_labels=word_labels,
             answers=answers,
             add_special_tokens=add_special_tokens,
@@ -798,8 +797,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def encode_plus(
         self,
         text,
-        boxes,
         text_pair=None,
+        boxes=None,
         word_labels=None,
         answers=None,
         add_special_tokens: bool = True,
@@ -869,8 +868,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def _encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput, EncodedInput],
-        boxes,
         text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
+        boxes=None,
         word_labels=None,
         answers=None,
         add_special_tokens: bool = True,
@@ -927,8 +926,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         return self.prepare_for_model(
             text=text,
-            boxes=boxes,
             text_pair=text_pair,
+            boxes=boxes,
             word_labels=word_labels,
             answers=answers,
             add_special_tokens=add_special_tokens,
@@ -951,8 +950,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def prepare_for_model(
         self,
         text: Union[TextInput, PreTokenizedInput, EncodedInput],
-        boxes,
         text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
+        boxes=None,
         word_labels=None,
         answers=None,
         add_special_tokens: bool = True,

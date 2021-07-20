@@ -41,10 +41,16 @@ class LayoutLMv2Processor:
 
     :class:`~transformers.LayoutLMv2Processor` offers all the functionalities you need to prepare data for the model.
 
-    It first uses :class:`~transformers.LayoutLMv2FeatureExtractor` to apply OCR on document images to get words and
-    normalized bounding boxes. These are then provided to :class:`~transformers.LayoutLMv2Tokenizer`, which turns the
-    words and bounding boxes into token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`,
-    :obj:`token_type_ids`.
+    It first uses :class:`~transformers.LayoutLMv2FeatureExtractor` to resize document images to a fixed size, and
+    optionally applies OCR to get words and normalized bounding boxes. These are then provided to
+    :class:`~transformers.LayoutLMv2Tokenizer`, which turns the words and bounding boxes into token-level
+    :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`. Optionally, one can provide additional
+    information to automatically create labels:
+
+    - for information extraction tasks (such as FUNSD, CORD), one can provide :obj:`word_labels`, which will be
+      automatically turned into token-level :obj:`labels`.
+    - for visual question answering tasks (such as DocVQA), one can provide :obj:`answers`, which will be automatically
+      turned into token-level :obj:`start_positions` and :obj:`end_positions`.
 
     Args:
         feature_extractor (:obj:`LayoutLMv2FeatureExtractor`):
@@ -124,9 +130,9 @@ class LayoutLMv2Processor:
     def __call__(
         self,
         images,
-        boxes: Union[List[int], List[List[int]]] = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        boxes: Union[List[int], List[List[int]]] = None,
         word_labels: Optional[Union[List[str], List[List[str]]]] = None,
         answers: Optional[Union[List[str], List[List[str]]]] = None,
         add_special_tokens: bool = True,
@@ -147,14 +153,14 @@ class LayoutLMv2Processor:
     ):
         """
         This method first forwards the :obj:`images` argument to LayoutLMv2FeatureExtractor's
-        :meth:`~transformers.LayoutLMv2FeatureExtractor.__call__`. Next, it passes the obtained features to
-        :meth:`~transformers.LayoutLMv2Processor.__call__` and returns the output. Please refer to the docstring of the
-        above two methods for more information.
+        :meth:`~transformers.LayoutLMv2FeatureExtractor.__call__`. Next, it passes the obtained features along with the
+        additional arguments to :meth:`~transformers.LayoutLMv2Processor.__call__` and returns the output. Please refer
+        to the docstring of the above two methods for more information.
         """
         # verify input
-        if self.feature_extractor.apply_ocr and (boxes is not None or text is not None):
+        if self.feature_extractor.apply_ocr and (boxes is not None):
             raise ValueError(
-                "You cannot provide bounding boxes or words "
+                "You cannot provide bounding boxes "
                 "if you initialized the feature extractor with apply_ocr set to True."
             )
 
@@ -162,11 +168,13 @@ class LayoutLMv2Processor:
         features = self.feature_extractor(images=images, return_tensors=return_tensors)
 
         # second, apply the tokenizer
+        print("Text:", text)
+        print("Text pair:", text_pair)
+
         encoded_inputs = self.tokenizer(
             text=text if text is not None else features["words"],
-            boxes=boxes if boxes is not None else features["boxes"],
-            # text_pair=features["words"] if text is not None else None,
             text_pair=text_pair if text_pair is not None else features["words"],
+            boxes=boxes if boxes is not None else features["boxes"],
             word_labels=word_labels,
             answers=answers,
             add_special_tokens=add_special_tokens,
