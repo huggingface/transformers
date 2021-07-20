@@ -675,7 +675,7 @@ class TrainingArguments:
                 )
 
         # logging_steps must be non-zero for logging_strategy that is other than 'no'
-        if self.logging_strategy != IntervalStrategy.NO and self.logging_steps == 0:
+        if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps == 0:
             raise ValueError(f"logging strategy {self.logging_strategy} requires non-zero --logging_steps")
 
         # Sanity checks for load_best_model_at_end: we require save and eval strategies to be compatible.
