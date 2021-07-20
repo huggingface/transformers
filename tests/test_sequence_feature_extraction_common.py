@@ -252,7 +252,7 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         )[input_name]
 
         self.assertTrue(_inputs_have_equal_length(input_5))
-        self.assertTrue(input_5.shape[-1] == len(speech_inputs[0]))
+        self.assertTrue(input_5.shape[1] == len(speech_inputs[0]))
 
         # since truncation forces padding to be smaller than longest input
         # function can't return `np.ndarray`, but has to return list
@@ -273,7 +273,7 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
             processed_features, padding="max_length", max_length=len(speech_inputs[1]), return_tensors="np"
         )[input_name]
 
-        self.assertTrue(input_7.shape[-1] == len(speech_inputs[1]))
+        self.assertTrue(input_7.shape[1] == len(speech_inputs[1]))
         self.assertTrue(_inputs_have_equal_length(input_7))
         self.assertTrue(_inputs_have_equal_length(input_8))
         self.assertTrue(_inputs_are_equal(input_7, input_8))
