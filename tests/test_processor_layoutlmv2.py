@@ -101,7 +101,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
-    # integration tests (7 cases)
+    # integration tests
     @slow
     def test_processor_case_1(self):
         # case 1: document image classification (training, inference) + token classification (inference), apply_ocr = True
