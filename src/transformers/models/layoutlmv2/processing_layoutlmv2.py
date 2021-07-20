@@ -168,12 +168,18 @@ class LayoutLMv2Processor:
         features = self.feature_extractor(images=images, return_tensors=return_tensors)
 
         # second, apply the tokenizer
+        # text_pair = text_pair if text_pair is not None and not self.feature_extractor.apply_ocr else features["words"]
+        if text is not None and self.feature_extractor.apply_ocr and text_pair is None:
+            if isinstance(text, str):
+                text = [text]  # add batch dimension
+            text_pair = features["words"]
+
         print("Text:", text)
         print("Text pair:", text_pair)
 
         encoded_inputs = self.tokenizer(
             text=text if text is not None else features["words"],
-            text_pair=text_pair if text_pair is not None else features["words"],
+            text_pair=text_pair if text_pair is not None else None,
             boxes=boxes if boxes is not None else features["boxes"],
             word_labels=word_labels,
             answers=answers,

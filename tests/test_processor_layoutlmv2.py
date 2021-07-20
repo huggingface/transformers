@@ -199,6 +199,32 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         self.assertListEqual(list(input_processor.keys()), expected_keys)
 
         # verify input_ids
-        expected_decoding = "[CLS] what's his name? [SEP]"
+        # fmt: off
+        expected_decoding = "[CLS] what's his name? [SEP] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]" #noqa: E231
+        # fmt: on
+        decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+        self.assertSequenceEqual(decoding, expected_decoding)
+
+    def test_processor_case_5(self):
+        # case 4: visual question answering (inference), apply_ocr=False
+
+        feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+        tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
+
+        processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
+        image = Image.open("tests/fixtures/tests_samples/DocVQA/document.png").convert("RGB")
+
+        question = "What's his name?"
+        words = ["hello", "world"]
+        boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
+        input_processor = processor(image, question, words, boxes, return_tensors="pt")
+
+        # verify keys
+        expected_keys = ["input_ids", "bbox", "token_type_ids", "attention_mask", "image"]
+        self.assertListEqual(list(input_processor.keys()), expected_keys)
+
+        # verify input_ids
+        expected_decoding = "[CLS] what's his name? [SEP] hello world [SEP]"
         decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
         self.assertSequenceEqual(decoding, expected_decoding)

@@ -1041,6 +1041,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     pair_tokens.extend(word_tokens)
                     pair_token_boxes.extend([box] * len(word_tokens))
             else:
+                start_position = 0
+                end_position = 0
                 # CASE 3: document visual question answering (training)
                 # text = question
                 # text_pair = words
@@ -1050,15 +1052,17 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 answers = [answer.lower() for answer in answers]
                 context = " ".join(text_pair).lower()
                 # find the answers in context, return first match
+                answer_found = False
                 for answer in answers:
                     start_char_idx = context.find(answer)
                     if start_char_idx != -1:
+                        answer_found = True
                         end_char_idx = start_char_idx + len(answer)
                         break
                 # in case no answer was found already, try the following:
                 # for each answer: remove a single character, try to find this in the context
                 # this is to take into account for cases when OCR context and answer don't perfectly match:
-                if start_char_idx == -1:
+                if not answer_found:
                     for answer in answers:
                         for i in range(len(answer)):
                             # drop the ith character from the answer
@@ -1069,8 +1073,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                                 start_char_idx = start_idx
                                 end_char_idx = start_char_idx + len(answer_i)
                                 break
-                # if the answer was found:
-                if start_char_idx != -1:
+                if answer_found:
                     # get found words from context as list
                     found_words = context[start_char_idx:end_char_idx].split()
                     words = [word.lower() for word in text_pair]
@@ -1088,7 +1091,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     else:
                         word_labels = [0 for _ in range(len(words))]
                 else:
-                    word_labels = [0 for _ in range(len(words))]
+                    word_labels = [0 for _ in range(len(text_pair))]
 
                 # finally, create start_position and end_position based on word_labels
                 assert len(text_pair) == len(boxes) == len(word_labels)
@@ -1116,8 +1119,9 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 # tokenize the question
                 tokens = self.tokenize(text)
                 token_boxes = [self.pad_token_box for _ in range(len(tokens))]
-                start_position = start_position + len(tokens)
-                end_position = end_position + len(tokens)
+                if answer_found:
+                    start_position = start_position + len(tokens)
+                    end_position = end_position + len(tokens)
 
         # Create ids + pair_ids
         ids = self.convert_tokens_to_ids(tokens)
@@ -1142,10 +1146,12 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 stride=stride,
             )
         special_tokens_count = self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0
-        if start_position is not None and start_position > (max_length - special_tokens_count):
-            start_position = 0
-        if end_position is not None and end_position > (max_length - special_tokens_count):
-            end_position = 0
+        if start_position is not None and max_length:
+            if start_position > (max_length - special_tokens_count):
+                start_position = 0
+        if end_position is not None and max_length:
+            if end_position > (max_length - special_tokens_count):
+                end_position = 0
 
         if return_token_type_ids and not add_special_tokens:
             raise ValueError(
@@ -1176,8 +1182,10 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             if labels:
                 labels = [self.pad_token_label] + labels + [self.pad_token_label]
             if start_position is not None and end_position is not None:
-                start_position += 2
-                end_position += 1
+                if start_position != 0:
+                    start_position += 2
+                if end_position != 0:
+                    end_position += 1
         else:
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])

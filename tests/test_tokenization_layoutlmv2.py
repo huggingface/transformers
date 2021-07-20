@@ -1206,6 +1206,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding = tokenizer(question, words, boxes, answers=answers, padding="max_length", max_length=20)
+        print("Case 4: not batched")
+        print(encoding)
         self.assertDictEqual(dict(encoding), expected_results)
 
         start_position = encoding.start_positions
