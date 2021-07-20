@@ -803,6 +803,16 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         Returns:
             text_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The text embeddings
             obtained by applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPTextModel`.
+
+        Examples::
+
+            >>> from transformers import CLIPTokenizer, FlaxCLIPModel
+
+            >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+            >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+
+            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="np")
+            >>> text_features = model.get_text_features(**inputs)
         """
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
@@ -848,6 +858,22 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
             image_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The image embeddings
             obtained by applying the projection layer to the pooled output of
             :class:`~transformers.FlaxCLIPVisionModel`
+
+        Examples::
+
+            >>> from PIL import Image
+            >>> import requests
+            >>> from transformers import CLIPProcessor, FlaxCLIPModel
+
+            >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+            >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> inputs = processor(images=image, return_tensors="np")
+
+            >>> image_features = model.get_image_features(**inputs)
         """
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
@@ -907,6 +933,7 @@ FLAX_CLIP_TEXT_MODEL_DOCSTRING = """
     Returns:
 
     Example::
+
         >>> from transformers import CLIPTokenizer, FlaxCLIPTextModel
 
         >>> model = FlaxCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
@@ -957,9 +984,9 @@ FLAX_CLIP_VISION_MODEL_DOCSTRING = """
     Returns:
 
     Example::
+
         >>> from PIL import Image
         >>> import requests
-
         >>> from transformers import CLIPProcessor, FlaxCLIPVisionModel
 
         >>> model = FlaxCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
@@ -1078,10 +1105,10 @@ FLAX_CLIP_MODEL_DOCSTRING = """
     Returns:
 
     Example::
+
         >>> import jax
         >>> from PIL import Image
         >>> import requests
-
         >>> from transformers import CLIPProcessor, FlaxCLIPModel
 
         >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
