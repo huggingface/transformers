@@ -49,8 +49,6 @@ class LayoutLMv2Processor:
 
     - for information extraction tasks (such as FUNSD, CORD), one can provide :obj:`word_labels`, which will be
       automatically turned into token-level :obj:`labels`.
-    - for visual question answering tasks (such as DocVQA), one can provide :obj:`answers`, which will be automatically
-      turned into token-level :obj:`start_positions` and :obj:`end_positions`.
 
     Args:
         feature_extractor (:obj:`LayoutLMv2FeatureExtractor`):
@@ -134,7 +132,6 @@ class LayoutLMv2Processor:
         text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         boxes: Union[List[int], List[List[int]]] = None,
         word_labels: Optional[Union[List[str], List[List[str]]]] = None,
-        answers: Optional[Union[List[str], List[List[str]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -174,15 +171,11 @@ class LayoutLMv2Processor:
                 text = [text]  # add batch dimension
             text_pair = features["words"]
 
-        print("Text:", text)
-        print("Text pair:", text_pair)
-
         encoded_inputs = self.tokenizer(
             text=text if text is not None else features["words"],
             text_pair=text_pair if text_pair is not None else None,
             boxes=boxes if boxes is not None else features["boxes"],
             word_labels=word_labels,
-            answers=answers,
             add_special_tokens=add_special_tokens,
             padding=padding,
             truncation=truncation,

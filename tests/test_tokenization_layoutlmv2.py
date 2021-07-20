@@ -85,31 +85,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return questions, words, boxes
 
-    def get_question_answers_words_and_boxes(self):
-        question = "what's his name?"
-        answers = ["weirdly"]
-        words = ["a", "weirdly", "test"]
-        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
-
-        return question, answers, words, boxes
-
-    def get_questions_answers_words_and_boxes(self):
-        questions = ["what's his name?", "where was he born?"]
-        answers = [["weirdly", "weird"], ["san francisco"]]
-        words = [["a", "weirdly", "test"], ["ronaldo", "was", "born", "in", "san", "francisco"]]
-        boxes = [
-            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
-            [
-                [256, 38, 330, 58],
-                [256, 38, 330, 58],
-                [336, 42, 353, 57],
-                [360, 39, 401, 56],
-                [360, 39, 401, 56],
-                [411, 39, 471, 59],
-            ],
-        ]
-        return questions, answers, words, boxes
-
     def setUp(self):
         super().setUp()
 
@@ -1124,17 +1099,15 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased", model_max_length=512)
 
-        # There are 4 cases:
+        # There are 3 cases:
         # CASE 1: document image classification (training + inference), document image token classification (inference),
         # in which case only words and bounding boxes are provided to the tokenizer
         # CASE 2: document image token classification (training),
         # in which case one also provides word labels to the tokenizer
         # CASE 3: document image visual question answering (inference),
         # in which case one also provides a question to the tokenizer
-        # CASE 4: document image visual question answering (training),
-        # in which case one provides a question + answers to the tokenizer
 
-        # We need to test all 4 cases both on batched and non-batched inputs.
+        # We need to test all 3 cases both on batched and non-batched inputs.
 
         # CASE 1: not batched
         words, boxes = self.get_words_and_boxes()
@@ -1197,40 +1170,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         encoding = tokenizer(questions, words, boxes, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding), expected_results)
-
-        # CASE 4: not batched
-        question, answers, words, boxes = self.get_question_answers_words_and_boxes()
-
-        # fmt: off
-        expected_results = {'input_ids': [101, 2054, 1005, 1055, 2010, 2171, 1029, 102, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0], 'bbox': [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], 'start_positions': 9, 'end_positions': 10, 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
-        # fmt: on
-
-        encoding = tokenizer(question, words, boxes, answers=answers, padding="max_length", max_length=20)
-        print("Case 4: not batched")
-        print(encoding)
-        self.assertDictEqual(dict(encoding), expected_results)
-
-        start_position = encoding.start_positions
-        end_position = encoding.end_positions
-
-        decoded_answer = tokenizer.decode(encoding.input_ids[start_position : end_position + 1])
-        self.assertEqual(decoded_answer, answers[0])
-
-        # CASE 4: batched
-        questions, answers, words, boxes = self.get_questions_answers_words_and_boxes()
-
-        # fmt: off
-        expected_results = {'input_ids': [[101, 2054, 1005, 1055, 2010, 2171, 1029, 102, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0], [101, 2073, 2001, 2002, 2141, 1029, 102, 8923, 2080, 2001, 2141, 1999, 2624, 3799, 102, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [256, 38, 330, 58], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [360, 39, 401, 56], [360, 39, 401, 56], [411, 39, 471, 59], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]], 'start_positions': [9, 12], 'end_positions': [10, 13], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]]}  # noqa: E231
-        # fmt: on
-
-        encoding = tokenizer(questions, words, boxes, answers=answers, padding="max_length", max_length=20)
-        self.assertDictEqual(dict(encoding), expected_results)
-
-        start_position = encoding.start_positions[1]
-        end_position = encoding.end_positions[1]
-
-        decoded_answer = tokenizer.decode(encoding.input_ids[1][start_position : end_position + 1])
-        self.assertEqual(decoded_answer, answers[1][0])
 
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
