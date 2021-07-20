@@ -14,11 +14,18 @@
 
 import unittest
 
-from transformers import AutoTokenizer, is_torch_available, pipeline
+from transformers import (
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    AutoTokenizer,
+    SummarizationPipeline,
+    is_torch_available,
+    pipeline,
+)
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
-from .test_pipelines_common import MonoInputPipelineCommonMixin
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
 if is_torch_available():
@@ -82,16 +89,38 @@ class SimpleSummarizationPipelineTests(unittest.TestCase):
         self.assertEqual(output, [{"summary_text": "\x02 L L L"}])
 
 
-class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
-    pipeline_task = "summarization"
-    pipeline_running_kwargs = {"num_beams": 2, "min_length": 2, "max_length": 5}
-    small_models = [
-        "patrickvonplaten/t5-tiny-random",
-        "sshleifer/bart-tiny-random",
-    ]  # Models tested without the @slow decorator
-    large_models = []  # Models tested with the @slow decorator
-    invalid_inputs = [4, "<mask>"]
-    mandatory_keys = ["summary_text"]
+class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+
+    def run_pipeline_test(self, model, tokenizer):
+        summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer)
+
+        outputs = summarizer("(CNN)The Palestinian Authority officially became")
+        self.assertEqual(outputs, [{"summary_text": ANY(str)}])
+
+        outputs = summarizer(
+            "(CNN)The Palestinian Authority officially became ",
+            num_beams=2,
+            min_length=2,
+            max_length=5,
+        )
+        self.assertEqual(outputs, [{"summary_text": ANY(str)}])
+
+        summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer, num_beams=2, min_length=2, max_length=5)
+        self.assertEqual(summarizer.num_beams, 2)
+        self.assertEqual(summarizer.min_length, 2)
+        self.assertEqual(summarizer.max_length, 5)
+
+    # pipeline_task = "summarization"
+    # pipeline_running_kwargs = {"num_beams": 2, "min_length": 2, "max_length": 5}
+    # small_models = [
+    #     "patrickvonplaten/t5-tiny-random",
+    #     "sshleifer/bart-tiny-random",
+    # ]  # Models tested without the @slow decorator
+    # large_models = []  # Models tested with the @slow decorator
+    # invalid_inputs = [4, "<mask>"]
+    # mandatory_keys = ["summary_text"]
 
     @require_torch
     @slow

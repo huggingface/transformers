@@ -37,7 +37,7 @@ class Text2TextGenerationPipeline(Pipeline):
     # Used in the return key of the pipeline.
     return_name = "generated"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, num_beams=None, min_length=None, max_length=None, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.check_model_type(
@@ -45,6 +45,9 @@ class Text2TextGenerationPipeline(Pipeline):
             if self.framework == "tf"
             else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
         )
+        self.num_beams = num_beams
+        self.min_length = min_length
+        self.max_length = max_length
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
         """
@@ -125,8 +128,12 @@ class Text2TextGenerationPipeline(Pipeline):
         elif self.framework == "tf":
             input_length = tf.shape(inputs["input_ids"])[-1].numpy()
 
-        min_length = generate_kwargs.get("min_length", self.model.config.min_length)
-        max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+        min_length = generate_kwargs.get(
+            "min_length", self.model.config.min_length if self.min_length is None else self.min_length
+        )
+        max_length = generate_kwargs.get(
+            "max_length", self.model.config.max_length if self.max_length is None else self.max_length
+        )
         self.check_inputs(input_length, min_length, max_length)
 
         generate_kwargs.update(inputs)
