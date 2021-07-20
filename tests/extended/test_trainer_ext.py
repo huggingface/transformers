@@ -248,6 +248,7 @@ class TestTrainerExt(TestCasePlus):
             --learning_rate {learning_rate}
             --warmup_steps 8
             --logging_steps 0
+            --logging_strategy no
             --save_steps {str(eval_steps)}
             --group_by_length
             --label_smoothing_factor 0.1

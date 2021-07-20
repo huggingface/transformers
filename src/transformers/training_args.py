@@ -663,8 +663,20 @@ class TrainingArguments:
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.evaluation_strategy != IntervalStrategy.NO:
             self.do_eval = True
-        if self.eval_steps is None:
-            self.eval_steps = self.logging_steps
+
+        # eval_steps has to be defined and non-zero, fallbacks to logging_steps if the latter is non-zero
+        if self.evaluation_strategy == IntervalStrategy.STEPS and (self.eval_steps is None or self.eval_steps == 0):
+            if self.logging_steps > 0:
+                logger.info(f"using `logging_steps` to initialize `eval_steps` to {self.logging_steps}")
+                self.eval_steps = self.logging_steps
+            else:
+                raise ValueError(
+                    f"evaluation strategy {self.evaluation_strategy} requires either non-zero --eval_steps or --logging_steps"
+                )
+
+        # logging_steps must be non-zero for logging_strategy that is other than 'no'
+        if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps == 0:
+            raise ValueError(f"logging strategy {self.logging_strategy} requires non-zero --logging_steps")
 
         # Sanity checks for load_best_model_at_end: we require save and eval strategies to be compatible.
         if self.load_best_model_at_end:
