@@ -1061,7 +1061,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, tokenizer=tokenizer)
 
             # should not raise an error
-            result = trainer.train()
+            _ = trainer.train()
 
     def test_training_iterable_dataset(self):
         config = RegressionModelConfig()
