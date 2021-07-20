@@ -181,7 +181,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 processed_features[key] = to_py_obj(value)
 
         # Convert padding_strategy in PaddingStrategy
-        padding_strategy, max_length, _ = self._get_padding_strategies(padding=padding, max_length=max_length)
+        padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
 
         required_input = processed_features[self.model_input_names[0]]
         if required_input and not isinstance(required_input[0], (list, tuple)):
@@ -189,7 +189,6 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             processed_features = self._truncate(
                 processed_features,
                 max_length=max_length,
-                padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
                 truncation=truncation,
             )
@@ -208,18 +207,28 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             len(v) == batch_size for v in processed_features.values()
         ), "Some items in the output dictionary have a different batch size than others."
 
+        truncated_inputs = []
+        for i in range(batch_size):
+            inputs = dict((k, v[i]) for k, v in processed_features.items())
+            # truncation
+            inputs = self._truncate(
+                inputs,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                truncation=truncation,
+            )
+            truncated_inputs.append(inputs)
+
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = max(len(inputs) for inputs in required_input)
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in processed_features.items())
             # truncation
-            processed_features = self._truncate(
-                inputs,
+            inputs = self._truncate(
+                truncated_inputs[i],
                 max_length=max_length,
-                padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
                 truncation=truncation,
             )
@@ -303,7 +312,6 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         self,
         processed_features: Union[Dict[str, List[float]], BatchFeature],
         max_length: Optional[int] = None,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
         truncation: Optional[bool] = None,
     ):
@@ -313,27 +321,17 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Args:
             processed_features: Dictionary of input values (`List[float]`) / input vectors (`List[List[float]]`) or batch of inputs values (`List[List[int]]`) / input vectors (`List[List[List[int]]]`)
             max_length: maximum length of the returned list and optionally padding length (see below)
-            padding_strategy: PaddingStrategy to use for padding.
-
-                - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
-                - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
-                - PaddingStrategy.DO_NOT_PAD: Do not pad
-                The feature_extractor padding sides are defined in self.padding_side:
-
-                    - 'left': pads on the left of the sequences
-                    - 'right': pads on the right of the sequences
-
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             truncation: (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
         """
-        if not truncation or padding_strategy == PaddingStrategy.LONGEST:
+        if not truncation:
             # no truncation
             return processed_features
         elif truncation and max_length is None:
             raise ValueError(
-                "When setting ``truncation=True``, make sure that max_length is defined ``padding='longest'``"
+                "When setting ``truncation=True``, make sure that ``max_length`` is defined and ``padding='max_length'``"
             )
 
         required_input = processed_features[self.model_input_names[0]]
@@ -345,7 +343,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         needs_to_be_truncated = len(required_input) > max_length
 
         if needs_to_be_truncated:
-            processed_features[required_input] = processed_features[required_input][:max_length]
+            processed_features[self.model_input_names[0]] = processed_features[self.model_input_names[0]][:max_length]
             if "attention_mask" in processed_features:
                 processed_features["attention_mask"] = processed_features["attention_mask"][:max_length]
 
@@ -381,4 +379,4 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 "Please select a value to use as `padding_value`. For example: `feature_extractor.padding_value = 0.0`."
             )
 
-        return padding_strategy, max_length, kwargs
+        return padding_strategy
