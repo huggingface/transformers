@@ -471,6 +471,19 @@ if __name__ == "__main__":
             extension = "text"
         datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
 
+        if "validation" not in datasets.keys():
+            datasets["validation"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[:{data_args.validation_split_percentage}%]",
+                cache_dir=model_args.cache_dir,
+            )
+            datasets["train"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[{data_args.validation_split_percentage}%:]",
+                cache_dir=model_args.cache_dir,
+            )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
