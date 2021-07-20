@@ -30,25 +30,9 @@ class TextGenerationPipeline(Pipeline):
     begging for his blessing. <eod> </s> <eos>
     """
 
-    ALLOWED_MODELS = [
-        "XLNetLMHeadModel",
-        "TransfoXLLMHeadModel",
-        "ReformerModelWithLMHead",
-        "GPT2LMHeadModel",
-        "GPTNeoForCausalLM",
-        "OpenAIGPTLMHeadModel",
-        "CTRLLMHeadModel",
-        "TFXLNetLMHeadModel",
-        "TFTransfoXLLMHeadModel",
-        "TFGPT2LMHeadModel",
-        "TFOpenAIGPTLMHeadModel",
-        "TFCTRLLMHeadModel",
-    ]
-
     def __init__(self, *args, return_full_text=True, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.check_model_type(self.ALLOWED_MODELS)
         self.return_full_text = return_full_text
 
     # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
