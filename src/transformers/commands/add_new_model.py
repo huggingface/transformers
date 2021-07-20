@@ -172,8 +172,6 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             os.remove(f"{directory}/modeling_flax_{lowercase_model_name}.py")
             os.remove(f"{directory}/test_modeling_flax_{lowercase_model_name}.py")
 
-
-
         shutil.move(
             f"{directory}/{lowercase_model_name}.rst",
             f"{path_to_transformer_root}/docs/source/model_doc/{lowercase_model_name}.rst",
@@ -217,12 +215,11 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             move(abs_path, original_file)
 
         def skip_units(line):
-            return ("generating PyTorch" in line and not output_pytorch) or (
-                "generating TensorFlow" in line and not output_tensorflow
-            ) or (
-                "generating Flax" in line and not output_flax
+            return (
+                ("generating PyTorch" in line and not output_pytorch)
+                or ("generating TensorFlow" in line and not output_tensorflow)
+                or ("generating Flax" in line and not output_flax)
             )
-
 
         def replace_in_files(path_to_datafile):
             with open(path_to_datafile) as datafile:
