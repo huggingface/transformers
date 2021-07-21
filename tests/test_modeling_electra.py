@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import ElectraConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -29,7 +29,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
-        ElectraConfig,
         ElectraForMaskedLM,
         ElectraForMultipleChoice,
         ElectraForPreTraining,
@@ -89,7 +88,21 @@ class ElectraModelTester:
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
             fake_token_labels = ids_tensor([self.batch_size, self.seq_length], 1)
 
-        config = ElectraConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
+        )
+
+    def get_config(self):
+        return ElectraConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -102,17 +115,6 @@ class ElectraModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-        )
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            fake_token_labels,
         )
 
     def create_and_check_electra_model(

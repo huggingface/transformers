@@ -19,7 +19,7 @@ import inspect
 import math
 import unittest
 
-from transformers import is_timm_available, is_vision_available
+from transformers import DetrConfig, is_timm_available, is_vision_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_timm, require_vision, slow, torch_device
 
@@ -31,7 +31,7 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_te
 if is_timm_available():
     import torch
 
-    from transformers import DetrConfig, DetrForObjectDetection, DetrForSegmentation, DetrModel
+    from transformers import DetrForObjectDetection, DetrForSegmentation, DetrModel
 
 
 if is_vision_available():
@@ -40,7 +40,6 @@ if is_vision_available():
     from transformers import DetrFeatureExtractor
 
 
-@require_timm
 class DetrModelTester:
     def __init__(
         self,
@@ -102,7 +101,11 @@ class DetrModelTester:
                 target["masks"] = torch.rand(self.n_targets, self.min_size, self.max_size, device=torch_device)
                 labels.append(target)
 
-        config = DetrConfig(
+        config = self.get_config()
+        return config, pixel_values, pixel_mask, labels
+
+    def get_config(self):
+        return DetrConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
@@ -115,7 +118,6 @@ class DetrModelTester:
             num_queries=self.num_queries,
             num_labels=self.num_labels,
         )
-        return config, pixel_values, pixel_mask, labels
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()

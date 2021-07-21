@@ -18,6 +18,7 @@
 import inspect
 import unittest
 
+from transformers import DeiTConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
@@ -31,7 +32,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_MAPPING,
-        DeiTConfig,
         DeiTForImageClassification,
         DeiTForImageClassificationWithTeacher,
         DeiTModel,
@@ -92,7 +92,12 @@ class DeiTModelTester:
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
-        config = DeiTConfig(
+        config = self.get_config()
+
+        return config, pixel_values, labels
+
+    def get_config(self):
+        return DeiTConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -106,8 +111,6 @@ class DeiTModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-
-        return config, pixel_values, labels
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = DeiTModel(config=config)

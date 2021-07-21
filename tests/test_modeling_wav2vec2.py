@@ -21,7 +21,7 @@ import unittest
 import pytest
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
-from transformers import is_torch_available
+from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -32,7 +32,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Wav2Vec2Config,
         Wav2Vec2FeatureExtractor,
         Wav2Vec2ForCTC,
         Wav2Vec2ForMaskedLM,
@@ -106,7 +105,12 @@ class Wav2Vec2ModelTester:
         input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        config = Wav2Vec2Config(
+        config = self.get_config()
+
+        return config, input_values, attention_mask
+
+    def get_config(self):
+        return Wav2Vec2Config(
             hidden_size=self.hidden_size,
             feat_extract_norm=self.feat_extract_norm,
             feat_extract_dropout=self.feat_extract_dropout,
@@ -126,8 +130,6 @@ class Wav2Vec2ModelTester:
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
         )
-
-        return config, input_values, attention_mask
 
     def create_and_check_model(self, config, input_values, attention_mask):
         model = Wav2Vec2Model(config=config)

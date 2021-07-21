@@ -17,7 +17,7 @@ import copy
 import random
 import unittest
 
-from transformers import is_torch_available
+from transformers import TransfoXLConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -29,7 +29,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import TransfoXLConfig, TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
+    from transformers import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
     from transformers.models.transfo_xl.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -69,7 +69,12 @@ class TransfoXLModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = TransfoXLConfig(
+        config = self.get_config()
+
+        return (config, input_ids_1, input_ids_2, lm_labels)
+
+    def get_config(self):
+        return TransfoXLConfig(
             vocab_size=self.vocab_size,
             mem_len=self.mem_len,
             clamp_len=self.clamp_len,
@@ -84,8 +89,6 @@ class TransfoXLModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
         )
-
-        return (config, input_ids_1, input_ids_2, lm_labels)
 
     def set_seed(self):
         random.seed(self.seed)

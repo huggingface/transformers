@@ -19,7 +19,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import MBartConfig, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
@@ -34,7 +34,6 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         BatchEncoding,
-        MBartConfig,
         MBartForCausalLM,
         MBartForConditionalGeneration,
         MBartForQuestionAnswering,
@@ -75,7 +74,6 @@ def prepare_mbart_inputs_dict(
     }
 
 
-@require_torch
 class MBartModelTester:
     def __init__(
         self,
@@ -124,7 +122,12 @@ class MBartModelTester:
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = MBartConfig(
+        config = self.get_config()
+        inputs_dict = prepare_mbart_inputs_dict(config, input_ids, decoder_input_ids)
+        return config, inputs_dict
+
+    def get_config(self):
+        return MBartConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -140,8 +143,6 @@ class MBartModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_mbart_inputs_dict(config, input_ids, decoder_input_ids)
-        return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()

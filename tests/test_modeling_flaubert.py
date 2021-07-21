@@ -13,10 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import unittest
 
-from transformers import is_torch_available
+from transformers import FlaubertConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -27,7 +26,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        FlaubertConfig,
         FlaubertForMultipleChoice,
         FlaubertForQuestionAnswering,
         FlaubertForQuestionAnsweringSimple,
@@ -96,7 +94,22 @@ class FlaubertModelTester(object):
             is_impossible_labels = ids_tensor([self.batch_size], 2).float()
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = FlaubertConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            choice_labels,
+            input_mask,
+        )
+
+    def get_config(self):
+        return FlaubertConfig(
             vocab_size=self.vocab_size,
             n_special=self.n_special,
             emb_dim=self.hidden_size,
@@ -113,18 +126,6 @@ class FlaubertModelTester(object):
             initializer_range=self.initializer_range,
             summary_type=self.summary_type,
             use_proj=self.use_proj,
-        )
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_lengths,
-            sequence_labels,
-            token_labels,
-            is_impossible_labels,
-            choice_labels,
-            input_mask,
         )
 
     def create_and_check_flaubert_model(

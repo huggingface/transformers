@@ -14,13 +14,13 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Speech2Text model. """
 
-
 import copy
 import inspect
 import os
 import tempfile
 import unittest
 
+from transformers import Speech2TextConfig
 from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     is_torch_available,
@@ -40,12 +40,7 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_te
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Speech2TextConfig,
-        Speech2TextForConditionalGeneration,
-        Speech2TextModel,
-        Speech2TextProcessor,
-    )
+    from transformers import Speech2TextForConditionalGeneration, Speech2TextModel, Speech2TextProcessor
     from transformers.models.speech_to_text.modeling_speech_to_text import Speech2TextDecoder, Speech2TextEncoder
 
 
@@ -142,7 +137,17 @@ class Speech2TextModelTester:
         attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(2)
 
-        config = Speech2TextConfig(
+        config = self.get_config()
+        inputs_dict = prepare_speech_to_text_inputs_dict(
+            config,
+            input_features=input_features,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+        )
+        return config, inputs_dict
+
+    def get_config(self):
+        return Speech2TextConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -165,13 +170,6 @@ class Speech2TextModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_speech_to_text_inputs_dict(
-            config,
-            input_features=input_features,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-        )
-        return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()

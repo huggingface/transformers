@@ -17,7 +17,7 @@
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import PegasusConfig, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
@@ -30,7 +30,7 @@ from .test_modeling_mbart import AbstractSeq2SeqIntegrationTest
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForSeq2SeqLM, PegasusConfig, PegasusForConditionalGeneration, PegasusModel
+    from transformers import AutoModelForSeq2SeqLM, PegasusForConditionalGeneration, PegasusModel
     from transformers.models.pegasus.modeling_pegasus import PegasusDecoder, PegasusEncoder, PegasusForCausalLM
 
 
@@ -65,7 +65,6 @@ def prepare_pegasus_inputs_dict(
     }
 
 
-@require_torch
 class PegasusModelTester:
     def __init__(
         self,
@@ -114,7 +113,12 @@ class PegasusModelTester:
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = PegasusConfig(
+        config = self.get_config()
+        inputs_dict = prepare_pegasus_inputs_dict(config, input_ids, decoder_input_ids)
+        return config, inputs_dict
+
+    def get_config(self):
+        return PegasusConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -130,8 +134,6 @@ class PegasusModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_pegasus_inputs_dict(config, input_ids, decoder_input_ids)
-        return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()

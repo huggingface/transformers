@@ -19,7 +19,7 @@ import unittest
 
 import numpy as np
 
-from transformers import is_torch_available
+from transformers import LxmertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -33,7 +33,6 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        LxmertConfig,
         LxmertForPreTraining,
         LxmertForQuestionAnswering,
         LxmertModel,
@@ -170,7 +169,24 @@ class LxmertModelTester:
         if self.task_matched:
             matched_label = ids_tensor([self.batch_size], self.num_labels)
 
-        config = LxmertConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids,
+            input_mask,
+            obj_labels,
+            masked_lm_labels,
+            matched_label,
+            ans,
+            output_attentions,
+        )
+
+    def get_config(self):
+        return LxmertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_attention_heads=self.num_attention_heads,
@@ -202,20 +218,6 @@ class LxmertModelTester:
             visual_feat_loss=self.visual_feat_loss,
             output_attentions=self.output_attentions,
             output_hidden_states=self.output_hidden_states,
-        )
-
-        return (
-            config,
-            input_ids,
-            visual_feats,
-            bounding_boxes,
-            token_type_ids,
-            input_mask,
-            obj_labels,
-            masked_lm_labels,
-            matched_label,
-            ans,
-            output_attentions,
         )
 
     def create_and_check_lxmert_model(

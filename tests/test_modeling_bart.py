@@ -21,7 +21,7 @@ import unittest
 
 import timeout_decorator  # noqa
 
-from transformers import is_torch_available
+from transformers import BartConfig, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
@@ -35,7 +35,6 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForSequenceClassification,
-        BartConfig,
         BartForCausalLM,
         BartForConditionalGeneration,
         BartForQuestionAnswering,
@@ -78,7 +77,6 @@ def prepare_bart_inputs_dict(
     }
 
 
-@require_torch
 class BartModelTester:
     def __init__(
         self,
@@ -127,7 +125,12 @@ class BartModelTester:
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = BartConfig(
+        config = self.get_config()
+        inputs_dict = prepare_bart_inputs_dict(config, input_ids, decoder_input_ids)
+        return config, inputs_dict
+
+    def get_config(self):
+        return BartConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -143,8 +146,6 @@ class BartModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_bart_inputs_dict(config, input_ids, decoder_input_ids)
-        return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
