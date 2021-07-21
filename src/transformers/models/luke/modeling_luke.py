@@ -39,6 +39,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LukeConfig"
 _TOKENIZER_FOR_DOC = "LukeTokenizer"
+_CHECKPOINT_FOR_DOC = "studio-ousia/luke-base"
 
 LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "studio-ousia/luke-base",

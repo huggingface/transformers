@@ -37,6 +37,7 @@ from .configuration_dpr import DPRConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DPRConfig"
+_CHECKPOINT_FOR_DOC = "facebook/dpr-ctx_encoder-single-nq-base"
 
 DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-ctx_encoder-single-nq-base",
