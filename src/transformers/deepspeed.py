@@ -204,7 +204,6 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         self.fill_only("scheduler.params.warmup_min_lr", 0)  # not a trainer arg
         self.fill_match("scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate")
-        self.fill_match("scheduler.params.warmup_num_steps", args.warmup_steps, "warmup_steps")
         # total_num_steps - will get set in trainer_config_finalize
 
         # fp16
@@ -245,6 +244,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # scheduler
         self.fill_match("scheduler.params.total_num_steps", num_training_steps, "num_training_steps (calculated)")
+        self.fill_match("scheduler.params.warmup_num_steps", args.get_warmup_steps(num_training_steps), "warmup_steps")
 
         if len(self.mismatches) > 0:
             mismatches = "\n".join(self.mismatches)

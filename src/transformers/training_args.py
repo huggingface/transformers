@@ -14,6 +14,7 @@
 
 import contextlib
 import json
+import math
 import os
 import warnings
 from dataclasses import asdict, dataclass, field
@@ -1064,6 +1065,17 @@ class TrainingArguments:
                         torch.distributed.barrier()
         else:
             yield
+
+    def get_warmup_steps(self, num_training_steps: int):
+        """
+        Get number of steps used for a linear warmup.
+        """
+        warmup_steps = (
+            self.warmup_steps
+            if self.warmup_steps > 0
+            else math.ceil(num_training_steps * self.warmup_ratio)
+        )
+        return warmup_steps
 
     def to_dict(self):
         """
