@@ -192,7 +192,7 @@ class ConversationalPipeline(Pipeline):
         super().__init__(*args, **kwargs)
 
         # We need at least an eos_token
-        assert self.tokenizer.eos_token_id is not None, "ConversationalPipeline tokenizer should have an EOS token set"
+        # assert self.tokenizer.eos_token_id is not None, "ConversationalPipeline tokenizer should have an EOS token set"
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
@@ -324,7 +324,10 @@ class ConversationalPipeline(Pipeline):
         eos_token_id = self.tokenizer.eos_token_id
         input_ids = []
         for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False) + [eos_token_id])
+            if eos_token_id is not None:
+                input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False) + [eos_token_id])
+            else:
+                input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False))
 
         if len(input_ids) > self.tokenizer.model_max_length:
             input_ids = input_ids[-self.model_max_length :]
