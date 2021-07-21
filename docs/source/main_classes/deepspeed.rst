@@ -1180,7 +1180,8 @@ the learning rate is set to different values in different places. Command line r
 
 - ``warmup_min_lr`` with the value of ``0``.
 - ``warmup_max_lr`` with the value of ``--learning_rate``.
-- ``warmup_num_steps`` with the value of ``--warmup_steps`` if provided. Otherwise will use ``--warmup_ratio`` multiplied by the number of training steps and rounded up.
+- ``warmup_num_steps`` with the value of ``--warmup_steps`` if provided. Otherwise will use ``--warmup_ratio``
+  multiplied by the number of training steps and rounded up.
 - ``total_num_steps`` with either the value of ``--max_steps`` or if it is not provided, derived automatically at run
   time based on the environment and the size of the dataset and other command line arguments (needed for
   ``WarmupDecayLR``).
