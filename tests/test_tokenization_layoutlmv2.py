@@ -1094,6 +1094,18 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                         self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
 
+    def test_prepare_for_model(self):
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                words, boxes = self.get_words_and_boxes()
+                ids = tokenizer.encode(words, boxes=boxes, add_special_tokens=False)
+                prepared_input_dict = tokenizer.prepare_for_model(words, boxes=boxes, add_special_tokens=True)
+
+                input_dict = tokenizer.encode_plus(words, boxes=boxes, add_special_tokens=True)
+
+                self.assertEqual(input_dict, prepared_input_dict)
+
     @slow
     def test_layoutlmv2_integration_test(self):
 
@@ -1101,7 +1113,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # There are 3 cases:
         # CASE 1: document image classification (training + inference), document image token classification (inference),
-        # in which case only words and bounding boxes are provided to the tokenizer
+        # in which case only words and normalized bounding boxes are provided to the tokenizer
         # CASE 2: document image token classification (training),
         # in which case one also provides word labels to the tokenizer
         # CASE 3: document image visual question answering (inference),

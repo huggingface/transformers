@@ -26,10 +26,8 @@ from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
     EncodedInput,
-    EncodedInputPair,
     PaddingStrategy,
     PreTokenizedInput,
-    PreTokenizedInputPair,
     TextInput,
     TextInputPair,
     TruncationStrategy,
@@ -364,9 +362,9 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        boxes: Union[List[int], List[List[int]]] = None,
-        word_labels: Optional[Union[List[str], List[List[str]]]] = None,
+        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
+        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
+        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -385,19 +383,20 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
-        sequences.
+        sequences with word-level bounding boxes and optional labels.
 
         Args:
             text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string, a list of strings
-                (words of a single example) or a list of list of strings (batch of words).
+                (words of a single example or questions of a batch of examples) or a list of list of strings (batch of
+                words).
             text_pair (:obj:`List[str]`, :obj:`List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
                 (pretokenized string).
             boxes (:obj:`List[List[int]]`, :obj:`List[List[List[int]]]`):
-                Word-level bounding boxes.
-            word_labels (:obj:`List[str]`, :obj:`List[List[str]]`
-                Optional word-level word_labels (for token classification tasks such as FUNSD, CORD).
+                Word-level bounding boxes. Each bounding box should be
+            word_labels (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
+                Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
         # Input type checking for clearer error
         def _is_valid_text_input(t):
@@ -511,13 +510,10 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             List[TextInput],
             List[TextInputPair],
             List[PreTokenizedInput],
-            List[PreTokenizedInputPair],
-            List[EncodedInput],
-            List[EncodedInputPair],
         ],
-        is_pair,
-        boxes,
-        word_labels: Optional[Union[List[str], List[List[str]]]] = None,
+        is_pair: bool = None,
+        boxes: Optional[List[List[List[int]]]] = None,
+        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -574,13 +570,10 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             List[TextInput],
             List[TextInputPair],
             List[PreTokenizedInput],
-            List[PreTokenizedInputPair],
-            List[EncodedInput],
-            List[EncodedInputPair],
         ],
-        is_pair,
-        boxes,
-        word_labels=None,
+        is_pair: bool = None,
+        boxes: Optional[List[List[List[int]]]] = None,
+        word_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -662,9 +655,9 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def _batch_prepare_for_model(
         self,
         batch_text_or_text_pairs,
-        is_pair,
-        boxes,
-        word_labels=None,
+        is_pair: bool = None,
+        boxes: Optional[List[List[int]]] = None,
+        word_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -732,10 +725,10 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING)
     def encode(
         self,
-        text,
-        text_pair=None,
-        boxes=None,
-        word_labels=None,
+        text: Union[TextInput, PreTokenizedInput],
+        text_pair: Optional[PreTokenizedInput] = None,
+        boxes: Optional[List[List[int]]] = None,
+        word_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -782,10 +775,10 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
         self,
-        text,
-        text_pair=None,
-        boxes=None,
-        word_labels=None,
+        text: Union[TextInput, PreTokenizedInput],
+        text_pair: Optional[PreTokenizedInput] = None,
+        boxes: Optional[List[List[int]]] = None,
+        word_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -807,14 +800,11 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         ``__call__`` should be used instead.
 
         Args:
-            text (:obj:`str`, :obj:`List[str]` or :obj:`List[int]` (the latter only for not-fast tokenizers)):
-                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
-                ``tokenize`` method) or a list of integers (tokenized string ids using the ``convert_tokens_to_ids``
-                method).
-            text_pair (:obj:`str`, :obj:`List[str]` or :obj:`List[int]`, `optional`):
-                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
-                the ``tokenize`` method) or a list of integers (tokenized string ids using the
-                ``convert_tokens_to_ids`` method).
+            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
+                The first sequence to be encoded. This can be a string, a list of strings or a list of list of strings.
+            text_pair (:obj:`List[str]` or :obj:`List[int]`, `optional`):
+                Optional second sequence to be encoded. This can be a list of strings (words of a single example) or a
+                list of list of strings (words of a batch of examples).
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
@@ -851,10 +841,10 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
     def _encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput, EncodedInput],
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
-        boxes=None,
-        word_labels=None,
+        text: Union[TextInput, PreTokenizedInput],
+        text_pair: Optional[PreTokenizedInput] = None,
+        boxes: Optional[List[List[int]]] = None,
+        word_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -931,10 +921,10 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def prepare_for_model(
         self,
-        text: Union[TextInput, PreTokenizedInput, EncodedInput],
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
-        boxes=None,
-        word_labels=None,
+        text: Union[TextInput, PreTokenizedInput],
+        text_pair: Optional[PreTokenizedInput] = None,
+        boxes: Optional[List[List[int]]] = None,
+        word_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -953,17 +943,20 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
-        adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
-        manages a moving window (with user defined stride) for overflowing tokens
+        Prepares a sequence or a pair of sequences so that it can be used by the model. It adds special tokens,
+        truncates sequences if overflowing while taking into account the special tokens and manages a moving window
+        (with user defined stride) for overflowing tokens.
+
+        Word-level :obj:`boxes` are turned into token-level :obj:`bbox`. If provided, word-level :obj:`word_labels` are
+        turned into token-level :obj:`labels`. The word label is used for the first token of the word, while remaining
+        tokens are labeled with -100, such that they will be ignored by the loss function.
 
         Args:
-            ids (:obj:`List[int]`):
-                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the ``tokenize``
-                and ``convert_tokens_to_ids`` methods.
-            pair_ids (:obj:`List[int]`, `optional`):
-                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the ``tokenize``
-                and ``convert_tokens_to_ids`` methods.
+            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
+                The first sequence to be encoded. This can be a string, a list of strings or a list of list of strings.
+            text_pair (:obj:`List[str]` or :obj:`List[int]`, `optional`):
+                Optional second sequence to be encoded. This can be a list of strings (words of a single example) or a
+                list of list of strings (words of a batch of examples).
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
@@ -1031,8 +1024,16 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         # Truncation: Handle max sequence length
         overflowing_tokens = []
+        overflowing_token_boxes = []
         if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
-            ids, token_boxes, pair_ids, pair_token_boxes, overflowing_tokens = self.truncate_sequences(
+            (
+                ids,
+                token_boxes,
+                pair_ids,
+                pair_token_boxes,
+                overflowing_tokens,
+                overflowing_token_boxes,
+            ) = self.truncate_sequences(
                 ids,
                 token_boxes,
                 pair_ids=pair_ids,
@@ -1060,6 +1061,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         if return_overflowing_tokens:
             encoded_inputs["overflowing_tokens"] = overflowing_tokens
+            encoded_inputs["overflowing_token_boxes"] = overflowing_token_boxes
             encoded_inputs["num_truncated_tokens"] = total_len - max_length
 
         # Add special tokens
@@ -1114,7 +1116,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def truncate_sequences(
         self,
         ids: List[int],
-        token_boxes: List[List[int]] = None,
+        token_boxes: List[List[int]],
         pair_ids: Optional[List[int]] = None,
         pair_token_boxes: Optional[List[List[int]]] = None,
         num_tokens_to_remove: int = 0,
@@ -1133,7 +1135,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             pair_ids (:obj:`List[int]`, `optional`):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the ``tokenize``
                 and ``convert_tokens_to_ids`` methods.
-            pair_token_boxes (:obj:`List[List[int]]`):
+            pair_token_boxes (:obj:`List[List[int]]`, `optional`):
                 Bounding boxes of the second sequence.
             num_tokens_to_remove (:obj:`int`, `optional`, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
@@ -1167,6 +1169,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             truncation_strategy = TruncationStrategy(truncation_strategy)
 
         overflowing_tokens = []
+        overflowing_token_boxes = []
         if truncation_strategy == TruncationStrategy.LONGEST_FIRST:
             for _ in range(num_tokens_to_remove):
                 if pair_ids is None or len(ids) > len(pair_ids):
@@ -1175,6 +1178,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     else:
                         window_len = 1
                     overflowing_tokens.extend(ids[-window_len:])
+                    overflowing_token_boxes.extend(token_boxes[-window_len:])
                     ids = ids[:-1]
                     token_boxes = token_boxes[:-1]
                 else:
@@ -1183,12 +1187,14 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     else:
                         window_len = 1
                     overflowing_tokens.extend(pair_ids[-window_len:])
+                    overflowing_token_boxes.extend(pair_token_boxes[-window_len:])
                     pair_ids = pair_ids[:-1]
                     pair_token_boxes = pair_token_boxes[:-1]
         elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
                 overflowing_tokens = ids[-window_len:]
+                overflowing_token_boxes = token_boxes[-window_len:]
                 ids = ids[:-num_tokens_to_remove]
                 token_boxes = token_boxes[:-num_tokens_to_remove]
             else:
@@ -1202,6 +1208,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
                 overflowing_tokens = pair_ids[-window_len:]
+                overflowing_token_boxes = pair_token_boxes[-window_len:]
                 pair_ids = pair_ids[:-num_tokens_to_remove]
                 pair_token_boxes = pair_token_boxes[:-num_tokens_to_remove]
             else:
@@ -1212,7 +1219,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     f"for instance 'longest_first' or 'only_first'."
                 )
 
-        return (ids, token_boxes, pair_ids, pair_token_boxes, overflowing_tokens)
+        return (ids, token_boxes, pair_ids, pair_token_boxes, overflowing_tokens, overflowing_token_boxes)
 
     def _pad(
         self,

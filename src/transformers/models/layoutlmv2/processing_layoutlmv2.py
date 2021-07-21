@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for LayoutLMv2
+Processor class for LayoutLMv2.
 """
 from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
 
@@ -129,9 +129,9 @@ class LayoutLMv2Processor:
         self,
         images,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        boxes: Union[List[int], List[List[int]]] = None,
-        word_labels: Optional[Union[List[str], List[List[str]]]] = None,
+        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
+        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
+        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -149,10 +149,16 @@ class LayoutLMv2Processor:
         **kwargs
     ):
         """
-        This method first forwards the :obj:`images` argument to LayoutLMv2FeatureExtractor's
-        :meth:`~transformers.LayoutLMv2FeatureExtractor.__call__`. Next, it passes the obtained features along with the
-        additional arguments to :meth:`~transformers.LayoutLMv2Processor.__call__` and returns the output. Please refer
-        to the docstring of the above two methods for more information.
+        This method first forwards the :obj:`images` argument to
+        :meth:`~transformers.LayoutLMv2FeatureExtractor.__call__`. In case :classes:`~LayoutLMv2FeatureExtractor` was
+        initialized with :obj:`apply_ocr` set to ``True``, it passes the obtained words and bounding boxes along with
+        the additional arguments to :meth:`~transformers.LayoutLMv2Processor.__call__` and returns the output, together
+        with resized :obj:`images`. In case :classes:`~LayoutLMv2FeatureExtractor` was initialized with
+        :obj:`apply_ocr` set to ``False``, it passes the words (:obj:`text`/:obj:`text_pair`) and :obj:`boxes`
+        specified by the user along with the additional arguments to :meth:`~transformers.LayoutLMv2Processor.__call__`
+        and returns the output, together with resized :obj:`images`.
+
+        Please refer to the docstring of the above two methods for more information.
         """
         # verify input
         if self.feature_extractor.apply_ocr and (boxes is not None):
@@ -161,11 +167,16 @@ class LayoutLMv2Processor:
                 "if you initialized the feature extractor with apply_ocr set to True."
             )
 
+        if self.feature_extractor.apply_ocr and (word_labels is not None):
+            raise ValueError(
+                "You cannot provide word labels "
+                "if you initialized the feature extractor with apply_ocr set to True."
+            )
+
         # first, apply the feature extractor
         features = self.feature_extractor(images=images, return_tensors=return_tensors)
 
         # second, apply the tokenizer
-        # text_pair = text_pair if text_pair is not None and not self.feature_extractor.apply_ocr else features["words"]
         if text is not None and self.feature_extractor.apply_ocr and text_pair is None:
             if isinstance(text, str):
                 text = [text]  # add batch dimension
