@@ -1054,10 +1054,10 @@ append_call_sample_docstring(
 )
 {# encoder_decoder #}
 {% else %}
-import copy
+import math
+import random
+from functools import partial
 from typing import Callable, Optional, Tuple
-
-import numpy as np
 
 import flax.linen as nn
 import jax
@@ -1068,13 +1068,15 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxCausalLMOutputWithCrossAttentions,
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqModelOutput,
+    FlaxSeq2SeqQuestionAnsweringModelOutput,
+    FlaxSeq2SeqSequenceClassifierOutput,
 )
 from ...modeling_flax_utils import (
     ACT2FN,
