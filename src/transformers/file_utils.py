@@ -1642,6 +1642,53 @@ def get_from_cache(
     return cache_path
 
 
+def get_list_of_files(
+    path_or_repo: Union[str, os.PathLike],
+    revision: Optional[str] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+) -> List[str]:
+    """
+    Gets the list of files inside :obj:`path_or_repo`.
+
+    Args:
+        path_or_repo (:obj:`str` or :obj:`os.PathLike`):
+            Can be either the id of a repo on huggingface.co or a path to a `directory`.
+        revision (:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+            identifier allowed by git.
+        use_auth_token (:obj:`str` or `bool`, `optional`):
+            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+
+    Returns:
+        :obj:`List[str]`: The list of files available in :obj:`path_or_repo`.
+    """
+    path_or_repo = str(path_or_repo)
+    # If path_or_repo is a folder, we just return what is inside (subdirectories included).
+    if os.path.isdir(path_or_repo):
+        list_of_files = []
+        for path, dir_names, file_names in os.walk(path_or_repo):
+            list_of_files.extend([os.path.join(path, f) for f in file_names])
+        return list_of_files
+
+    # Can't grab the files if we are on offline mode.
+    if is_offline_mode():
+        return []
+
+    # Otherwise we grab the token and use the model_info method.
+    if isinstance(use_auth_token, str):
+        token = use_auth_token
+    elif use_auth_token is True:
+        token = HfFolder.get_token()
+    else:
+        token = None
+    model_info = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).model_info(
+        path_or_repo, revision=revision, token=token
+    )
+    return [f.rfilename for f in model_info.siblings]
+
+
 class cached_property(property):
     """
     Descriptor that mimics @property but caches output in member variable.

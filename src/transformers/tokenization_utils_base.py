@@ -21,6 +21,7 @@ of output with special method for the Fast tokenizers)
 import copy
 import json
 import os
+import re
 import warnings
 from collections import OrderedDict, UserDict
 from contextlib import contextmanager
@@ -28,9 +29,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from packaging import version
 
 import requests
 
+from . import __version__
 from .file_utils import (
     ExplicitEnum,
     PaddingStrategy,
@@ -44,6 +47,7 @@ from .file_utils import (
     add_end_docstrings,
     cached_path,
     copy_func,
+    get_list_of_files,
     hf_bucket_url,
     is_flax_available,
     is_offline_mode,
@@ -115,6 +119,7 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
+_re_tokenizer_file = re.compile(r"tokenizer\.(.*)\.json")
 
 
 class TruncationStrategy(ExplicitEnum):
@@ -1639,11 +1644,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             vocab_files[file_id] = pretrained_model_name_or_path
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
+            fast_tokenizer_file = get_fast_tokenizer_file(
+                pretrained_model_name_or_path, revision=revision, use_auth_token=use_auth_token
+            )
             additional_files_names = {
                 "added_tokens_file": ADDED_TOKENS_FILE,
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                "tokenizer_file": FULL_TOKENIZER_FILE,
+                "tokenizer_file": fast_tokenizer_file,
             }
             # Look for the tokenizer files
             for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
@@ -3372,6 +3380,51 @@ For a more complete example, see the implementation of `prepare_seq2seq_batch`.
             )
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
+
+
+def get_fast_tokenizer_file(
+    path_or_repo: Union[str, os.PathLike],
+    revision: Optional[str] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+) -> str:
+    """
+    Get the tokenizer file to use for this version of transformers.
+
+    Args:
+        path_or_repo (:obj:`str` or :obj:`os.PathLike`):
+            Can be either the id of a repo on huggingface.co or a path to a `directory`.
+        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+            identifier allowed by git.
+        use_auth_token (:obj:`str` or `bool`, `optional`):
+            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+
+    Returns:
+        :obj:`str`: The tokenizer file to use.
+    """
+    # Inspect all files from the repo/folder.
+    all_files = get_list_of_files(path_or_repo, revision=revision, use_auth_token=use_auth_token)
+    tokenizer_files_map = {}
+    for file_name in all_files:
+        search = _re_tokenizer_file.search(file_name)
+        if search is not None:
+            v = search.groups()[0]
+            tokenizer_files_map[v] = file_name
+    available_versions = sorted(tokenizer_files_map.keys())
+
+    # Defaults to FULL_TOKENIZER_FILE and then try to look at some newer versions.
+    tokenizer_file = FULL_TOKENIZER_FILE
+    transformers_version = version.parse(__version__)
+    for v in available_versions:
+        if version.parse(v) <= transformers_version:
+            tokenizer_file = tokenizer_files_map[v]
+        else:
+            # No point going further since the versions are sorted.
+            break
+
+    return tokenizer_file
 
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
