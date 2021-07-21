@@ -256,7 +256,8 @@ class ZeroShotClassificationWithT5Pipeline(Pipeline):
             truncation=truncation,
         )
 
-        inputs = {**encoder_inputs, "decoder_input_ids": decoder_inputs.input_ids}
+        inputs = encoder_inputs # {**encoder_inputs, "decoder_input_ids": decoder_inputs.input_ids}
+        inputs['decoder_input_ids'] = decoder_inputs.input_ids
 
         return inputs
 
