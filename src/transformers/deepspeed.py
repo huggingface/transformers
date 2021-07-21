@@ -244,10 +244,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # scheduler
         self.fill_match("scheduler.params.total_num_steps", num_training_steps, "num_training_steps (calculated)")
-        if args.warmup_ratio > 0:
-            self.fill_match("scheduler.params.warmup_num_steps", int(args.warmup_ratio * num_training_steps), "warmup_steps")
-        else:
-            self.fill_match("scheduler.params.warmup_num_steps", args.warmup_steps, "warmup_steps")
+        self.fill_match("scheduler.params.warmup_num_steps", args.get_warmup_steps(num_training_steps), "warmup_steps")
 
         if len(self.mismatches) > 0:
             mismatches = "\n".join(self.mismatches)
