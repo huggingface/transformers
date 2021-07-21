@@ -89,8 +89,18 @@ class PipelineTestCaseMeta(type):
             @skipIf(checkpoint is None, "checkpoint does not exist")
             def test(self):
                 model = ModelClass(tiny_config)
-                tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
-                tokenizer.model_max_length = model.config.max_position_embeddings
+                if hasattr(model, "eval"):
+                    model = model.eval()
+                try:
+                    tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
+                    tokenizer.model_max_length = model.config.max_position_embeddings
+                # Rust Panic exception are NOT Exception subclass
+                # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
+                # provide some default tokenizer and hope for the best.
+                except:  # noqa: E722
+                    logger.warning(f"Tokenizer cannot be created from checkpoint {checkpoint}")
+                    tokenizer = get_tiny_tokenizer_from_checkpoint("gpt2")
+                    tokenizer.model_max_length = model.config.max_position_embeddings
                 self.run_pipeline_test(model, tokenizer)
 
             return test
