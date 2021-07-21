@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import ReformerConfig, is_torch_available
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
@@ -36,7 +36,6 @@ if is_torch_available():
 
     from transformers import (
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        ReformerConfig,
         ReformerForMaskedLM,
         ReformerForQuestionAnswering,
         ReformerForSequenceClassification,
@@ -51,44 +50,44 @@ class ReformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=None,
-        seq_length=None,
-        is_training=None,
-        is_decoder=None,
-        use_input_mask=None,
-        use_labels=None,
-        vocab_size=None,
-        attention_head_size=None,
-        hidden_size=None,
-        num_attention_heads=None,
-        local_attn_chunk_length=None,
-        local_num_chunks_before=None,
-        local_num_chunks_after=None,
+        batch_size=13,
+        seq_length=32,
+        is_training=True,
+        is_decoder=True,
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=32,
+        attention_head_size=16,
+        hidden_size=32,
+        num_attention_heads=2,
+        local_attn_chunk_length=4,
+        local_num_chunks_before=1,
+        local_num_chunks_after=0,
         num_buckets=None,
         num_hashes=1,
         lsh_attn_chunk_length=None,
         lsh_num_chunks_before=None,
         lsh_num_chunks_after=None,
-        chunk_size_lm_head=None,
-        chunk_size_feed_forward=None,
-        feed_forward_size=None,
-        hidden_act=None,
-        hidden_dropout_prob=None,
-        local_attention_probs_dropout_prob=None,
+        chunk_size_lm_head=0,
+        chunk_size_feed_forward=0,
+        feed_forward_size=32,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        local_attention_probs_dropout_prob=0.1,
         lsh_attention_probs_dropout_prob=None,
-        max_position_embeddings=None,
-        initializer_range=None,
-        axial_norm_std=None,
-        layer_norm_eps=None,
-        axial_pos_embds=None,
-        axial_pos_shape=None,
-        axial_pos_embds_dim=None,
-        attn_layers=None,
-        pad_token_id=None,
-        eos_token_id=None,
+        max_position_embeddings=512,
+        initializer_range=0.02,
+        axial_norm_std=1.0,
+        layer_norm_eps=1e-12,
+        axial_pos_embds=True,
+        axial_pos_shape=[4, 8],
+        axial_pos_embds_dim=[16, 16],
+        attn_layers=["local", "local", "local", "local"],
+        pad_token_id=0,
+        eos_token_id=2,
         scope=None,
-        hash_seed=None,
-        num_labels=None,
+        hash_seed=0,
+        num_labels=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -101,7 +100,7 @@ class ReformerModelTester:
         self.attention_head_size = attention_head_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = len(attn_layers)
+        self.num_hidden_layers = len(attn_layers) if attn_layers is not None else 0
         self.local_attn_chunk_length = local_attn_chunk_length
         self.local_num_chunks_after = local_num_chunks_after
         self.local_num_chunks_before = local_num_chunks_before
@@ -149,7 +148,17 @@ class ReformerModelTester:
         if self.use_labels:
             choice_labels = ids_tensor([self.batch_size], 2)
 
-        config = ReformerConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            input_mask,
+            choice_labels,
+        )
+
+    def get_config(self):
+        return ReformerConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -175,13 +184,6 @@ class ReformerModelTester:
             attn_layers=self.attn_layers,
             pad_token_id=self.pad_token_id,
             hash_seed=self.hash_seed,
-        )
-
-        return (
-            config,
-            input_ids,
-            input_mask,
-            choice_labels,
         )
 
     def create_and_check_reformer_model(self, config, input_ids, input_mask, choice_labels):
@@ -593,45 +595,8 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     test_torchscript = False
     test_sequence_classification_problem_types = True
 
-    def prepare_kwargs(self):
-        return {
-            "batch_size": 13,
-            "seq_length": 32,
-            "is_training": True,
-            "is_decoder": True,
-            "use_input_mask": True,
-            "use_labels": True,
-            "vocab_size": 32,
-            "attention_head_size": 16,
-            "hidden_size": 32,
-            "num_attention_heads": 2,
-            "local_attn_chunk_length": 4,
-            "local_num_chunks_before": 1,
-            "local_num_chunks_after": 0,
-            "chunk_size_lm_head": 0,
-            "chunk_size_feed_forward": 0,
-            "feed_forward_size": 32,
-            "hidden_act": "gelu",
-            "hidden_dropout_prob": 0.1,
-            "local_attention_probs_dropout_prob": 0.1,
-            "max_position_embeddings": 512,
-            "initializer_range": 0.02,
-            "axial_norm_std": 1.0,
-            "layer_norm_eps": 1e-12,
-            "axial_pos_embds": True,
-            "axial_pos_shape": [4, 8],
-            "axial_pos_embds_dim": [16, 16],
-            "attn_layers": ["local", "local", "local", "local"],
-            "pad_token_id": 0,
-            "eos_token_id": 2,
-            "scope": None,
-            "hash_seed": 0,
-            "num_labels": 2,
-        }
-
     def setUp(self):
-        tester_kwargs = self.prepare_kwargs()
-        self.model_tester = ReformerModelTester(self, **tester_kwargs)
+        self.model_tester = ReformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
 
     @slow
@@ -716,49 +681,46 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, Generation
     test_headmasking = False
     test_torchscript = False
 
-    def prepare_kwargs(self):
-        return {
-            "batch_size": 13,
-            "seq_length": 13,
-            "use_input_mask": True,
-            "use_labels": True,
-            "is_training": False,
-            "is_decoder": True,
-            "vocab_size": 32,
-            "attention_head_size": 16,
-            "hidden_size": 64,
-            "num_attention_heads": 2,
-            "num_buckets": 2,
-            "num_hashes": 4,
-            "lsh_attn_chunk_length": 4,
-            "lsh_num_chunks_before": 1,
-            "lsh_num_chunks_after": 0,
-            "chunk_size_lm_head": 5,
-            "chunk_size_feed_forward": 6,
-            "feed_forward_size": 32,
-            "hidden_act": "relu",
-            "hidden_dropout_prob": 0.1,
-            "lsh_attention_probs_dropout_prob": 0.1,
-            "max_position_embeddings": 512,
-            "initializer_range": 0.02,
-            "axial_norm_std": 1.0,
-            "layer_norm_eps": 1e-12,
-            "axial_pos_embds": True,
-            "axial_pos_shape": [4, 8],
-            "axial_pos_embds_dim": [16, 48],
-            #            sanotheu
-            #            "attn_layers": ["lsh", "lsh", "lsh", "lsh"],
-            "attn_layers": ["lsh"],
-            "pad_token_id": 0,
-            "eos_token_id": 2,
-            "scope": None,
-            "hash_seed": 0,
-            "num_labels": 2,
-        }
-
     def setUp(self):
-        tester_kwargs = self.prepare_kwargs()
-        self.model_tester = ReformerModelTester(self, **tester_kwargs)
+        self.model_tester = ReformerModelTester(
+            self,
+            batch_size=13,
+            seq_length=13,
+            use_input_mask=True,
+            use_labels=True,
+            is_training=False,
+            is_decoder=True,
+            vocab_size=32,
+            attention_head_size=16,
+            hidden_size=64,
+            num_attention_heads=2,
+            num_buckets=2,
+            num_hashes=4,
+            lsh_attn_chunk_length=4,
+            lsh_num_chunks_before=1,
+            lsh_num_chunks_after=0,
+            chunk_size_lm_head=5,
+            chunk_size_feed_forward=6,
+            feed_forward_size=32,
+            hidden_act="relu",
+            hidden_dropout_prob=0.1,
+            lsh_attention_probs_dropout_prob=0.1,
+            max_position_embeddings=512,
+            initializer_range=0.02,
+            axial_norm_std=1.0,
+            layer_norm_eps=1e-12,
+            axial_pos_embds=True,
+            axial_pos_shape=[4, 8],
+            axial_pos_embds_dim=[16, 48],
+            # sanotheu
+            # attn_layers=[lsh,lsh,lsh,lsh],
+            attn_layers=["lsh"],
+            pad_token_id=0,
+            eos_token_id=2,
+            scope=None,
+            hash_seed=0,
+            num_labels=2,
+        )
         self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
 
     def _check_attentions_for_generate(
