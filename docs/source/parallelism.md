@@ -226,8 +226,8 @@ Implementations:
 
 🤗 Transformers status:
 - core: not yet implemented in the core
-- but if you want inference https://github.com/tunib-ai/parallelformers provides this support for most of our models. So until this is implemented in the core you can use theirs. And hopefully training-mode will be supported too.
-- Deepspeed-Inference also supports our BERT, GPT-2, and GPT-Neo models in their super-fast CUDA-kernel-based inference mode: https://www.deepspeed.ai/tutorials/inference-tutorial/
+- but if you want inference [parallelformers](https://github.com/tunib-ai/parallelformers) provides this support for most of our models. So until this is implemented in the core you can use theirs. And hopefully training mode will be supported too.
+- Deepspeed-Inference also supports our BERT, GPT-2, and GPT-Neo models in their super-fast CUDA-kernel-based inference mode, see more [here](https://www.deepspeed.ai/tutorials/inference-tutorial/)
 
 
 
