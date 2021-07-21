@@ -158,8 +158,6 @@ class GPT2Config(PretrainedConfig):
         eos_token_id=50256,
         **kwargs
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx
         self.n_positions = n_positions
@@ -185,21 +183,15 @@ class GPT2Config(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-    @property
-    def max_position_embeddings(self):
-        return self.n_positions
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id,
+                         attribute_map={"hidden_size": "n_embd",
+                                        "max_position_embeddings": "n_positions",
+                                        "num_attention_heads": "n_head",
+                                        "num_hidden_layers": "n_layer"
+                                        },
+                         **kwargs)
 
-    @property
-    def hidden_size(self):
-        return self.n_embd
 
-    @property
-    def num_attention_heads(self):
-        return self.n_head
-
-    @property
-    def num_hidden_layers(self):
-        return self.n_layer
 
 
 class GPT2OnnxConfig(OnnxConfigWithPast):
