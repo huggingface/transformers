@@ -851,9 +851,10 @@ class Trainer:
 
         for key, value in params.items():
             if not hasattr(self.args, key):
-                raise AttributeError(
+                logger.warn(
                     f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
                 )
+                continue
             old_attr = getattr(self.args, key, None)
             # Casting value to the proper type
             if old_attr is not None:
