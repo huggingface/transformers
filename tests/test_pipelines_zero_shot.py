@@ -60,13 +60,13 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
         with self.assertRaises(ValueError):
             classifier("", candidate_labels="politics")
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             classifier(None, candidate_labels="politics")
 
         with self.assertRaises(ValueError):
             classifier("Who are you voting for in 2020?", candidate_labels="")
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             classifier("Who are you voting for in 2020?", candidate_labels=None)
 
         with self.assertRaises(ValueError):
@@ -76,7 +76,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
                 hypothesis_template="Not formatting template",
             )
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(AttributeError):
             classifier(
                 "Who are you voting for in 2020?",
                 candidate_labels="politics",
@@ -118,8 +118,8 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             nested_simplify(outputs),
             {
                 "sequence": "Who are you voting for in 2020?",
-                "labels": ["politics", "public health", "science"],
-                "scores": [0.975, 0.015, 0.008],
+                "labels": ["science", "public health", "politics"],
+                "scores": [0.333, 0.333, 0.333],
             },
         )
 
@@ -138,8 +138,8 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             nested_simplify(outputs),
             {
                 "sequence": "Who are you voting for in 2020?",
-                "labels": ["politics", "public health", "science"],
-                "scores": [0.975, 0.015, 0.008],
+                "labels": ["science", "public health", "politics"],
+                "scores": [0.333, 0.333, 0.333],
             },
         )
 
@@ -156,7 +156,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             {
                 "sequence": "Who are you voting for in 2020?",
                 "labels": ["politics", "public health", "science"],
-                "scores": [0.975, 0.015, 0.008],
+                "scores": [0.976, 0.015, 0.009],
             },
         )
         outputs = zero_shot_classifier(
@@ -169,7 +169,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             {
                 "sequence": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks in an encoder-decoder configuration. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing both with large and limited training data.",
                 "labels": ["translation", "machine learning", "vision", "statistics"],
-                "scores": [0.817, 0.712, 0.018, 0.017],
+                "scores": [0.817, 0.713, 0.018, 0.018],
             },
         )
 
@@ -186,7 +186,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             {
                 "sequence": "Who are you voting for in 2020?",
                 "labels": ["politics", "public health", "science"],
-                "scores": [0.975, 0.015, 0.008],
+                "scores": [0.976, 0.015, 0.009],
             },
         )
         outputs = zero_shot_classifier(
@@ -199,6 +199,6 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             {
                 "sequence": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks in an encoder-decoder configuration. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing both with large and limited training data.",
                 "labels": ["translation", "machine learning", "vision", "statistics"],
-                "scores": [0.817, 0.712, 0.018, 0.017],
+                "scores": [0.817, 0.713, 0.018, 0.018],
             },
         )
