@@ -1156,8 +1156,8 @@ Here is where the schedulers overlap between 🤗 Transformers and DeepSpeed:
   therefore, if you don't configure the scheduler this is scheduler that will get configured by default.
 
 If you don't configure the ``scheduler`` entry in the configuration file, the :class:`~transformers.Trainer` will use
-the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` or ``--warmup_ratio``
-to configure a 🤗 Transformers version of it.
+the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` or ``--warmup_ratio`` to configure a
+🤗 Transformers version of it.
 
 Here is an example of the auto-configured ``scheduler`` entry for ``WarmupLR``:
 
