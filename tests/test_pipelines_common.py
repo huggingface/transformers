@@ -55,7 +55,9 @@ def get_tiny_config_from_class(configuration_class):
 
     model_tester = model_tester_class(parent=None)
 
-    if hasattr(model_tester, "get_config"):
+    if hasattr(model_tester, "get_pipeline_config"):
+        return model_tester.get_pipeline_config()
+    elif hasattr(model_tester, "get_config"):
         return model_tester.get_config()
     else:
         logger.warning(f"Model tester {model_tester_class.__name__} has no `get_config()`.")

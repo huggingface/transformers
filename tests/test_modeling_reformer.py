@@ -186,6 +186,11 @@ class ReformerModelTester:
             hash_seed=self.hash_seed,
         )
 
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 100
+        return config
+
     def create_and_check_reformer_model(self, config, input_ids, input_mask, choice_labels):
         model = ReformerModel(config=config)
         model.to(torch_device)
