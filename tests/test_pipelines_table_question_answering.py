@@ -21,7 +21,7 @@ from transformers.pipelines import (
     TableQuestionAnsweringPipeline,
     pipeline,
 )
-from transformers.testing_utils import require_pandas, require_torch, require_torch_scatter, slow
+from transformers.testing_utils import is_pipeline_test, require_pandas, require_torch, require_torch_scatter, slow
 
 from .test_pipelines_common import PipelineTestCaseMeta
 
@@ -29,6 +29,7 @@ from .test_pipelines_common import PipelineTestCaseMeta
 @require_torch_scatter
 @require_torch
 @require_pandas
+@is_pipeline_test
 class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     # Putting it there for consistency, but TQA do not have fast tokenizer
     # which are needed to generate automatic tests

@@ -219,6 +219,7 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     #         self.assertRaises(ValueError, question_answering_pipeline, invalid_inputs)
 
 
+@is_pipeline_test
 class QuestionAnsweringArgumentHandlerTests(unittest.TestCase):
     def test_argument_handler(self):
         qa = QuestionAnsweringArgumentHandler()

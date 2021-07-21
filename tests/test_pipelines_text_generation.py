@@ -15,11 +15,12 @@
 import unittest
 
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING, TextGenerationPipeline, pipeline
-from transformers.testing_utils import require_tf, require_torch
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
+@is_pipeline_test
 class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
