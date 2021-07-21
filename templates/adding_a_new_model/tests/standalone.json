@@ -7,5 +7,6 @@
   "checkpoint_identifier": "bi-brand-new-bert-base-cased",
   "tokenizer_type": "Standalone",
   "generate_tensorflow_and_pytorch": "PyTorch & TensorFlow",
+  "generate_flax": "True",
   "is_encoder_decoder_model": "False"
 }

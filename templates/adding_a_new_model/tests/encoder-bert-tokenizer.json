@@ -7,5 +7,6 @@
   "checkpoint_identifier": "brand-new-bert-base-cased",
   "tokenizer_type": "Based on BERT",
   "generate_tensorflow_and_pytorch": "PyTorch & TensorFlow",
+  "generate_flax": "True",
   "is_encoder_decoder_model": "False"
 }
