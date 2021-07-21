@@ -1052,9 +1052,7 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
-{% if False %}
-# encoder_decoder, this is a cookiecutter comment to make finding this else easier
-{% endif -%}
+{# encoder_decoder #}
 {% else %}
 import copy
 from typing import Callable, Optional, Tuple
