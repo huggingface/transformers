@@ -1071,9 +1071,7 @@ class TrainingArguments:
         Get number of steps used for a linear warmup.
         """
         warmup_steps = (
-            self.warmup_steps
-            if self.warmup_steps > 0
-            else math.ceil(num_training_steps * self.warmup_ratio)
+            self.warmup_steps if self.warmup_steps > 0 else math.ceil(num_training_steps * self.warmup_ratio)
         )
         return warmup_steps
 
