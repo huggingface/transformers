@@ -169,9 +169,7 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
 
 class ZeroShotClassificationPipelineWithT5Tests(CustomInputPipelineCommonMixin, unittest.TestCase):
     pipeline_task = "zero-shot-classification-t5"
-    small_models = [
-        "t5-small"
-    ]  # Models tested without the @slow decorator
+    small_models = ["t5-small"]  # Models tested without the @slow decorator
     large_models = ["t5-large"]  # Models tested with the @slow decorator
     valid_inputs = [
         {"sequences": "Who are you voting for in 2020?", "candidate_labels": "politics"},
@@ -186,7 +184,7 @@ class ZeroShotClassificationPipelineWithT5Tests(CustomInputPipelineCommonMixin, 
         },
         {
             "sequences": "hospital, a health facility where patients recieve treatment.",
-            "candidate_labels": ['politics', 'culture', 'economy', 'biology', 'legal', 'medicine', 'business'],
+            "candidate_labels": ["politics", "culture", "economy", "biology", "legal", "medicine", "business"],
             "hypothesis_template": "This topic is about {}",
         },
     ]
@@ -279,12 +277,12 @@ class ZeroShotClassificationPipelineWithT5Tests(CustomInputPipelineCommonMixin, 
             expected_outputs = [
                 {
                     "sequence": "Who are you voting for in 2020?",
-                    "labels": ['politics', 'public health', 'science'],
+                    "labels": ["politics", "public health", "science"],
                     "scores": [0.979, 0.011, 0.009],
                 },
                 {
                     "sequence": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks in an encoder-decoder configuration. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing both with large and limited training data.",
-                    "labels": ['translation', 'machine learning', 'statistics', 'vision'],
+                    "labels": ["translation", "machine learning", "statistics", "vision"],
                     "scores": [0.980, 0.113, 0.019, 0.001],
                 },
             ]
