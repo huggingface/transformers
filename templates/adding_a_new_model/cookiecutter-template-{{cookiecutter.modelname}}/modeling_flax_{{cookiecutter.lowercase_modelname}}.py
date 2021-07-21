@@ -526,7 +526,6 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel with Bert->{{cookiecutter.camelcase_modelname}}
 class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
