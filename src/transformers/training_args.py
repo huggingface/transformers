@@ -1066,7 +1066,7 @@ class TrainingArguments:
         else:
             yield
 
-    def get_warmup_steps(self, num_training_steps):
+    def get_warmup_steps(self, num_training_steps: int):
         """
         Get number of steps used for a linear warmup.
         """
