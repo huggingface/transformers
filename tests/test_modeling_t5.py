@@ -18,7 +18,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import T5Config, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
@@ -30,7 +30,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import ByT5Tokenizer, T5Config, T5EncoderModel, T5ForConditionalGeneration, T5Model, T5Tokenizer
+    from transformers import ByT5Tokenizer, T5EncoderModel, T5ForConditionalGeneration, T5Model, T5Tokenizer
     from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -100,7 +100,19 @@ class T5ModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = T5Config(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        )
+
+    def get_config(self):
+        return T5Config(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             d_ff=self.d_ff,
@@ -115,15 +127,6 @@ class T5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
-        )
-
-        return (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
         )
 
     def check_prepare_lm_labels_via_shift_left(

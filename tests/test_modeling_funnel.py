@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import FunnelTokenizer, is_torch_available
+from transformers import FunnelConfig, FunnelTokenizer, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
@@ -30,7 +30,6 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         FunnelBaseModel,
-        FunnelConfig,
         FunnelForMaskedLM,
         FunnelForMultipleChoice,
         FunnelForPreTraining,
@@ -127,7 +126,21 @@ class FunnelModelTester:
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
             fake_token_labels = ids_tensor([self.batch_size, self.seq_length], 1)
 
-        config = FunnelConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
+        )
+
+    def get_config(self):
+        return FunnelConfig(
             vocab_size=self.vocab_size,
             block_sizes=self.block_sizes,
             num_decoder_layers=self.num_decoder_layers,
@@ -141,17 +154,6 @@ class FunnelModelTester:
             activation_dropout=self.activation_dropout,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
-        )
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            fake_token_labels,
         )
 
     def create_and_check_model(
