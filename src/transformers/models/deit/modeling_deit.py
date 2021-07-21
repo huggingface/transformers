@@ -41,6 +41,7 @@ from .configuration_deit import DeiTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DeiTConfig"
+_CHECKPOINT_FOR_DOC = "facebook/deit-base-distilled-patch16-224"
 
 DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/deit-base-distilled-patch16-224",

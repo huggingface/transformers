@@ -34,9 +34,10 @@ from .configuration_vit import ViTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ViTConfig"
+_CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224"
 
 VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nielsr/vit-base-patch16-224",
+    "google/vit-base-patch16-224",
     # See all ViT models at https://huggingface.co/models?filter=vit
 ]
 

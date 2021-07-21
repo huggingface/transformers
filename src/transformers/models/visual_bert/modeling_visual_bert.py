@@ -50,6 +50,7 @@ from .configuration_visual_bert import VisualBertConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VisualBertConfig"
+_CHECKPOINT_FOR_DOC = "uclanlp/visualbert-vqa-coco-pre"
 
 VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uclanlp/visualbert-vqa",

@@ -40,6 +40,7 @@ from .configuration_wav2vec2 import Wav2Vec2Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
+_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/wav2vec2-base-960h",
