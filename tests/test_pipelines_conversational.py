@@ -73,7 +73,7 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         # One conversation with history
         conversation_2.add_user_input("Why do you recommend it?")
         # Some tiny config have max_length a bit low, forcing it to be a bit higher.
-        outputs = conversation_agent(conversation_2, max_length=64)
+        outputs = conversation_agent(conversation_2, max_length=24)
         self.assertEqual(outputs, conversation_2)
         self.assertEqual(
             outputs,
