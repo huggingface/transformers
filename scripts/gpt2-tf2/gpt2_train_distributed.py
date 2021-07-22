@@ -50,7 +50,7 @@ print("With dataset "+train_file)
 
 def tokenize(data, tokenizer, truncate=False):
     if truncate:
-        data = tokenizer(data[:1000], return_tensors='tf', padding=True, truncation=True)
+        data = tokenizer(data[:100], return_tensors='tf', padding=True, truncation=True)
     else:
         data = tokenizer(data, return_tensors='tf', padding=True, truncation=True)
     return tf.data.Dataset.from_tensor_slices((dict(data), data['input_ids']))
