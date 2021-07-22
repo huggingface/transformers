@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from transformers import ESMConfig
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
@@ -40,57 +41,38 @@ if is_torch_available():
     )
     from transformers.models.esm.modeling_esm import (
         ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ESMEmbeddings,
+        create_position_ids_from_input_ids
     )
 
-
+# copied from tests.test_modeling_roberta
 class ESMModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
     ):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
+        self.batch_size = 13
+        self.seq_length = 7
+        self.is_training = True
+        self.use_input_mask = True
+        self.use_token_type_ids = True
+        self.use_labels = True
+        self.vocab_size = 99
+        self.hidden_size = 32
+        self.num_hidden_layers = 5
+        self.num_attention_heads = 4
+        self.intermediate_size = 37
+        self.hidden_act = "gelu"
+        self.hidden_dropout_prob = 0.1
+        self.attention_probs_dropout_prob = 0.1
+        self.max_position_embeddings = 512
+        self.type_vocab_size = 16
+        self.type_sequence_label_size = 2
+        self.initializer_range = 0.02
+        self.num_labels = 3
+        self.num_choices = 4
+        self.scope = None
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -127,7 +109,6 @@ class ESMModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
             initializer_range=self.initializer_range,
         )
 
@@ -159,7 +140,7 @@ class ESMModelTester:
         )
 
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = ESMModel(config=config)
         model.to(torch_device)
@@ -167,19 +148,21 @@ class ESMModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
+
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.add_cross_attention = True
         model = ESMModel(config)
@@ -200,29 +183,21 @@ class ESMModelTester:
         )
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_for_causal_lm(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         model = ESMForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = ESMForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -242,9 +217,11 @@ class ESMModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = ESMForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
+        model = ESMForCausalLM(config=config).to(torch_device).eval()
+
+        # make sure that ids don't start with pad token
+        mask = input_ids.ne(config.pad_token_id).long()
+        input_ids = input_ids * mask
 
         # first forward pass
         outputs = model(
@@ -258,6 +235,10 @@ class ESMModelTester:
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+
+        # make sure that ids don't start with pad token
+        mask = next_tokens.ne(config.pad_token_id).long()
+        next_tokens = next_tokens * mask
         next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and
@@ -290,34 +271,17 @@ class ESMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_for_question_answering(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    def create_and_check_for_masked_lm(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = ESMForQuestionAnswering(config=config)
+        model = ESMForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
-
-    def create_and_check_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = ESMForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = ESMForTokenClassification(config=config)
@@ -327,7 +291,7 @@ class ESMModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_multiple_choice(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
         model = ESMForMultipleChoice(config=config)
@@ -343,6 +307,22 @@ class ESMModelTester:
             labels=choice_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+
+    def create_and_check_for_question_answering(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = ESMForQuestionAnswering(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
+        )
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -360,22 +340,23 @@ class ESMModelTester:
 
 
 @require_torch
-class ESMModelTest(ModelTesterMixin, unittest.TestCase):
+class ESMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            ESMModel,
-            ESMForMaskedLM,
             ESMForCausalLM,
-            ESMForMultipleChoice,
-            ESMForQuestionAnswering,
+            ESMForMaskedLM,
+            ESMModel,
             ESMForSequenceClassification,
             ESMForTokenClassification,
+            ESMForMultipleChoice,
+            ESMForQuestionAnswering,
         )
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (ESMForCausalLM,) if is_torch_available() else ()
+    test_sequence_classification_problem_types = True
 
     def setUp(self):
         self.model_tester = ESMModelTester(self)
@@ -393,30 +374,6 @@ class ESMModelTest(ModelTesterMixin, unittest.TestCase):
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
-    def test_for_multiple_choice(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-
-    def test_for_token_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     def test_model_as_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
@@ -450,11 +407,76 @@ class ESMModelTest(ModelTesterMixin, unittest.TestCase):
             encoder_attention_mask,
         )
 
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_for_masked_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
+
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in ESM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ESMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_create_position_ids_respects_padding_index(self):
+        """Ensure that the default position ids only assign a sequential . This is a regression
+        test for https://github.com/huggingface/transformers/issues/1761
+
+        The position ids should be masked with the embedding object's padding index. Therefore, the
+        first available non-padding position index is ESMEmbeddings.padding_idx + 1
+        """
+        config = self.model_tester.prepare_config_and_inputs()[0]
+        model = ESMEmbeddings(config=config)
+
+        input_ids = torch.as_tensor([[12, 31, 13, model.padding_idx]])
+        expected_positions = torch.as_tensor(
+            [[0 + model.padding_idx + 1, 1 + model.padding_idx + 1, 2 + model.padding_idx + 1, model.padding_idx]]
+        )
+
+        position_ids = create_position_ids_from_input_ids(input_ids, model.padding_idx)
+        self.assertEqual(position_ids.shape, expected_positions.shape)
+        self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
+
+    def test_create_position_ids_from_inputs_embeds(self):
+        """Ensure that the default position ids only assign a sequential . This is a regression
+        test for https://github.com/huggingface/transformers/issues/1761
+
+        The position ids should be masked with the embedding object's padding index. Therefore, the
+        first available non-padding position index is ESMEmbeddings.padding_idx + 1
+        """
+        config = self.model_tester.prepare_config_and_inputs()[0]
+        embeddings = ESMEmbeddings(config=config)
+
+        inputs_embeds = torch.empty(2, 4, 30)
+        expected_single_positions = [
+            0 + embeddings.padding_idx + 1,
+            1 + embeddings.padding_idx + 1,
+            2 + embeddings.padding_idx + 1,
+            3 + embeddings.padding_idx + 1,
+        ]
+        expected_positions = torch.as_tensor([expected_single_positions, expected_single_positions])
+        position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
+        self.assertEqual(position_ids.shape, expected_positions.shape)
+        self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
 
 @require_torch
