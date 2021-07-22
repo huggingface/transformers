@@ -19,7 +19,7 @@ import unittest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
 from transformers import ESMConfig
 from .test_configuration_common import ConfigTester
@@ -481,7 +481,7 @@ class ESMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class ESMModelIntegrationTest(unittest.TestCase):
+class ESMModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
         # model = ESMForMaskedLM.from_pretrained("facebook/esm1b")
@@ -501,4 +501,39 @@ class ESMModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_no_head(self):
+        model = ESMModel.from_pretrained("/checkpoint/jasonliu/tmp/huggingface/")
+
+        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
+        output = model(input_ids)[0]
+        # compare the actual values for a slice.
+        expected_slice = torch.tensor(
+            [[[-0.1687, 0.0673, 0.0991], [0.2569, 0.0041, 0.2266], [0.1488, 0.0387, 0.0665]]]
+        )
+
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+    # XXX: this might be a candidate for common tests if we have many of those
+    def test_lm_head_ignore_keys(self):
+        from copy import deepcopy
+        keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
+        keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
+        config = ESMConfig.from_pretrained("/checkpoint/jasonliu/tmp/huggingface/")
+        config_tied = deepcopy(config)
+        config_tied.tie_word_embeddings = True
+        config_untied = deepcopy(config)
+        config_untied.tie_word_embeddings = False
+        for cls in [ESMForMaskedLM, ESMForCausalLM]:
+            model = cls(config_tied)
+            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
+
+            # the keys should be different when embeddings aren't tied
+            model = cls(config_untied)
+            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_untied, cls)
+
+            # test that saving works with updated ignore keys - just testing that it doesn't fail
+            model.save_pretrained(self.get_auto_remove_tmp_dir())
+
 
