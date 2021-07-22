@@ -205,6 +205,13 @@ class ESMEmbeddings(nn.Module):
 
         # TODO: fairseq logic checks if there is token dropout and if the tokens are not masked at all
         # https://github.com/facebookresearch/esm/blob/master/esm/model.py#L128-L134
+        # if getattr(self.args, "token_dropout", False):
+        #     x.masked_fill_((tokens == self.mask_idx).unsqueeze(-1), 0.0)
+        #     # x: B x T x C
+        #     mask_ratio_train = 0.15 * 0.8
+        #     src_lengths = (~padding_mask).sum(-1)
+        #     mask_ratio_observed = (tokens == self.mask_idx).sum(-1).float() / src_lengths
+        #     x = x * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]
         embeddings *= self.encoder_keep_prob
         
         if self.position_embedding_type == "absolute":
@@ -363,13 +370,11 @@ class ESMSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        # hidden_states = self.LayerNorm(hidden_states + input_tensor)
         hidden_states += input_tensor
         return hidden_states
 
@@ -447,14 +452,12 @@ class ESMOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states += input_tensor
-        # hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
