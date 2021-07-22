@@ -28,7 +28,12 @@ import numpy
 from datasets import load_dataset, load_metric
 
 import transformers
-from sparseml_utils import SparseMLQATrainer, export_model
+from sparseml_utils import (
+    SparseMLQATrainer,
+    export_model,
+    preprocess_state_dict,
+    load_recipe
+)
 from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
@@ -311,6 +316,12 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+
+    # Load and preprocess the state dict if the model existed (in this case we continue to train or
+    # evaluate the model). The preprocessing step is to restore names of parameters changed by
+    # QAT process.
+    state_dict = preprocess_state_dict(model_args.model_name_or_path)
+
     model = AutoModelForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
@@ -318,6 +329,7 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
+        state_dict=state_dict
     )
 
     teacher_model = None
@@ -573,9 +585,14 @@ def main():
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
+    # Load possible existing recipe and new one passed in through command argument
+    existing_recipe = load_recipe(model_args.model_name_or_path)
+    new_recipe = data_args.recipe
+
     # Initialize our Trainer
     trainer = SparseMLQATrainer(
-        data_args.recipe,
+        model_args.model_name_or_path,
+        [existing_recipe, new_recipe],
         teacher=teacher_model,
         distill_hardness=model_args.distill_hardness,
         distill_temperature=model_args.distill_temperature,
@@ -589,6 +606,11 @@ def main():
         post_process_function=post_processing_function,
         compute_metrics=compute_metrics,
     )
+
+    # Apply recipes to the model. This is necessary given that
+    # sparsification methods such as QAT modified the model graph with their own learnable
+    # parameters. They are also restored/loaded to the model.
+    trainer.apply_recipes()
 
     # Training
     if training_args.do_train:
