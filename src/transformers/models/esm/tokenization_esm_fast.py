@@ -15,10 +15,9 @@
 """Tokenization classes for ESM."""
 from typing import List, Optional
 
-from tokenizers import ByteLevelBPETokenizer
-
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_base import AddedToken
 from ...utils import logging
+from ..gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
 from .tokenization_esm import ESMTokenizer
 
 
@@ -39,44 +38,142 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/esm1b": 1024,
 }
 
-class ESMTokenizerFast(PreTrainedTokenizerFast):
+# Copied from transformers.model.roberta.tokenization_roberta_fast
+class ESMTokenizerFast(GPT2TokenizerFast):
     """
-    Construct a "fast" ESM tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" ESM tokenizer (backed by HuggingFace's `tokenizers` library), derived from the GPT-2
+    tokenizer, using byte-level Byte-Pair-Encoding.
+
+    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
+    be encoded differently whether it is at the beginning of the sentence (without space) or not:
+
+    ::
+
+        >>> from transformers import ESMTokenizerFast
+        >>> tokenizer = ESMTokenizerFast.from_pretrained("esm1b")
+        >>> tokenizer("Hello world")['input_ids']
+        [0, 31414, 232, 328, 2]
+        >>> tokenizer(" Hello world")['input_ids']
+        [0, 20920, 232, 2]
+
+    You can get around that behavior by passing ``add_prefix_space=True`` when instantiating this tokenizer or when you
+    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
+
+    .. note::
+
+        When used with ``is_split_into_words=True``, this tokenizer needs to be instantiated with
+        ``add_prefix_space=True``.
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
+        merges_file (:obj:`str`):
+            Path to the merges file.
+        errors (:obj:`str`, `optional`, defaults to :obj:`"replace"`):
+            Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
+            <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+
+            .. note::
+
+                When building a sequence using special tokens, this is not the token that is used for the beginning of
+                sequence. The token used is the :obj:`cls_token`.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The end of sequence token.
+
+            .. note::
+
+                When building a sequence using special tokens, this is not the token that is used for the end of
+                sequence. The token used is the :obj:`sep_token`.
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
+        add_prefix_space (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word. (ESM tokenizer detect beginning of words by the preceding space).
+        trim_offsets (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether the post processing step should trim offsets to avoid including whitespaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = ESMTokenizer
 
     def __init__(
-            self,
-            vocab_file,
-            merges_file,
-            unk_token="<|endoftext|>",
-            bos_token="<|endoftext|>",
-            eos_token="<|endoftext|>",
-            add_prefix_space=False,
-            trim_offsets=True,
-            **kwargs
+        self,
+        vocab_file=None,
+        merges_file=None,
+        tokenizer_file=None,
+        errors="replace",
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        add_prefix_space=False,
+        **kwargs
     ):
         super().__init__(
-            ByteLevelBPETokenizer(
-                vocab_file=vocab_file,
-                merges_file=merges_file,
-                add_prefix_space=add_prefix_space,
-                trim_offsets=trim_offsets,
-            ),
+            vocab_file,
+            merges_file,
+            tokenizer_file=tokenizer_file,
+            errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
             unk_token=unk_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
-        self.add_prefix_space = add_prefix_space
+
+    @property
+    def mask_token(self) -> str:
+        """
+        :obj:`str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while
+        not having been set.
+
+        ESM tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
+        comprise the space before the `<mask>`.
+        """
+        if self._mask_token is None and self.verbose:
+            logger.error("Using mask_token, but it is not set yet.")
+            return None
+        return str(self._mask_token)
+
+    @mask_token.setter
+    def mask_token(self, value):
+        """
+        Overriding the default behavior of the mask token to have it eat the space before it.
+
+        This is needed to preserve backward compatibility with all the previously used models based on ESM.
+        """
+        # Mask token behave like a normal word, i.e. include the space before it
+        # So we set lstrip to True
+        value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
+        self._mask_token = value
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
@@ -85,13 +182,12 @@ class ESMTokenizerFast(PreTrainedTokenizerFast):
 
         return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
-
     def create_token_type_ids_from_sequences(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        ESM does not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -100,7 +196,7 @@ class ESMTokenizerFast(PreTrainedTokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`:  List of zeros.
+            :obj:`List[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -108,6 +204,3 @@ class ESMTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
-
-
