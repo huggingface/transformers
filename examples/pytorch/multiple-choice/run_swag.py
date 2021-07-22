@@ -106,7 +106,7 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-    max_seq_length: int = field(
+    max_seq_length: Optional[int] = field(
         default=None,
         metadata={
             "help": "The maximum total input sequence length after tokenization. If passed, sequences longer "
