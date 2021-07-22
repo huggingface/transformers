@@ -45,6 +45,7 @@ if is_torch_available():
         create_position_ids_from_input_ids
     )
 
+
 # copied from tests.test_modeling_roberta
 class ESMModelTester:
     def __init__(
@@ -483,21 +484,21 @@ class ESMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 class ESMModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = ESMForMaskedLM.from_pretrained("facebook/esm1b")
+        # model = ESMForMaskedLM.from_pretrained("facebook/esm1b")
+        model = ESMForMaskedLM.from_pretrained("/checkpoint/jasonliu/tmp/huggingface/")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
         # TODO Replace vocab size
-        vocab_size = 32000
+        vocab_size = 33
 
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
         # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+            [[[[24.4653, -8.0736, 10.0146], [-9.0505, -15.9262, -4.8583], [-6.9496, -14.6652, 6.2619]]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
 
