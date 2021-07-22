@@ -746,29 +746,33 @@ class Pipeline(_ScikitCompat):
         Parse arguments and tokenize
         """
         # Parse arguments
-        try:
-            inputs = self.tokenizer(
-                inputs,
-                add_special_tokens=add_special_tokens,
-                return_tensors=self.framework,
-                padding=padding,
-                truncation=truncation,
-            )
-        except ValueError:
-            # Can be linked to no padding token, if padding_token does not exist we should recover
-            inputs = self.tokenizer(
-                inputs,
-                add_special_tokens=add_special_tokens,
-                return_tensors=self.framework,
-                padding=False,
-                truncation=truncation,
-            )
-
+        inputs = self.tokenizer(
+            inputs,
+            add_special_tokens=add_special_tokens,
+            return_tensors=self.framework,
+            padding=padding,
+            truncation=truncation,
+        )
         return inputs
 
-    def __call__(self, *args, **kwargs):
-        inputs = self._parse_and_tokenize(*args, **kwargs)
-        return self._forward(inputs)
+    def __call__(self, inputs, *args, **kwargs):
+        try:
+            model_inputs = self._parse_and_tokenize(inputs, *args, **kwargs)
+            outputs = self._forward(model_inputs)
+            return outputs
+        except ValueError:
+            # XXX: Some tokenizer do NOT have a pad token, hence we cannot run the inference
+            # in a batch, instead we run everything sequentially
+            if isinstance(inputs, list):
+                values = []
+                for input_ in inputs:
+                    model_input = self._parse_and_tokenize(input_, padding=False, *args, **kwargs)
+                    value = self._forward(model_input)
+                    values.append(value.squeeze(0))
+            else:
+                model_input = self._parse_and_tokenize(inputs, padding=False, *args, **kwargs)
+                values = self._forward(model_input)
+            return values
 
     def _forward(self, inputs, return_tensors=False):
         """

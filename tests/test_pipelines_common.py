@@ -103,7 +103,8 @@ class PipelineTestCaseMeta(type):
                     model = model.eval()
                 try:
                     tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
-                    tokenizer.model_max_length = model.config.max_position_embeddings
+                    if hasattr(model.config, "max_position_embeddings"):
+                        tokenizer.model_max_length = model.config.max_position_embeddings
                 # Rust Panic exception are NOT Exception subclass
                 # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
                 # provide some default tokenizer and hope for the best.
