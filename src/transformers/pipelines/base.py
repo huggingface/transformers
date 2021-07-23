@@ -746,13 +746,23 @@ class Pipeline(_ScikitCompat):
         Parse arguments and tokenize
         """
         # Parse arguments
-        inputs = self.tokenizer(
-            inputs,
-            add_special_tokens=add_special_tokens,
-            return_tensors=self.framework,
-            padding=padding,
-            truncation=truncation,
-        )
+        try:
+            inputs = self.tokenizer(
+                inputs,
+                add_special_tokens=add_special_tokens,
+                return_tensors=self.framework,
+                padding=padding,
+                truncation=truncation,
+            )
+        except ValueError:
+            # Can be linked to no padding token, if padding_token does not exist we should recover
+            inputs = self.tokenizer(
+                inputs,
+                add_special_tokens=add_special_tokens,
+                return_tensors=self.framework,
+                padding=False,
+                truncation=truncation,
+            )
 
         return inputs
 
