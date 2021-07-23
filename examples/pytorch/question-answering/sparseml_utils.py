@@ -217,9 +217,9 @@ def export_model(model, dataloader, output_dir, num_exported_samples):
         input_names = list(sample_batch.keys())
         output_names = [o.name for o in sess.get_outputs()]
         for input_vals in zip(*sample_batch.values()):
-            input_feed = {k: v.reshape(1, -1).numpy() for k, v in zip(input_names, input_vals)}
-            output_vals = sess.run(output_names, input_feed)
-            output_dict = {name: val for name, val in zip(output_names, output_vals)}
+            input_feed = {k: v.numpy() for k, v in zip(input_names, input_vals)}
+            output_vals = sess.run(output_names, {k: input_feed[k].reshape(1, -1) for k in input_feed})
+            output_dict = {name: numpy.squeeze(val) for name, val in zip(output_names, output_vals)}
             file_idx = f"{num_samples}".zfill(4)
             numpy.savez(f"{sample_inputs}/inp-{file_idx}.npz", **input_feed)
             numpy.savez(f"{sample_outputs}/out-{file_idx}.npz", **output_dict)
