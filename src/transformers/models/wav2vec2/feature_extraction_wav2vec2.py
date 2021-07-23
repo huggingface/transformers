@@ -83,7 +83,9 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
-        input_values = [x.astype(np.float32) for x in input_values]
+        if isinstance(input_values[0], np.ndarray):
+            input_values = [x.astype(np.float32) for x in input_values]
+
         normed_input_values = [
             (x - np.mean(x[:i])) / np.sqrt(np.var(x[:i]) + 1e-5) for x, i in zip(input_values, input_lengths)
         ]
