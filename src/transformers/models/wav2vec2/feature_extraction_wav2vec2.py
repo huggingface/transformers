@@ -83,6 +83,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
+        input_values = [x.astype(np.float32) for x in input_values]
         normed_input_values = [
             (x - np.mean(x[:i])) / np.sqrt(np.var(x[:i]) + 1e-5) for x, i in zip(input_values, input_lengths)
         ]
@@ -174,9 +175,11 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
         # make sure input is in list format
         if is_batched and not isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [np.asarray(speech) for speech in raw_speech]
+            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech)
+            raw_speech = np.asarray(raw_speech, dtype=np.float32)
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.float64:
+            raw_speech = raw_speech.astype(np.float32)
 
         # always return batch
         if not is_batched:

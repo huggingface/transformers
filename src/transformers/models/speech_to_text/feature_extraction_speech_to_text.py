@@ -95,6 +95,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     def utterance_cmvn(
         x: np.ndarray, input_length: int, normalize_means: Optional[bool] = True, normalize_vars: Optional[bool] = True
     ) -> np.ndarray:
+        x = x.astype(np.float32)
         mean = x[:input_length].mean(axis=0)
         square_sums = (x[:input_length] ** 2).sum(axis=0)
 
