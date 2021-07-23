@@ -17,9 +17,9 @@
 import os
 from collections import OrderedDict
 
-from transformers import DeiTFeatureExtractor, Speech2TextFeatureExtractor, ViTFeatureExtractor
+from transformers import DeiTFeatureExtractor, DetrFeatureExtractor, Speech2TextFeatureExtractor, ViTFeatureExtractor
 
-from ... import DeiTConfig, PretrainedConfig, Speech2TextConfig, ViTConfig, Wav2Vec2Config
+from ... import DeiTConfig, DetrConfig, PretrainedConfig, Speech2TextConfig, ViTConfig, Wav2Vec2Config
 from ...feature_extraction_utils import FeatureExtractionMixin
 
 # Build the list of all feature extractors
@@ -31,6 +31,7 @@ from .configuration_auto import AutoConfig, replace_list_option_in_docstrings
 FEATURE_EXTRACTOR_MAPPING = OrderedDict(
     [
         (DeiTConfig, DeiTFeatureExtractor),
+        (DetrConfig, DetrFeatureExtractor),
         (Speech2TextConfig, Speech2TextFeatureExtractor),
         (ViTConfig, ViTFeatureExtractor),
         (Wav2Vec2Config, Wav2Vec2FeatureExtractor),

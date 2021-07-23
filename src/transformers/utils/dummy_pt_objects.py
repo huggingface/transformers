@@ -459,6 +459,15 @@ class AutoModelForNextSentencePrediction:
         requires_backends(cls, ["torch"])
 
 
+class AutoModelForObjectDetection:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class AutoModelForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

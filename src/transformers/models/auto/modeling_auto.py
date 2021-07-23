@@ -882,6 +882,13 @@ class AutoModelForImageClassification(_BaseAutoModelClass):
 AutoModelForImageClassification = auto_class_update(AutoModelForImageClassification, head_doc="image classification")
 
 
+class AutoModelForObjectDetection(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
+
+
+AutoModelForObjectDetection = auto_class_update(AutoModelForObjectDetection, head_doc="object detection")
+
+
 class AutoModelWithLMHead(_AutoModelWithLMHead):
     @classmethod
     def from_config(cls, config):
