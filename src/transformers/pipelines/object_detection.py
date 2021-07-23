@@ -115,6 +115,8 @@ class ObjectDetectionPipeline(Pipeline):
             - **score** (:obj:`int`) -- The score attributed by the model for that label.
             - **box** (:obj:`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
+        THRESHOLD = 0.9
+        
         is_batched = isinstance(images, list)
 
         if not is_batched:
@@ -130,8 +132,7 @@ class ObjectDetectionPipeline(Pipeline):
             annotations = self.feature_extractor.post_process(outputs, target_sizes)
             for i, annotation in enumerate(annotations):
                 annotation_ = []
-                # keep only predictions of queries with 0.9+ confidence (excluding no-object class)
-                keep = annotation["scores"] > 0.9
+                keep = annotation["scores"] > THRESHOLD
                 for key, tensor in annotation.items():
                     annotation[key] = tensor[keep]
                 for score, label, box in zip(annotation["scores"], annotation["labels"], annotation["boxes"]):
@@ -139,7 +140,7 @@ class ObjectDetectionPipeline(Pipeline):
                         {
                             "score": score.item(),
                             "label": self.model.config.id2label[label.item()],
-                            "box": self.getVertices(box),
+                            "box": self._get_vertices(box),
                         }
                     )
                 annotations[i] = annotation_
@@ -149,12 +150,21 @@ class ObjectDetectionPipeline(Pipeline):
 
         return annotations
 
-    def getVertices(self, box: Tensor) -> List[Dict[str, int]]:
+    def _get_vertices(self, box: Tensor) -> List[Dict[str, int]]:
+        """
+        Generates 4 corners of a box in a clockwise order (starting from top-left corner).
+
+        Args:
+            box (tensor): Tensor of shape (4) representng 2 opposing corners of object detection box
+
+        Returns:
+            vertices (List[Dict[str, int]]): 4 corners of a box
+        """
         xmin, ymin, xmax, ymax = box.int().tolist()
-        # Corners of a box in a clockwise order
-        return [
+        vertices = [
             {"x": xmin, "y": ymin},
             {"x": xmax, "y": ymin},
             {"x": xmax, "y": ymax},
             {"x": xmin, "y": ymax},
         ]
+        return vertices
