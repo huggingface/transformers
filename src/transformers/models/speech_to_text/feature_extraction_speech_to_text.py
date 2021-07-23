@@ -96,7 +96,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         x: np.ndarray, input_length: int, normalize_means: Optional[bool] = True, normalize_vars: Optional[bool] = True
     ) -> np.ndarray:
         # make sure we normalie float32 arrays
-        x = x.astype(np.float32)
 
         mean = x[:input_length].mean(axis=0)
         square_sums = (x[:input_length] ** 2).sum(axis=0)
@@ -107,6 +106,9 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             var = square_sums / x[:input_length].shape[0] - mean ** 2
             std = np.sqrt(np.maximum(var, 1e-10))
             x = np.divide(x, std)
+
+        # make sure array is in float32
+        x = x.astype(np.float32)
 
         return x
 
