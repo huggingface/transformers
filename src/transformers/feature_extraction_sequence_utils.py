@@ -69,7 +69,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         ],
         padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
-        truncation: Optional[bool] = None,
+        truncation: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -108,7 +108,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                   different lengths).
             max_length (:obj:`int`, `optional`):
                 Maximum length of the returned list and optionally padding length (see above).
-            truncation (:obj:`bool`, `optional`):
+            truncation (:obj:`bool`):
                 Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value.
@@ -327,7 +327,6 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             truncation: (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
         """
         if not truncation:
-            # no truncation
             return processed_features
         elif truncation and max_length is None:
             raise ValueError(
