@@ -95,7 +95,9 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     def utterance_cmvn(
         x: np.ndarray, input_length: int, normalize_means: Optional[bool] = True, normalize_vars: Optional[bool] = True
     ) -> np.ndarray:
+        # make sure we normalie float32 arrays
         x = x.astype(np.float32)
+
         mean = x[:input_length].mean(axis=0)
         square_sums = (x[:input_length] ** 2).sum(axis=0)
 
@@ -198,6 +200,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             raw_speech = [np.asarray(speech) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech)
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.float64:
+            raw_speech = raw_speech.astype(np.float32)
 
         # always return batch
         if not is_batched:
