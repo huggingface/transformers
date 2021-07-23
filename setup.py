@@ -100,7 +100,7 @@ _deps = [
     "flake8>=3.8.3",
     "flax>=0.3.4",
     "fugashi>=1.0",
-    "GitPython",
+    "GitPython<3.1.19",
     "huggingface-hub==0.0.12",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
