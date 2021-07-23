@@ -22,25 +22,25 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
-import tensorflow as tf
 from pathlib import Path
+from typing import Optional
 
 import datasets
 import numpy as np
+import tensorflow as tf
 from datasets import load_dataset
 
 import transformers
 from transformers import (
+    CONFIG_NAME,
+    TF2_WEIGHTS_NAME,
     AutoConfig,
-    TFAutoModelForMultipleChoice,
     AutoTokenizer,
     HfArgumentParser,
+    TFAutoModelForMultipleChoice,
     TFTrainingArguments,
-    set_seed,
     create_optimizer,
-    CONFIG_NAME,
-    TF2_WEIGHTS_NAME
+    set_seed,
 )
 from transformers.utils import check_min_version
 
@@ -102,8 +102,14 @@ def convert_dataset_for_tensorflow(
         tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    tf_dataset = tf_dataset.with_options(options).batch(batch_size=batch_size, drop_remainder=drop_remainder).map(densify_ragged_batch)
+    tf_dataset = (
+        tf_dataset.with_options(options)
+        .batch(batch_size=batch_size, drop_remainder=drop_remainder)
+        .map(densify_ragged_batch)
+    )
     return tf_dataset
+
+
 # endregion
 
 # region Arguments
@@ -198,6 +204,8 @@ class DataTrainingArguments:
         if self.validation_file is not None:
             extension = self.validation_file.split(".")[-1]
             assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+
+
 # endregion
 
 
@@ -337,24 +345,16 @@ def main():
         second_sentences = sum(second_sentences, [])
 
         # Tokenize
-        tokenized_examples = tokenizer(
-            first_sentences,
-            second_sentences,
-            truncation=True,
-            max_length=max_seq_length
-        )
+        tokenized_examples = tokenizer(first_sentences, second_sentences, truncation=True, max_length=max_seq_length)
         # Un-flatten
-        # TODO Stop converting this to ragged in this function, instead just return lists of lists and do the conversion
-        #      at the end somewhere
         data = {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
         return data
-
 
     if training_args.do_train:
         if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = raw_datasets["train"]
-        non_label_columns = [feature for feature in train_dataset.features if feature not in ('label', 'labels')]
+        non_label_columns = [feature for feature in train_dataset.features if feature not in ("label", "labels")]
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         with training_args.main_process_first(desc="train dataset map pre-processing"):
@@ -370,7 +370,7 @@ def main():
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = raw_datasets["validation"]
         if not training_args.do_train:
-            non_label_columns = [feature for feature in eval_dataset.features if feature not in ('label', 'labels')]
+            non_label_columns = [feature for feature in eval_dataset.features if feature not in ("label", "labels")]
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
         with training_args.main_process_first(desc="validation dataset map pre-processing"):
@@ -393,7 +393,7 @@ def main():
             config=config,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None
+            use_auth_token=True if model_args.use_auth_token else None,
         )
 
         num_replicas = training_args.strategy.num_replicas_in_sync
@@ -405,29 +405,39 @@ def main():
                 init_lr=training_args.learning_rate, num_train_steps=int(total_train_steps), num_warmup_steps=0
             )
         else:
-            optimizer = 'adam'  # Just put anything in here, since we're not using it anyway
-        model.compile(optimizer=optimizer, loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                      metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="accuracy")])
+            optimizer = "adam"  # Just put anything in here, since we're not using it anyway
+        model.compile(
+            optimizer=optimizer,
+            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+            metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
+        )
         # endregion
 
         # region Training
         if training_args.do_train:
-            tf_train_dataset = convert_dataset_for_tensorflow(train_dataset, non_label_column_names=non_label_columns,
-                                                              batch_size=total_train_batch_size)
+            tf_train_dataset = convert_dataset_for_tensorflow(
+                train_dataset, non_label_column_names=non_label_columns, batch_size=total_train_batch_size
+            )
             if training_args.do_eval:
-                validation_data = convert_dataset_for_tensorflow(eval_dataset, non_label_column_names=non_label_columns,
-                                                              batch_size=total_eval_batch_size)
+                validation_data = convert_dataset_for_tensorflow(
+                    eval_dataset, non_label_column_names=non_label_columns, batch_size=total_eval_batch_size
+                )
             else:
                 validation_data = None
-            model.fit(tf_train_dataset, validation_data=validation_data, epochs=int(training_args.num_train_epochs),
-                      callbacks=[SavePretrainedCallback(output_dir=training_args.output_dir)])
+            model.fit(
+                tf_train_dataset,
+                validation_data=validation_data,
+                epochs=int(training_args.num_train_epochs),
+                callbacks=[SavePretrainedCallback(output_dir=training_args.output_dir)],
+            )
         # endregion
 
         # region Evaluation
         if training_args.do_eval and not training_args.do_train:
             # Do a standalone evaluation pass
-            tf_eval_dataset = convert_dataset_for_tensorflow(eval_dataset, non_label_column_names=non_label_columns,
-                                                             batch_size=total_eval_batch_size)
+            tf_eval_dataset = convert_dataset_for_tensorflow(
+                eval_dataset, non_label_column_names=non_label_columns, batch_size=total_eval_batch_size
+            )
             model.evaluate(tf_eval_dataset)
         # endregion
 
