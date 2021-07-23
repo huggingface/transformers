@@ -230,7 +230,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
             # make sure list is in array format
             if isinstance(input_features[0], list):
-                input_features = [np.asarray(feature) for feature in input_features]
+                input_features = [np.asarray(feature, dtype=np.float32) for feature in input_features]
 
             padded_inputs["input_features"] = self.normalize(input_features, input_lengths=input_lengths)
 
