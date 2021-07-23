@@ -93,22 +93,25 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
     @staticmethod
     def utterance_cmvn(
-        x: np.ndarray, normalize_means: Optional[bool] = True, normalize_vars: Optional[bool] = True
+        x: np.ndarray, input_length: int, normalize_means: Optional[bool] = True, normalize_vars: Optional[bool] = True
     ) -> np.ndarray:
-        mean = x.mean(axis=0)
-        square_sums = (x ** 2).sum(axis=0)
+        mean = x[:input_length].mean(axis=0)
+        square_sums = (x[:input_length] ** 2).sum(axis=0)
 
         if normalize_means:
             x = np.subtract(x, mean)
         if normalize_vars:
-            var = square_sums / x.shape[0] - mean ** 2
+            var = square_sums / x[:input_length].shape[0] - mean ** 2
             std = np.sqrt(np.maximum(var, 1e-10))
             x = np.divide(x, std)
 
         return x
 
-    def normalize(self, input_values: List[np.ndarray]) -> List[np.ndarray]:
-        return [self.utterance_cmvn(x, self.normalize_means, self.normalize_vars) for x in input_values]
+    def normalize(self, input_values: List[np.ndarray], input_lengths: List[int]) -> List[np.ndarray]:
+        return [
+            self.utterance_cmvn(x, n, self.normalize_means, self.normalize_vars)
+            for x, n in zip(input_values, input_lengths)
+        ]
 
     def __call__(
         self,
@@ -202,10 +205,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         # extract fbank features
         features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
 
-        # Utterance-level cepstral mean and variance normalization
-        if self.do_ceptral_normalize:
-            features = self.normalize(features)
-
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
 
@@ -216,8 +215,26 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
-            return_tensors=return_tensors,
             **kwargs,
         )
+
+        if "attention_mask" in padded_inputs:
+            input_lengths = padded_inputs["attention_mask"].sum(-1)
+        else:
+            padded_input_values = padded_inputs["input_features"]
+            input_lengths = [padded_input_values.shape[-1] for _ in range(padded_input_values.shape[0])]
+
+        # Utterance-level cepstral mean and variance normalization
+        if self.do_ceptral_normalize:
+            input_features = padded_inputs["input_features"]
+
+            # make sure list is in array format
+            if isinstance(input_features[0], list):
+                input_features = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+
+            padded_inputs["input_features"] = self.normalize(input_features, input_lengths=input_lengths)
+
+        if return_tensors is not None:
+            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs

@@ -79,11 +79,15 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         self.do_normalize = do_normalize
 
     @staticmethod
-    def zero_mean_unit_var_norm(input_values: List[np.ndarray]) -> List[np.ndarray]:
+    def zero_mean_unit_var_norm(input_values: List[np.ndarray], input_lengths: List[int]) -> List[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
-        return [(x - np.mean(x)) / np.sqrt(np.var(x) + 1e-5) for x in input_values]
+        normed_input_values = [
+            (x - np.mean(x[:i], dtype=np.float32)) / np.sqrt(np.var(x[:i], dtype=np.float32) + 1e-5)
+            for x, i in zip(input_values, input_lengths)
+        ]
+        return normed_input_values
 
     def __call__(
         self,
@@ -171,17 +175,13 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
         # make sure input is in list format
         if is_batched and not isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [np.asarray(speech) for speech in raw_speech]
+            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech)
+            raw_speech = np.asarray(raw_speech, dtype=np.float32)
 
         # always return batch
         if not is_batched:
             raw_speech = [raw_speech]
-
-        # zero-mean and unit-variance normalization
-        if self.do_normalize:
-            raw_speech = self.zero_mean_unit_var_norm(raw_speech)
 
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_values": raw_speech})
@@ -193,7 +193,21 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
-            return_tensors=return_tensors,
         )
+
+        if "attention_mask" in padded_inputs:
+            input_lengths = padded_inputs["attention_mask"].sum(-1)
+        else:
+            padded_input_values = padded_inputs["input_values"]
+            input_lengths = [padded_input_values.shape[-1] for _ in range(padded_input_values.shape[0])]
+
+        # zero-mean and unit-variance normalization
+        if self.do_normalize:
+            padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
+                padded_inputs["input_values"], input_lengths=input_lengths
+            )
+
+        if return_tensors is not None:
+            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
