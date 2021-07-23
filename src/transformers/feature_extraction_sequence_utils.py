@@ -109,7 +109,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             max_length (:obj:`int`, `optional`):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (:obj:`bool`):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+                Activates truncation to cut input sequences longer than :obj:`max_length` to :obj:`max_length`.
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value.
 

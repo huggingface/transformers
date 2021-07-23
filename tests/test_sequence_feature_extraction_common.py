@@ -242,7 +242,9 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         processed_features = BatchFeature({input_name: speech_inputs})
 
         # truncate to smallest
-        input_1 = feat_extract.pad(processed_features, padding="max_length", max_length=len(speech_inputs[0]), truncation=True)
+        input_1 = feat_extract.pad(
+            processed_features, padding="max_length", max_length=len(speech_inputs[0]), truncation=True
+        )
         input_1 = input_1[input_name]
 
         input_2 = feat_extract.pad(processed_features, padding="max_length", max_length=len(speech_inputs[0]))
