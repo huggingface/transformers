@@ -804,7 +804,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --val_max_target_length {max_len}
             --warmup_steps 8
             --predict_with_generate
-            --logging_steps 0
             --save_steps 0
             --eval_steps {eval_steps}
             --group_by_length

@@ -171,7 +171,6 @@ class TestDeepSpeedWav2Vec2(TestCasePlus):
             --group_by_length
             --freeze_feature_extractor
             --report_to none
-            --logging_steps 0
             --save_steps 0
             --eval_steps {eval_steps}
             --report_to none
