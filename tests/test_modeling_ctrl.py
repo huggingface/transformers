@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import CTRLConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -28,7 +28,6 @@ if is_torch_available():
 
     from transformers import (
         CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
-        CTRLConfig,
         CTRLForSequenceClassification,
         CTRLLMHeadModel,
         CTRLModel,
@@ -88,21 +87,7 @@ class CTRLModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = CTRLConfig(
-            vocab_size=self.vocab_size,
-            n_embd=self.hidden_size,
-            n_layer=self.num_hidden_layers,
-            n_head=self.num_attention_heads,
-            # intermediate_size=self.intermediate_size,
-            # hidden_act=self.hidden_act,
-            # hidden_dropout_prob=self.hidden_dropout_prob,
-            # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            n_positions=self.max_position_embeddings,
-            n_ctx=self.max_position_embeddings,
-            # type_vocab_size=self.type_vocab_size,
-            # initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-        )
+        config = self.get_config()
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
 
@@ -116,6 +101,23 @@ class CTRLModelTester:
             sequence_labels,
             token_labels,
             choice_labels,
+        )
+
+    def get_config(self):
+        return CTRLConfig(
+            vocab_size=self.vocab_size,
+            n_embd=self.hidden_size,
+            n_layer=self.num_hidden_layers,
+            n_head=self.num_attention_heads,
+            # intermediate_size=self.intermediate_size,
+            # hidden_act=self.hidden_act,
+            # hidden_dropout_prob=self.hidden_dropout_prob,
+            # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            n_positions=self.max_position_embeddings,
+            n_ctx=self.max_position_embeddings,
+            # type_vocab_size=self.type_vocab_size,
+            # initializer_range=self.initializer_range,
+            pad_token_id=self.pad_token_id,
         )
 
     def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
