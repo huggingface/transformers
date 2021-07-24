@@ -223,6 +223,7 @@ _import_structure = {
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
+    "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
@@ -316,6 +317,7 @@ if is_sentencepiece_available():
     _import_structure["models.mt5"].append("MT5Tokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
+    _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
@@ -361,6 +363,7 @@ if is_tokenizers_available():
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
+    _import_structure["models.rembert"].append("RemBertTokenizerFast")
     _import_structure["models.retribert"].append("RetriBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
@@ -506,6 +509,7 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
+
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -977,6 +981,21 @@ if is_torch_available():
             "ReformerPreTrainedModel",
         ]
     )
+    _import_structure["models.rembert"].extend(
+        [
+            "REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RemBertForCausalLM",
+            "RemBertForMaskedLM",
+            "RemBertForMultipleChoice",
+            "RemBertForQuestionAnswering",
+            "RemBertForSequenceClassification",
+            "RemBertForTokenClassification",
+            "RemBertLayer",
+            "RemBertModel",
+            "RemBertPreTrainedModel",
+            "load_tf_weights_in_rembert",
+        ]
+    )
     _import_structure["models.retribert"].extend(
         ["RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST", "RetriBertModel", "RetriBertPreTrainedModel"]
     )
@@ -1441,6 +1460,20 @@ if is_tf_available():
             "TFRagTokenForGeneration",
         ]
     )
+    _import_structure["models.rembert"].extend(
+        [
+            "TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRemBertForCausalLM",
+            "TFRemBertForMaskedLM",
+            "TFRemBertForMultipleChoice",
+            "TFRemBertForQuestionAnswering",
+            "TFRemBertForSequenceClassification",
+            "TFRemBertForTokenClassification",
+            "TFRemBertLayer",
+            "TFRemBertModel",
+            "TFRemBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.roberta"].extend(
         [
             "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1852,6 +1885,7 @@ if TYPE_CHECKING:
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+    from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
@@ -1945,6 +1979,7 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5Tokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.reformer import ReformerTokenizer
+        from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.t5 import T5Tokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
@@ -1980,6 +2015,7 @@ if TYPE_CHECKING:
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.reformer import ReformerTokenizerFast
+        from .models.rembert import RemBertTokenizerFast
         from .models.retribert import RetriBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
         from .models.roformer import RoFormerTokenizerFast
@@ -2488,6 +2524,19 @@ if TYPE_CHECKING:
             ReformerModelWithLMHead,
             ReformerPreTrainedModel,
         )
+        from .models.rembert import (
+            REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RemBertForCausalLM,
+            RemBertForMaskedLM,
+            RemBertForMultipleChoice,
+            RemBertForQuestionAnswering,
+            RemBertForSequenceClassification,
+            RemBertForTokenClassification,
+            RemBertLayer,
+            RemBertModel,
+            RemBertPreTrainedModel,
+            load_tf_weights_in_rembert,
+        )
         from .models.retribert import RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST, RetriBertModel, RetriBertPreTrainedModel
         from .models.roberta import (
             ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2876,6 +2925,18 @@ if TYPE_CHECKING:
         )
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
+        from .models.rembert import (
+            TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRemBertForCausalLM,
+            TFRemBertForMaskedLM,
+            TFRemBertForMultipleChoice,
+            TFRemBertForQuestionAnswering,
+            TFRemBertForSequenceClassification,
+            TFRemBertForTokenClassification,
+            TFRemBertLayer,
+            TFRemBertModel,
+            TFRemBertPreTrainedModel,
+        )
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRobertaForMaskedLM,

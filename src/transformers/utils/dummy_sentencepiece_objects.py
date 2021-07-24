@@ -110,6 +110,15 @@ class ReformerTokenizer:
         requires_backends(cls, ["sentencepiece"])
 
 
+class RemBertTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["sentencepiece"])
+
+
 class Speech2TextTokenizer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])

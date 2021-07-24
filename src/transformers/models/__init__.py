@@ -68,6 +68,7 @@ from . import (
     prophetnet,
     rag,
     reformer,
+    rembert,
     retribert,
     roberta,
     roformer,
