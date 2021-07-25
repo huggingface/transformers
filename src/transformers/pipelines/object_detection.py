@@ -87,6 +87,7 @@ class ObjectDetectionPipeline(Pipeline):
     def __call__(
         self,
         images: Union[str, List[str], "Image", List["Image"]],
+        threshold: Optional[float] = 0.9,
     ) -> Union[Predictions, List[Prediction]]:
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
@@ -102,6 +103,8 @@ class ObjectDetectionPipeline(Pipeline):
                 The pipeline accepts either a single image or a batch of images, which must then be passed as a string.
                 Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
                 images.
+            threshold (:obj:`float`, `optional`, defaults to 0.9):
+                The probability necessary to make a prediction.
 
         Return:
             A list of dictionaries or a list of of list of dictionaries containing result. If the input is a single
@@ -115,8 +118,6 @@ class ObjectDetectionPipeline(Pipeline):
             - **score** (:obj:`int`) -- The score attributed by the model for that label.
             - **box** (:obj:`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
-        THRESHOLD = 0.9
-        
         is_batched = isinstance(images, list)
 
         if not is_batched:
@@ -132,7 +133,7 @@ class ObjectDetectionPipeline(Pipeline):
             annotations = self.feature_extractor.post_process(outputs, target_sizes)
             for i, annotation in enumerate(annotations):
                 annotation_ = []
-                keep = annotation["scores"] > THRESHOLD
+                keep = annotation["scores"] > threshold
                 for key, tensor in annotation.items():
                     annotation[key] = tensor[keep]
                 for score, label, box in zip(annotation["scores"], annotation["labels"], annotation["boxes"]):

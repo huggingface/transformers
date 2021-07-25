@@ -143,3 +143,25 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                 self.assertEqual(set(vertex.keys()), {"x", "y"})
                 self.assertEqual(type(vertex["x"]), int)
                 self.assertEqual(type(vertex["y"]), int)
+
+    def test_low_threshold(self):
+        threshold = 0.0
+        model_id = "facebook/detr-resnet-50"
+        object_detector = pipeline("object-detection", model=model_id)
+        valid_input = {"images": "http://images.cocodataset.org/val2017/000000039769.jpg", "threshold": threshold}
+
+        output = object_detector(**valid_input)
+
+        self.assertTrue(isinstance(output, list))
+        self.assertEqual(len(output), 100)
+
+    def test_high_threshold(self):
+        threshold = 1.0
+        model_id = "facebook/detr-resnet-50"
+        object_detector = pipeline("object-detection", model=model_id)
+        valid_input = {"images": "http://images.cocodataset.org/val2017/000000039769.jpg", "threshold": threshold}
+
+        output = object_detector(**valid_input)
+
+        self.assertTrue(isinstance(output, list))
+        self.assertEqual(len(output), 0)
