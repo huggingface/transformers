@@ -39,7 +39,7 @@ Predictions = List[Prediction]
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ObjectDetectionPipeline(Pipeline):
     """
-    Object detection pipeline using any :obj:`AutoModelForObjectDetection`. This pipeline predicts boundig boxes of
+    Object detection pipeline using any :obj:`AutoModelForObjectDetection`. This pipeline predicts bounding boxes of
     objects and their classes.
 
     This object detection pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task
