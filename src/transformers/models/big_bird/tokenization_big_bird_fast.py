@@ -67,14 +67,14 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         vocab_file (:obj:`str`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
             .. note::
 
                When building a sequence using special tokens, this is not the token that is used for the beginning of
                sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
             that is used for the end of sequence. The token used is the :obj:`sep_token`.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
