@@ -276,6 +276,12 @@ class TokenClassificationPipeline(Pipeline):
                     is_subword = len(word) != len(word_ref)
                 else:
                     # This is a fallback heuristic. This will fail most likely on any kind of text + punctuation mixtures that will be considered "words". Non word aware models cannot do better than this unfortunately.
+                    if self.aggregation_strategy in {
+                        AggregationStrategy.FIRST,
+                        AggregationStrategy.AVERAGE,
+                        AggregationStrategy.MAX,
+                    }:
+                        warnings.warn(UserWarning, "Tokenizer does not support real words, using fallback heuristic")
                     is_subword = sentence[start_ind - 1 : start_ind] != " " if start_ind > 0 else False
 
                 if int(input_ids[idx]) == self.tokenizer.unk_token_id:
