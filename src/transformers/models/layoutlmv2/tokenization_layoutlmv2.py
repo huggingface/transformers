@@ -18,15 +18,14 @@ import collections
 import os
 import sys
 import unicodedata
-from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
-from ...file_utils import ExplicitEnum, PaddingStrategy, TensorType, add_end_docstrings
+from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
     EncodedInput,
-    PaddingStrategy,
     PreTokenizedInput,
     TextInput,
     TextInputPair,
@@ -383,7 +382,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
-        sequences with word-level bounding boxes and optional labels.
+        sequences with word-level normalized bounding boxes and optional labels.
 
         Args:
             text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
@@ -394,8 +393,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
                 (pretokenized string).
             boxes (:obj:`List[List[int]]`, :obj:`List[List[List[int]]]`):
-                Word-level bounding boxes. Each bounding box should be
-            word_labels (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
+                Word-level bounding boxes. Each bounding box should be normalized to be on a 0-1000 scale.
+            word_labels (:obj:`List[int]`, :obj:`List[List[int]]`, `optional`):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
         # Input type checking for clearer error
@@ -1042,7 +1041,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 truncation_strategy=truncation_strategy,
                 stride=stride,
             )
-        special_tokens_count = self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0
 
         if return_token_type_ids and not add_special_tokens:
             raise ValueError(

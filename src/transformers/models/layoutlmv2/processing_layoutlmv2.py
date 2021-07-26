@@ -15,21 +15,10 @@
 """
 Processor class for LayoutLMv2.
 """
-from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
+from typing import List, Optional, Union
 
 from ...file_utils import TensorType
-from ...tokenization_utils_base import (
-    ENCODE_KWARGS_DOCSTRING,
-    BatchEncoding,
-    EncodedInput,
-    EncodedInputPair,
-    PaddingStrategy,
-    PreTokenizedInput,
-    PreTokenizedInputPair,
-    TextInput,
-    TextInputPair,
-    TruncationStrategy,
-)
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
 from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 
@@ -44,11 +33,9 @@ class LayoutLMv2Processor:
     It first uses :class:`~transformers.LayoutLMv2FeatureExtractor` to resize document images to a fixed size, and
     optionally applies OCR to get words and normalized bounding boxes. These are then provided to
     :class:`~transformers.LayoutLMv2Tokenizer`, which turns the words and bounding boxes into token-level
-    :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`. Optionally, one can provide additional
-    information to automatically create labels:
-
-    - for information extraction tasks (such as FUNSD, CORD), one can provide :obj:`word_labels`, which will be
-      automatically turned into token-level :obj:`labels`.
+    :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`. Optionally, one can provide integer
+    :obj:`word_labels`, which are turned into token-level :obj:`labels` for token classification tasks (such as FUNSD,
+    CORD).
 
     Args:
         feature_extractor (:obj:`LayoutLMv2FeatureExtractor`):
@@ -147,16 +134,16 @@ class LayoutLMv2Processor:
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
-    ):
+    ) -> BatchEncoding:
         """
         This method first forwards the :obj:`images` argument to
-        :meth:`~transformers.LayoutLMv2FeatureExtractor.__call__`. In case :classes:`~LayoutLMv2FeatureExtractor` was
+        :meth:`~transformers.LayoutLMv2FeatureExtractor.__call__`. In case :class:`~LayoutLMv2FeatureExtractor` was
         initialized with :obj:`apply_ocr` set to ``True``, it passes the obtained words and bounding boxes along with
-        the additional arguments to :meth:`~transformers.LayoutLMv2Processor.__call__` and returns the output, together
-        with resized :obj:`images`. In case :classes:`~LayoutLMv2FeatureExtractor` was initialized with
-        :obj:`apply_ocr` set to ``False``, it passes the words (:obj:`text`/:obj:`text_pair`) and :obj:`boxes`
-        specified by the user along with the additional arguments to :meth:`~transformers.LayoutLMv2Processor.__call__`
-        and returns the output, together with resized :obj:`images`.
+        the additional arguments to :meth:`~transformers.LayoutLMv2Tokenizer.__call__` and returns the output, together
+        with resized :obj:`images`. In case :class:`~LayoutLMv2FeatureExtractor` was initialized with :obj:`apply_ocr`
+        set to ``False``, it passes the words (:obj:`text`/:obj:`text_pair`) and :obj:`boxes` specified by the user
+        along with the additional arguments to :meth:`~transformers.LayoutLMv2Tokenizer.__call__` and returns the
+        output, together with resized :obj:`images`.
 
         Please refer to the docstring of the above two methods for more information.
         """
@@ -179,7 +166,7 @@ class LayoutLMv2Processor:
         # second, apply the tokenizer
         if text is not None and self.feature_extractor.apply_ocr and text_pair is None:
             if isinstance(text, str):
-                text = [text]  # add batch dimension
+                text = [text]  # add batch dimension (as the feature extractor always adds a batch dimension)
             text_pair = features["words"]
 
         encoded_inputs = self.tokenizer(
@@ -204,6 +191,7 @@ class LayoutLMv2Processor:
             **kwargs,
         )
 
+        # add pixel values
         encoded_inputs["image"] = features.pop("pixel_values")
 
         return encoded_inputs

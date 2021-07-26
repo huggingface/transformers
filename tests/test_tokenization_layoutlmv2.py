@@ -20,8 +20,6 @@ import tempfile
 import unittest
 from typing import List
 
-import numpy as np
-
 from transformers import AddedToken
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import (
     VOCAB_FILES_NAMES,
@@ -441,7 +439,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 padding_size = 10
                 padding_idx = tokenizer.pad_token_id
-                token_type_padding_idx = tokenizer.pad_token_type_id
 
                 encoded_sequence = tokenizer.encode_plus(words, boxes=boxes, return_special_tokens_mask=True)
                 input_ids = encoded_sequence["input_ids"]
@@ -1019,8 +1016,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # Build sequence
-                first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-                sequence = " ".join(first_ten_tokens)
                 words, boxes = self.get_words_and_boxes()
                 encoded_sequence = tokenizer.encode_plus(words, boxes=boxes, return_tensors="pt")
                 batch_encoded_sequence = tokenizer.batch_encode_plus(
@@ -1099,12 +1094,23 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 words, boxes = self.get_words_and_boxes()
-                ids = tokenizer.encode(words, boxes=boxes, add_special_tokens=False)
                 prepared_input_dict = tokenizer.prepare_for_model(words, boxes=boxes, add_special_tokens=True)
 
                 input_dict = tokenizer.encode_plus(words, boxes=boxes, add_special_tokens=True)
 
                 self.assertEqual(input_dict, prepared_input_dict)
+
+    @unittest.skip("LayoutLMv2 tokenizer requires boxes besides sequences.")
+    def test_maximum_encoding_length_pair_input(self):
+        pass
+
+    @unittest.skip("LayoutLMv2 tokenizer requires boxes besides sequences.")
+    def test_maximum_encoding_length_single_input(self):
+        pass
+
+    @unittest.skip("LayoutLMv2 tokenizer requires boxes besides sequences.")
+    def test_pretokenized_inputs(self):
+        pass
 
     @slow
     def test_layoutlmv2_integration_test(self):

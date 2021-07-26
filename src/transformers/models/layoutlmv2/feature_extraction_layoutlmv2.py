@@ -136,6 +136,16 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return NumPy :obj:`np.ndarray` objects.
                 * :obj:`'jax'`: Return JAX :obj:`jnp.ndarray` objects.
+
+        Returns:
+            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+
+            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
+              width).
+            - **words** -- Optional words as identified by Tesseract OCR (only when :class:`~transformers.BatchFeature`
+              was initialized with :obj:`apply_ocr` set to ``True``).
+            - **boxes** -- Optional bounding boxes as identified by Tesseract OCR, normalized based on the image size
+              (only when :class:`~transformers.BatchFeature` was initialized with :obj:`apply_ocr` set to ``True``).
         """
 
         # Input type checking for clearer error
