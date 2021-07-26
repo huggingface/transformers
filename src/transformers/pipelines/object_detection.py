@@ -142,8 +142,7 @@ class ObjectDetectionPipeline(Pipeline):
                 annotation["boxes"] = [self._get_vertices(box) for box in boxes]
 
                 # {"scores": [...], ...} --> [{"score":x, ...}, ...]
-                plural2singular = {"scores": "score", "labels": "label", "boxes": "box"}
-                keys = [plural2singular[key] for key in annotation]
+                keys = ["score", "label", "box"]
                 annotation = [dict(zip(keys, vals)) for vals in zip(*annotation.values())]
 
                 annotations[i] = annotation
