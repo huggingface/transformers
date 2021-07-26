@@ -140,6 +140,8 @@ class ReformerConfig(PretrainedConfig):
             Whether to tie input and output embeddings.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        classifier_dropout (:obj:`float`, `optional`):
+            The dropout ratio for the classification head.
 
     Examples::
 
@@ -191,6 +193,7 @@ class ReformerConfig(PretrainedConfig):
         vocab_size=320,
         tie_word_embeddings=False,
         use_cache=True,
+        classifier_dropout=None,
         **kwargs
     ):
         super().__init__(
@@ -230,3 +233,4 @@ class ReformerConfig(PretrainedConfig):
         self.chunk_size_lm_head = chunk_size_lm_head
         self.attn_layers = attn_layers
         self.use_cache = use_cache
+        self.classifier_dropout = classifier_dropout
