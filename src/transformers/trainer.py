@@ -2515,10 +2515,11 @@ class Trainer:
         Returns:
             The url of the commit of your model in the given repository.
         """
-        if not self.args.should_save:
-            return
 
-        self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
+        if self.args.should_save:
+            self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
+        # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
+        # self.args.should_save.
         self.save_model()
 
         # Only push from one node.
