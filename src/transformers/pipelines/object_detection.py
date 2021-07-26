@@ -139,7 +139,7 @@ class ObjectDetectionPipeline(Pipeline):
 
                 annotation["scores"] = scores.tolist()
                 annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
-                annotation["boxes"] = [self._get_vertices(box) for box in boxes]
+                annotation["boxes"] = [self._get_clockwise_vertices(box) for box in boxes]
 
                 # {"scores": [...], ...} --> [{"score":x, ...}, ...]
                 keys = ["score", "label", "box"]
