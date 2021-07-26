@@ -1212,7 +1212,10 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         self.config = config
 
         self.mobilebert = MobileBertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -1510,7 +1513,10 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
