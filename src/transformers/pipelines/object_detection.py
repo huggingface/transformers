@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
 
-if is_timm_available() and is_vision_available():
+if is_vision_available():
     from PIL import Image
 
 if is_torch_available():
