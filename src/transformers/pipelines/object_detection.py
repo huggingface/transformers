@@ -158,7 +158,7 @@ class ObjectDetectionPipeline(Pipeline):
         Generates 4 corners of a box in a clockwise order (starting from top-left corner).
 
         Args:
-            box (tensor): Tensor of shape (4) representng 2 opposing corners of object detection box
+            box (tensor): Tensor containing the coordinates in corners format.
 
         Returns:
             vertices (List[Dict[str, int]]): 4 corners of a box
