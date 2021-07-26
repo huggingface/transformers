@@ -107,7 +107,7 @@ class ObjectDetectionPipeline(Pipeline):
                 The probability necessary to make a prediction.
 
         Return:
-            A list of dictionaries or a list of of list of dictionaries containing result. If the input is a single
+            A list of dictionaries or a list of list of dictionaries containing the result. If the input is a single
             image, will return a list of dictionaries, if the input is a list of several images, will return a list of
             list of dictionaries corresponding to each image.
 
