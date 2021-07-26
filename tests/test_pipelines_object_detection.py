@@ -38,32 +38,32 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
     large_models = ["facebook/detr-resnet-50"]  # Models tested without the @slow decorator
     valid_inputs = [
         {"images": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-        # {
-        #     "images": [
-        #         "http://images.cocodataset.org/val2017/000000039769.jpg",
-        #         "http://images.cocodataset.org/val2017/000000039769.jpg",
-        #     ]
-        # },
-        # {"images": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
-        # {
-        #     "images": [
-        #         "./tests/fixtures/tests_samples/COCO/000000039769.png",
-        #         "./tests/fixtures/tests_samples/COCO/000000039769.png",
-        #     ]
-        # },
-        # {"images": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")},
-        # {
-        #     "images": [
-        #         Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-        #         Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-        #     ]
-        # },
-        # {
-        #     "images": [
-        #         Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-        #         "./tests/fixtures/tests_samples/COCO/000000039769.png",
-        #     ]
-        # },
+        {
+            "images": [
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+            ]
+        },
+        {"images": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
+        {
+            "images": [
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            ]
+        },
+        {"images": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")},
+        {
+            "images": [
+                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+            ]
+        },
+        {
+            "images": [
+                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            ]
+        },
     ]
 
     def test_large_model_from_factory(self):
