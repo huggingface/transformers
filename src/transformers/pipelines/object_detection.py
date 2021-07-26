@@ -18,7 +18,6 @@ from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if TYPE_CHECKING:
-    from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
 
 if is_vision_available():
@@ -51,7 +50,7 @@ class ObjectDetectionPipeline(Pipeline):
 
     def __init__(
         self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        model: "PreTrainedModel",
         feature_extractor: PreTrainedFeatureExtractor,
         framework: Optional[str] = None,
         **kwargs
@@ -113,8 +112,8 @@ class ObjectDetectionPipeline(Pipeline):
 
             The dictionaries contain the following keys:
 
-            - **label** (:obj:`str`) -- The label identified by the model. 
-            - **score** (:obj:`int`) -- The score attributed by the model for that label.
+            - **label** (:obj:`str`) -- The label identified by the model.
+            - **score** (:obj:`float`) -- The score attributed by the model for that label.
             - **box** (:obj:`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
         is_batched = isinstance(images, list)
