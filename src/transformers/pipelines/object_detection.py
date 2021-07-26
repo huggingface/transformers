@@ -113,8 +113,7 @@ class ObjectDetectionPipeline(Pipeline):
 
             The dictionaries contain the following keys:
 
-            - **label** (:obj:`str`) -- The label identified by the model. There could be duplicates within the list
-              (corresponding to object of same label within an image).
+            - **label** (:obj:`str`) -- The label identified by the model. 
             - **score** (:obj:`int`) -- The score attributed by the model for that label.
             - **box** (:obj:`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
