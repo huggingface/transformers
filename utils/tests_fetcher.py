@@ -131,7 +131,8 @@ def get_module_dependencies(module_fname):
     imported_modules = []
 
     # Let's start with relative imports
-    relative_imports = re.findall(r"from\s+(\.+\S+)\s+import\s+\S+\s", content)
+    relative_imports = re.findall(r"from\s+(\.+\S+)\s+import\s+([^\n]+)\n", content)
+    relative_imports = [mod for mod, imp in relative_imports if "# tests_ignore" not in imp]
     for imp in relative_imports:
         level = 0
         while imp.startswith("."):
@@ -151,7 +152,8 @@ def get_module_dependencies(module_fname):
     # Let's continue with direct imports
     # The import from the transformers module are ignored for the same reason we ignored the
     # main init before.
-    direct_imports = re.findall(r"from\s+transformers\.(\S+)\s+import\s+\S+\s", content)
+    direct_imports = re.findall(r"from\s+transformers\.(\S+)\s+import\s+([^\n]+)\n", content)
+    direct_imports = [mod for mod, imp in direct_imports if "# tests_ignore" not in imp]
     for imp in direct_imports:
         import_parts = imp.split(".")
         dep_parts = ["src", "transformers"] + import_parts
