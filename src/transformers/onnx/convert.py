@@ -105,6 +105,10 @@ def export(
     if not inputs_match:
         raise ValueError("Model and config inputs doesn't match")
 
+    config.patch_ops()
+
+    outputs = model(**model_inputs)
+
     # export can works with named args but the dict containing named args as to be last element of the args tuple
     export(
         model,
@@ -118,6 +122,8 @@ def export(
         enable_onnx_checker=True,
         opset_version=opset,
     )
+
+    config.restore_ops()
 
     return matched_inputs, onnx_outputs
 

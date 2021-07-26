@@ -34,8 +34,11 @@ class OnnxConfig(ABC):
     DEFAULT_FIXED_BATCH = 2
     DEFAULT_FIXED_SEQUENCE = 8
 
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PretrainedConfig, patching_specs=None):
         self._config = config
+        self._patching_specs = []
+        if patching_specs is not None:
+            self._patching_specs = [(obj, name, getattr(obj, name), custom_op) for (obj, name, custom_op) in patching_specs]
 
     @classmethod
     def default(cls, config: PretrainedConfig) -> "OnnxConfig":
@@ -171,9 +174,18 @@ class OnnxConfig(ABC):
         return dict(tokenizer(dummy_input, return_tensors=framework))
 
 
+    def patch_ops(self):
+        for (obj, name, _, custom_op) in self._patching_specs:
+            setattr(obj, name, custom_op)
+
+    def restore_ops(self):
+        for (obj, name, orig_op, _) in self._patching_specs:
+            setattr(obj, name, orig_op)
+
+
 class OnnxConfigWithPast(OnnxConfig, ABC):
-    def __init__(self, config: PretrainedConfig, use_past: bool = False):
-        super().__init__(config)
+    def __init__(self, config: PretrainedConfig, patching_specs=None, use_past: bool = False):
+        super().__init__(config, patching_specs=patching_specs)
         self.use_past = use_past
 
     @classmethod

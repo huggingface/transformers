@@ -14,7 +14,12 @@
 # limitations under the License.
 """ GPT Neo model configuration """
 
+from typing import Any, Mapping, Optional
+from collections import OrderedDict
+
+from ... import PreTrainedModel, PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -173,3 +178,97 @@ class GPTNeoConfig(PretrainedConfig):
     @property
     def num_hidden_layers(self):
         return self.num_layers
+
+
+def custom_unfold(input, dimension, size, step):
+    """ Custom torch.Tensor.unfold implementation to enable export to ONNX. """
+    import torch
+    shape = input.shape
+    rank = len(shape)
+    sizedim = shape[dimension]
+    low_indices = range(0, sizedim, step)
+    hi_indices = range(size, sizedim + 1, step)
+    stack = []
+    for low, hi in zip(low_indices, hi_indices):
+        s = [slice(None)] * rank
+        s[dimension] = slice(low, hi)
+        stack.append(input[s])
+    perm = list(range(0, rank))
+    perm.append(perm.pop(dimension))
+    unsqueeze = [t.permute(perm).unsqueeze(dimension) for t in stack]
+    return torch.cat(unsqueeze, dim=dimension)
+
+
+class GPTNeoOnnxConfig(OnnxConfigWithPast):
+    def __init__(self, config: PretrainedConfig, use_past: bool = False):
+        if is_torch_available():
+            import torch
+            patching_specs = [(torch.Tensor, "unfold", custom_unfold)]
+        super().__init__(config, patching_specs=patching_specs, use_past=use_past)
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_inputs = OrderedDict({"input_ids": {0: "batch"}})
+        if self.use_past:
+            for i in range(self._config.num_layers * 2):
+                common_inputs[f"past_key_values.{i}"] = {0: "batch", 2: "sequence"}
+
+            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
+        else:
+            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
+
+        return common_inputs
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_outputs = OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}})
+        if self.use_past:
+            for i in range(self._config.num_layers * 2):
+                common_outputs[f"present.{i}"] = {0: "batch", 2: "sequence"}
+
+        return common_outputs
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+        common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+
+        # We need to order the input in the way they appears in the forward()
+        ordered_inputs = OrderedDict({"input_ids": common_inputs["input_ids"]})
+
+        batch = common_inputs["input_ids"].shape[0]
+        past_shapes = {
+            "global": (batch, self._config.num_heads, 1, self._config.hidden_size // self._config.num_attention_heads),
+            "local": (batch,  1, self._config.hidden_size),
+        }
+
+        # Need to add the past_keys
+        if self.use_past:
+            if not is_torch_available():
+                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+            else:
+                import torch
+
+                ordered_inputs["past_key_values"] = [
+                    # torch.zeros((2, ) + past_shapes[self._config.attention_layers[i]])
+                    (
+                        torch.zeros(past_shapes[self._config.attention_layers[i]]),
+                        torch.zeros(past_shapes[self._config.attention_layers[i]]),
+                    )
+                    for i in range(self._config.num_layers)
+                ]
+
+
+        ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
+        if self.use_past:
+            ordered_inputs["attention_mask"] = torch.cat(
+                [ordered_inputs["attention_mask"], torch.zeros(batch, 1)],
+                dim=1
+            )
+
+        return ordered_inputs
