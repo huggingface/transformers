@@ -152,7 +152,7 @@ class ObjectDetectionPipeline(Pipeline):
 
         return annotations
 
-    def _get_vertices(self, box: Tensor) -> List[Dict[str, int]]:
+    def _get_clockwise_vertices(self, box: Tensor) -> List[Dict[str, int]]:
         """
         Generates 4 corners of a box in a clockwise order (starting from top-left corner).
 
