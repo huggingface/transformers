@@ -1030,6 +1030,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 token_boxes,
                 pair_ids,
                 pair_token_boxes,
+                labels,
                 overflowing_tokens,
                 overflowing_token_boxes,
             ) = self.truncate_sequences(
@@ -1037,6 +1038,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 token_boxes,
                 pair_ids=pair_ids,
                 pair_token_boxes=pair_token_boxes,
+                labels=labels, 
                 num_tokens_to_remove=total_len - max_length,
                 truncation_strategy=truncation_strategy,
                 stride=stride,
@@ -1117,6 +1119,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         token_boxes: List[List[int]],
         pair_ids: Optional[List[int]] = None,
         pair_token_boxes: Optional[List[List[int]]] = None,
+        labels: Optional[List[int]] = None,
         num_tokens_to_remove: int = 0,
         truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
         stride: int = 0,
@@ -1135,6 +1138,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 and ``convert_tokens_to_ids`` methods.
             pair_token_boxes (:obj:`List[List[int]]`, `optional`):
                 Bounding boxes of the second sequence.
+            labels (:obj:`List[int]`, `optional`):
+                Labels of the first sequence (for token classification tasks).
             num_tokens_to_remove (:obj:`int`, `optional`, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
             truncation_strategy (:obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`False`):
@@ -1161,7 +1166,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             list of overflowing tokens.
         """
         if num_tokens_to_remove <= 0:
-            return ids, token_boxes, pair_ids, pair_token_boxes, []
+            return ids, token_boxes, pair_ids, pair_token_boxes, labels, [], []
 
         if not isinstance(truncation_strategy, TruncationStrategy):
             truncation_strategy = TruncationStrategy(truncation_strategy)
@@ -1179,6 +1184,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     overflowing_token_boxes.extend(token_boxes[-window_len:])
                     ids = ids[:-1]
                     token_boxes = token_boxes[:-1]
+                    labels = labels[:-1]
                 else:
                     if not overflowing_tokens:
                         window_len = min(len(pair_ids), stride + 1)
@@ -1195,6 +1201,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 overflowing_token_boxes = token_boxes[-window_len:]
                 ids = ids[:-num_tokens_to_remove]
                 token_boxes = token_boxes[:-num_tokens_to_remove]
+                labels = labels[:-num_tokens_to_remove]
             else:
                 logger.error(
                     f"We need to remove {num_tokens_to_remove} to truncate the input"
@@ -1217,7 +1224,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     f"for instance 'longest_first' or 'only_first'."
                 )
 
-        return (ids, token_boxes, pair_ids, pair_token_boxes, overflowing_tokens, overflowing_token_boxes)
+        return (ids, token_boxes, pair_ids, pair_token_boxes, labels, overflowing_tokens, overflowing_token_boxes)
 
     def _pad(
         self,
