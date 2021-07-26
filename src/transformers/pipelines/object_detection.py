@@ -132,19 +132,21 @@ class ObjectDetectionPipeline(Pipeline):
             target_sizes = torch.IntTensor([[im.height, im.width] for im in images])
             annotations = self.feature_extractor.post_process(outputs, target_sizes)
             for i, annotation in enumerate(annotations):
-                annotation_ = []
                 keep = annotation["scores"] > threshold
-                for key, tensor in annotation.items():
-                    annotation[key] = tensor[keep]
-                for score, label, box in zip(annotation["scores"], annotation["labels"], annotation["boxes"]):
-                    annotation_.append(
-                        {
-                            "score": score.item(),
-                            "label": self.model.config.id2label[label.item()],
-                            "box": self._get_vertices(box),
-                        }
-                    )
-                annotations[i] = annotation_
+                scores = annotation["scores"][keep]
+                labels = annotation["labels"][keep]
+                boxes = annotation["boxes"][keep]
+
+                annotation["scores"] = scores.tolist()
+                annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
+                annotation["boxes"] = [self._get_vertices(box) for box in boxes]
+
+                # {"scores": [...], ...} --> [{"score":x, ...}, ...]
+                plural2singular = {"scores": "score", "labels": "label", "boxes": "box"}
+                keys = [plural2singular[key] for key in annotation]
+                annotation = [dict(zip(keys, vals)) for vals in zip(*annotation.values())]
+
+                annotations[i] = annotation
 
         if not is_batched:
             return annotations[0]
