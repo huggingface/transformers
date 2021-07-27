@@ -344,7 +344,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 if "attention_mask" in processed_features:
                     processed_features["attention_mask"] = processed_features["attention_mask"][max_length:]
             else:
-                raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
+                raise ValueError(f"invalid truncation strategy: {self.truncation_side}")
 
         return processed_features
 

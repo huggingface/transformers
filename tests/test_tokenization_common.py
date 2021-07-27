@@ -1600,13 +1600,13 @@ class TokenizerTesterMixin:
                     truncation=True,
                 )
                 truncated_sequence_left_length = len(truncated_sequence_left)
-                assert max_length == truncated_sequence_left_length
+                self.assertEqual(max_length, truncated_sequence_left_length)
 
                 # RIGHT TRUNCATION
                 tokenizer.truncation_side = "right"
                 truncated_sequence_right = tokenizer.encode(sequence, max_length=max_length, truncation=True)
                 truncated_sequence_right_length = len(truncated_sequence_right)
-                assert max_length == truncated_sequence_right_length
+                self.assertEqual(max_length, truncated_sequence_right_length)
 
     def test_separate_tokenizers(self):
         # This tests that tokenizers don't impact others. Unfortunately the case where it fails is when
