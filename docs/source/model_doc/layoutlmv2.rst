@@ -99,6 +99,8 @@ follows:
 - When calling :meth:`~transformer.LayoutLMv2Model.from_pretrained`, a warning will be printed with a long list of
   parameter names that are not initialized. This is not a problem, as these parameters are batch normalization
   statistics, which are going to have values when fine-tuning on a custom dataset.
+- If you want to train the model in a distributed environment, make sure to call :meth:`synchronize_batch_norm` on the
+  model in order to properly synchronize the batch normalization layers of the visual backbone.
 
 In addition, there's LayoutXLM, which is a multilingual version of LayoutLMv2. LayoutXLM was proposed in `LayoutXLM:
 Multimodal Pre-training for Multilingual Visually-rich Document Understanding <https://arxiv.org/abs/2104.08836>`__ by

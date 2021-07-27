@@ -570,23 +570,24 @@ class VisualBackbone(nn.Module):
         return features
 
     def synchronize_batch_norm(self):
-        assert (
+        if not (
             torch.distributed.is_available()
             and torch.distributed.is_initialized()
             and torch.distributed.get_rank() > -1
-        ), "Please make sure torch.distributed is set up properly."
+        ):
+            raise RuntimeError("Make sure torch.distributed is set up properly.")
 
         self_rank = torch.distributed.get_rank()
         node_size = torch.cuda.device_count()
         world_size = torch.distributed.get_world_size()
-        assert world_size % node_size == 0
+        if not (world_size & node_size == 0):
+            raise RuntimeError("Make sure the number of processes can be divided by the number of nodes")
 
         node_global_ranks = [list(range(i * node_size, (i + 1) * node_size)) for i in range(world_size // node_size)]
         sync_bn_groups = [
             torch.distributed.new_group(ranks=node_global_ranks[i]) for i in range(world_size // node_size)
         ]
         node_rank = self_rank // node_size
-        assert self_rank in node_global_ranks[node_rank]
 
         self.backbone = my_convert_sync_batchnorm(self.backbone, process_group=sync_bn_groups[node_rank])
 

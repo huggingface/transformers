@@ -1038,7 +1038,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 token_boxes,
                 pair_ids=pair_ids,
                 pair_token_boxes=pair_token_boxes,
-                labels=labels, 
+                labels=labels,
                 num_tokens_to_remove=total_len - max_length,
                 truncation_strategy=truncation_strategy,
                 stride=stride,
