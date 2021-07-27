@@ -1387,9 +1387,11 @@ INIT_TOKENIZER_DOCSTRING = r"""
           to pass to the `__init__` method of the tokenizer class for this pretrained model when loading the
           tokenizer with the [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`]
           method.
-        - **model_input_names** (`List[str]`) -- A list of inputs expected in the forward pass of the model.
-        - **padding_side** (`str`) -- The default value for the side on which the model should have padding
-          applied. Should be `'right'` or `'left'`.
+        - **model_input_names** (:obj:`List[str]`) -- A list of inputs expected in the forward pass of the model.
+        - **padding_side** (:obj:`str`) -- The default value for the side on which the model should have padding
+          applied. Should be :obj:`'right'` or :obj:`'left'`.
+        - **truncation_side** (:obj:`str`) -- The default value for the side on which the model should truncate
+          sequences. Should be :obj:`'right'` or :obj:`'left'`.
 
     Args:
         model_max_length (`int`, *optional*):
@@ -1400,19 +1402,22 @@ INIT_TOKENIZER_DOCSTRING = r"""
         padding_side: (`str`, *optional*):
             The side on which the model should have padding applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
-        model_input_names (`List[string]`, *optional*):
-            The list of inputs accepted by the forward pass of the model (like `"token_type_ids"` or
-            `"attention_mask"`). Default value is picked from the class attribute of the same name.
-        bos_token (`str` or `tokenizers.AddedToken`, *optional*):
-            A special token representing the beginning of a sentence. Will be associated to `self.bos_token` and
-            `self.bos_token_id`.
-        eos_token (`str` or `tokenizers.AddedToken`, *optional*):
-            A special token representing the end of a sentence. Will be associated to `self.eos_token` and
-            `self.eos_token_id`.
-        unk_token (`str` or `tokenizers.AddedToken`, *optional*):
-            A special token representing an out-of-vocabulary token. Will be associated to `self.unk_token` and
-            `self.unk_token_id`.
-        sep_token (`str` or `tokenizers.AddedToken`, *optional*):
+        truncation_side: (:obj:`str`, `optional`):
+            The side on which the model should truncate sequences. Should be selected between ['right', 'left'].
+            Default value is picked from the class attribute of the same name.
+        model_input_names (:obj:`List[string]`, `optional`):
+            The list of inputs accepted by the forward pass of the model (like :obj:`"token_type_ids"` or
+            :obj:`"attention_mask"`). Default value is picked from the class attribute of the same name.
+        bos_token (:obj:`str` or :obj:`tokenizers.AddedToken`, `optional`):
+            A special token representing the beginning of a sentence. Will be associated to ``self.bos_token`` and
+            ``self.bos_token_id``.
+        eos_token (:obj:`str` or :obj:`tokenizers.AddedToken`, `optional`):
+            A special token representing the end of a sentence. Will be associated to ``self.eos_token`` and
+            ``self.eos_token_id``.
+        unk_token (:obj:`str` or :obj:`tokenizers.AddedToken`, `optional`):
+            A special token representing an out-of-vocabulary token. Will be associated to ``self.unk_token`` and
+            ``self.unk_token_id``.
+        sep_token (:obj:`str` or :obj:`tokenizers.AddedToken`, `optional`):
             A special token separating two different sentences in the same input (used by BERT for instance). Will be
             associated to `self.sep_token` and `self.sep_token_id`.
         pad_token (`str` or `tokenizers.AddedToken`, *optional*):
@@ -1449,6 +1454,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     # to make sure `tokenizer.pad(...)` works correctly
     model_input_names: List[str] = ["input_ids", "token_type_ids", "attention_mask"]
     padding_side: str = "right"
+    truncation_side: str = "right"
     slow_tokenizer_class = None
 
     def __init__(self, **kwargs):
@@ -1467,6 +1473,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             "right",
             "left",
         ], f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
+        # Truncation side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
+        self.truncation_side = kwargs.pop("truncation_side", self.truncation_side)
+        assert self.truncation_side in [
+            "right",
+            "left",
+        ], f"Truncation side should be selected between 'right' and 'left', current value: {self.truncation_side}"
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
         self.deprecation_warnings = (
@@ -1521,7 +1533,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return (
             f"{'PreTrainedTokenizerFast' if self.is_fast else 'PreTrainedTokenizer'}(name_or_path='{self.name_or_path}', "
             f"vocab_size={self.vocab_size}, model_max_len={self.model_max_length}, is_fast={self.is_fast}, "
-            f"padding_side='{self.padding_side}', special_tokens={self.special_tokens_map_extended})"
+            f"padding_side='{self.padding_side}', truncation_side='{self.truncation_side}', "
+            f"special_tokens={self.special_tokens_map_extended})"
         )
 
     def get_vocab(self) -> Dict[str, int]:
@@ -3025,7 +3038,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
                 - `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
                   greater than the model maximum admissible input size).
+<<<<<<< HEAD
             stride (`int`, *optional*, defaults to 0):
+=======
+
+                The tokenizer truncation sides are defined in self.truncation_side:
+
+                    - 'left': truncates sequences from the left
+                    - 'right': truncates sequences from the right
+
+
+            stride (:obj:`int`, `optional`, defaults to 0):
+>>>>>>> First pass
                 If set to a positive number, the overflowing tokens returned will contain some tokens from the main
                 sequence returned. The value of this argument defines the number of additional tokens.
 
@@ -3041,13 +3065,46 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation_strategy = TruncationStrategy(truncation_strategy)
 
         overflowing_tokens = []
-        if truncation_strategy == TruncationStrategy.ONLY_FIRST or (
-            truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is None
-        ):
+        if truncation_strategy == TruncationStrategy.LONGEST_FIRST:
+            for _ in range(num_tokens_to_remove):
+                if pair_ids is None or len(ids) > len(pair_ids):
+                    if not overflowing_tokens:
+                        window_len = min(len(ids), stride + 1)
+                    else:
+                        window_len = 1
+                    if self.truncation_side == "right":
+                        overflowing_tokens.extend(ids[-window_len:])
+                        ids = ids[:-1]
+                    elif self.truncation_side == "left":
+                        overflowing_tokens.extend(ids[:window_len])
+                        ids = ids[1:]
+                    else:
+                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
+                else:
+                    if not overflowing_tokens:
+                        window_len = min(len(pair_ids), stride + 1)
+                    else:
+                        window_len = 1
+                    if self.truncation_side == "right":
+                        overflowing_tokens.extend(pair_ids[-window_len:])
+                        pair_ids = pair_ids[:-1]
+                    elif self.truncation_side == "left":
+                        overflowing_tokens.extend(pair_ids[:window_len])
+                        pair_ids = pair_ids[1:]
+                    else:
+                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
+
+        elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
-                overflowing_tokens = ids[-window_len:]
-                ids = ids[:-num_tokens_to_remove]
+                if self.truncation_side == "right":
+                    overflowing_tokens = ids[-window_len:]
+                    ids = ids[:-num_tokens_to_remove]
+                elif self.truncation_side == "left":
+                    overflowing_tokens = ids[:window_len]
+                    ids = ids[num_tokens_to_remove:]
+                else:
+                    raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
             else:
                 error_msg = (
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
@@ -3074,8 +3131,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
-                overflowing_tokens = pair_ids[-window_len:]
-                pair_ids = pair_ids[:-num_tokens_to_remove]
+                if self.truncation_side == "right":
+                    overflowing_tokens = pair_ids[-window_len:]
+                    pair_ids = pair_ids[:-num_tokens_to_remove]
+                elif self.truncation_side == "left":
+                    overflowing_tokens = pair_ids[:window_len]
+                    pair_ids = pair_ids[num_tokens_to_remove:]
+                else:
+                    raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
             else:
                 logger.error(
                     f"We need to remove {num_tokens_to_remove} to truncate the input "

@@ -54,6 +54,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         self.padding_value = padding_value
 
         self.padding_side = kwargs.pop("padding_side", "right")
+        self.truncation_side = kwargs.pop("truncation_side", "right")
         self.return_attention_mask = kwargs.pop("return_attention_mask", True)
 
         super().__init__(**kwargs)
@@ -304,7 +305,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         truncation: Optional[bool] = None,
     ):
         """
-        Truncate inputs to predefined length or max length in the batch
+        Truncate inputs (on left/right and up to predefined length or max length in the batch)
+
+        Truncation side (left/right) values are defined at the feature extractor level (with ``self.truncation_side``)
 
         Args:
             processed_features: Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
@@ -328,9 +331,20 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         needs_to_be_truncated = len(required_input) > max_length
 
         if needs_to_be_truncated:
-            processed_features[self.model_input_names[0]] = processed_features[self.model_input_names[0]][:max_length]
-            if "attention_mask" in processed_features:
-                processed_features["attention_mask"] = processed_features["attention_mask"][:max_length]
+            if self.truncation_side == "right":
+                processed_features[self.model_input_names[0]] = processed_features[self.model_input_names[0]][
+                    :max_length
+                ]
+                if "attention_mask" in processed_features:
+                    processed_features["attention_mask"] = processed_features["attention_mask"][:max_length]
+            elif self.truncation_side == "left":
+                processed_features[self.model_input_names[0]] = processed_features[self.model_input_names[0]][
+                    max_length:
+                ]
+                if "attention_mask" in processed_features:
+                    processed_features["attention_mask"] = processed_features["attention_mask"][max_length:]
+            else:
+                raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
 
         return processed_features
 

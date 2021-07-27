@@ -1585,6 +1585,29 @@ class TokenizerTesterMixin:
                     assert attention_mask + [0] * padding_size == right_padded_attention_mask
                     assert [0] * padding_size + attention_mask == left_padded_attention_mask
 
+    def test_right_and_left_truncation(self):
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                sequence = "I wanted to go running"
+                max_length = 5
+
+                # LEFT TRUNCATION
+                tokenizer.truncation_side = "left"
+                truncated_sequence_left = tokenizer.encode(
+                    sequence,
+                    max_length=max_length,
+                    truncation=True,
+                )
+                truncated_sequence_left_length = len(truncated_sequence_left)
+                assert max_length == truncated_sequence_left_length
+
+                # RIGHT TRUNCATION
+                tokenizer.truncation_side = "right"
+                truncated_sequence_right = tokenizer.encode(sequence, max_length=max_length, truncation=True)
+                truncated_sequence_right_length = len(truncated_sequence_right)
+                assert max_length == truncated_sequence_right_length
+
     def test_separate_tokenizers(self):
         # This tests that tokenizers don't impact others. Unfortunately the case where it fails is when
         # we're loading an S3 configuration from a pre-trained identifier, and we have no way of testing those today.
