@@ -21,7 +21,7 @@ from ...file_utils import _LazyModule, is_flax_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
+    "configuration_gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig", "GPTNeoOnnxConfig"],
 }
 
 if is_torch_available():

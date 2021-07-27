@@ -107,8 +107,6 @@ def export(
 
     config.patch_ops()
 
-    outputs = model(**model_inputs)
-
     # export can works with named args but the dict containing named args as to be last element of the args tuple
     export(
         model,

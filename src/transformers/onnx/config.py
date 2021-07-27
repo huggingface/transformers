@@ -13,7 +13,7 @@
 # limitations under the License.
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, List, Mapping, Optional, Tuple
 
 from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
 
@@ -25,6 +25,14 @@ DEFAULT_ONNX_OPSET = 11
 # 2 Gb
 EXTERNAL_DATA_FORMAT_SIZE_LIMIT = 2 * 1024 * 1024 * 1024
 
+_TASK_TO_COMMON_OUTPUTS = {
+    "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
+    "causal_lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+    "sequence_classification": OrderedDict({"logits": {0: "batch"}}),
+}
+
+PatchingSpec = Tuple[Any, str, Callable]
+
 
 class OnnxConfig(ABC):
     """
@@ -34,14 +42,21 @@ class OnnxConfig(ABC):
     DEFAULT_FIXED_BATCH = 2
     DEFAULT_FIXED_SEQUENCE = 8
 
-    def __init__(self, config: PretrainedConfig, patching_specs=None):
+    def __init__(self, config: PretrainedConfig, task: str = "default", patching_specs: List[PatchingSpec] = None):
         self._config = config
+
+        if task not in _TASK_TO_COMMON_OUTPUTS:
+            raise ValueError(f"{task} is not a supported task, supported tasks: {_TASK_TO_COMMON_OUTPUTS.keys()}")
+        self.task = task
+
         self._patching_specs = []
         if patching_specs is not None:
-            self._patching_specs = [(obj, name, getattr(obj, name), custom_op) for (obj, name, custom_op) in patching_specs]
+            self._patching_specs = [
+                (obj, name, getattr(obj, name), custom_op) for (obj, name, custom_op) in patching_specs
+            ]
 
     @classmethod
-    def default(cls, config: PretrainedConfig) -> "OnnxConfig":
+    def default(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":
         """
         Instantiate a OnnxConfig for a specific model
 
@@ -51,7 +66,7 @@ class OnnxConfig(ABC):
         Returns:
             OnnxConfig for this model
         """
-        return cls(config)
+        return cls(config, task=task)
 
     @property
     @abstractmethod
@@ -65,7 +80,6 @@ class OnnxConfig(ABC):
         raise NotImplementedError()
 
     @property
-    @abstractmethod
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         """
         Mapping containing the axis definition of the output tensors to provide to the model
@@ -73,7 +87,7 @@ class OnnxConfig(ABC):
         Returns:
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
-        raise NotImplementedError()
+        return _TASK_TO_COMMON_OUTPUTS[self.task]
 
     @property
     def values_override(self) -> Optional[Mapping[str, Any]]:
@@ -173,7 +187,6 @@ class OnnxConfig(ABC):
         dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
         return dict(tokenizer(dummy_input, return_tensors=framework))
 
-
     def patch_ops(self):
         for (obj, name, _, custom_op) in self._patching_specs:
             setattr(obj, name, custom_op)
@@ -184,12 +197,18 @@ class OnnxConfig(ABC):
 
 
 class OnnxConfigWithPast(OnnxConfig, ABC):
-    def __init__(self, config: PretrainedConfig, patching_specs=None, use_past: bool = False):
-        super().__init__(config, patching_specs=patching_specs)
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        task: str = "default",
+        patching_specs: List[PatchingSpec] = None,
+        use_past: bool = False,
+    ):
+        super().__init__(config, task=task, patching_specs=patching_specs)
         self.use_past = use_past
 
     @classmethod
-    def with_past(cls, config: PretrainedConfig) -> "OnnxConfigWithPast":
+    def with_past(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfigWithPast":
         """
         Instantiate a OnnxConfig with `use_past` attribute set to True
 
@@ -199,7 +218,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         Returns:
             OnnxConfig with `.use_past = True`
         """
-        return cls(config, use_past=True)
+        return cls(config, task=task, use_past=True)
 
     @property
     def values_override(self) -> Optional[Mapping[str, Any]]:

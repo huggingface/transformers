@@ -14,10 +14,10 @@
 # limitations under the License.
 """ GPT Neo model configuration """
 
-from typing import Any, Mapping, Optional
 from collections import OrderedDict
+from typing import Any, Mapping, Optional
 
-from ... import PreTrainedModel, PreTrainedTokenizer, TensorType, is_torch_available
+from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast
 from ...utils import logging
@@ -181,8 +181,9 @@ class GPTNeoConfig(PretrainedConfig):
 
 
 def custom_unfold(input, dimension, size, step):
-    """ Custom torch.Tensor.unfold implementation to enable export to ONNX. """
+    """Custom torch.Tensor.unfold implementation to enable export to ONNX."""
     import torch
+
     shape = input.shape
     rank = len(shape)
     sizedim = shape[dimension]
@@ -200,15 +201,16 @@ def custom_unfold(input, dimension, size, step):
 
 
 class GPTNeoOnnxConfig(OnnxConfigWithPast):
-    def __init__(self, config: PretrainedConfig, use_past: bool = False):
+    def __init__(self, config: PretrainedConfig, task: str = "default", use_past: bool = False):
         if is_torch_available():
             import torch
+
             patching_specs = [(torch.Tensor, "unfold", custom_unfold)]
-        super().__init__(config, patching_specs=patching_specs, use_past=use_past)
+        super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict({"input_ids": {0: "batch"}})
+        common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
             for i in range(self._config.num_layers * 2):
                 common_inputs[f"past_key_values.{i}"] = {0: "batch", 2: "sequence"}
@@ -221,7 +223,7 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_outputs = OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}})
+        common_outputs = super().outputs
         if self.use_past:
             for i in range(self._config.num_layers * 2):
                 common_outputs[f"present.{i}"] = {0: "batch", 2: "sequence"}
@@ -244,7 +246,7 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         batch = common_inputs["input_ids"].shape[0]
         past_shapes = {
             "global": (batch, self._config.num_heads, 1, self._config.hidden_size // self._config.num_attention_heads),
-            "local": (batch,  1, self._config.hidden_size),
+            "local": (batch, 1, self._config.hidden_size),
         }
 
         # Need to add the past_keys
@@ -263,12 +265,10 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
                     for i in range(self._config.num_layers)
                 ]
 
-
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
             ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.zeros(batch, 1)],
-                dim=1
+                [ordered_inputs["attention_mask"], torch.zeros(batch, 1)], dim=1
             )
 
         return ordered_inputs
