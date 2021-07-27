@@ -134,6 +134,8 @@ def infer_framework_load_model(
 
             try:
                 model = model_class.from_pretrained(model, **kwargs)
+                if hasattr(model, "eval"):
+                    model = model.eval()
                 # Stop loading on the first successful load.
                 break
             except (OSError, ValueError):

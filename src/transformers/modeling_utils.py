@@ -1415,7 +1415,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
-
         # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
         # matching the weights in the model.
         mismatched_keys = []
@@ -1485,13 +1484,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
-        model_to_load = model
         if not hasattr(model, cls.base_model_prefix) and has_prefix_module:
             start_prefix = cls.base_model_prefix + "."
+        load(model, prefix=start_prefix)
         if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
             model_to_load = getattr(model, cls.base_model_prefix)
-
-        load(model_to_load, prefix=start_prefix)
+            load(model_to_load, prefix=start_prefix)
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
