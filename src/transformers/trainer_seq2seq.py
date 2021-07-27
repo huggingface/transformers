@@ -70,9 +70,9 @@ class Seq2SeqTrainer(Trainer):
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
-        if max_length is not None or not hasattr(self, '_max_length'):
+        if max_length is not None or not hasattr(self, "_max_length"):
             self._max_length = max_length
-        if num_beams is not None or not hasattr(self, '_num_beams'):
+        if num_beams is not None or not hasattr(self, "_num_beams"):
             self._num_beams = num_beams
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
@@ -119,9 +119,9 @@ class Seq2SeqTrainer(Trainer):
             - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
               contained labels).
         """
-        if max_length is not None or not hasattr(self, '_max_length'):
+        if max_length is not None or not hasattr(self, "_max_length"):
             self._max_length = max_length
-        if num_beams is not None or not hasattr(self, '_num_beams'):
+        if num_beams is not None or not hasattr(self, "_num_beams"):
             self._num_beams = num_beams
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
