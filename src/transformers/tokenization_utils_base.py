@@ -1469,16 +1469,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Padding side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
-        assert self.padding_side in [
-            "right",
-            "left",
-        ], f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
+        if self.padding_side not in ["right", "left"]:
+            raise ValueError(
+                f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
+            )
         # Truncation side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
         self.truncation_side = kwargs.pop("truncation_side", self.truncation_side)
-        assert self.truncation_side in [
-            "right",
-            "left",
-        ], f"Truncation side should be selected between 'right' and 'left', current value: {self.truncation_side}"
+        if self.truncation_side not in ["right", "left"]:
+            raise ValueError(
+                f"Truncation side should be selected between 'right' and 'left', current value: {self.truncation_side}"
+            )
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
         self.deprecation_warnings = (
@@ -3046,7 +3046,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
                     - 'left': truncates sequences from the left
                     - 'right': truncates sequences from the right
-
 
             stride (:obj:`int`, `optional`, defaults to 0):
 >>>>>>> First pass
