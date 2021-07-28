@@ -45,7 +45,7 @@ class OnnxUtilsTestCaseV2(TestCase):
     @patch(is_torch_onnx_dict_inputs_support_available, return_value=False)
     def test_ensure_pytorch_version_ge_1_8_0(self, mock_is_torch_onnx_dict_inputs_support_available):
         """
-        Ensure
+        Ensure we raise an Exception if the pytorch version is unsupported (< 1.8.0)
         """
         mock_is_torch_onnx_dict_inputs_support_available.assert_called()
         self.assertRaises(Exception, convert, None, None, None, None, None)
