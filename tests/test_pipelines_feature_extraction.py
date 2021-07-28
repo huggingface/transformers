@@ -58,7 +58,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         elif isinstance(input_, float):
             return 0
         else:
-            raise Exception("We expect lists of floats, nothing else")
+            raise ValueError("We expect lists of floats, nothing else")
         return shape
 
     def run_pipeline_test(self, model, tokenizer):
