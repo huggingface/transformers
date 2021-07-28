@@ -964,7 +964,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
             >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             >>> outputs = model(input_ids)
 
-            >>> prediction_logits = outptus.prediction_logits
+            >>> prediction_logits = outputs.prediction_logits
             >>> seq_relationship_logits = outputs.seq_relationship_logits
 
         """
