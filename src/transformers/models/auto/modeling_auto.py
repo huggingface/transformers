@@ -21,6 +21,15 @@ from collections import OrderedDict
 from ...utils import logging
 
 # Add modeling imports here
+from ..beit.modeling_beit import (
+    BEiTForMaskedLM,
+    BEiTForCausalLM,
+    BEiTForMultipleChoice,
+    BEiTForQuestionAnswering,
+    BEiTForSequenceClassification,
+    BEiTForTokenClassification,
+    BEiTModel,
+)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -319,6 +328,7 @@ from ..xlnet.modeling_xlnet import (
 )
 from .auto_factory import _BaseAutoModelClass, auto_class_update
 from .configuration_auto import (
+    BEiTConfig,
     AlbertConfig,
     BartConfig,
     BertConfig,
@@ -388,6 +398,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (BEiTConfig, BEiTModel),
         (RemBertConfig, RemBertModel),
         (VisualBertConfig, VisualBertModel),
         (CanineConfig, CanineModel),
@@ -493,6 +504,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+(BEiTConfig, BEiTForMaskedLM),
         (RemBertConfig, RemBertForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
@@ -542,6 +554,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
+        (BEiTConfig, BEiTForCausalLM),
         (RemBertConfig, RemBertForCausalLM),
         (RoFormerConfig, RoFormerForCausalLM),
         (BigBirdPegasusConfig, BigBirdPegasusForCausalLM),
@@ -585,6 +598,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
+(BEiTConfig, BEiTForMaskedLM),
         (RemBertConfig, RemBertForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdConfig, BigBirdForMaskedLM),
@@ -647,6 +661,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (BEiTConfig, BEiTForSequenceClassification),
         (RemBertConfig, RemBertForSequenceClassification),
         (CanineConfig, CanineForSequenceClassification),
         (RoFormerConfig, RoFormerForSequenceClassification),
@@ -689,6 +704,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (BEiTConfig, BEiTForQuestionAnswering),
         (RemBertConfig, RemBertForQuestionAnswering),
         (CanineConfig, CanineForQuestionAnswering),
         (RoFormerConfig, RoFormerForQuestionAnswering),
@@ -732,6 +748,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+(BEiTConfig, BEiTForTokenClassification),
         (RemBertConfig, RemBertForTokenClassification),
         (CanineConfig, CanineForTokenClassification),
         (RoFormerConfig, RoFormerForTokenClassification),
@@ -764,6 +781,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+(BEiTConfig, BEiTForMultipleChoice),
         (RemBertConfig, RemBertForMultipleChoice),
         (CanineConfig, CanineForMultipleChoice),
         (RoFormerConfig, RoFormerForMultipleChoice),

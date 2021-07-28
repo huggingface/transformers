@@ -147,6 +147,7 @@ _import_structure = {
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
+    "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BEiTConfig", "BEiTFeatureExtractor"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BasicTokenizer",
@@ -417,6 +418,7 @@ if is_vision_available():
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
+    _import_structure["models.beit"].append("BEiTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
@@ -496,6 +498,7 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -510,7 +513,6 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
-
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -542,7 +544,6 @@ if is_torch_available():
             "AutoModelWithLMHead",
         ]
     )
-
     _import_structure["models.bart"].extend(
         [
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -553,6 +554,14 @@ if is_torch_available():
             "BartModel",
             "BartPretrainedModel",
             "PretrainedBartModel",
+        ]
+    )
+    _import_structure["models.beit"].extend(
+        [
+            "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BEiTForImageClassification",
+            "BEiTModel",
+            "BEiTPreTrainedModel",
         ]
     )
     _import_structure["models.bert"].extend(
@@ -1813,6 +1822,7 @@ if TYPE_CHECKING:
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
+    from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BEiTConfig
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BasicTokenizer,
@@ -2068,6 +2078,7 @@ if TYPE_CHECKING:
         from .utils.dummy_timm_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2169,6 +2180,12 @@ if TYPE_CHECKING:
             BartModel,
             BartPretrainedModel,
             PretrainedBartModel,
+        )
+        from .models.beit import (
+            BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BEiTForImageClassification,
+            BEiTModel,
+            BEiTPreTrainedModel,
         )
         from .models.bert import (
             BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
