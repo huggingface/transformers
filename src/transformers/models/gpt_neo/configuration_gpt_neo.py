@@ -183,65 +183,23 @@ class GPTNeoConfig(PretrainedConfig):
 def custom_unfold(input, dimension, size, step):
     """Custom torch.Tensor.unfold implementation to enable export to ONNX."""
     import torch
+
     shape = input.size()
     rank = len(shape)
     sizedim = shape[dimension]
-    low_indices = torch.arange(0, sizedim, step)
-    hi_indices = torch.arange(size, sizedim + 1, step)
-    min_length = (sizedim - size) // step + 1
-    # print("low_indices", low_indices)
-    # print("hi_indices", hi_indices)
-    # print("min_length", min_length)
-    # hi_indices = hi_indices[:min_length]
-    # import pdb; pdb.set_trace()
-    # indices = torch.stack([low_indices, hi_indices], dim=1)
-    # indices = indices[:, :, None]
-    # print("low_indices", low_indices)
-    # print("hi_indices", hi_indices)
-    it = list(zip(range(0, sizedim, step), range(size, sizedim + 1, step)))
-    supposed_indices = torch.stack(
-        [torch.arange(start=lo, end=hi) for (lo, hi) in it],
-        dim=0
-    )
-    print(supposed_indices)
-    # print("supposed indices", supposed_indices)
-    indices = torch.arange(size) + low_indices[:min_length][:, None]
-    print(indices)
 
-    #indices = indices[:min_length]
-    # print(indices)
-    # print(supposed_indices)
-    print("matching", torch.all(indices == supposed_indices))
-    # stack = input[torch.arange(indices.shape[0])[:, None] , :]
+    low_indices = torch.arange(0, sizedim, step)
+    min_length = (sizedim - size) // step + 1
+    indices = torch.arange(size) + low_indices[:min_length][:, None]
+
     s = [slice(None)] * rank
     s[dimension] = indices
     sliced = input[s]
-    print("input shape", input.shape)
-    print("indices shape", indices.shape)
-    print("sliced shape", sliced.shape)
-    # print(stack, stack.shape)
-    stack = []
-    for t in it:
-        s = [slice(None)] * rank
-        s[dimension] = slice(t[0], t[1])
-        stack.append(input[s])
-        # stack.append(torch.narrow(input, dim=dimension, start=t[0], length=t[1]-t[0]))
-    print("stack shape", len(stack), stack[0].shape)
-    perm = list(range(0, rank))
-    sliced_perm = list(range(0, rank + 1))
-    perm.append(perm.pop(dimension))
-    sliced_perm.append(sliced_perm.pop(dimension + 1))
-    print("perm", perm)
-    print("sliced perm", perm)
-    # stack = stack.permute(perm)
-    unsqueeze = [t.permute(perm).unsqueeze(dimension) for t in stack]
-    ready_sliced = sliced.permute(sliced_perm)
-    print("unsqueeze shape", unsqueeze[0].shape)
-    print("ready_sliced shape", ready_sliced.shape)
-    res = torch.cat(unsqueeze, dim=dimension)
-    print("res shape", res.shape)
-    return ready_sliced
-    return torch.cat(unsqueeze, dim=dimension)
+
+    perm = list(range(0, rank + 1))
+    perm.append(perm.pop(dimension + 1))
+
+    return sliced.permute(perm)
 
 
 class GPTNeoOnnxConfig(OnnxConfigWithPast):
