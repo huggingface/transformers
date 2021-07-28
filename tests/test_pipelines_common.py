@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 def get_checkpoint_from_architecture(architecture):
     try:
         module = importlib.import_module(architecture.__module__)
-    except Exception:
+    except ImportError:
         logger.error(f"Ignoring architecture {architecture}")
         return
 
