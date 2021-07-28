@@ -123,6 +123,13 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
+    max_seq_length: int = field(
+        default=None,
+        metadata={
+            "help": "The maximum total input sequence length after tokenization. If set, sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
     pad_to_max_length: bool = field(
         default=False,
         metadata={
@@ -358,6 +365,7 @@ def main():
             examples[text_column_name],
             padding=padding,
             truncation=True,
+            max_length=data_args.max_seq_length,
             # We use this argument because the texts in our dataset are lists of words (with a label for each word).
             is_split_into_words=True,
         )
