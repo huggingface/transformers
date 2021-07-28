@@ -18,12 +18,16 @@ import shutil
 import tempfile
 import unittest
 
-from PIL import Image
-
-from transformers.file_utils import FEATURE_EXTRACTOR_NAME
-from transformers.models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor, LayoutLMv2Tokenizer
+from transformers.file_utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+from transformers.models.layoutlmv2 import LayoutLMv2Tokenizer
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_pytesseract, require_torch, slow
+
+
+if is_pytesseract_available():
+    from PIL import Image
+
+    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
 
 
 class LayoutLMv2ProcessorTest(unittest.TestCase):
@@ -101,24 +105,29 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
-    # we verify our implementation on 2 document images from the DocVQA dataset
+
+# integration tests
+@require_torch
+@require_pytesseract
+class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
+    @cached_property
     def get_images(self):
+        # we verify our implementation on 2 document images from the DocVQA dataset
         image_1 = Image.open("tests/fixtures/tests_samples/DocVQA/document.png").convert("RGB")
         image_2 = Image.open("tests/fixtures/tests_samples/DocVQA/document_2.png").convert("RGB")
 
         return image_1, image_2
 
-    # integration tests
     @slow
     def test_processor_case_1(self):
         # case 1: document image classification (training, inference) + token classification (inference), apply_ocr = True
 
-        feature_extractor = self.get_feature_extractor()
+        feature_extractor = LayoutLMv2FeatureExtractor()
         tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
         processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-        images = self.get_images()
+        images = self.get_images
 
         # not batched
         input_feat_extract = feature_extractor(images[0], return_tensors="pt")
@@ -147,7 +156,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         self.assertListEqual(list(input_processor.keys()), expected_keys)
 
         # verify images
-        self.assertAlmostEqual(input_feat_extract["pixel_values"].sum(), input_processor["images"].sum(), delta=1e-2)
+        self.assertAlmostEqual(input_feat_extract["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2)
 
         # verify input_ids
         # fmt: off
@@ -156,6 +165,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         decoding = tokenizer.decode(input_processor.input_ids[1].tolist())
         self.assertSequenceEqual(decoding, expected_decoding)
 
+    @slow
     def test_processor_case_2(self):
         # case 2: document image classification (training, inference) + token classification (inference), apply_ocr=False
 
@@ -164,7 +174,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
 
         processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-        images = self.get_images()
+        images = self.get_images
 
         # not batched
         words = ["hello", "world"]
@@ -206,6 +216,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         ]
         self.assertListEqual(input_processor.bbox[1].tolist(), expected_bbox)
 
+    @slow
     def test_processor_case_3(self):
         # case 3: token classification (training), apply_ocr=False
 
@@ -214,7 +225,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
 
         processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-        images = self.get_images()
+        images = self.get_images
 
         # not batched
         words = ["weirdly", "world"]
@@ -268,6 +279,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         expected_labels = [-100, 6, 3, 10, 2, -100, -100]
         self.assertListEqual(input_processor.labels[1].tolist(), expected_labels)
 
+    @slow
     def test_processor_case_4(self):
         # case 4: visual question answering (inference), apply_ocr=True
 
@@ -276,7 +288,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
 
         processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-        images = self.get_images()
+        images = self.get_images
 
         # not batched
         question = "What's his name?"
@@ -314,6 +326,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         # fmt: on
         self.assertListEqual(input_processor.bbox[1].tolist(), expected_bbox)
 
+    @slow
     def test_processor_case_5(self):
         # case 4: visual question answering (inference), apply_ocr=False
 
@@ -322,7 +335,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
 
         processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-        images = self.get_images()
+        images = self.get_images
 
         # not batched
         question = "What's his name?"
