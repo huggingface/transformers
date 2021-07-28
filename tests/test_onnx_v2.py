@@ -46,8 +46,8 @@ class OnnxUtilsTestCaseV2(TestCase):
         """
         Ensure we raise an Exception if the pytorch version is unsupported (< 1.8.0)
         """
-        mock_is_torch_onnx_dict_inputs_support_available.assert_called()
         self.assertRaises(Exception, convert, None, None, None, None, None)
+        mock_is_torch_onnx_dict_inputs_support_available.assert_called()
 
     def test_compute_effective_axis_dimension(self):
         """
