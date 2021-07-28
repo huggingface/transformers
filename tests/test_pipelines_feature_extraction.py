@@ -27,7 +27,9 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
     @require_torch
     def test_small_model_pt(self):
-        feature_extractor = pipeline(task="feature-extraction", model="Narsil/tiny-distilbert", framework="pt")
+        feature_extractor = pipeline(
+            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
+        )
         outputs = feature_extractor("This is a test")
         self.assertEqual(
             nested_simplify(outputs),
@@ -74,24 +76,10 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             return
 
         outputs = feature_extractor("This is a test")
-        # Output shape is NxTxE where
-        # N = number of sequences passed
-        # T = number of tokens in sequence (depends on the tokenizer)
-        # E = number of embedding dimensions
 
         shape = self.get_shape(outputs)
         self.assertEqual(shape[0], 1)
-        # self.assertIsInstance(outputs[0], list)
-        # self.assertIsInstance(outputs[0][0], list)
-        # self.assertIsInstance(outputs[0][0][0], float)
-        # self.assertTrue(all(isinstance(el, float) for row in outputs for col in row for el in col))
 
         outputs = feature_extractor(["This is a test", "Another test"])
         shape = self.get_shape(outputs)
         self.assertEqual(shape[0], 2)
-        # self.assertIsInstance(outputs, list)
-        # self.assertEqual(len(outputs), 2)
-        # self.assertIsInstance(outputs[0], list)
-        # self.assertIsInstance(outputs[0][0], list)
-        # self.assertIsInstance(outputs[0][0][0], float)
-        # self.assertTrue(all(isinstance(el, float) for row in outputs for col in row for el in col))

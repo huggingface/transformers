@@ -80,9 +80,9 @@ class FeatureExtractionPipeline(Pipeline):
             A nested list of :obj:`float`: The features computed by the model.
         """
         results = super().__call__(*args, **kwargs)
-        if hasattr(results, "tolist"):
-            results = results.tolist()
-        else:
-            print("Sequential results")
+        if isinstance(results, list):
+            # Sequential run
             results = [r.tolist() for r in results]
+        else:
+            results = results.tolist()
         return results
