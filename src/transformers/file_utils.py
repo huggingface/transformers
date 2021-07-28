@@ -274,7 +274,7 @@ PRESET_MIRROR_DICT = {
     "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
 }
 
-# This is the version of torch required to run torch.fx features.
+# This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
@@ -297,10 +297,10 @@ def is_torch_cuda_available():
         return False
 
 
-_torch_fx_available = False
+_torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
-    _torch_fx_available = (torch_version.major, torch_version.minor) == (
+    _torch_fx_available = _torch_onnx_dict_inputs_support_available = (torch_version.major, torch_version.minor) == (
         TORCH_FX_REQUIRED_VERSION.major,
         TORCH_FX_REQUIRED_VERSION.minor,
     )
@@ -308,6 +308,10 @@ if _torch_available:
 
 def is_torch_fx_available():
     return _torch_fx_available
+
+
+def is_torch_onnx_dict_inputs_support_available():
+    return _torch_onnx_dict_inputs_support_available
 
 
 def is_tf_available():
