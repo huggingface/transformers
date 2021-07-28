@@ -477,7 +477,7 @@ class AutoTokenizer:
                       applicable to all derived classes)
             inputs (additional positional arguments, `optional`):
                 Will be passed along to the Tokenizer ``__init__()`` method.
-            config (:class:`~transformers.PreTrainedConfig`, `optional`)
+            config (:class:`~transformers.PretrainedConfig`, `optional`)
                 The configuration object used to dertermine the tokenizer class to instantiate.
             cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
