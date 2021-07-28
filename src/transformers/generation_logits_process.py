@@ -137,7 +137,7 @@ class TemperatureLogitsWarper(LogitsWarper):
 
         self.temperature = temperature
 
-    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
+    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.FloatTensor:
         scores = scores / self.temperature
         return scores
 
