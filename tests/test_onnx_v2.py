@@ -13,6 +13,7 @@ from transformers import (  # LongformerConfig,; T5Config,
     XLMRobertaConfig,
     is_torch_available,
 )
+from transformers.file_utils import is_torch_onnx_dict_inputs_support_available
 from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.bart import BartOnnxConfig
 from transformers.models.bert.configuration_bert import BertConfig, BertOnnxConfig
@@ -24,7 +25,8 @@ from transformers.models.roberta import RobertaOnnxConfig
 
 # from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
-from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat, validate_model_outputs
+from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat, validate_model_outputs, \
+    convert
 from transformers.onnx.config import DEFAULT_ONNX_OPSET, OnnxConfigWithPast
 from transformers.onnx.utils import (
     compute_effective_axis_dimension,
@@ -39,6 +41,14 @@ class OnnxUtilsTestCaseV2(TestCase):
     """
     Cover all the utilities involved to export ONNX models
     """
+
+    @patch(is_torch_onnx_dict_inputs_support_available, return_value=False)
+    def test_ensure_pytorch_version_ge_1_8_0(self, mock_is_torch_onnx_dict_inputs_support_available):
+        """
+        Ensure
+        """
+        mock_is_torch_onnx_dict_inputs_support_available.assert_called()
+        self.assertRaises(Exception, convert, None, None, None, None, None)
 
     def test_compute_effective_axis_dimension(self):
         """
