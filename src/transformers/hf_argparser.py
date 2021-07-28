@@ -16,7 +16,7 @@ import dataclasses
 import json
 import re
 import sys
-from argparse import ArgumentParser, ArgumentTypeError
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
 from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, List, NewType, Optional, Tuple, Union
@@ -59,6 +59,9 @@ class HfArgumentParser(ArgumentParser):
             kwargs:
                 (Optional) Passed to `argparse.ArgumentParser()` in the regular way.
         """
+        # To make the default appear when using --help
+        if "formatter_class" not in kwargs:
+            kwargs["formatter_class"] = ArgumentDefaultsHelpFormatter
         super().__init__(**kwargs)
         if dataclasses.is_dataclass(dataclass_types):
             dataclass_types = [dataclass_types]
