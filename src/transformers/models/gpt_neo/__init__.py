@@ -43,7 +43,7 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
+    from .configuration_gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig, GPTNeoOnnxConfig
 
     if is_torch_available():
         from .modeling_gpt_neo import (
