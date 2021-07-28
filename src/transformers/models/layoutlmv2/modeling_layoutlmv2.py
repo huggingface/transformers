@@ -1240,10 +1240,10 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
     LAYOUTLMV2_START_DOCSTRING,
 )
 class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, has_visual_segment_embedding=True):
         super().__init__(config)
         self.num_labels = config.num_labels
-        config.has_visual_segment_embedding = True
+        config.has_visual_segment_embedding = has_visual_segment_embedding
         self.layoutlmv2 = LayoutLMv2Model(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 

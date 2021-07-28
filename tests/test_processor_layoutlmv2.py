@@ -30,6 +30,7 @@ if is_pytesseract_available():
     from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
 
 
+@require_pytesseract
 class LayoutLMv2ProcessorTest(unittest.TestCase):
     def setUp(self):
         vocab_tokens = [
@@ -106,7 +107,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
 
-# integration tests
+# different use cases tests
 @require_torch
 @require_pytesseract
 class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):

@@ -1055,15 +1055,15 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 words, boxes = self.get_words_and_boxes()
 
                 # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, boxes, return_tensors="pt")
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, boxes, return_tensors="tf")
+                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, boxes=boxes, return_tensors="pt")
+                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, boxes=boxes, return_tensors="tf")
 
                 if tokenizer.pad_token_id is None:
                     self.assertRaises(
                         ValueError,
                         tokenizer.batch_encode_plus,
                         words,
-                        boxes,
+                        boxes=boxes,
                         padding=True,
                         return_tensors="pt",
                     )
@@ -1071,16 +1071,16 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         ValueError,
                         tokenizer.batch_encode_plus,
                         words,
-                        boxes,
+                        boxes=boxes,
                         padding="longest",
                         return_tensors="tf",
                     )
                 else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(words, boxes, padding=True, return_tensors="pt")
+                    pytorch_tensor = tokenizer.batch_encode_plus(words, boxes=boxes, padding=True, return_tensors="pt")
                     tensorflow_tensor = tokenizer.batch_encode_plus(
-                        words, boxes, padding="longest", return_tensors="tf"
+                        words, boxes=boxes, padding="longest", return_tensors="tf"
                     )
-                    encoded_sequences = tokenizer.batch_encode_plus(words, boxes, padding=True)
+                    encoded_sequences = tokenizer.batch_encode_plus(words, boxes=boxes, padding=True)
 
                     for key in encoded_sequences.keys():
                         pytorch_value = pytorch_tensor[key].tolist()
