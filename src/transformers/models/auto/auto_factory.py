@@ -361,6 +361,7 @@ class _BaseAutoModelClass:
             f"`{self.__class__.__name__}.from_config(config)` methods."
         )
 
+    @classmethod
     def from_config(cls, config, **kwargs):
         if type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
@@ -371,6 +372,7 @@ class _BaseAutoModelClass:
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
         )
 
+    @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
