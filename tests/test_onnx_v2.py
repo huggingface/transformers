@@ -13,7 +13,6 @@ from transformers import (  # LongformerConfig,; T5Config,
     XLMRobertaConfig,
     is_torch_available,
 )
-from transformers.file_utils import is_torch_onnx_dict_inputs_support_available
 from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.bart import BartOnnxConfig
 from transformers.models.bert.configuration_bert import BertConfig, BertOnnxConfig
@@ -42,7 +41,7 @@ class OnnxUtilsTestCaseV2(TestCase):
     Cover all the utilities involved to export ONNX models
     """
 
-    @patch(is_torch_onnx_dict_inputs_support_available, return_value=False)
+    @patch("transformers.file_utils.is_torch_onnx_dict_inputs_support_available", return_value=False)
     def test_ensure_pytorch_version_ge_1_8_0(self, mock_is_torch_onnx_dict_inputs_support_available):
         """
         Ensure we raise an Exception if the pytorch version is unsupported (< 1.8.0)
