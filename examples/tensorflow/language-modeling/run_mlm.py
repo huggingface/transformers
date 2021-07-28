@@ -499,7 +499,7 @@ def main():
             f"Validation file not found: using {data_args.validation_split_percentage}% of the dataset as validation as provided in data_args"
         )
         train_indices, val_indices = train_test_split(
-            list(range(len(train_dataset))), test_size=data_args.validation_split_percentage
+            list(range(len(train_dataset))), test_size=data_args.validation_split_percentage / 100
         )
 
         eval_dataset = train_dataset.select(val_indices)
