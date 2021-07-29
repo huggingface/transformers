@@ -35,7 +35,8 @@ else:
 @require_torch
 class ObjectDetectionPipelineTests(unittest.TestCase):
     pipeline_task = "object-detection"
-    large_models = ["facebook/detr-resnet-50"]  # Models tested without the @slow decorator
+    large_models = ["facebook/detr-resnet-50"]
+    small_models = ["mishig/tiny-detr-mobilenetsv3"]  # Models tested without the @slow decorator
     valid_inputs = [
         {"images": "http://images.cocodataset.org/val2017/000000039769.jpg"},
         {
@@ -66,6 +67,61 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         },
     ]
 
+    def test_small_model_from_factory(self):
+        threshold = 0.0
+        for small_model in self.small_models:
+
+            object_detector = pipeline("object-detection", model=small_model)
+
+            for valid_input in self.valid_inputs:
+                output = object_detector(**valid_input, threshold=threshold)
+
+                def assert_valid_pipeline_output(pipeline_output):
+                    self.assertTrue(isinstance(pipeline_output, list))
+                    for annotation_result in pipeline_output:
+                        self.assertTrue(isinstance(annotation_result, dict))
+                        self.assertEqual(set(annotation_result.keys()), {"score", "label", "box"})
+                        self.assertEqual(type(annotation_result["score"]), float)
+                        self.assertEqual(type(annotation_result["label"]), str)
+                        self.assertEqual(type(annotation_result["box"]), list)
+
+                if isinstance(valid_input["images"], list):
+                    self.assertEqual(len(valid_input["images"]), len(output))
+                    for individual_output in output:
+                        assert_valid_pipeline_output(individual_output)
+                else:
+                    assert_valid_pipeline_output(output)
+
+    def test_small_model_from_pipeline(self):
+        threshold = 0.0
+        for small_model in self.small_models:
+
+            model = AutoModelForObjectDetection.from_pretrained(small_model)
+            feature_extractor = AutoFeatureExtractor.from_pretrained(small_model)
+            object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
+
+            for valid_input in self.valid_inputs:
+                output = object_detector(**valid_input, threshold=threshold)
+
+                def assert_valid_pipeline_output(pipeline_output):
+                    self.assertTrue(isinstance(pipeline_output, list))
+                    for annotation_result in pipeline_output:
+                        self.assertTrue(isinstance(annotation_result, dict))
+                        self.assertEqual(set(annotation_result.keys()), {"score", "label", "box"})
+                        self.assertEqual(type(annotation_result["score"]), float)
+                        self.assertEqual(type(annotation_result["label"]), str)
+                        self.assertEqual(type(annotation_result["box"]), list)
+
+                if isinstance(valid_input["images"], list):
+                    # When images are batched, pipeline output is a list of lists of dictionaries
+                    self.assertEqual(len(valid_input["images"]), len(output))
+                    for individual_output in output:
+                        assert_valid_pipeline_output(individual_output)
+                else:
+                    # When images are batched, pipeline output is a list of dictionaries
+                    assert_valid_pipeline_output(output)
+
+    @slow
     def test_large_model_from_factory(self):
         for large_model in self.large_models:
 
@@ -90,6 +146,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                 else:
                     assert_valid_pipeline_output(output)
 
+    @slow
     def test_large_model_from_pipeline(self):
         for large_model in self.large_models:
 
@@ -127,10 +184,11 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         self.assertIs(object_detector.tokenizer, tokenizer)
 
     def test_annotation_box(self):
-        model_id = "facebook/detr-resnet-50"
+        threshold = 0.0
+        model_id = "mishig/tiny-detr-mobilenetsv3"
         object_detector = pipeline("object-detection", model=model_id)
 
-        output = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg")
+        output = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=threshold)
 
         self.assertTrue(isinstance(output, list))
 
@@ -144,6 +202,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                 self.assertEqual(type(vertex["x"]), int)
                 self.assertEqual(type(vertex["y"]), int)
 
+    @slow
     def test_low_threshold(self):
         threshold = 0.0
         model_id = "facebook/detr-resnet-50"
@@ -155,6 +214,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         self.assertTrue(isinstance(output, list))
         self.assertEqual(len(output), 100)
 
+    @slow
     def test_high_threshold(self):
         threshold = 1.0
         model_id = "facebook/detr-resnet-50"
