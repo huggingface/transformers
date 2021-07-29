@@ -307,7 +307,7 @@ if _torch_available:
 
     _torch_onnx_dict_inputs_support_available = (torch_version.major, torch_version.minor) >= (
         TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION.major,
-        TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION.minor
+        TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION.minor,
     )
 
 
