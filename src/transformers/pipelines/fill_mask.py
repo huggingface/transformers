@@ -32,11 +32,10 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
     r"""
-        top_k (:obj:`int`, defaults to 5): The number of predictions to return.
-        targets (:obj:`str` or :obj:`List[str]`, `optional`):
-            When passed, the model will limit the scores to the passed targets instead of looking up in the whole
-            vocab. If the provided targets are not in the model vocab, they will be tokenized and the first
-            resulting token will be used (with a warning, and that might be slower).
+        top_k (:obj:`int`, defaults to 5): The number of predictions to return. targets (:obj:`str` or
+        :obj:`List[str]`, `optional`): When passed, the model will limit the scores to the passed targets instead of
+        looking up in the whole vocab. If the provided targets are not in the model vocab, they will be tokenized and
+        the first resulting token will be used (with a warning, and that might be slower).
     """,
 )
 class FillMaskPipeline(Pipeline):
