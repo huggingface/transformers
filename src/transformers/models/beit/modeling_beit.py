@@ -72,7 +72,10 @@ class BEiTEmbeddings(nn.Module):
             embed_dim=config.hidden_size,
         )
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+        if config.use_absolute_position_embeddings:
+            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+        else:
+            self.position_embeddings = None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, pixel_values):
@@ -81,7 +84,8 @@ class BEiTEmbeddings(nn.Module):
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-        embeddings = embeddings + self.position_embeddings
+        if self.position_embeddings is not None:
+            embeddings = embeddings + self.position_embeddings
         embeddings = self.dropout(embeddings)
         return embeddings
 
@@ -132,7 +136,7 @@ class BEiTSelfAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
@@ -201,7 +205,7 @@ class BEiTSelfOutput(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states, input_tensor, gamma=None):
 
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -236,7 +240,7 @@ class BEiTAttention(nn.Module):
 
     def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None):
         self_outputs = self.attention(hidden_states, head_mask, output_attentions, relative_position_bias)
-
+        
         attention_output = self.output(self_outputs[0], hidden_states)
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -288,6 +292,13 @@ class BEiTLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+        init_values = config.layer_scale_init_value
+        if init_values > 0:
+            self.gamma_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+            self.gamma_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+        else:
+            self.gamma_1, self.gamma_2 = None, None
+
     def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None):
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
@@ -298,20 +309,23 @@ class BEiTLayer(nn.Module):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
+        # apply gamma_1 if present
+        if self.gamma_1 is not None:
+            attention_output = self.gamma_1 * attention_output
+        
         # first residual connection
         hidden_states = attention_output + hidden_states
 
         # in BEiT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
 
-        # TODO feedforward chunking not working for now
-        # layer_output = apply_chunking_to_forward(
-        #     self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, layer_output
-        # )
-
         layer_output = self.intermediate(layer_output)
 
-        # second residual connection is done here
+        # TODO apply gamma_2 if present
+        # if self.gamma_2 is not None:
+        #     layer_output = self.gamma_2 * layer_output
+        
+        # second residual connection
         layer_output = self.output(layer_output, hidden_states)
 
         outputs = (layer_output,) + outputs
@@ -401,6 +415,7 @@ class BEiTEncoder(nn.Module):
                     layer_head_mask,
                 )
             else:
+                relative_position_bias = self.relative_position_bias() if self.relative_position_bias is not None else None
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
 
             hidden_states = layer_outputs[0]

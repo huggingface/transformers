@@ -12,16 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for BeiT."""
+"""Feature extractor class for BEiT."""
 
 from ...utils import logging
-from ..beit.modeling_beit import BeiTConfig
+from ..vit import ViTFeatureExtractor
 
 
 logger = logging.get_logger(__name__)
 
 
-class BeiTFeatureExtractor(ViTFeatureExtractor):
+class BEiTFeatureExtractor(ViTFeatureExtractor):
     r"""
     Constructs a BEiT feature extractor.
 

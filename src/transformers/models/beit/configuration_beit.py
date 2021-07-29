@@ -34,6 +34,8 @@ class BEiTConfig(PretrainedConfig):
     the BEiT `microsoft/beit-base-patch16-224-in22k <https://huggingface.co/microsoft/beit-base-patch16-224-in22k>`__ architecture.
 
     Args:
+        vocab_size (:obj:`int`, `optional`, defaults to 8092):
+            Vocabulary size of the BEiT model. Defines the number of different image tokens that can be used during pre-training.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -61,10 +63,14 @@ class BEiTConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (:obj:`int`, `optional`, defaults to :obj:`3`):
             The number of input channels.
+        use_absolute_position_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use BERT-style absolute position embeddings.
         use_relative_position_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to use T5-style relative position embeddings in the self-attention layers.
         use_shared_relative_position_bias (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use the same relative position embeddings across all self-attention layers of the Transformer.
+        layer_scale_init_value (:obj:`float`, `optional`, defaults to 0.1):
+            Scale to use in the self-attention layers. 0.1 for base, 1e-5 for large. Set 0 to disable layer scale.
 
     Example::
 
@@ -83,6 +89,7 @@ class BEiTConfig(PretrainedConfig):
 
     def __init__(
         self,
+        vocab_size=8192,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -96,12 +103,15 @@ class BEiTConfig(PretrainedConfig):
         image_size=224,
         patch_size=16,
         num_channels=3,
+        use_absolute_position_embeddings=False,
         use_relative_position_bias=True,
         use_shared_relative_position_bias=False,
+        layer_scale_init_value=0.1,
         **kwargs
     ):
         super().__init__(**kwargs)
 
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -115,5 +125,7 @@ class BEiTConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        self.use_absolute_position_embeddings = use_absolute_position_embeddings
         self.use_relative_position_bias = use_relative_position_bias
         self.use_shared_relative_position_bias = use_shared_relative_position_bias
+        self.layer_scale_init_value = layer_scale_init_value

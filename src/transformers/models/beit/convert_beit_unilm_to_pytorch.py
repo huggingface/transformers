@@ -22,7 +22,6 @@ import torch
 from PIL import Image
 
 import requests
-import timm
 from transformers import BEiTConfig, BEiTFeatureExtractor, BEiTForImageClassification, BEiTModel
 from transformers.utils import logging
 from transformers.utils.imagenet_classes import id2label
@@ -37,24 +36,23 @@ def create_rename_keys(config, base_model=False):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"vit.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"vit.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"vit.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"vit.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"vit.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"vit.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"vit.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"vit.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"vit.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append((f"blocks.{i}.norm1.weight", f"beit.encoder.layer.{i}.layernorm_before.weight"))
+        rename_keys.append((f"blocks.{i}.norm1.bias", f"beit.encoder.layer.{i}.layernorm_before.bias"))
+        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"beit.encoder.layer.{i}.attention.output.dense.weight"))
+        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"beit.encoder.layer.{i}.attention.output.dense.bias"))
+        rename_keys.append((f"blocks.{i}.norm2.weight", f"beit.encoder.layer.{i}.layernorm_after.weight"))
+        rename_keys.append((f"blocks.{i}.norm2.bias", f"beit.encoder.layer.{i}.layernorm_after.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"beit.encoder.layer.{i}.intermediate.dense.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"beit.encoder.layer.{i}.intermediate.dense.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"beit.encoder.layer.{i}.output.dense.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"beit.encoder.layer.{i}.output.dense.bias"))
 
     # projection layer + position embeddings
     rename_keys.extend(
         [
-            ("cls_token", "vit.embeddings.cls_token"),
-            ("patch_embed.proj.weight", "vit.embeddings.patch_embeddings.projection.weight"),
-            ("patch_embed.proj.bias", "vit.embeddings.patch_embeddings.projection.bias"),
-            ("pos_embed", "vit.embeddings.position_embeddings"),
+            ("cls_token", "beit.embeddings.cls_token"),
+            ("patch_embed.proj.weight", "beit.embeddings.patch_embeddings.projection.weight"),
+            ("patch_embed.proj.bias", "beit.embeddings.patch_embeddings.projection.bias"),
         ]
     )
 
@@ -69,14 +67,14 @@ def create_rename_keys(config, base_model=False):
             ]
         )
 
-        # if just the base model, we should remove "vit" from all keys that start with "vit"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("vit") else pair for pair in rename_keys]
+        # if just the base model, we should remove "beit" from all keys that start with "beit"
+        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("beit") else pair for pair in rename_keys]
     else:
         # layernorm + classification head
         rename_keys.extend(
             [
-                ("norm.weight", "vit.layernorm.weight"),
-                ("norm.bias", "vit.layernorm.bias"),
+                ("fc_norm.weight", "beit.layernorm.weight"),
+                ("fc_norm.bias", "beit.layernorm.bias"),
                 ("head.weight", "classifier.weight"),
                 ("head.bias", "classifier.bias"),
             ]
@@ -91,31 +89,35 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         if base_model:
             prefix = ""
         else:
-            prefix = "vit."
-        # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
+            prefix = "beit."
+        # queries, keys and values
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
-        in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
+        q_bias = state_dict.pop(f"blocks.{i}.attn.q_bias")
+        v_bias = state_dict.pop(f"blocks.{i}.attn.v_bias")
+
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:config.hidden_size,:]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = q_bias
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
         ]
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
             -config.hidden_size :, :
         ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = v_bias
 
+        # gamma_1 and gamma_2
+        gamma_1 = state_dict.pop(f"blocks.{i}.gamma_1")
+        gamma_2 = state_dict.pop(f"blocks.{i}.gamma_2")
 
-def remove_classification_head_(state_dict):
-    ignore_keys = ["head.weight", "head.bias"]
-    for k in ignore_keys:
-        state_dict.pop(k, None)
+        state_dict[f"{prefix}encoder.layer.{i}.gamma_1"] = gamma_1
+        state_dict[f"{prefix}encoder.layer.{i}.gamma_2"] = gamma_2
+        
+        # relative_position bias table + index
+        table = state_dict.pop(f"blocks.{i}.attn.relative_position_bias_table")
+        index = state_dict.pop(f"blocks.{i}.attn.relative_position_index")
+
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_bias_table"] = table
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_index"] = index
 
 
 def rename_key(dct, old, new):
@@ -131,57 +133,51 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_beit_checkpoint(model_name, finetuned_on_1k, checkpoint_path, pytorch_dump_folder_path):
+def convert_beit_checkpoint(checkpoint_path, pytorch_dump_folder_path, task="MIM", size="base", image_size=224):
     """
     Copy/paste/tweak model's weights to our BEiT structure.
     """
 
     # define default BEiT configuration
     config = BEiTConfig()
-    # dataset (pre-trained on ImageNet-22k only, also fine-tuned on ImageNet-22k or fine-tuned on ImageNet 2012), 
-    # patch_size and image_size
-    if not finetuned_on_1k:
-        config.patch_size = int(model_name[-12:-10])
-        config.image_size = int(model_name[-9:-6])
-    else:
+    # task 
+    base_model = False
+    if task == "MIM":
+        # masked image modeling
+        base_model = True
+    elif task == "IFT":
+        # intermediate fine-tuning on ImageNet-22k
+        config.num_labels = 21841
+    elif task == "FT":
+        # fine-tuning on ImageNet-1k
         config.num_labels = 1000
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
-        config.patch_size = int(model_name[-6:-4])
-        config.image_size = int(model_name[-3:])
+        config.image_size = image_size
+    else:
+        raise ValueError(f"Task {task} not supported")
+        
     # size of the architecture
-    if model_name[5:].startswith("small"):
-        config.hidden_size = 768
-        config.intermediate_size = 2304
-        config.num_hidden_layers = 8
-        config.num_attention_heads = 8
-    elif model_name[5:].startswith("base"):
+    if size == "base":
         pass
-    elif model_name[5:].startswith("large"):
+    elif size == "large":
         config.hidden_size = 1024
         config.intermediate_size = 4096
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
-    elif model_name[5:].startswith("huge"):
-        config.hidden_size = 1280
-        config.intermediate_size = 5120
-        config.num_hidden_layers = 32
-        config.num_attention_heads = 16
+    else:
+        raise ValueError(f"Size {size} not supported, should be either 'base' or 'large'")
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))['model']
-    if base_model:
-        remove_classification_head_(state_dict)
     rename_keys = create_rename_keys(config, base_model)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config, base_model)
 
     # load HuggingFace model
-    if model_name[-5:] == "in21k":
-        model = BEiTModel(config).eval()
-    else:
-        model = BEiTForImageClassification(config).eval()
+    model = BEiTForImageClassification(config)
+    model.eval()
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by BEiTFeatureExtractor
@@ -190,8 +186,10 @@ def convert_beit_checkpoint(model_name, finetuned_on_1k, checkpoint_path, pytorc
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
 
+    print("Shape of logits:", outputs.logits.shape)
+
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+    print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
@@ -201,22 +199,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--model_name",
-        default="beit_base_patch16_224_pt22k_ft22k",
-        type=str,
-        help="Name of the model you'd like to convert.",
-    )
-    parser.add_argument(
-        "--finetuned_on_1k",
-        action='store_true',
-        type=bool,
-        help="Whether the model was also fine-tuned on ImageNet-1k",
-    )
-    parser.add_argument(
         "--checkpoint_path", default=None, type=str, help="Path to the original PyTorch checkpoint (.pth file)."
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
+    parser.add_argument(
+        "--task",
+        default="MIM",
+        type=str,
+        help="Task on which the model was trained. Can be either 'MIM' (masked image modeling), 'IFT' (intermediate fine-tuning) or 'FT' (fine-tuning)."
+    )
+    parser.add_argument("--size", default="base", type=str, help="Model size (base or large)")
+    parser.add_argument("--image_size", default=224, type=int, help="Image size")
     args = parser.parse_args()
-    convert_beit_checkpoint(args.model_name, args.finetuned_on_1k, args.checkpoint_path, args.pytorch_dump_folder_path)
+    convert_beit_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.task, args.size, args.image_size)
