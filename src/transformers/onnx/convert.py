@@ -21,7 +21,7 @@ import numpy as np
 from packaging.version import Version, parse
 
 from .. import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
-from ..file_utils import is_torch_onnx_dict_inputs_support_available, torch_version
+from ..file_utils import is_torch_onnx_dict_inputs_support_available
 from ..utils import logging
 from .config import OnnxConfig
 from .utils import flatten_output_collection_property
@@ -82,11 +82,12 @@ def export(
     if not is_torch_available():
         raise ImportError("Cannot convert because PyTorch is not installed. Please install torch first.")
 
-    if not is_torch_onnx_dict_inputs_support_available():
-        raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
-
     import torch
     from torch.onnx import export
+    from ..file_utils import torch_version
+
+    if not is_torch_onnx_dict_inputs_support_available():
+        raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
     logger.info(f"Using framework PyTorch: {torch.__version__}")
     torch.set_grad_enabled(False)
