@@ -24,8 +24,13 @@ from transformers.models.roberta import RobertaOnnxConfig
 
 # from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
-from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat, validate_model_outputs, \
-    export
+from transformers.onnx import (
+    EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
+    OnnxConfig,
+    ParameterFormat,
+    export,
+    validate_model_outputs,
+)
 from transformers.onnx.config import DEFAULT_ONNX_OPSET, OnnxConfigWithPast
 from transformers.onnx.utils import (
     compute_effective_axis_dimension,
@@ -41,12 +46,12 @@ class OnnxUtilsTestCaseV2(TestCase):
     Cover all the utilities involved to export ONNX models
     """
 
-    @patch("transformers.file_utils.is_torch_onnx_dict_inputs_support_available", return_value=False)
+    @patch("transformers.onnx.convert.is_torch_onnx_dict_inputs_support_available", return_value=False)
     def test_ensure_pytorch_version_ge_1_8_0(self, mock_is_torch_onnx_dict_inputs_support_available):
         """
         Ensure we raise an Exception if the pytorch version is unsupported (< 1.8.0)
         """
-        self.assertRaises(Exception, export, None, None, None, None, None)
+        self.assertRaises(AssertionError, export, None, None, None, None, None)
         mock_is_torch_onnx_dict_inputs_support_available.assert_called()
 
     def test_compute_effective_axis_dimension(self):
