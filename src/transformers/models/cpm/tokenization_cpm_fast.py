@@ -19,12 +19,15 @@ from ..xlnet.tokenization_xlnet_fast import XLNetTokenizerFast
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "TsinghuaAI/CPM-Generate": "https://huggingface.co/TsinghuaAI/CPM-Generate/resolve/main/spiece.model",
-    }
+    },
+    "tokenizer_file": {
+        "TsinghuaAI/CPM-Generate": "https://huggingface.co/TsinghuaAI/CPM-Generate/resolve/main/tokenizer.json",
+    },
 }
 
 
@@ -98,10 +101,12 @@ class CpmTokenizerFast(XLNetTokenizerFast):
         self.jieba = jieba
         self.translator = str.maketrans(" \n", "\u2582\u2583")
 
-    def _tokenize(self, text, *args, **kwargs):
-        text = [x.translate(self.translator) for x in self.jieba.cut(text, cut_all=False)]
-        text = " ".join(text)
-        return super()._tokenize(text, *args, **kwargs)
+    def _batch_encode_plus(self, batch_text_or_text_pairs, *args, **kwargs):
+        batch_text_or_text_pairs = [
+            " ".join([x.translate(self.translator) for x in self.jieba.cut(text, cut_all=False)])
+            for text in batch_text_or_text_pairs
+        ]
+        return super()._batch_encode_plus(batch_text_or_text_pairs, *args, **kwargs)
 
     def _decode(self, *args, **kwargs):
         text = super()._decode(*args, **kwargs)
