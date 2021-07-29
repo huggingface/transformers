@@ -275,7 +275,8 @@ PRESET_MIRROR_DICT = {
 }
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
-TORCH_FX_REQUIRED_VERSION = TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
+TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
+TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
 
