@@ -30,6 +30,24 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
+    @require_torch
+    def test_pt_bert_small(self):
+        text_classifier = pipeline(
+            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="pt"
+        )
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_1", "score": 0.502}])
+
+    @require_tf
+    def test_tf_bert_small(self):
+        text_classifier = pipeline(
+            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="tf"
+        )
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_1", "score": 0.502}])
+
     @slow
     @require_torch
     def test_pt_bert(self):

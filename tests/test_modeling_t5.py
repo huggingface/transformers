@@ -111,6 +111,24 @@ class T5ModelTester:
             lm_labels,
         )
 
+    def get_pipeline_config(self):
+        return T5Config(
+            vocab_size=166,  # t5 forces 100 extra tokens
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_decoder_layers=self.decoder_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
+        )
+
     def get_config(self):
         return T5Config(
             vocab_size=self.vocab_size,
