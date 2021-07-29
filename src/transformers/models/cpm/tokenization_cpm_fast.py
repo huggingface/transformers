@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes."""
 from ...utils import logging
-from ..xlnet.tokenization_xlnet import XLNetTokenizer
+from ..xlnet.tokenization_xlnet_fast import XLNetTokenizerFast
 
 
 logger = logging.get_logger(__name__)
@@ -28,7 +28,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 
-class CpmTokenizer(XLNetTokenizer):
+class CpmTokenizerFast(XLNetTokenizerFast):
     """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
 
     def __init__(self, *args, **kwargs):
