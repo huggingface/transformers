@@ -46,6 +46,7 @@ class OnnxUtilsTestCaseV2(TestCase):
     Cover all the utilities involved to export ONNX models
     """
 
+    @require_torch
     @patch("transformers.onnx.convert.is_torch_onnx_dict_inputs_support_available", return_value=False)
     def test_ensure_pytorch_version_ge_1_8_0(self, mock_is_torch_onnx_dict_inputs_support_available):
         """

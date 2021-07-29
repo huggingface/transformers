@@ -84,6 +84,7 @@ def export(
 
     import torch
     from torch.onnx import export
+
     from ..file_utils import torch_version
 
     if not is_torch_onnx_dict_inputs_support_available():
