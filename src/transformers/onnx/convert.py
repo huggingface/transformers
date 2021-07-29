@@ -184,7 +184,7 @@ def validate_model_outputs(
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
-        ref_value = ref_outputs_dict[name].numpy()
+        ref_value = ref_outputs_dict[name].detach().numpy()
         logger.info(f'\t- Validating ONNX Model output "{name}":')
 
         # Shape

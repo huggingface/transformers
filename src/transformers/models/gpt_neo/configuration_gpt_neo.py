@@ -19,7 +19,7 @@ from typing import Any, Mapping, Optional
 
 from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast
+from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
 
 
@@ -181,7 +181,7 @@ class GPTNeoConfig(PretrainedConfig):
 
 
 def custom_unfold(input, dimension, size, step):
-    """Custom torch.Tensor.unfold implementation to enable export to ONNX."""
+    """Custom torch.Tensor.unfold implementation to enable the export to ONNX."""
     import torch
 
     shape = input.size()
@@ -189,7 +189,7 @@ def custom_unfold(input, dimension, size, step):
     sizedim = shape[dimension]
 
     low_indices = torch.arange(0, sizedim, step)
-    min_length = (sizedim - size) // step + 1
+    min_length = torch.div(sizedim - size, step, rounding_mode="floor") + 1
     indices = torch.arange(size) + low_indices[:min_length][:, None]
 
     s = [slice(None)] * rank
@@ -202,13 +202,48 @@ def custom_unfold(input, dimension, size, step):
     return sliced.permute(perm)
 
 
+def custom_get_block_length_and_num_blocks(seq_length, window_size):
+    """
+    Custom implementation for GPTNeoAttentionMixin._get_block_length_and_num_blocks to enable the export to ONNX as
+    original implmentation uses Python variables and control flow.
+    """
+    import torch
+
+    candidates = torch.arange(1, window_size)
+    remainders = torch.remainder(seq_length, candidates)
+    divisor_indices = remainders == 0
+    divisors = candidates[divisor_indices]
+    largest_divisor = torch.max(divisors)
+    return largest_divisor, torch.div(seq_length, largest_divisor, rounding_mode="floor")
+
+
 class GPTNeoOnnxConfig(OnnxConfigWithPast):
     def __init__(self, config: PretrainedConfig, task: str = "default", use_past: bool = False):
         if is_torch_available():
             import torch
 
-            patching_specs = [(torch.Tensor, "unfold", custom_unfold)]
+            from .modeling_gpt_neo import GPTNeoAttentionMixin
+
+            patching_specs = [
+                PatchingSpec(torch.Tensor, name="unfold", custom_op=custom_unfold),
+                PatchingSpec(
+                    GPTNeoAttentionMixin,
+                    name="_get_block_length_and_num_blocks",
+                    custom_op=custom_get_block_length_and_num_blocks,
+                    op_wrapper=staticmethod,
+                ),
+            ]
         super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
+
+    @property
+    def default_onnx_opset(self) -> int:
+        """
+        Which onnx opset to use when exporting the model
+
+        Returns:
+            Integer ONNX Opset version
+        """
+        return 12
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:

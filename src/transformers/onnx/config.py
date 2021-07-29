@@ -11,9 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import dataclasses
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Any, Callable, List, Mapping, Optional, Tuple
+from typing import Any, Callable, List, Mapping, Optional
 
 from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
 
@@ -31,7 +32,14 @@ _TASK_TO_COMMON_OUTPUTS = {
     "sequence_classification": OrderedDict({"logits": {0: "batch"}}),
 }
 
-PatchingSpec = Tuple[Any, str, Callable]
+
+@dataclasses.dataclass
+class PatchingSpec:
+    o: Any
+    name: str
+    custom_op: Callable
+    orig_op: Optional[Callable] = None
+    op_wrapper: Optional[str] = None
 
 
 class OnnxConfig(ABC):
@@ -50,10 +58,11 @@ class OnnxConfig(ABC):
         self.task = task
 
         self._patching_specs = []
-        if patching_specs is not None:
-            self._patching_specs = [
-                (obj, name, getattr(obj, name), custom_op) for (obj, name, custom_op) in patching_specs
-            ]
+        for spec in patching_specs if patching_specs is not None else []:
+            final_spec = spec
+            if spec.orig_op is None:
+                final_spec = dataclasses.replace(spec, orig_op=getattr(spec.o, spec.name))
+            self._patching_specs.append(final_spec)
 
     @classmethod
     def default(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":
@@ -188,12 +197,14 @@ class OnnxConfig(ABC):
         return dict(tokenizer(dummy_input, return_tensors=framework))
 
     def patch_ops(self):
-        for (obj, name, _, custom_op) in self._patching_specs:
-            setattr(obj, name, custom_op)
+        for spec in self._patching_specs:
+            custom_op = spec.custom_op if spec.op_wrapper is None else spec.op_wrapper(spec.custom_op)
+            setattr(spec.o, spec.name, custom_op)
 
     def restore_ops(self):
-        for (obj, name, orig_op, _) in self._patching_specs:
-            setattr(obj, name, orig_op)
+        for spec in self._patching_specs:
+            orig_op = spec.orig_op if spec.op_wrapper is None else spec.op_wrapper(spec.orig_op)
+            setattr(spec.o, spec.name, orig_op)
 
 
 class OnnxConfigWithPast(OnnxConfig, ABC):
