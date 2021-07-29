@@ -1409,7 +1409,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         add_prefix = has_prefix_module and not expects_prefix_module
 
         if remove_prefix:
-            expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
+            expected_keys = [".".join(s.split(".")[1:]) for s in expected_keys if s.startswith(prefix)]
         elif add_prefix:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
