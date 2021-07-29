@@ -80,10 +80,10 @@ def export(
 
     """
     if not is_torch_available():
-        raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
+        raise ImportError("Cannot convert because PyTorch is not installed. Please install torch first.")
 
     if not is_torch_onnx_dict_inputs_support_available():
-        raise Exception(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
+        raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
     import torch
     from torch.onnx import export
