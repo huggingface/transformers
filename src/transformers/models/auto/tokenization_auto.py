@@ -177,6 +177,7 @@ if is_tokenizers_available():
     from ..big_bird.tokenization_big_bird_fast import BigBirdTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
     from ..convbert.tokenization_convbert_fast import ConvBertTokenizerFast
+    from ..cpm.tokenization_cpm_fast import CpmTokenizerFast
     from ..deberta.tokenization_deberta_fast import DebertaTokenizerFast
     from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
     from ..dpr.tokenization_dpr_fast import DPRQuestionEncoderTokenizerFast
@@ -212,6 +213,7 @@ else:
     BigBirdTokenizerFast = None
     CamembertTokenizerFast = None
     ConvBertTokenizerFast = None
+    CpmTokenizerFast = None
     DebertaTokenizerFast = None
     DistilBertTokenizerFast = None
     DPRQuestionEncoderTokenizerFast = None
@@ -308,6 +310,7 @@ NO_CONFIG_TOKENIZER = [
     BertweetTokenizer,
     ByT5Tokenizer,
     CpmTokenizer,
+    CpmTokenizerFast,
     HerbertTokenizer,
     HerbertTokenizerFast,
     PhobertTokenizer,

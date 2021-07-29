@@ -18,16 +18,24 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule
+from ...file_utils import _LazyModule, is_sentencepiece_available, is_tokenizers_available
 
 
-_import_structure = {
-    "tokenization_cpm": ["CpmTokenizer"],
-}
+_import_structure = {}
+
+if is_sentencepiece_available():
+    _import_structure["tokenization_cpm"] = ["CpmTokenizer"]
+
+if is_tokenizers_available():
+    _import_structure["tokenization_cpm_fast"] = ["CpmTokenizerFast"]
 
 
 if TYPE_CHECKING:
-    from .tokenization_cpm import CpmTokenizer
+    if is_sentencepiece_available():
+        from .tokenization_cpm import CpmTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_cpm_fast import CpmTokenizerFast
 
 else:
     import sys
