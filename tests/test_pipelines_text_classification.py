@@ -37,7 +37,7 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         )
 
         outputs = text_classifier("This is great !")
-        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.5}])
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_1", "score": 0.502}])
 
     @require_tf
     def test_tf_bert_small(self):
@@ -46,7 +46,7 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         )
 
         outputs = text_classifier("This is great !")
-        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.5}])
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_1", "score": 0.502}])
 
     @slow
     @require_torch
