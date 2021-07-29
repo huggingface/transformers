@@ -81,6 +81,13 @@ from ..camembert.modeling_camembert import (
     CamembertForTokenClassification,
     CamembertModel,
 )
+from ..canine.modeling_canine import (
+    CanineForMultipleChoice,
+    CanineForQuestionAnswering,
+    CanineForSequenceClassification,
+    CanineForTokenClassification,
+    CanineModel,
+)
 from ..clip.modeling_clip import CLIPModel
 from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
@@ -232,6 +239,15 @@ from ..reformer.modeling_reformer import (
     ReformerModel,
     ReformerModelWithLMHead,
 )
+from ..rembert.modeling_rembert import (
+    RemBertForCausalLM,
+    RemBertForMaskedLM,
+    RemBertForMultipleChoice,
+    RemBertForQuestionAnswering,
+    RemBertForSequenceClassification,
+    RemBertForTokenClassification,
+    RemBertModel,
+)
 from ..retribert.modeling_retribert import RetriBertModel
 from ..roberta.modeling_roberta import (
     RobertaForCausalLM,
@@ -301,7 +317,7 @@ from ..xlnet.modeling_xlnet import (
     XLNetLMHeadModel,
     XLNetModel,
 )
-from .auto_factory import auto_class_factory
+from .auto_factory import _BaseAutoModelClass, auto_class_update
 from .configuration_auto import (
     AlbertConfig,
     BartConfig,
@@ -312,6 +328,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
+    CanineConfig,
     CLIPConfig,
     ConvBertConfig,
     CTRLConfig,
@@ -346,6 +363,7 @@ from .configuration_auto import (
     PegasusConfig,
     ProphetNetConfig,
     ReformerConfig,
+    RemBertConfig,
     RetriBertConfig,
     RobertaConfig,
     RoFormerConfig,
@@ -370,7 +388,9 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (RemBertConfig, RemBertModel),
         (VisualBertConfig, VisualBertModel),
+        (CanineConfig, CanineModel),
         (RoFormerConfig, RoFormerModel),
         (CLIPConfig, CLIPModel),
         (BigBirdPegasusConfig, BigBirdPegasusModel),
@@ -473,6 +493,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+        (RemBertConfig, RemBertForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
         (GPTNeoConfig, GPTNeoForCausalLM),
@@ -521,6 +542,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
+        (RemBertConfig, RemBertForCausalLM),
         (RoFormerConfig, RoFormerForCausalLM),
         (BigBirdPegasusConfig, BigBirdPegasusForCausalLM),
         (GPTNeoConfig, GPTNeoForCausalLM),
@@ -563,6 +585,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
+        (RemBertConfig, RemBertForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
@@ -624,6 +647,8 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (RemBertConfig, RemBertForSequenceClassification),
+        (CanineConfig, CanineForSequenceClassification),
         (RoFormerConfig, RoFormerForSequenceClassification),
         (BigBirdPegasusConfig, BigBirdPegasusForSequenceClassification),
         (BigBirdConfig, BigBirdForSequenceClassification),
@@ -664,6 +689,8 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (RemBertConfig, RemBertForQuestionAnswering),
+        (CanineConfig, CanineForQuestionAnswering),
         (RoFormerConfig, RoFormerForQuestionAnswering),
         (BigBirdPegasusConfig, BigBirdPegasusForQuestionAnswering),
         (BigBirdConfig, BigBirdForQuestionAnswering),
@@ -705,6 +732,8 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+        (RemBertConfig, RemBertForTokenClassification),
+        (CanineConfig, CanineForTokenClassification),
         (RoFormerConfig, RoFormerForTokenClassification),
         (BigBirdConfig, BigBirdForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
@@ -735,6 +764,8 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        (RemBertConfig, RemBertForMultipleChoice),
+        (CanineConfig, CanineForMultipleChoice),
         (RoFormerConfig, RoFormerForMultipleChoice),
         (BigBirdConfig, BigBirdForMultipleChoice),
         (ConvBertConfig, ConvBertForMultipleChoice),
@@ -767,64 +798,106 @@ MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
 )
 
 
-AutoModel = auto_class_factory("AutoModel", MODEL_MAPPING)
+class AutoModel(_BaseAutoModelClass):
+    _model_mapping = MODEL_MAPPING
 
-AutoModelForPreTraining = auto_class_factory(
-    "AutoModelForPreTraining", MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
-)
+
+AutoModel = auto_class_update(AutoModel)
+
+
+class AutoModelForPreTraining(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_PRETRAINING_MAPPING
+
+
+AutoModelForPreTraining = auto_class_update(AutoModelForPreTraining, head_doc="pretraining")
+
 
 # Private on purpose, the public class will add the deprecation warnings.
-_AutoModelWithLMHead = auto_class_factory(
-    "AutoModelWithLMHead", MODEL_WITH_LM_HEAD_MAPPING, head_doc="language modeling"
+class _AutoModelWithLMHead(_BaseAutoModelClass):
+    _model_mapping = MODEL_WITH_LM_HEAD_MAPPING
+
+
+_AutoModelWithLMHead = auto_class_update(_AutoModelWithLMHead, head_doc="language modeling")
+
+
+class AutoModelForCausalLM(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
+
+
+AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")
+
+
+class AutoModelForMaskedLM(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_MASKED_LM_MAPPING
+
+
+AutoModelForMaskedLM = auto_class_update(AutoModelForMaskedLM, head_doc="masked language modeling")
+
+
+class AutoModelForSeq2SeqLM(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+
+
+AutoModelForSeq2SeqLM = auto_class_update(
+    AutoModelForSeq2SeqLM, head_doc="sequence-to-sequence language modeling", checkpoint_for_example="t5-base"
 )
 
-AutoModelForCausalLM = auto_class_factory(
-    "AutoModelForCausalLM", MODEL_FOR_CAUSAL_LM_MAPPING, head_doc="causal language modeling"
+
+class AutoModelForSequenceClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+
+
+AutoModelForSequenceClassification = auto_class_update(
+    AutoModelForSequenceClassification, head_doc="sequence classification"
 )
 
-AutoModelForMaskedLM = auto_class_factory(
-    "AutoModelForMaskedLM", MODEL_FOR_MASKED_LM_MAPPING, head_doc="masked language modeling"
-)
 
-AutoModelForSeq2SeqLM = auto_class_factory(
-    "AutoModelForSeq2SeqLM",
-    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    head_doc="sequence-to-sequence language modeling",
-    checkpoint_for_example="t5-base",
-)
+class AutoModelForQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
-AutoModelForSequenceClassification = auto_class_factory(
-    "AutoModelForSequenceClassification", MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING, head_doc="sequence classification"
-)
 
-AutoModelForQuestionAnswering = auto_class_factory(
-    "AutoModelForQuestionAnswering", MODEL_FOR_QUESTION_ANSWERING_MAPPING, head_doc="question answering"
-)
+AutoModelForQuestionAnswering = auto_class_update(AutoModelForQuestionAnswering, head_doc="question answering")
 
-AutoModelForTableQuestionAnswering = auto_class_factory(
-    "AutoModelForTableQuestionAnswering",
-    MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
+
+class AutoModelForTableQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
+
+
+AutoModelForTableQuestionAnswering = auto_class_update(
+    AutoModelForTableQuestionAnswering,
     head_doc="table question answering",
     checkpoint_for_example="google/tapas-base-finetuned-wtq",
 )
 
-AutoModelForTokenClassification = auto_class_factory(
-    "AutoModelForTokenClassification", MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING, head_doc="token classification"
+
+class AutoModelForTokenClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+
+
+AutoModelForTokenClassification = auto_class_update(AutoModelForTokenClassification, head_doc="token classification")
+
+
+class AutoModelForMultipleChoice(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_MULTIPLE_CHOICE_MAPPING
+
+
+AutoModelForMultipleChoice = auto_class_update(AutoModelForMultipleChoice, head_doc="multiple choice")
+
+
+class AutoModelForNextSentencePrediction(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING
+
+
+AutoModelForNextSentencePrediction = auto_class_update(
+    AutoModelForNextSentencePrediction, head_doc="next sentence prediction"
 )
 
-AutoModelForMultipleChoice = auto_class_factory(
-    "AutoModelForMultipleChoice", MODEL_FOR_MULTIPLE_CHOICE_MAPPING, head_doc="multiple choice"
-)
 
-AutoModelForNextSentencePrediction = auto_class_factory(
-    "AutoModelForNextSentencePrediction",
-    MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-    head_doc="next sentence prediction",
-)
+class AutoModelForImageClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
-AutoModelForImageClassification = auto_class_factory(
-    "AutoModelForImageClassification", MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, head_doc="image classification"
-)
+
+AutoModelForImageClassification = auto_class_update(AutoModelForImageClassification, head_doc="image classification")
 
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):

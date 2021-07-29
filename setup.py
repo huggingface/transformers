@@ -87,10 +87,11 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "black==21.4b0",
+    "codecarbon==1.2.0",
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.4.0",
+    "deepspeed>=0.4.3",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -99,7 +100,8 @@ _deps = [
     "flake8>=3.8.3",
     "flax>=0.3.4",
     "fugashi>=1.0",
-    "huggingface-hub==0.0.8",
+    "GitPython<3.1.19",
+    "huggingface-hub==0.0.12",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -113,17 +115,18 @@ _deps = [
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "optuna",
+    "optax>=0.0.8",
     "packaging",
     "parameterized",
     "protobuf",
     "psutil",
-    "pyyaml",
+    "pyyaml>=5.1",
     "pydantic",
     "pytest",
-    "pytest-sugar",
+    "pytest-timeout",
     "pytest-xdist",
     "python>=3.6.0",
-    "ray",
+    "ray[tune]",
     "recommonmark",
     "regex!=2019.12.17",
     "requests",
@@ -233,7 +236,7 @@ if os.name == "nt":  # windows
     extras["flax"] = []  # jax is not supported on windows
 else:
     extras["retrieval"] = deps_list("faiss-cpu", "datasets")
-    extras["flax"] = deps_list("jax", "jaxlib", "flax")
+    extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
@@ -244,7 +247,7 @@ extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed")
 extras["fairscale"] = deps_list("fairscale")
 extras["optuna"] = deps_list("optuna")
-extras["ray"] = deps_list("ray")
+extras["ray"] = deps_list("ray[tune]")
 
 extras["integrations"] = extras["optuna"] + extras["ray"]
 
@@ -252,11 +255,12 @@ extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["codecarbon"] = deps_list("codecarbon")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
-        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black", "sacrebleu", "rouge-score", "nltk"
+        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-timeout", "black", "sacrebleu", "rouge-score", "nltk", "GitPython"
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -274,6 +278,7 @@ extras["all"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["codecarbon"]
 )
 
 extras["docs_specific"] = deps_list(
@@ -322,7 +327,7 @@ install_requires = [
     deps["huggingface-hub"],
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
-    deps["pyyaml"], # used for the model cards metadata
+    deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["sacremoses"],  # for XLM
@@ -332,7 +337,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.8.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.10.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

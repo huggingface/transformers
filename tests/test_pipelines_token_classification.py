@@ -62,6 +62,13 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
                 self.assertIn(key, result)
 
     @require_torch
+    def test_model_kwargs_passed_to_model_load(self):
+        ner_pipeline = pipeline(task="ner", model=self.small_models[0])
+        self.assertFalse(ner_pipeline.model.config.output_attentions)
+        ner_pipeline = pipeline(task="ner", model=self.small_models[0], model_kwargs={"output_attentions": True})
+        self.assertTrue(ner_pipeline.model.config.output_attentions)
+
+    @require_torch
     @slow
     def test_spanish_bert(self):
         # https://github.com/huggingface/transformers/pull/4987
@@ -181,6 +188,19 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             [
                 {"entity_group": "PER", "score": 0.996, "word": "Enzo", "start": 0, "end": 4},
                 {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24},
+            ],
+        )
+
+    @require_torch
+    @slow
+    def test_aggregation_strategy_byte_level_tokenizer(self):
+        sentence = "Groenlinks praat over Schiphol."
+        ner = pipeline("ner", model="xlm-roberta-large-finetuned-conll02-dutch", aggregation_strategy="max")
+        self.assertEqual(
+            nested_simplify(ner(sentence)),
+            [
+                {"end": 10, "entity_group": "ORG", "score": 0.994, "start": 0, "word": "Groenlinks"},
+                {"entity_group": "LOC", "score": 1.0, "word": "Schiphol.", "start": 22, "end": 31},
             ],
         )
 

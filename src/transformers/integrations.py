@@ -14,12 +14,15 @@
 """
 Integrations with other Python libraries.
 """
+import functools
 import importlib.util
 import numbers
 import os
+import sys
 import tempfile
 from pathlib import Path
 
+from .file_utils import is_datasets_available
 from .utils import logging
 
 
@@ -42,7 +45,7 @@ if _has_comet:
         _has_comet = False
 
 from .file_utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
-from .trainer_callback import TrainerCallback  # noqa: E402
+from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
 
 
@@ -100,6 +103,10 @@ def is_neptune_available():
     return importlib.util.find_spec("neptune") is not None
 
 
+def is_codecarbon_available():
+    return importlib.util.find_spec("codecarbon") is not None
+
+
 def hp_params(trial):
     if is_optuna_available():
         import optuna
@@ -149,6 +156,14 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     import ray
 
     def _objective(trial, local_trainer, checkpoint_dir=None):
+        try:
+            from transformers.utils.notebook import NotebookProgressCallback
+
+            if local_trainer.pop_callback(NotebookProgressCallback):
+                local_trainer.add_callback(ProgressCallback)
+        except ModuleNotFoundError:
+            pass
+
         checkpoint = None
         if checkpoint_dir:
             for subdir in os.listdir(checkpoint_dir):
@@ -234,8 +249,34 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
                 "Trainer `args`.".format(cls=type(kwargs["scheduler"]).__name__)
             )
 
+    trainable = ray.tune.with_parameters(_objective, local_trainer=trainer)
+
+    @functools.wraps(trainable)
+    def dynamic_modules_import_trainable(*args, **kwargs):
+        """
+        Wrapper around ``tune.with_parameters`` to ensure datasets_modules are loaded on each Actor.
+
+        Without this, an ImportError will be thrown. See https://github.com/huggingface/transformers/issues/11565.
+
+        Assumes that ``_objective``, defined above, is a function.
+        """
+        if is_datasets_available():
+            import datasets.load
+
+            dynamic_modules_path = os.path.join(datasets.load.init_dynamic_modules(), "__init__.py")
+            # load dynamic_modules from path
+            spec = importlib.util.spec_from_file_location("datasets_modules", dynamic_modules_path)
+            datasets_modules = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = datasets_modules
+            spec.loader.exec_module(datasets_modules)
+        return trainable(*args, **kwargs)
+
+    # special attr set by tune.with_parameters
+    if hasattr(trainable, "__mixins__"):
+        dynamic_modules_import_trainable.__mixins__ = trainable.__mixins__
+
     analysis = ray.tune.run(
-        ray.tune.with_parameters(_objective, local_trainer=trainer),
+        dynamic_modules_import_trainable,
         config=trainer.hp_space(None),
         num_samples=n_trials,
         **kwargs,
@@ -259,6 +300,8 @@ def get_available_reporting_integrations():
         integrations.append("tensorboard")
     if is_wandb_available():
         integrations.append("wandb")
+    if is_codecarbon_available():
+        integrations.append("codecarbon")
     return integrations
 
 
@@ -718,6 +761,34 @@ class NeptuneCallback(TrainerCallback):
             pass
 
 
+class CodeCarbonCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that tracks the CO2 emission of training.
+    """
+
+    def __init__(self):
+        assert (
+            is_codecarbon_available()
+        ), "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
+        import codecarbon
+
+        self._codecarbon = codecarbon
+        self.tracker = None
+
+    def on_init_end(self, args, state, control, **kwargs):
+        if self.tracker is None and state.is_local_process_zero:
+            # CodeCarbon will automatically handle environment variables for configuration
+            self.tracker = self._codecarbon.EmissionsTracker(output_dir=args.output_dir)
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if self.tracker and state.is_local_process_zero:
+            self.tracker.start()
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self.tracker and state.is_local_process_zero:
+            self.tracker.stop()
+
+
 INTEGRATION_TO_CALLBACK = {
     "azure_ml": AzureMLCallback,
     "comet_ml": CometCallback,
@@ -725,6 +796,7 @@ INTEGRATION_TO_CALLBACK = {
     "neptune": NeptuneCallback,
     "tensorboard": TensorBoardCallback,
     "wandb": WandbCallback,
+    "codecarbon": CodeCarbonCallback,
 }
 
 

@@ -18,8 +18,10 @@
 import math
 import unittest
 
+import pytest
+
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
-from transformers import is_torch_available
+from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -30,7 +32,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Wav2Vec2Config,
         Wav2Vec2FeatureExtractor,
         Wav2Vec2ForCTC,
         Wav2Vec2ForMaskedLM,
@@ -104,7 +105,12 @@ class Wav2Vec2ModelTester:
         input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        config = Wav2Vec2Config(
+        config = self.get_config()
+
+        return config, input_values, attention_mask
+
+    def get_config(self):
+        return Wav2Vec2Config(
             hidden_size=self.hidden_size,
             feat_extract_norm=self.feat_extract_norm,
             feat_extract_dropout=self.feat_extract_dropout,
@@ -124,8 +130,6 @@ class Wav2Vec2ModelTester:
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
         )
-
-        return config, input_values, attention_mask
 
     def create_and_check_model(self, config, input_values, attention_mask):
         model = Wav2Vec2Model(config=config)
@@ -182,12 +186,13 @@ class Wav2Vec2ModelTester:
             attention_mask[i, input_lengths[i] :] = 0
 
         model.config.ctc_loss_reduction = "sum"
-        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
 
         model.config.ctc_loss_reduction = "mean"
-        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
 
-        self.parent.assertTrue(abs(labels.shape[0] * labels.shape[1] * mean_loss.item() - sum_loss.item()) < 1e-3)
+        self.parent.assertTrue(isinstance(sum_loss, float))
+        self.parent.assertTrue(isinstance(mean_loss, float))
 
     def check_training(self, config, input_values, *args):
         config.ctc_zero_infinity = True
@@ -217,6 +222,20 @@ class Wav2Vec2ModelTester:
         self.parent.assertFalse(torch.isinf(loss).item())
 
         loss.backward()
+
+    def check_labels_out_of_vocab(self, config, input_values, *args):
+        model = Wav2Vec2ForCTC(config)
+        model.to(torch_device)
+        model.train()
+
+        input_values = input_values[:3]
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
+
+        with pytest.raises(ValueError):
+            model(input_values, labels=labels)
 
     def prepare_config_and_inputs_for_common(self):
         config, input_values, attention_mask = self.prepare_config_and_inputs()
@@ -251,6 +270,10 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_training(*config_and_inputs)
+
+    def test_labels_out_of_vocab(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
     # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
@@ -391,6 +414,10 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_training(*config_and_inputs)
+
+    def test_labels_out_of_vocab(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
     # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
@@ -555,6 +582,24 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         for batch_sum in mask.sum(axis=-1):
             self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
 
+    def test_compute_mask_indices_attn_mask_overlap(self):
+        batch_size = 4
+        sequence_length = 80
+        mask_prob = 0.5
+        mask_length = 4
+
+        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        attention_mask[:2, sequence_length // 2 :] = 0
+
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length, device=torch_device, attention_mask=attention_mask
+        )
+
+        for batch_sum in mask.sum(axis=-1):
+            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
+
+        self.assertTrue(mask[:2, sequence_length // 2 :].sum() == 0)
+
     def test_compute_perplexity(self):
         probs = torch.arange(100, device=torch_device).reshape(2, 5, 10) / 100
 
@@ -580,6 +625,37 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         negatives = Wav2Vec2ForPreTraining._sample_negatives(features, num_negatives)
+
+        self.assertTrue(negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size))
+
+        # make sure no negatively sampled vector is actually a positive one
+        for negative in negatives:
+            self.assertTrue(((negative - features) == 0).sum() == 0.0)
+
+        # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
+        self.assertTrue(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+
+    def test_sample_negatives_with_attn_mask(self):
+        batch_size = 2
+        sequence_length = 10
+        hidden_size = 4
+        num_negatives = 3
+
+        # second half of last input tensor is padded
+        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        attention_mask[-1, sequence_length // 2 :] = 0
+
+        features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
+            sequence_length, hidden_size
+        )  # each value in vector consits of same value
+        features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
+
+        # replace masked feature vectors with -100 to test that those are not sampled
+        features = torch.where(attention_mask[:, :, None].expand(features.shape).bool(), features, -100)
+
+        negatives = Wav2Vec2ForPreTraining._sample_negatives(features, num_negatives, attention_mask=attention_mask)
+
+        self.assertTrue((negatives >= 0).all().item())
 
         self.assertTrue(negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size))
 
@@ -639,7 +715,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(2)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True, truncation=True)
+        inputs = processor(input_speech, return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
 
@@ -661,7 +737,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True, truncation=True)
+        inputs = processor(input_speech, return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)

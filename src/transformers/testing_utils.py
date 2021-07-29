@@ -33,8 +33,10 @@ from .file_utils import (
     is_datasets_available,
     is_faiss_available,
     is_flax_available,
+    is_keras2onnx_available,
     is_onnx_available,
     is_pandas_available,
+    is_rjieba_available,
     is_scatter_available,
     is_sentencepiece_available,
     is_soundfile_availble,
@@ -223,6 +225,23 @@ def require_git_lfs(test_case):
         return test_case
 
 
+def require_rjieba(test_case):
+    """
+    Decorator marking a test that requires rjieba. These tests are skipped when rjieba isn't installed.
+    """
+    if not is_rjieba_available():
+        return unittest.skip("test requires rjieba")(test_case)
+    else:
+        return test_case
+
+
+def require_keras2onnx(test_case):
+    if not is_keras2onnx_available():
+        return unittest.skip("test requires keras2onnx")(test_case)
+    else:
+        return test_case
+
+
 def require_onnx(test_case):
     if not is_onnx_available():
         return unittest.skip("test requires ONNX")(test_case)
@@ -379,6 +398,21 @@ def require_torch_non_multi_gpu(test_case):
 
     if torch.cuda.device_count() > 1:
         return unittest.skip("test requires 0 or 1 GPU")(test_case)
+    else:
+        return test_case
+
+
+def require_torch_up_to_2_gpus(test_case):
+    """
+    Decorator marking a test that requires 0 or 1 or 2 GPU setup (in PyTorch).
+    """
+    if not is_torch_available():
+        return unittest.skip("test requires PyTorch")(test_case)
+
+    import torch
+
+    if torch.cuda.device_count() > 2:
+        return unittest.skip("test requires 0 or 1 or 2 GPUs")(test_case)
     else:
         return test_case
 
