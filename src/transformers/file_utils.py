@@ -306,10 +306,7 @@ if _torch_available:
         TORCH_FX_REQUIRED_VERSION.minor,
     )
 
-    _torch_onnx_dict_inputs_support_available = (torch_version.major, torch_version.minor) >= (
-        TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION.major,
-        TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION.minor,
-    )
+    _torch_onnx_dict_inputs_support_available = torch_version >= TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION
 
 
 def is_torch_fx_available():
