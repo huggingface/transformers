@@ -1040,8 +1040,8 @@ if is_torch_available():
     _import_structure["models.splinter"].extend(
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SplinterForMaskedLM",
             "SplinterForCausalLM",
+            "SplinterForMaskedLM",
             "SplinterForMultipleChoice",
             "SplinterForQuestionAnswering",
             "SplinterForSequenceClassification",
@@ -2589,8 +2589,8 @@ if TYPE_CHECKING:
         )
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SplinterForMaskedLM,
             SplinterForCausalLM,
+            SplinterForMaskedLM,
             SplinterForMultipleChoice,
             SplinterForQuestionAnswering,
             SplinterForSequenceClassification,

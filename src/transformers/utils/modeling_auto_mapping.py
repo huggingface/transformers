@@ -36,6 +36,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("DebertaConfig", "DebertaForQuestionAnswering"),
         ("DebertaV2Config", "DebertaV2ForQuestionAnswering"),
         ("IBertConfig", "IBertForQuestionAnswering"),
+        ("SplinterConfig", "SplinterForQuestionAnswering"),
     ]
 )
 
@@ -68,6 +69,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("BlenderbotConfig", "BlenderbotForCausalLM"),
         ("BlenderbotSmallConfig", "BlenderbotSmallForCausalLM"),
         ("MegatronBertConfig", "MegatronBertForCausalLM"),
+        ("SplinterConfig", "SplinterForCausalLM"),
     ]
 )
 
@@ -110,6 +112,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("DebertaConfig", "DebertaForMaskedLM"),
         ("DebertaV2Config", "DebertaV2ForMaskedLM"),
         ("IBertConfig", "IBertForMaskedLM"),
+        ("SplinterConfig", "SplinterForMaskedLM"),
     ]
 )
 
@@ -138,6 +141,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("FunnelConfig", "FunnelForMultipleChoice"),
         ("MPNetConfig", "MPNetForMultipleChoice"),
         ("IBertConfig", "IBertForMultipleChoice"),
+        ("SplinterConfig", "SplinterForMultipleChoice"),
     ]
 )
 
@@ -217,6 +221,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("MPNetConfig", "MPNetForSequenceClassification"),
         ("TapasConfig", "TapasForSequenceClassification"),
         ("IBertConfig", "IBertForSequenceClassification"),
+        ("SplinterConfig", "SplinterForSequenceClassification"),
     ]
 )
 
@@ -255,6 +260,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("DebertaConfig", "DebertaForTokenClassification"),
         ("DebertaV2Config", "DebertaV2ForTokenClassification"),
         ("IBertConfig", "IBertForTokenClassification"),
+        ("SplinterConfig", "SplinterForTokenClassification"),
     ]
 )
 
@@ -320,6 +326,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("MPNetConfig", "MPNetModel"),
         ("TapasConfig", "TapasModel"),
         ("IBertConfig", "IBertModel"),
+        ("SplinterConfig", "SplinterModel"),
     ]
 )
 
@@ -368,5 +375,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("DebertaConfig", "DebertaForMaskedLM"),
         ("DebertaV2Config", "DebertaV2ForMaskedLM"),
         ("IBertConfig", "IBertForMaskedLM"),
+        ("SplinterConfig", "SplinterForMaskedLM"),
     ]
 )

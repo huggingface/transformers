@@ -221,7 +221,7 @@ CONFIG_MAPPING = OrderedDict(
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
         ("tapas", TapasConfig),
-        ("splinter", SplinterConfig)
+        ("splinter", SplinterConfig),
     ]
 )
 

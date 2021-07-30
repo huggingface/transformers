@@ -269,8 +269,8 @@ from ..roformer.modeling_roformer import (
 )
 from ..speech_to_text.modeling_speech_to_text import Speech2TextForConditionalGeneration, Speech2TextModel
 from ..splinter.modeling_splinter import (
-    SplinterForMaskedLM,
     SplinterForCausalLM,
+    SplinterForMaskedLM,
     SplinterForMultipleChoice,
     SplinterForQuestionAnswering,
     SplinterForSequenceClassification,
@@ -734,7 +734,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForQuestionAnswering),
         (DebertaV2Config, DebertaV2ForQuestionAnswering),
         (IBertConfig, IBertForQuestionAnswering),
-        (SplinterConfig, SplinterForQuestionAnswering)
+        (SplinterConfig, SplinterForQuestionAnswering),
     ]
 )
 
