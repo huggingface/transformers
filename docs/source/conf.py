@@ -27,7 +27,8 @@ author = "huggingface"
 # The short X.Y version
 version = ""
 # The full version, including alpha/beta/rc tags
-release = "4.5.0.dev0"
+release = u'4.7.0'
+
 
 
 # Prefix link to point to master, comment this during version release and uncomment below line

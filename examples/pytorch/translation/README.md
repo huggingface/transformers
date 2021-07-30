@@ -29,6 +29,7 @@ For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2s
 - `MarianMTModel`
 - `PegasusForConditionalGeneration`
 - `T5ForConditionalGeneration`
+- `MT5ForConditionalGeneration`
 
 `run_translation.py` is a lightweight examples of how to download and preprocess a dataset from the [🤗 Datasets](https://github.com/huggingface/datasets) library or use your own files (jsonlines or csv), then fine-tune one of the architectures above on it.
 

@@ -23,30 +23,67 @@ Based on the script [`run_flax_glue.py`](https://github.com/huggingface/transfor
 Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding
 Evaluation](https://gluebenchmark.com/). This script can fine-tune any of the models on the [hub](https://huggingface.co/models).
 
-GLUE is made up of a total of 9 different tasks. Here is how to run the script on one of them:
+To begin with it is recommended to create a model repository to save the trained model and logs.
+Here we call the model `"bert-glue-mrpc-test"`, but you can change the model name as you like.
+
+You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
+you are logged in) or via the command line:
+
+```
+huggingface-cli repo create bert-glue-mrpc-test
+```
+
+Next we clone the model repository to add the tokenizer and model files.
+
+```
+git clone https://huggingface.co/<your-username>/bert-glue-mrpc-test
+```
+
+To ensure that all tensorboard traces will be uploaded correctly, we need to 
+track them. You can run the following command inside your model repo to do so.
+
+```
+cd bert-glue-mrpc-test
+git lfs track "*tfevents*"
+```
+
+Great, we have set up our model repository. During training, we will automatically
+push the training logs and model weights to the repo.
+
+Next, let's add a symbolic link to the `run_flax_glue.py`.
 
 ```bash
 export TASK_NAME=mrpc
+export MODEL_DIR="./bert-glue-mrpc-test"
+ln -s ~/transformers/examples/flax/text-classification/run_flax_glue.py run_flax_glue.py
+```
 
+
+GLUE is made up of a total of 9 different tasks. Here is how to run the script on one of them:
+
+```bash
 python run_flax_glue.py \
   --model_name_or_path bert-base-cased \
-  --task_name $TASK_NAME \
+  --task_name ${TASK_NAME} \
   --max_length 128 \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --per_device_train_batch_size 4 \
-  --output_dir /tmp/$TASK_NAME/
+  --output_dir ${MODEL_DIR} \
+  --push_to_hub
 ```
 
 where task name can be one of cola, mnli, mnli-mm, mrpc, qnli, qqp, rte, sst2, stsb, wnli.
 
 Using the command above, the script will train for 3 epochs and run eval after each epoch. 
-Metrics and hyperparameters are stored in Tensorflow event files in `---output_dir`.
+Metrics and hyperparameters are stored in Tensorflow event files in `--output_dir`.
 You can see the results by running `tensorboard` in that directory:
 
 ```bash
 $ tensorboard --logdir .
 ```
+
+or directly on the hub under *Training metrics*.
 
 ### Accuracy Evaluation
 
@@ -63,15 +100,15 @@ In the Tensorboard results linked below, the random seed of each model is equal 
 
 | Task  | Metric                       | Acc (best run) | Acc (avg/5runs) | Stdev     | Metrics                                                                  |
 |-------|------------------------------|----------------|-----------------|-----------|--------------------------------------------------------------------------|
-| CoLA  | Matthew's corr               | 60.82          | 59.04           | 1.17      | [tfhub.dev](https://tensorboard.dev/experiment/U2ncNFP3RpWW6YnA9PYJBA/)  |
-| SST-2 | Accuracy                     | 92.43          | 92.13           | 0.38      | [tfhub.dev](https://tensorboard.dev/experiment/vzxoOHZURcm0rO1I33x7uA/)  |
-| MRPC  | F1/Accuracy                  | 89.90/88.98    | 88.98/85.30     | 0.73/2.33 | [tfhub.dev](https://tensorboard.dev/experiment/EWPBIbfYSDGHjiYxrw2a2Q/)  |
-| STS-B | Pearson/Spearman corr.       | 89.04/88.70    | 88.94/88.63     | 0.07/0.07 | [tfhub.dev](https://tensorboard.dev/experiment/3aYHKL10TeiaZYwH1M8ogA/)  |
-| QQP   | Accuracy/F1                  | 90.82/87.54    | 90.75/87.53     | 0.06/0.02 | [tfhub.dev](https://tensorboard.dev/experiment/VfVDLS4AQnqr4NMbng6yUw/)  |
-| MNLI  | Matched acc.                 | 84.10          | 83.84           | 0.16      | [tfhub.dev](https://tensorboard.dev/experiment/Sz9UdhoORaaSjzuOHRB4Jw/)  |
-| QNLI  | Accuracy                     | 91.07          | 90.83           | 0.19      | [tfhub.dev](https://tensorboard.dev/experiment/zk6udb5MQAyAQ4eczrFBaQ/)  |
-| RTE   | Accuracy                     | 66.06          | 64.76           | 1.04      | [tfhub.dev](https://tensorboard.dev/experiment/BwxaUoAEQ5aa3oQilEjADw/)  |
-| WNLI  | Accuracy                     | 46.48          | 37.01           | 6.83      | [tfhub.dev](https://tensorboard.dev/experiment/b2Y8ouwMTRC8iBWzRzVYTA/)  |
+| CoLA  | Matthew's corr               | 60.57          | 59.04           | 1.06      | [tfhub.dev](https://tensorboard.dev/experiment/lfr2adVpRtmLDALKrElkzg/)  |
+| SST-2 | Accuracy                     | 92.66          | 92.23           | 0.57      | [tfhub.dev](https://tensorboard.dev/experiment/jYvfv2trRHKMjoWnXVwrZA/)  |
+| MRPC  | F1/Accuracy                  | 89.90/85.78    | 88.97/84.36     | 0.72/1.09 | [tfhub.dev](https://tensorboard.dev/experiment/bo3W3DEoRw2Q7YXjWrJkfg/)  |
+| STS-B | Pearson/Spearman corr.       | 89.04/88.70    | 88.94/88.63     | 0.07/0.07 | [tfhub.dev](https://tensorboard.dev/experiment/fxVwbLD7QpKhbot0r9rn2w/)  |
+| QQP   | Accuracy/F1                  | 90.81/87.58    | 90.76/87.51     | 0.05/0.06 | [tfhub.dev](https://tensorboard.dev/experiment/di089Rc9TZmsnKRMrYNLsA/)  |
+| MNLI  | Matched acc.                 | 84.10          | 83.80           | 0.16      | [tfhub.dev](https://tensorboard.dev/experiment/JgNCGHDJSRaW6HBx6YQFYQ/)  |
+| QNLI  | Accuracy                     | 91.01          | 90.82           | 0.17      | [tfhub.dev](https://tensorboard.dev/experiment/Bq7cMGJnQMSggYgL8qNGeQ/)  |
+| RTE   | Accuracy                     | 66.06          | 64.76           | 1.04      | [tfhub.dev](https://tensorboard.dev/experiment/66Eq24bhRjqN6CEhgDSGqQ/)  |
+| WNLI  | Accuracy                     | 46.48          | 37.01           | 6.83      | [tfhub.dev](https://tensorboard.dev/experiment/TAqcnddqTkWvVEeGaWwIdQ/)  |
 
 Some of these results are significantly different from the ones reported on the test set of GLUE benchmark on the
 website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the website.
@@ -95,14 +132,8 @@ overall training time below. For comparison we ran Pytorch's [run_glue.py](https
 | WNLI  |  1m 11s   |     48s    | 39s        | 36s             |
 |-------|
 | **TOTAL** | 1h 03m | 1h 28m | 5h 16m | 6h 37m      |
-| **COST*** | $8.56  | $29.10 | $13.06 | $16.41      |
 
-
-*All experiments are ran on Google Cloud Platform. Prices are on-demand prices
-(not preemptible), obtained on May 12, 2021 for zone Iowa (us-central1) using
-the following tables:
-[TPU pricing table](https://cloud.google.com/tpu/pricing) ($2.40/h for v3-8),
-[GPU pricing table](https://cloud.google.com/compute/gpus-pricing) ($2.48/h per
-V100 GPU). GPU experiments are ran without further optimizations besides JAX
+*All experiments are ran on Google Cloud Platform. 
+GPU experiments are ran without further optimizations besides JAX
 transformations. GPU experiments are ran with full precision (fp32). "TPU v3-8"
 are 8 TPU cores on 4 chips (each chips has 2 cores), while "8 GPU" are 8 GPU chips.

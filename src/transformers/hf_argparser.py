@@ -16,7 +16,7 @@ import dataclasses
 import json
 import re
 import sys
-from argparse import ArgumentParser, ArgumentTypeError
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
 from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, List, NewType, Optional, Tuple, Union
@@ -46,7 +46,7 @@ class HfArgumentParser(ArgumentParser):
 
     The class is designed to play well with the native argparse. In particular, you can add more (non-dataclass backed)
     arguments to the parser after initialization and you'll get the output back after parsing as an additional
-    namespace.
+    namespace. Optional: To create sub argument groups use the `_argument_group_name` attribute in the dataclass.
     """
 
     dataclass_types: Iterable[DataClassType]
@@ -59,6 +59,9 @@ class HfArgumentParser(ArgumentParser):
             kwargs:
                 (Optional) Passed to `argparse.ArgumentParser()` in the regular way.
         """
+        # To make the default appear when using --help
+        if "formatter_class" not in kwargs:
+            kwargs["formatter_class"] = ArgumentDefaultsHelpFormatter
         super().__init__(**kwargs)
         if dataclasses.is_dataclass(dataclass_types):
             dataclass_types = [dataclass_types]
@@ -67,6 +70,10 @@ class HfArgumentParser(ArgumentParser):
             self._add_dataclass_arguments(dtype)
 
     def _add_dataclass_arguments(self, dtype: DataClassType):
+        if hasattr(dtype, "_argument_group_name"):
+            parser = self.add_argument_group(dtype._argument_group_name)
+        else:
+            parser = self
         for field in dataclasses.fields(dtype):
             if not field.init:
                 continue
@@ -103,13 +110,13 @@ class HfArgumentParser(ArgumentParser):
                     kwargs["required"] = True
             elif field.type is bool or field.type == Optional[bool]:
                 if field.default is True:
-                    self.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **kwargs)
+                    parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **kwargs)
 
                 # Hack because type=bool in argparse does not behave as we want.
                 kwargs["type"] = string_to_bool
                 if field.type is bool or (field.default is not None and field.default is not dataclasses.MISSING):
-                    # Default value is True if we have no default when of type bool.
-                    default = True if field.default is dataclasses.MISSING else field.default
+                    # Default value is False if we have no default when of type bool.
+                    default = False if field.default is dataclasses.MISSING else field.default
                     # This is the value that will get picked if we don't include --field_name in any way
                     kwargs["default"] = default
                     # This tells argparse we accept 0 or 1 value after --field_name
@@ -136,7 +143,7 @@ class HfArgumentParser(ArgumentParser):
                     kwargs["default"] = field.default_factory()
                 else:
                     kwargs["required"] = True
-            self.add_argument(field_name, **kwargs)
+            parser.add_argument(field_name, **kwargs)
 
     def parse_args_into_dataclasses(
         self, args=None, return_remaining_strings=False, look_for_args_file=True, args_filename=None

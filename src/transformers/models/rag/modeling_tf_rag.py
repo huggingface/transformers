@@ -1063,7 +1063,11 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         num_return_sequences=None,
         decoder_start_token_id=None,
         n_docs=None,
-        **kwargs
+        output_scores=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict_in_generate=None,
+        **model_kwargs
     ):
         """
         Implements TFRAG token decoding.
@@ -1130,12 +1134,25 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 Number of beams for beam search. 1 means no beam search.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
-                is not the value we pass to the ``generator``'s `:func:`~transformers.PreTrainedModel.generate`
-                function, where we set ``num_return_sequences`` to :obj:`num_beams`.
+                is not the value we pass to the ``generator``'s
+                `:func:`~transformers.generation_utils.GenerationMixin.generate` function, where we set
+                ``num_return_sequences`` to :obj:`num_beams`.
             decoder_start_token_id (:obj:`int`, `optional`):
                 If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
             n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
+            output_attentions (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more details.
+            output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more details.
+            output_scores (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
+            return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            model_specific_kwargs:
+                Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
         Return:
             :obj:`tf.Tensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
@@ -1165,6 +1182,21 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             if decoder_start_token_id is not None
             else self.config.generator.decoder_start_token_id
         )
+
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict_in_generate = (
+            return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+        )
+
+        model_kwargs["output_scores"] = output_scores
+        model_kwargs["output_attentions"] = output_attentions
+        model_kwargs["output_hidden_states"] = output_hidden_states
+        model_kwargs["encoder_attentions"] = None
+        model_kwargs["encoder_hidden_states"] = None
 
         # retrieve docs
         if self.retriever is not None and context_input_ids is None:
@@ -1199,7 +1231,19 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         batch_size = context_input_ids.shape[0] // n_docs
 
         encoder = self.rag.generator.get_encoder()
-        encoder_outputs = encoder(input_ids=context_input_ids, attention_mask=context_attention_mask, return_dict=True)
+        encoder_outputs = encoder(
+            input_ids=context_input_ids,
+            attention_mask=context_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+
+        if return_dict_in_generate:
+            if output_attentions:
+                model_kwargs["encoder_attentions"] = encoder_outputs.attentions
+            if output_hidden_states:
+                model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
 
         decoder_input_ids = tf.fill(
             (batch_size * num_beams, 1),
@@ -1237,9 +1281,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         # define start_len & additional parameters
         cur_len = 1
         vocab_size = self.config.generator.vocab_size
-        kwargs["doc_scores"] = doc_scores
-        kwargs["encoder_outputs"] = encoder_outputs
-        kwargs["n_docs"] = n_docs
+        model_kwargs["doc_scores"] = doc_scores
+        model_kwargs["encoder_outputs"] = encoder_outputs
+        model_kwargs["n_docs"] = n_docs
 
         # not needed. TODO(PVP): change after generate refactor
         do_sample = False
@@ -1273,7 +1317,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 use_cache=use_cache,
                 forced_bos_token_id=None,
                 forced_eos_token_id=None,
-                **kwargs,  # encoder_outputs is here as in Pytorch's version
+                return_dict_in_generate=return_dict_in_generate,
+                **model_kwargs,  # encoder_outputs is here as in Pytorch's version
             )
         else:
             return self._generate_no_beam_search(
@@ -1296,7 +1341,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 use_cache=use_cache,
                 forced_bos_token_id=None,
                 forced_eos_token_id=None,
-                **kwargs,  # encoder_outputs is here as in Pytorch's version
+                return_dict_in_generate=return_dict_in_generate,
+                **model_kwargs,  # encoder_outputs is here as in Pytorch's version
             )
 
     def get_input_embeddings(self):
@@ -1319,9 +1365,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
 
         shifted_input_ids = tf.cast(input_ids, tf.int32)
-        shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
         start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), start_token_id)
-        shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
+        shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, :-1]], -1)
 
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids = tf.where(
@@ -1682,8 +1727,9 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         **model_kwargs
     ):
         """
-        Implements RAG sequence "thorough" decoding. Read the :meth:`~transformers.PreTrainedModel.generate``
-        documentation for more information on how to set other generate input parameters
+        Implements RAG sequence "thorough" decoding. Read the
+        :meth:`~transformers.generation_utils.GenerationMixin.generate`` documentation for more information on how to
+        set other generate input parameters
 
         Args:
             input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1711,14 +1757,15 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
                 to be set to :obj:`False` if used while training with distributed backend.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
-                is not the value we pass to the ``generator``'s `:func:`~transformers.PreTrainedModel.generate``
-                function, where we set ``num_return_sequences`` to :obj:`num_beams`.
+                is not the value we pass to the ``generator``'s
+                `:func:`~transformers.generation_utils.GenerationMixin.generate`` function, where we set
+                ``num_return_sequences`` to :obj:`num_beams`.
             num_beams (:obj:`int`, `optional`, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
             n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
             kwargs:
-                Additional kwargs will be passed to :meth:`~transformers.PreTrainedModel.generate`
+                Additional kwargs will be passed to :meth:`~transformers.generation_utils.GenerationMixin.generate`
 
         Return:
             :obj:`tf.Tensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated

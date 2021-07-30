@@ -9,8 +9,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Union
 import datasets
 import numpy as np
 import torch
-import torch.nn as nn
 from packaging import version
+from torch import nn
 
 import librosa
 from lang_trans import arabic
@@ -55,7 +55,10 @@ class ModelArguments:
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
     gradient_checkpointing: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
     )
     verbose_logging: Optional[bool] = field(
         default=False,
@@ -65,7 +68,7 @@ class ModelArguments:
 
 def configure_logger(model_args: ModelArguments, training_args: TrainingArguments):
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )

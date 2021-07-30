@@ -15,12 +15,7 @@
 import sys
 
 from transformers.testing_utils import TestCasePlus
-from transformers.utils.versions import (
-    importlib_metadata,
-    require_version,
-    require_version_core,
-    require_version_examples,
-)
+from transformers.utils.versions import importlib_metadata, require_version, require_version_core
 
 
 numpy_ver = importlib_metadata.version("numpy")
@@ -87,14 +82,6 @@ class DependencyVersionCheckTest(TestCasePlus):
                 require_version_core(req)
             except ValueError as e:
                 self.assertIn("need one of ", str(e))
-
-    def test_examples(self):
-        # the main functionality is tested in `test_core`, this is just the hint check
-        try:
-            require_version_examples("numpy>1000.4.5")
-        except ImportError as e:
-            self.assertIn("is required", str(e))
-            self.assertIn("pip install -r examples/requirements.txt", str(e))
 
     def test_python(self):
 

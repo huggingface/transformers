@@ -48,11 +48,14 @@ from transformers import (
     set_seed,
 )
 from transformers.utils import check_min_version
+from transformers.utils.versions import require_version
 from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.7.0.dev0")
+check_min_version("4.10.0.dev0")
+
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
 logger = logging.getLogger(__name__)
 # You should update this to your particular problem to have better documentation of `model_type`
@@ -264,7 +267,7 @@ def main():
     accelerator = Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
@@ -364,6 +367,11 @@ def main():
 
     # Training preprocessing
     def prepare_train_features(examples):
+        # Some of the questions have lots of whitespace on the left, which is not useful and will make the
+        # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
+        # left whitespace
+        examples[question_column_name] = [q.lstrip() for q in examples[question_column_name]]
+
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
         # context that overlaps a bit the context of the previous feature.
@@ -448,6 +456,7 @@ def main():
         num_proc=args.preprocessing_num_workers,
         remove_columns=column_names,
         load_from_cache_file=not args.overwrite_cache,
+        desc="Running tokenizer on train dataset",
     )
     if args.max_train_samples is not None:
         # Number of samples might increase during Feature Creation, We select only specified max samples
@@ -455,6 +464,11 @@ def main():
 
     # Validation preprocessing
     def prepare_validation_features(examples):
+        # Some of the questions have lots of whitespace on the left, which is not useful and will make the
+        # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
+        # left whitespace
+        examples[question_column_name] = [q.lstrip() for q in examples[question_column_name]]
+
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
         # context that overlaps a bit the context of the previous feature.
@@ -508,6 +522,7 @@ def main():
         num_proc=args.preprocessing_num_workers,
         remove_columns=column_names,
         load_from_cache_file=not args.overwrite_cache,
+        desc="Running tokenizer on validation dataset",
     )
 
     if args.max_eval_samples is not None:
@@ -528,6 +543,7 @@ def main():
             num_proc=args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on prediction dataset",
         )
         if args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
@@ -692,7 +708,11 @@ def main():
             if completed_steps >= args.max_train_steps:
                 break
 
-    # Validation
+    # Evaluation
+    logger.info("***** Running Evaluation *****")
+    logger.info(f"  Num examples = {len(eval_dataset)}")
+    logger.info(f"  Batch size = {args.per_device_eval_batch_size}")
+
     all_start_logits = []
     all_end_logits = []
     for step, batch in enumerate(eval_dataloader):
@@ -725,6 +745,10 @@ def main():
 
     # Prediction
     if args.do_predict:
+        logger.info("***** Running Prediction *****")
+        logger.info(f"  Num examples = {len(predict_dataset)}")
+        logger.info(f"  Batch size = {args.per_device_eval_batch_size}")
+
         all_start_logits = []
         all_end_logits = []
         for step, batch in enumerate(predict_dataloader):

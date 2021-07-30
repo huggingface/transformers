@@ -45,9 +45,12 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
+
 # You should update this to your particular problem to have better documentation of `model_type`
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -74,6 +77,18 @@ def parse_args():
     )
     parser.add_argument(
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
+    )
+    parser.add_argument(
+        "--text_column_name",
+        type=str,
+        default=None,
+        help="The column name of text to input in the file (a csv or JSON file).",
+    )
+    parser.add_argument(
+        "--label_column_name",
+        type=str,
+        default=None,
+        help="The column name of label to input in the file (a csv or JSON file).",
     )
     parser.add_argument(
         "--max_length",
@@ -206,7 +221,7 @@ def main():
     accelerator = Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
@@ -259,8 +274,20 @@ def main():
     else:
         column_names = raw_datasets["validation"].column_names
         features = raw_datasets["validation"].features
-    text_column_name = "tokens" if "tokens" in column_names else column_names[0]
-    label_column_name = f"{args.task_name}_tags" if f"{args.task_name}_tags" in column_names else column_names[1]
+
+    if args.text_column_name is not None:
+        text_column_name = args.text_column_name
+    elif "tokens" in column_names:
+        text_column_name = "tokens"
+    else:
+        text_column_name = column_names[0]
+
+    if args.label_column_name is not None:
+        label_column_name = args.label_column_name
+    elif f"{args.task_name}_tags" in column_names:
+        label_column_name = f"{args.task_name}_tags"
+    else:
+        label_column_name = column_names[1]
 
     # In the event the labels are not a `Sequence[ClassLabel]`, we will need to go through the dataset to get the
     # unique labels.
@@ -293,15 +320,17 @@ def main():
         config = CONFIG_MAPPING[args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
-    if args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=True)
-    elif args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=True)
-    else:
+    tokenizer_name_or_path = args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
+    if not tokenizer_name_or_path:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
+
+    if config.model_type in {"gpt2", "roberta"}:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True, add_prefix_space=True)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True)
 
     if args.model_name_or_path:
         model = AutoModelForTokenClassification.from_pretrained(
@@ -315,7 +344,7 @@ def main():
 
     model.resize_token_embeddings(len(tokenizer))
 
-    # Preprocessing the raw_datasets.
+    # Preprocessing the datasets.
     # First we tokenize all the texts.
     padding = "max_length" if args.pad_to_max_length else False
 
@@ -355,7 +384,10 @@ def main():
         return tokenized_inputs
 
     processed_raw_datasets = raw_datasets.map(
-        tokenize_and_align_labels, batched=True, remove_columns=raw_datasets["train"].column_names
+        tokenize_and_align_labels,
+        batched=True,
+        remove_columns=raw_datasets["train"].column_names,
+        desc="Running tokenizer on dataset",
     )
 
     train_dataset = processed_raw_datasets["train"]

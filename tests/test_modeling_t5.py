@@ -18,7 +18,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import T5Config, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
@@ -30,7 +30,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import T5Config, T5EncoderModel, T5ForConditionalGeneration, T5Model, T5Tokenizer
+    from transformers import ByT5Tokenizer, T5EncoderModel, T5ForConditionalGeneration, T5Model, T5Tokenizer
     from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -100,8 +100,20 @@ class T5ModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = T5Config(
-            vocab_size=self.vocab_size,
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        )
+
+    def get_pipeline_config(self):
+        return T5Config(
+            vocab_size=166,  # t5 forces 100 extra tokens
             d_model=self.hidden_size,
             d_ff=self.d_ff,
             d_kv=self.hidden_size // self.num_attention_heads,
@@ -117,13 +129,22 @@ class T5ModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
         )
 
-        return (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
+    def get_config(self):
+        return T5Config(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_decoder_layers=self.decoder_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
         )
 
     def check_prepare_lm_labels_via_shift_left(
@@ -795,6 +816,21 @@ class T5ModelIntegrationTests(unittest.TestCase):
         return T5Tokenizer.from_pretrained("t5-base")
 
     @slow
+    def test_small_generation(self):
+        model = T5ForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
+        model.config.max_length = 8
+        model.config.num_beams = 1
+        model.config.do_sample = False
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids.to(torch_device)
+
+        sequences = model.generate(input_ids)
+
+        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
+        self.assertTrue(output_str == "Hello there!")
+
+    @slow
     def test_small_integration_test(self):
         """
         For comparision run:
@@ -844,6 +880,30 @@ class T5ModelIntegrationTests(unittest.TestCase):
         mtf_score = -(labels.shape[-1] * loss.item())
 
         EXPECTED_SCORE = -59.0293
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+
+    @slow
+    def test_small_byt5_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.9.1
+
+        >>> path_to_byt5_small_checkpoint = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_tf_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = t5.data.ByteVocabulary()
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = T5ForConditionalGeneration.from_pretrained("google/byt5-small").to(torch_device)
+        tokenizer = ByT5Tokenizer.from_pretrained("google/byt5-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
+        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
+
+        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
+        mtf_score = -(labels.shape[-1] * loss.item())
+
+        EXPECTED_SCORE = -60.7397
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow

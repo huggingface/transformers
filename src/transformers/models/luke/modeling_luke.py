@@ -19,9 +19,8 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.utils.checkpoint
+from torch import nn
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -40,6 +39,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LukeConfig"
 _TOKENIZER_FOR_DOC = "LukeTokenizer"
+_CHECKPOINT_FOR_DOC = "studio-ousia/luke-base"
 
 LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "studio-ousia/luke-base",
@@ -1098,9 +1098,9 @@ class LukeForEntityClassification(LukePreTrainedModel):
             # When the number of dimension of `labels` is 1, cross entropy is used as the loss function. The binary
             # cross entropy is used otherwise.
             if labels.ndim == 1:
-                loss = F.cross_entropy(logits, labels)
+                loss = nn.functional.cross_entropy(logits, labels)
             else:
-                loss = F.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
+                loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
 
         if not return_dict:
             output = (
@@ -1213,9 +1213,9 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
             # When the number of dimension of `labels` is 1, cross entropy is used as the loss function. The binary
             # cross entropy is used otherwise.
             if labels.ndim == 1:
-                loss = F.cross_entropy(logits, labels)
+                loss = nn.functional.cross_entropy(logits, labels)
             else:
-                loss = F.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
+                loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
 
         if not return_dict:
             output = (
@@ -1351,9 +1351,9 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
             # When the number of dimension of `labels` is 2, cross entropy is used as the loss function. The binary
             # cross entropy is used otherwise.
             if labels.ndim == 2:
-                loss = F.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = nn.functional.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
             else:
-                loss = F.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
+                loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
 
         if not return_dict:
             output = (

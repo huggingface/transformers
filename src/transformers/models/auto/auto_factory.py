@@ -14,11 +14,8 @@
 # limitations under the License.
 """Factory function to build auto-model classes."""
 
-import types
-
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import copy_func
-from ...integrations import deepspeed_config, is_deepspeed_zero3_enabled
 from ...utils import logging
 from .configuration_auto import AutoConfig, replace_list_option_in_docstrings
 
@@ -357,31 +354,25 @@ class _BaseAutoModelClass:
     # Base class for auto models.
     _model_mapping = None
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         raise EnvironmentError(
             f"{self.__class__.__name__} is designed to be instantiated "
             f"using the `{self.__class__.__name__}.from_pretrained(pretrained_model_name_or_path)` or "
             f"`{self.__class__.__name__}.from_config(config)` methods."
         )
 
+    @classmethod
     def from_config(cls, config, **kwargs):
         if type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
+            return model_class._from_config(config, **kwargs)
 
-                logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-                # this immediately partitions the model across all gpus, to avoid the overhead in time
-                # and memory copying it on CPU or each GPU first
-                with deepspeed.zero.Init(config=deepspeed_config()):
-                    return model_class(config, **kwargs)
-            else:
-                return model_class(config, **kwargs)
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
         )
 
+    @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
@@ -410,12 +401,12 @@ def insert_head_doc(docstring, head_doc=""):
     )
 
 
-def auto_class_factory(name, model_mapping, checkpoint_for_example="bert-base-cased", head_doc=""):
+def auto_class_update(cls, checkpoint_for_example="bert-base-cased", head_doc=""):
     # Create a new class with the right name from the base class
-    new_class = types.new_class(name, (_BaseAutoModelClass,))
-    new_class._model_mapping = model_mapping
+    model_mapping = cls._model_mapping
+    name = cls.__name__
     class_docstring = insert_head_doc(CLASS_DOCSTRING, head_doc=head_doc)
-    new_class.__doc__ = class_docstring.replace("BaseAutoModelClass", name)
+    cls.__doc__ = class_docstring.replace("BaseAutoModelClass", name)
 
     # Now we need to copy and re-register `from_config` and `from_pretrained` as class methods otherwise we can't
     # have a specific docstrings for them.
@@ -425,7 +416,7 @@ def auto_class_factory(name, model_mapping, checkpoint_for_example="bert-base-ca
     from_config_docstring = from_config_docstring.replace("checkpoint_placeholder", checkpoint_for_example)
     from_config.__doc__ = from_config_docstring
     from_config = replace_list_option_in_docstrings(model_mapping, use_model_types=False)(from_config)
-    new_class.from_config = classmethod(from_config)
+    cls.from_config = classmethod(from_config)
 
     if name.startswith("TF"):
         from_pretrained_docstring = FROM_PRETRAINED_TF_DOCSTRING
@@ -441,8 +432,8 @@ def auto_class_factory(name, model_mapping, checkpoint_for_example="bert-base-ca
     from_pretrained_docstring = from_pretrained_docstring.replace("shortcut_placeholder", shortcut)
     from_pretrained.__doc__ = from_pretrained_docstring
     from_pretrained = replace_list_option_in_docstrings(model_mapping)(from_pretrained)
-    new_class.from_pretrained = classmethod(from_pretrained)
-    return new_class
+    cls.from_pretrained = classmethod(from_pretrained)
+    return cls
 
 
 def get_values(model_mapping):
