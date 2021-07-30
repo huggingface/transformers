@@ -74,8 +74,8 @@ def create_rename_keys(config, base_model=False):
         # layernorm + classification head
         rename_keys.extend(
             [
-                ("fc_norm.weight", "beit.layernorm.weight"),
-                ("fc_norm.bias", "beit.layernorm.bias"),
+                ("fc_norm.weight", "beit.pooler.layernorm.weight"),
+                ("fc_norm.bias", "beit.pooler.layernorm.bias"),
                 ("head.weight", "classifier.weight"),
                 ("head.bias", "classifier.bias"),
             ]
@@ -106,12 +106,13 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         ]
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = v_bias
 
-        # gamma_1 and gamma_2
+        # gamma_1 and gamma_2 
+        # we call them lambda because otherwise they are renamed when using .from_pretrained
         gamma_1 = state_dict.pop(f"blocks.{i}.gamma_1")
         gamma_2 = state_dict.pop(f"blocks.{i}.gamma_2")
 
-        state_dict[f"{prefix}encoder.layer.{i}.gamma_1"] = gamma_1
-        state_dict[f"{prefix}encoder.layer.{i}.gamma_2"] = gamma_2
+        state_dict[f"{prefix}encoder.layer.{i}.lambda_1"] = gamma_1
+        state_dict[f"{prefix}encoder.layer.{i}.lambda_2"] = gamma_2
         
         # relative_position bias table + index
         table = state_dict.pop(f"blocks.{i}.attn.relative_position_bias_table")
@@ -179,11 +180,8 @@ def convert_beit_checkpoint(checkpoint_path, pytorch_dump_folder_path, task="MIM
     # load HuggingFace model
     model = BEiTForImageClassification(config)
     model.eval()
-    print("State dict:")
-    for name, param in state_dict.items():
-        print(name, param.shape)
     model.load_state_dict(state_dict)
-
+    
     # Check outputs on an image
     # TODO prepare image using BEiTFeatureExtractor instead of torchvision
     #feature_extractor = BEiTFeatureExtractor(size=config.image_size)

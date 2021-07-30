@@ -51,6 +51,41 @@ def to_2tuple(x):
     return (x, x)
 
 
+# Based on https://github.com/rwightman/pytorch-image-models/blob/a2727c1bf78ba0d7b5727f5f95e37fb7f8866b1f/timm/models/layers/drop.py
+def drop_path(x, drop_prob: float = 0., training: bool = False):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    
+    Comment by Ross Wightman:
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
+    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
+    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
+    'survival rate' as the argument.
+    """
+    if drop_prob == 0. or not training:
+        return x
+    keep_prob = 1 - drop_prob
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    random_tensor.floor_()  # binarize
+    output = x.div(keep_prob) * random_tensor
+    return output
+
+
+class DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    """
+    def __init__(self, drop_prob=None):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x):
+        return drop_path(x, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return 'p={}'.format(self.drop_prob)
+
+
 # Based on timm implementation, which can be found here:
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
 
@@ -170,14 +205,21 @@ class BEiTSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
+        print("Shape of attention scores:", attention_scores.shape)
+        
+        print("Attention scores before relative position bias:")
+        print(attention_scores[0,0,:3,:3])
+        
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
-            relative_position_bias = self.relative_position_bias()
-            attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
+            attention_scores = attention_scores + self.relative_position_bias().unsqueeze(0)
         
         # Add shared relative position bias if provided.
         if relative_position_bias is not None:
             attention_scores = attention_scores + relative_position_bias
+        
+        print("Attention scores after relative position bias:")
+        print(attention_scores[0,0,:3,:3])
         
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -287,7 +329,7 @@ class BEiTOutput(nn.Module):
 class BEiTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config, window_size=None):
+    def __init__(self, config, window_size=None, drop_path_rate=0.):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -295,14 +337,15 @@ class BEiTLayer(nn.Module):
         self.intermediate = BEiTIntermediate(config)
         self.output = BEiTOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0. else nn.Identity()
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         init_values = config.layer_scale_init_value
         if init_values > 0:
-            self.gamma_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
-            self.gamma_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+            self.lambda_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+            self.lambda_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
         else:
-            self.gamma_1, self.gamma_2 = None, None
+            self.lambda_1, self.lambda_2 = None, None
 
     def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None): 
         self_attention_outputs = self.attention(
@@ -314,40 +357,43 @@ class BEiTLayer(nn.Module):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        print("Sum of hidden states after self-attention:", attention_output.sum().item())
+        print("Hidden states after self-attention:", attention_output[0,:3,:3])
         
-        # apply gamma_1 if present
-        if self.gamma_1 is not None:
-            attention_output = self.gamma_1 * attention_output
+        #print("First elements of lambda weights:", self.lambda_1[:3])
+        #print("Sum of lambda_1 weights:", self.lambda_1.sum().item())
         
-        print("Sum of hidden states after gamma 1:", attention_output.sum().item())
+        # apply lambda_1 if present
+        if self.lambda_1 is not None:
+            attention_output = self.lambda_1 * attention_output
+                
+        #print("Hidden states after lambda 1:", attention_output[0,:3,:3])
         
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = self.drop_path(attention_output) + hidden_states
 
-        print("Sum of hidden states after first residual connection:", hidden_states.sum().item())
+        #print("Sum of hidden states after first residual connection:", hidden_states.sum().item())
 
         # in BEiT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
 
-        print("Sum of hidden states after layernorm:", layer_output.sum().item())
+        #print("Sum of hidden states after layernorm:", layer_output.sum().item())
 
         layer_output = self.intermediate(layer_output)
         layer_output = self.output(layer_output)
 
-        print("Sum of hidden states after intermediate + output:", layer_output.sum().item())
+        #print("Sum of hidden states after intermediate + output:", layer_output.sum().item())
 
-        if self.gamma_2 is not None:
-            layer_output = self.gamma_2 * layer_output
+        if self.lambda_2 is not None:
+            layer_output = self.lambda_2 * layer_output
         
-        print("Sum of hidden states after gamma 2:", layer_output.sum().item())  
+        #print("Sum of hidden states after lambda_2:", layer_output.sum().item())  
 
-        print("Sum of hidden states which are added:", hidden_states.sum().item())
+        #print("Sum of hidden states which are added:", hidden_states.sum().item())
         
         # second residual connection
-        layer_output = layer_output + hidden_states
+        layer_output = self.drop_path(layer_output) + hidden_states
 
-        print("Sum of hidden states after second residual connection:", layer_output.sum().item())     
+        #print("Sum of hidden states after second residual connection:", layer_output.sum().item())     
 
         outputs = (layer_output,) + outputs
 
@@ -387,6 +433,9 @@ class BEiTRelativePositionBias(nn.Module):
             self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
                 self.window_size[0] * self.window_size[1] + 1,
                 self.window_size[0] * self.window_size[1] + 1, -1)  # Wh*Ww,Wh*Ww,nH
+        #print("Sum of relative position bias:", relative_position_bias.sum())
+        #print("Relative position bias first elements:", relative_position_bias[:3,:3,:3])
+        #print("Relative position bias last elements:", relative_position_bias[-3:,-3:,-3:])
         return relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
 
 
@@ -398,7 +447,10 @@ class BEiTEncoder(nn.Module):
             self.relative_position_bias = BEiTRelativePositionBias(config, window_size=window_size)
         else:
             self.relative_position_bias = None
-        self.layer = nn.ModuleList([BEiTLayer(config, window_size=window_size) for _ in range(config.num_hidden_layers)])
+        
+        # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]  
+        self.layer = nn.ModuleList([BEiTLayer(config, window_size=window_size, drop_path_rate=dpr[i]) for i in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -433,14 +485,14 @@ class BEiTEncoder(nn.Module):
             else:
                 print("----------------------------------")
             
-                print(f"Sum of hidden states before layer {i}", hidden_states.sum().item())
+                print(f"Hidden states before layer {i}", hidden_states[0, :3, :3])
                 
                 relative_position_bias = self.relative_position_bias() if self.relative_position_bias is not None else None
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
             
             hidden_states = layer_outputs[0]
 
-            print(f"Sum of hidden states after layer {i}", hidden_states.sum().item())
+            print(f"Hidden states after layer {i}", hidden_states[0, :3, :3])
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -530,8 +582,8 @@ class BEiTModel(BEiTPreTrainedModel):
         self.embeddings = BEiTEmbeddings(config)
         window_size = self.embeddings.patch_embeddings.patch_shape if config.use_relative_position_bias else None
         self.encoder = BEiTEncoder(config, window_size=window_size)
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+ 
+        self.layernorm = nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = BEiTPooler(config) if add_pooling_layer else None
 
         self.init_weights()
@@ -622,22 +674,28 @@ class BEiTModel(BEiTPreTrainedModel):
 class BEiTPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.use_mean_pooling else None
+        #self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        #self.activation = nn.Tanh()
 
     def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
+        if self.layernorm is not None:
+            # Mean pool the final hidden states of the patch tokens
+            patch_tokens = hidden_states[:, 1:, :]
+            pooled_output = self.layernorm(patch_tokens.mean(1))
+        else:
+            # Pool by simply taking the final hidden state of the [CLS] token
+            pooled_output = hidden_states[:, 0]
+        
+        #pooled_output = self.dense(pooled_output)
+        #pooled_output = self.activation(pooled_output)
         return pooled_output
 
 
 @add_start_docstrings(
     """
-    BEiT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    BEiT Model transformer with an image classification head on top (a linear layer on top of the average of the final hidden states 
+    of the patch tokens) e.g. for ImageNet.
     """,
     BEIT_START_DOCSTRING,
 )
@@ -646,7 +704,7 @@ class BEiTForImageClassification(BEiTPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.beit = BEiTModel(config, add_pooling_layer=False)
+        self.beit = BEiTModel(config, add_pooling_layer=True)
 
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
@@ -701,9 +759,9 @@ class BEiTForImageClassification(BEiTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:

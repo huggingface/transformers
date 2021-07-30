@@ -48,7 +48,7 @@ class BEiTConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
@@ -71,6 +71,11 @@ class BEiTConfig(PretrainedConfig):
             Whether to use the same relative position embeddings across all self-attention layers of the Transformer.
         layer_scale_init_value (:obj:`float`, `optional`, defaults to 0.1):
             Scale to use in the self-attention layers. 0.1 for base, 1e-5 for large. Set 0 to disable layer scale.
+        drop_path_rate (:obj:`float`, `optional`, defaults to 0.1):
+            Stochastic depth rate per sample (when applied in the main path of residual layers).
+        use_mean_pooling (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the CLS token,
+            before applying the classification head.
 
     Example::
 
@@ -107,6 +112,8 @@ class BEiTConfig(PretrainedConfig):
         use_relative_position_bias=True,
         use_shared_relative_position_bias=False,
         layer_scale_init_value=0.1,
+        drop_path_rate=0.1,
+        use_mean_pooling=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -129,3 +136,5 @@ class BEiTConfig(PretrainedConfig):
         self.use_relative_position_bias = use_relative_position_bias
         self.use_shared_relative_position_bias = use_shared_relative_position_bias
         self.layer_scale_init_value = layer_scale_init_value
+        self.drop_path_rate = drop_path_rate
+        self.use_mean_pooling = use_mean_pooling
