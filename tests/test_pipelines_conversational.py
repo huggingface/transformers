@@ -39,10 +39,18 @@ DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 @is_pipeline_test
 class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = dict(
-        list(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items()) + list(MODEL_FOR_CAUSAL_LM_MAPPING.items())
+        list(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items())
+        if MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+        else [] + list(MODEL_FOR_CAUSAL_LM_MAPPING.items())
+        if MODEL_FOR_CAUSAL_LM_MAPPING
+        else []
     )
     tf_model_mapping = dict(
-        list(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items()) + list(TF_MODEL_FOR_CAUSAL_LM_MAPPING.items())
+        list(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items())
+        if TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+        else [] + list(TF_MODEL_FOR_CAUSAL_LM_MAPPING.items())
+        if TF_MODEL_FOR_CAUSAL_LM_MAPPING
+        else []
     )
 
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
