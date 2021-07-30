@@ -17,22 +17,21 @@ Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The Splinter model was proposed in `Few-Shot Question Answering by Pretraining Span Selection
-<https://arxiv.org/abs/2101.00438>`__  by Ori Ram, Yuval Kirstain, Jonathan Berant, Amir Globerson, Omer Levy.
-Splinter is an encoder-only transformer (similar to BERT) pretrained using the recurring span selection task on a large
-corpus comprising Wikipedia and the Toronto Book Corpus.
+<https://arxiv.org/abs/2101.00438>`__ by Ori Ram, Yuval Kirstain, Jonathan Berant, Amir Globerson, Omer Levy. Splinter
+is an encoder-only transformer (similar to BERT) pretrained using the recurring span selection task on a large corpus
+comprising Wikipedia and the Toronto Book Corpus.
 
 The abstract from the paper is the following:
 
 In several question answering benchmarks, pretrained models have reached human parity through fine-tuning on an order
-of 100,000 annotated questions and answers. We explore the more realistic few-shot setting, where only a
-few hundred training examples are available, and observe that standard models perform poorly, highlighting the
-discrepancy between current pretraining objectives and question answering.
-We propose a new pretraining scheme tailored for question answering: recurring span selection.
-Given a passage with multiple sets of recurring spans, we mask in each set all recurring spans but one,
-and ask the model to select the correct span in the passage for each masked span. Masked spans are replaced with a
-special token, viewed as a question representation, that is later used during fine-tuning to select the answer span.
-The resulting model obtains surprisingly good results on multiple benchmarks (e.g., 72.7 F1 on SQuAD with
-only 128 training examples), while maintaining competitive performance in the high-resource setting.
+of 100,000 annotated questions and answers. We explore the more realistic few-shot setting, where only a few hundred
+training examples are available, and observe that standard models perform poorly, highlighting the discrepancy between
+current pretraining objectives and question answering. We propose a new pretraining scheme tailored for question
+answering: recurring span selection. Given a passage with multiple sets of recurring spans, we mask in each set all
+recurring spans but one, and ask the model to select the correct span in the passage for each masked span. Masked spans
+are replaced with a special token, viewed as a question representation, that is later used during fine-tuning to select
+the answer span. The resulting model obtains surprisingly good results on multiple benchmarks (e.g., 72.7 F1 on SQuAD
+with only 128 training examples), while maintaining competitive performance in the high-resource setting.
 
 Tips:
 
@@ -44,12 +43,11 @@ Tips:
 - If you plan on using Splinter outside run_qa.py, please keep in mind the question token - it might be important for
   the success of your model, especially in a few-shot setting.
 - Please note the 'initialize_new_qass' flag in SplinterConfig. It controls whether the QASS layer's pretrained
-  parameters are used, or replaced with randomly initialized ones (see ablations in the paper for a detailed discussion).
+  parameters are used, or replaced with randomly initialized ones (see ablations in the paper for a detailed
+  discussion).
 
-This model was contributed by `yuvalkirstain
-<https://huggingface.co/yuvalkirstain>`__ and `oriram
-<https://huggingface.co/oriram>`__. The original code can be found `here
-<https://github.com/oriram/splinter>`__.
+This model was contributed by `yuvalkirstain <https://huggingface.co/yuvalkirstain>`__ and `oriram
+<https://huggingface.co/oriram>`__. The original code can be found `here <https://github.com/oriram/splinter>`__.
 
 SplinterConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -150,7 +150,7 @@ class SplinterConverter(Converter):
                 (cls, cls_token_id),
                 (sep, sep_token_id),
                 (question, question_token_id),
-                (dot, dot_token_id)
+                (dot, dot_token_id),
             ],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
@@ -879,7 +879,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "T5Tokenizer": T5Converter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,
-    "SplinterTokenizer": SplinterConverter
+    "SplinterTokenizer": SplinterConverter,
 }
 
 

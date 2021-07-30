@@ -15,8 +15,6 @@
 """ PyTorch Splinter model. """
 
 
-
-
 import math
 import os
 
@@ -636,8 +634,8 @@ class SplinterOnlyMLMHead(nn.Module):
 
 class SplinterPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = SplinterConfig
@@ -646,7 +644,7 @@ class SplinterPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -663,14 +661,15 @@ class SplinterPreTrainedModel(PreTrainedModel):
 
 
 SPLINTER_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.SplinterConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 SPLINTER_INPUTS_DOCSTRING = r"""
@@ -678,9 +677,9 @@ SPLINTER_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.SplinterTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.SplinterTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
@@ -699,8 +698,8 @@ SPLINTER_INPUTS_DOCSTRING = r"""
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
@@ -730,9 +729,9 @@ SPLINTER_INPUTS_DOCSTRING = r"""
 )
 class SplinterModel(SplinterPreTrainedModel):
     """
-    The model is an encoder (with only self-attention) following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    The model is an encoder (with only self-attention) following the architecture described in `Attention is all you
+    need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion
+    Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
 
     def __init__(self, config):
@@ -751,9 +750,9 @@ class SplinterModel(SplinterPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -783,12 +782,11 @@ class SplinterModel(SplinterPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -827,7 +825,6 @@ class SplinterModel(SplinterPreTrainedModel):
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -935,10 +932,9 @@ class SplinterForMaskedLM(SplinterPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``.
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1017,22 +1013,22 @@ class SplinterForCausalLM(SplinterPreTrainedModel):
     @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            head_mask=None,
-            cross_attn_head_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        head_mask=None,
+        cross_attn_head_mask=None,
+        past_key_values=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
@@ -1132,7 +1128,9 @@ class SplinterForCausalLM(SplinterPreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past
 
 
@@ -1158,8 +1156,10 @@ class SplinterClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Splinter Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    Splinter Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     SPLINTER_START_DOCSTRING,
 )
 class SplinterForSequenceClassification(SplinterPreTrainedModel):
@@ -1179,23 +1179,22 @@ class SplinterForSequenceClassification(SplinterPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1236,9 +1235,12 @@ class SplinterForSequenceClassification(SplinterPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
-    """Splinter Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    Splinter Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     SPLINTER_START_DOCSTRING,
 )
 class SplinterForMultipleChoice(SplinterPreTrainedModel):
@@ -1251,7 +1253,9 @@ class SplinterForMultipleChoice(SplinterPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        SPLINTER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1259,23 +1263,23 @@ class SplinterForMultipleChoice(SplinterPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1326,8 +1330,10 @@ class SplinterForMultipleChoice(SplinterPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Splinter Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    Splinter Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     SPLINTER_START_DOCSTRING,
 )
 class SplinterForTokenClassification(SplinterPreTrainedModel):
@@ -1363,8 +1369,8 @@ class SplinterForTokenClassification(SplinterPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1413,8 +1419,7 @@ class SplinterForTokenClassification(SplinterPreTrainedModel):
 
 def gather_positions(input_tensor, positions):
     """
-    :param input_tensor: shape [batch_size, seq_length, dim]
-    :param positions: shape [batch_size, num_positions]
+    :param input_tensor: shape [batch_size, seq_length, dim] :param positions: shape [batch_size, num_positions]
     :return: [batch_size, num_positions, dim]
 
     Gathers specific vectors along the sequence dimension for classification
@@ -1426,7 +1431,6 @@ def gather_positions(input_tensor, positions):
 
 
 class FullyConnectedLayer(nn.Module):
-
     def __init__(self, input_dim, output_dim, hidden_act="gelu"):
         super(FullyConnectedLayer, self).__init__()
 
@@ -1449,6 +1453,7 @@ class QuestionAwareSpanSelectionHead(nn.Module):
     Implementation of Question-Aware Span Selection (QASS) head, described in Splinter's paper:
 
     """
+
     def __init__(self, config):
         super().__init__()
 
@@ -1490,8 +1495,10 @@ class ClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Splinter Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    Splinter Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     SPLINTER_START_DOCSTRING,
 )
 class SplinterForQuestionAnswering(SplinterPreTrainedModel):
@@ -1500,8 +1507,8 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
 
         self.splinter = SplinterModel(config)
         self.initialize_new_qass = config.initialize_new_qass
-        #self.cls = ClassificationHead(config) if not self.initialize_new_qass else None
-        #self.new_cls = ClassificationHead(config) if self.initialize_new_qass else None
+        # self.cls = ClassificationHead(config) if not self.initialize_new_qass else None
+        # self.new_cls = ClassificationHead(config) if self.initialize_new_qass else None
         self.splinter_qass = QuestionAwareSpanSelectionHead(config) if not self.initialize_new_qass else None
         self.new_splinter_qass = QuestionAwareSpanSelectionHead(config) if self.initialize_new_qass else None
         self.question_token_id = config.question_token_id
@@ -1509,7 +1516,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         self.init_weights()
 
     def _get_qass(self):
-        """ Controls whether we use the pretrained QASS layer's parameters, or randomly initialized ones """
+        """Controls whether we use the pretrained QASS layer's parameters, or randomly initialized ones"""
         return self.splinter_qass if not self.initialize_new_qass else self.new_splinter_qass
 
     @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
@@ -1532,35 +1539,35 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        question_positions=None
+        question_positions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         question_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_questions)`, `optional`):
-            The positions of all question tokens.
-            If given, start_logits and end_logits will be of shape :obj:`(batch_size, num_questions, sequence_length)`.
-            If None, the first question token in each sequence in the batch will be the only one for which
-            start_logits and end_logits are calculated and they will be of shape :obj:`(batch_size, sequence_length)`.
+            The positions of all question tokens. If given, start_logits and end_logits will be of shape
+            :obj:`(batch_size, num_questions, sequence_length)`. If None, the first question token in each sequence in
+            the batch will be the only one for which start_logits and end_logits are calculated and they will be of
+            shape :obj:`(batch_size, sequence_length)`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         question_positions_were_none = False
         if question_positions is None:
             if input_ids is not None:
-                question_position_for_each_example = \
-                    torch.argmax((torch.eq(input_ids, self.question_token_id)).int(), dim=-1)
+                question_position_for_each_example = torch.argmax(
+                    (torch.eq(input_ids, self.question_token_id)).int(), dim=-1
+                )
             else:
-                question_position_for_each_example = torch.zeros(inputs_embeds.size(0),
-                                                                 dtype=torch.int64,
-                                                                 layout=inputs_embeds.layout,
-                                                                 device=inputs_embeds.device)
+                question_position_for_each_example = torch.zeros(
+                    inputs_embeds.size(0), dtype=torch.int64, layout=inputs_embeds.layout, device=inputs_embeds.device
+                )
             question_positions = question_position_for_each_example.unsqueeze(-1)
             question_positions_were_none = True
 
@@ -1610,6 +1617,8 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         if not return_dict:
             output = (start_logits, end_logits) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
+
+        print(start_logits[0])
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,

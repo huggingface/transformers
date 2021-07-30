@@ -19,6 +19,7 @@ from ...utils import logging
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_splinter import SplinterTokenizer
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
@@ -59,20 +60,20 @@ class SplinterTokenizerFast(BertTokenizerFast):
     slow_tokenizer_class = SplinterTokenizer
 
     def __init__(
-            self,
-            vocab_file,
-            do_lower_case=False,
-            do_basic_tokenize=True,
-            never_split=None,
-            unk_token="[UNK]",
-            sep_token="[SEP]",
-            pad_token="[PAD]",
-            cls_token="[CLS]",
-            mask_token="[MASK]",
-            question_token="[QUESTION]",
-            tokenize_chinese_chars=True,
-            strip_accents=None,
-            **kwargs
+        self,
+        vocab_file,
+        do_lower_case=False,
+        do_basic_tokenize=True,
+        never_split=None,
+        unk_token="[UNK]",
+        sep_token="[SEP]",
+        pad_token="[PAD]",
+        cls_token="[CLS]",
+        mask_token="[MASK]",
+        question_token="[QUESTION]",
+        tokenize_chinese_chars=True,
+        strip_accents=None,
+        **kwargs
     ):
         super().__init__(
             vocab_file=vocab_file,
@@ -91,26 +92,26 @@ class SplinterTokenizerFast(BertTokenizerFast):
         )
 
     def build_inputs_with_special_tokens(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-                Build model inputs from a pair of sequence for question answering tasks by concatenating and
-                adding special tokens. A Splinter sequence has the following format:
+        Build model inputs from a pair of sequence for question answering tasks by concatenating and adding special
+        tokens. A Splinter sequence has the following format:
 
-                - single sequence: ``[CLS] X [SEP]``
-                - pair of sequences for question answering:
-                ``[CLS] question_tokens [QUESTION] . [SEP] context_tokens [SEP]`` or alternatively
-                ``[CLS] context_tokens [SEP] question_tokens [QUESTION] . [SEP]``
+        - single sequence: ``[CLS] X [SEP]``
+        - pair of sequences for question answering:
+        ``[CLS] question_tokens [QUESTION] . [SEP] context_tokens [SEP]`` or alternatively ``[CLS] context_tokens [SEP]
+        question_tokens [QUESTION] . [SEP]``
 
-                Args:
-                    token_ids_0 (:obj:`List[int]`):
-                        The question token IDs if pad_on_right, else context tokens IDs
-                    token_ids_1 (:obj:`List[int]`, `optional`):
-                        The context token IDs if pad_on_right, else question token IDs
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                The question token IDs if pad_on_right, else context tokens IDs
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                The context token IDs if pad_on_right, else question token IDs
 
-                Returns:
-                    :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
-                """
+        Returns:
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
 
@@ -127,8 +128,8 @@ class SplinterTokenizerFast(BertTokenizerFast):
     @property
     def question_token_id(self) -> Optional[int]:
         """
-        :obj:`Optional[int]`: Id of the question token in the vocabulary, used to condition the answer on a
-        question representation.
+        :obj:`Optional[int]`: Id of the question token in the vocabulary, used to condition the answer on a question
+        representation.
 
         Returns :obj:`None` if the token has not been set.
         """

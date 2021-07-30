@@ -17,6 +17,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -28,20 +29,19 @@ SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SplinterConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.SplinterModel`.
-    It is used to instantiate an Splinter model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the Splinter `splinter-base <https://huggingface.co/splinter-base>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.SplinterModel`. It is used to
+    instantiate an Splinter model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the Splinter `splinter-base
+    <https://huggingface.co/splinter-base>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the Splinter model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.SplinterModel` or
+            Vocabulary size of the Splinter model. Defines the number of different tokens that can be represented by
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.SplinterModel` or
             :class:`~transformers.TFSplinterModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
@@ -52,18 +52,18 @@ class SplinterConfig(PretrainedConfig):
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.SplinterModel` or
-            :class:`~transformers.TFSplinterModel`.
+            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.SplinterModel`
+            or :class:`~transformers.TFSplinterModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -78,6 +78,7 @@ class SplinterConfig(PretrainedConfig):
             Splinter.
         question_token_id (:obj:`int`, `optional`, defaults to :obj:`104`):
             The ID of the [QUESTION] token
+
         Example::
 
         >>> from transformers import SplinterModel, SplinterConfig
@@ -92,6 +93,7 @@ class SplinterConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "splinter"
+
     def __init__(
         self,
         vocab_size=30522,
@@ -112,10 +114,7 @@ class SplinterConfig(PretrainedConfig):
         question_token_id=104,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            **kwargs
-        )
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

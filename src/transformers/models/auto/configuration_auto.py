@@ -77,6 +77,7 @@ from ..speech_to_text.configuration_speech_to_text import (
     SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     Speech2TextConfig,
 )
+from ..splinter.configuration_splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig
 from ..squeezebert.configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from ..t5.configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from ..tapas.configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
@@ -150,6 +151,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -219,6 +221,7 @@ CONFIG_MAPPING = OrderedDict(
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
         ("tapas", TapasConfig),
+        ("splinter", SplinterConfig)
     ]
 )
 
@@ -286,6 +289,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mpnet", "MPNet"),
         ("tapas", "TAPAS"),
         ("hubert", "Hubert"),
+        ("splinter", "Splinter"),
     ]
 )
 
