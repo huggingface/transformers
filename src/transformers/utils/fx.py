@@ -357,7 +357,7 @@ def symbolic_trace(
 
     Example::
 
-        from transformers.modeling_fx_utils import symbolic_trace
+        from transformers.utils.fx import symbolic_trace
         traced_model = symbolic_trace(
             model,
             input_names=["input_ids", "attention_mask", "token_type_ids"],

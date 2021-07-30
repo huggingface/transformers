@@ -1769,7 +1769,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             init_kwargs = init_configuration
 
         if config_tokenizer_class is None:
-            from .models.auto.configuration_auto import AutoConfig
+            from .models.auto.configuration_auto import AutoConfig  # tests_ignore
 
             # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
             try:
@@ -1781,8 +1781,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if config_tokenizer_class is None:
                 # Third attempt. If we have not yet found the original type of the tokenizer,
                 # we are loading we see if we can infer it from the type of the configuration file
-                from .models.auto.configuration_auto import CONFIG_MAPPING
-                from .models.auto.tokenization_auto import TOKENIZER_MAPPING
+                from .models.auto.configuration_auto import CONFIG_MAPPING  # tests_ignore
+                from .models.auto.tokenization_auto import TOKENIZER_MAPPING  # tests_ignore
 
                 if hasattr(config, "model_type"):
                     config_class = CONFIG_MAPPING.get(config.model_type)
