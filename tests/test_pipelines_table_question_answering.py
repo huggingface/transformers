@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers.pipelines import (
+from transformers import (
     MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
     AutoModelForTableQuestionAnswering,
     AutoTokenizer,
