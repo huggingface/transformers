@@ -289,6 +289,7 @@ extras["docs_specific"] = deps_list(
     "sphinx-rtd-theme",
     "sphinx-copybutton",
     "sphinxext-opengraph",
+    "sphinx-intl",
 )
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
