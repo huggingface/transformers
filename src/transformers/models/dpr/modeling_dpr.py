@@ -627,7 +627,7 @@ class DPRReader(DPRPretrainedReader):
             ...         return_tensors='pt'
             ...     )
             >>> outputs = model(**encoded_inputs)
-            >>> start_logits = outputs.stat_logits
+            >>> start_logits = outputs.start_logits
             >>> end_logits = outputs.end_logits
             >>> relevance_logits = outputs.relevance_logits
 
