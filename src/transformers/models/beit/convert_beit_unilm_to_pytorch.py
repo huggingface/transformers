@@ -20,6 +20,7 @@ from pathlib import Path
 
 import torch
 from PIL import Image
+from torchvision import transforms
 
 import requests
 from transformers import BEiTConfig, BEiTFeatureExtractor, BEiTForImageClassification, BEiTModel
@@ -178,21 +179,58 @@ def convert_beit_checkpoint(checkpoint_path, pytorch_dump_folder_path, task="MIM
     # load HuggingFace model
     model = BEiTForImageClassification(config)
     model.eval()
+    print("State dict:")
+    for name, param in state_dict.items():
+        print(name, param.shape)
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by BEiTFeatureExtractor
-    feature_extractor = BEiTFeatureExtractor(size=config.image_size)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
-    outputs = model(pixel_values)
+    # Check outputs on an image
+    # TODO prepare image using BEiTFeatureExtractor instead of torchvision
+    #feature_extractor = BEiTFeatureExtractor(size=config.image_size)
+    #encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    #pixel_values = encoding["pixel_values"]
 
-    print("Shape of logits:", outputs.logits.shape)
+    image = prepare_img()
+    
+    # define image transforms
+    resize_im = config.image_size > 32
+    mean = (0.5, 0.5, 0.5)
+    std = (0.5, 0.5, 0.5)
+    t = []
+    if resize_im:
+        if config.image_size < 384:
+                crop_pct = 224 / 256
+        size = int(config.image_size / crop_pct)
+        t.append(
+            transforms.Resize(size, interpolation=transforms.InterpolationMode.BICUBIC),  # to maintain same ratio w.r.t. 224 images
+        )
+        t.append(transforms.CenterCrop(config.image_size))
+
+    t.append(transforms.ToTensor())
+    t.append(transforms.Normalize(mean, std))
+
+    transform_test = transforms.Compose(t)
+
+    pixel_values = transform_test(image).unsqueeze(0) # batch size of 1
+
+    # test:
+    transform = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor(), transforms.Normalize(mean, std)])
+    pixel_values = transform(image).unsqueeze(0)
+
+    print("Sum of pixel values:", pixel_values.sum())
+    
+    outputs = model(pixel_values)
+    logits = outputs.logits
+
+    print("Sum of logits:", logits.sum())
+    print("Shape of logits:", logits.shape)
+    print("Predicted class idx:", logits.argmax(-1).item())
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    #print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    #feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

@@ -80,13 +80,20 @@ class BEiTEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         batch_size = pixel_values.shape[0]
+        
         embeddings = self.patch_embeddings(pixel_values)
+
+        print("Sum of patch embeddings:", embeddings.sum().item())
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
         if self.position_embeddings is not None:
             embeddings = embeddings + self.position_embeddings
         embeddings = self.dropout(embeddings)
+        
+        
+        print("Sum of final embeddings:", embeddings.sum().item())
+        
         return embeddings
 
 
@@ -270,11 +277,9 @@ class BEiTOutput(nn.Module):
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
-        hidden_states = hidden_states + input_tensor
 
         return hidden_states
 
@@ -299,7 +304,7 @@ class BEiTLayer(nn.Module):
         else:
             self.gamma_1, self.gamma_2 = None, None
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None):
+    def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None): 
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
             head_mask,
@@ -309,33 +314,44 @@ class BEiTLayer(nn.Module):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
+        print("Sum of hidden states after self-attention:", attention_output.sum().item())
+        
         # apply gamma_1 if present
         if self.gamma_1 is not None:
             attention_output = self.gamma_1 * attention_output
         
+        print("Sum of hidden states after gamma 1:", attention_output.sum().item())
+        
         # first residual connection
         hidden_states = attention_output + hidden_states
+
+        print("Sum of hidden states after first residual connection:", hidden_states.sum().item())
 
         # in BEiT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
 
-        layer_output = self.intermediate(layer_output)
+        print("Sum of hidden states after layernorm:", layer_output.sum().item())
 
-        # TODO apply gamma_2 if present
-        # if self.gamma_2 is not None:
-        #     layer_output = self.gamma_2 * layer_output
+        layer_output = self.intermediate(layer_output)
+        layer_output = self.output(layer_output)
+
+        print("Sum of hidden states after intermediate + output:", layer_output.sum().item())
+
+        if self.gamma_2 is not None:
+            layer_output = self.gamma_2 * layer_output
+        
+        print("Sum of hidden states after gamma 2:", layer_output.sum().item())  
+
+        print("Sum of hidden states which are added:", hidden_states.sum().item())
         
         # second residual connection
-        layer_output = self.output(layer_output, hidden_states)
+        layer_output = layer_output + hidden_states
+
+        print("Sum of hidden states after second residual connection:", layer_output.sum().item())     
 
         outputs = (layer_output,) + outputs
 
         return outputs
-
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output)
-        return layer_output
 
 
 class BEiTRelativePositionBias(nn.Module):
@@ -415,10 +431,16 @@ class BEiTEncoder(nn.Module):
                     layer_head_mask,
                 )
             else:
+                print("----------------------------------")
+            
+                print(f"Sum of hidden states before layer {i}", hidden_states.sum().item())
+                
                 relative_position_bias = self.relative_position_bias() if self.relative_position_bias is not None else None
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
-
+            
             hidden_states = layer_outputs[0]
+
+            print(f"Sum of hidden states after layer {i}", hidden_states.sum().item())
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -572,6 +594,9 @@ class BEiTModel(BEiTPreTrainedModel):
 
         embedding_output = self.embeddings(pixel_values)
 
+        print("Shape of embedding output:", embedding_output.shape)
+        print("Sum of embedding output:", embedding_output.sum())
+        
         encoder_outputs = self.encoder(
             embedding_output,
             head_mask=head_mask,
