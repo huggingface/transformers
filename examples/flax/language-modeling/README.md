@@ -114,7 +114,7 @@ from transformers import RobertaConfig
 
 model_dir = "./norwegian-roberta-base"  # ${MODEL_DIR}
 
-config = RobertaConfig.from_pretrained("roberta-base", vocab_size=tokenizer.vocab_size)
+config = RobertaConfig.from_pretrained("roberta-base", vocab_size=tokenizer.get_vocab_size())
 config.save_pretrained(model_dir)
 ```
 
@@ -349,7 +349,7 @@ from transformers import T5Config
 
 model_dir = "./norwegian-t5-base"  # ${MODEL_DIR}
 
-config = T5Config.from_pretrained("google/t5-v1_1-base", vocab_size=tokenizer.vocab_size)
+config = T5Config.from_pretrained("google/t5-v1_1-base", vocab_size=tokenizer.get_vocab_size())
 config.save_pretrained(model_dir)
 ```
 
