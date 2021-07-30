@@ -177,6 +177,7 @@ if is_tokenizers_available():
     from ..big_bird.tokenization_big_bird_fast import BigBirdTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
     from ..convbert.tokenization_convbert_fast import ConvBertTokenizerFast
+    from ..cpm.tokenization_cpm_fast import CpmTokenizerFast
     from ..deberta.tokenization_deberta_fast import DebertaTokenizerFast
     from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
     from ..dpr.tokenization_dpr_fast import DPRQuestionEncoderTokenizerFast
@@ -212,6 +213,7 @@ else:
     BigBirdTokenizerFast = None
     CamembertTokenizerFast = None
     ConvBertTokenizerFast = None
+    CpmTokenizerFast = None
     DebertaTokenizerFast = None
     DistilBertTokenizerFast = None
     DPRQuestionEncoderTokenizerFast = None
@@ -308,6 +310,7 @@ NO_CONFIG_TOKENIZER = [
     BertweetTokenizer,
     ByT5Tokenizer,
     CpmTokenizer,
+    CpmTokenizerFast,
     HerbertTokenizer,
     HerbertTokenizerFast,
     PhobertTokenizer,
@@ -477,7 +480,7 @@ class AutoTokenizer:
                       applicable to all derived classes)
             inputs (additional positional arguments, `optional`):
                 Will be passed along to the Tokenizer ``__init__()`` method.
-            config (:class:`~transformers.PreTrainedConfig`, `optional`)
+            config (:class:`~transformers.PretrainedConfig`, `optional`)
                 The configuration object used to dertermine the tokenizer class to instantiate.
             cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
@@ -556,7 +559,7 @@ class AutoTokenizer:
             if type(config.decoder) is not type(config.encoder):  # noqa: E721
                 logger.warning(
                     f"The encoder model config class: {config.encoder.__class__} is different from the decoder model "
-                    f"config class: {config.decoder.__class}. It is not recommended to use the "
+                    f"config class: {config.decoder.__class__}. It is not recommended to use the "
                     "`AutoTokenizer.from_pretrained()` method in this case. Please use the encoder and decoder "
                     "specific tokenizer classes."
                 )
