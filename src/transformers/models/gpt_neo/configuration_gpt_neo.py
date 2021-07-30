@@ -233,28 +233,30 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
                     op_wrapper=staticmethod,
                 ),
             ]
+
         super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
 
-    @property
-    def default_onnx_opset(self) -> int:
-        """
-        Which onnx opset to use when exporting the model
+        self._num_local_attention = len([type_ for type_ in self._config.attention_layers if type_ == "local"])
+        self._key_values_dynamic_axis = []
+        for i in range(self._config.num_layers):
+            if self._config.attention_layers[i] == "local":
+                self._key_values_dynamic_axis.append({0: "batch", 1: "sequence"})
+            else:
+                self._key_values_dynamic_axis.append({0: "batch", 2: "sequence"})
+                self._key_values_dynamic_axis.append({0: "batch", 2: "sequence"})
 
-        Returns:
-            Integer ONNX Opset version
-        """
-        return 12
+    @property
+    def _number_key_values(self):
+        return (self._config.num_layers * 2) - self._num_local_attention
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
-            for i in range(self._config.num_layers * 2):
-                common_inputs[f"past_key_values.{i}"] = {0: "batch", 2: "sequence"}
+            for i in range(self._number_key_values):
+                common_inputs[f"past_key_values.{i}"] = self._key_values_dynamic_axis[i]
 
-            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
-        else:
-            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
+        common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
 
         return common_inputs
 
@@ -262,8 +264,8 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         common_outputs = super().outputs
         if self.use_past:
-            for i in range(self._config.num_layers * 2):
-                common_outputs[f"present.{i}"] = {0: "batch", 2: "sequence"}
+            for i in range(self._number_key_values):
+                common_outputs[f"present.{i}"] = self._key_values_dynamic_axis[i]
 
         return common_outputs
 
@@ -293,14 +295,18 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
             else:
                 import torch
 
-                ordered_inputs["past_key_values"] = [
-                    # torch.zeros((2, ) + past_shapes[self._config.attention_layers[i]])
-                    (
-                        torch.zeros(past_shapes[self._config.attention_layers[i]]),
-                        torch.zeros(past_shapes[self._config.attention_layers[i]]),
-                    )
-                    for i in range(self._config.num_layers)
-                ]
+                ordered_inputs["past_key_values"] = []
+                for i in range(self._config.num_layers):
+                    attention_type = self._config.attention_layers[i]
+                    if attention_type == "global":
+                        ordered_inputs["past_key_values"].append(
+                            (
+                                torch.zeros(past_shapes[attention_type]),
+                                torch.zeros(past_shapes[attention_type]),
+                            )
+                        )
+                    else:
+                        ordered_inputs["past_key_values"].append((torch.zeros(past_shapes[attention_type]),))
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
