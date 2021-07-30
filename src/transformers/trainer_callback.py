@@ -242,6 +242,12 @@ class TrainerCallback:
         """
         pass
 
+    def on_substep_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called at the end of an substep during gradient accumulation.
+        """
+        pass
+
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called at the end of a training step. If using gradient accumulation, one training step might take
@@ -354,6 +360,9 @@ class CallbackHandler(TrainerCallback):
         control.should_evaluate = False
         control.should_save = False
         return self.call_event("on_step_begin", args, state, control)
+
+    def on_substep_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
+        return self.call_event("on_substep_end", args, state, control)
 
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_step_end", args, state, control)
