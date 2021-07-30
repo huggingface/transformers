@@ -37,7 +37,7 @@ else:
 class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
-    def run_pipeline_test(self, model, feature_extractor):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         image_classifier = ImageClassificationPipeline(model=model, feature_extractor=feature_extractor)
         outputs = image_classifier("./tests/fixtures/tests_samples/COCO/000000039769.png")
 

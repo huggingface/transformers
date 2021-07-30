@@ -17,7 +17,9 @@ import unittest
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    LEDConfig,
     SummarizationPipeline,
+    T5Config,
     pipeline,
 )
 from transformers.testing_utils import is_pipeline_test, require_torch, slow, torch_device
@@ -34,7 +36,7 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer)
 
         outputs = summarizer("(CNN)The Palestinian Authority officially became")
@@ -53,9 +55,11 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
         self.assertEqual(summarizer.min_length, 2)
         self.assertEqual(summarizer.max_length, 5)
 
-        # Too long.
-        with self.assertRaises(Exception):
-            outputs = summarizer("This " * 1000)
+        if not isinstance(model.config, (T5Config, LEDConfig)):
+            # LED, T5 can handle it.
+            # Too long.
+            with self.assertRaises(Exception):
+                outputs = summarizer("This " * 1000)
         outputs = summarizer("This " * 1000, truncation=TruncationStrategy.ONLY_FIRST)
 
     @require_torch

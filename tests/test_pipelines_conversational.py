@@ -45,7 +45,7 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         list(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items()) + list(TF_MODEL_FOR_CAUSAL_LM_MAPPING.items())
     )
 
-    def run_pipeline_test(self, model, tokenizer):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
         # Simple
         outputs = conversation_agent(Conversation("Hi there!"))
@@ -72,8 +72,7 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
         # One conversation with history
         conversation_2.add_user_input("Why do you recommend it?")
-        # Some tiny config have max_length a bit low, forcing it to be a bit higher.
-        outputs = conversation_agent(conversation_2, max_length=24)
+        outputs = conversation_agent(conversation_2)
         self.assertEqual(outputs, conversation_2)
         self.assertEqual(
             outputs,

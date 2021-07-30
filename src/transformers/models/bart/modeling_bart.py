@@ -1627,8 +1627,6 @@ class BartForCausalLM(BartPretrainedModel):
         config.is_decoder = True
         config.is_encoder_decoder = False
         self.model = BartDecoderWrapper(config)
-        self.config.is_decoder = True
-        self.config.is_encoder_decoder = False
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 

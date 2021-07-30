@@ -32,7 +32,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         classifier = ZeroShotClassificationPipeline(model=model, tokenizer=tokenizer)
 
         outputs = classifier("Who are you voting for in 2020?", candidate_labels="politics")

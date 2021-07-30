@@ -36,9 +36,14 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         translator = TranslationPipeline(model=model, tokenizer=tokenizer)
-        outputs = translator("Some string")
+        try:
+            outputs = translator("Some string")
+        except ValueError:
+            # Triggered by m2m langages
+            src_lang, tgt_lang = list(translator.tokenizer.lang_code_to_id.keys())[:2]
+            outputs = translator("Some string", src_lang=src_lang, tgt_lang=tgt_lang)
         self.assertEqual(outputs, [{"translation_text": ANY(str)}])
 
     @require_torch

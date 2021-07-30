@@ -206,11 +206,12 @@ class TokenClassificationPipeline(Pipeline):
             # Manage correct placement of the tensors
             with self.device_placement():
 
+                truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
                 tokens = self.tokenizer(
                     sentence,
                     return_attention_mask=False,
                     return_tensors=self.framework,
-                    truncation=True,
+                    truncation=truncation,
                     return_special_tokens_mask=True,
                     return_offsets_mapping=self.tokenizer.is_fast,
                 )
@@ -281,7 +282,7 @@ class TokenClassificationPipeline(Pipeline):
                         AggregationStrategy.AVERAGE,
                         AggregationStrategy.MAX,
                     }:
-                        warnings.warn(UserWarning, "Tokenizer does not support real words, using fallback heuristic")
+                        warnings.warn("Tokenizer does not support real words, using fallback heuristic", UserWarning)
                     is_subword = sentence[start_ind - 1 : start_ind] != " " if start_ind > 0 else False
 
                 if int(input_ids[idx]) == self.tokenizer.unk_token_id:

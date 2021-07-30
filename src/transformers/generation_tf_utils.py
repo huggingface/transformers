@@ -728,9 +728,13 @@ class TFGenerationMixin:
             encoder_outputs = None
             cur_len = shape_list(input_ids)[-1]
 
-        assert (
-            cur_len < max_length
-        ), f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
+        # Consistent with PT behavior, we simply raise a warning.
+        if cur_len >= max_length:
+            input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+            logger.warning(
+                f"Input length of {input_ids_string} is {cur_len}, but ``max_length`` is set to {max_length}."
+                "This can lead to unexpected behavior. You should consider increasing ``config.max_length`` or ``max_length``."
+            )
 
         if num_beams > 1:
             output = self._generate_beam_search(

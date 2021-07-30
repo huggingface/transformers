@@ -17,6 +17,7 @@ import unittest
 from transformers import (
     MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    LxmertConfig,
     QuestionAnsweringPipeline,
 )
 from transformers.data.processors.squad import SquadExample
@@ -31,7 +32,11 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+        if isinstance(model.config, LxmertConfig):
+            # This is an bimodal model, we need to find a more consistent way
+            # to switch on those models.
+            return
         question_answerer = QuestionAnsweringPipeline(model, tokenizer)
 
         outputs = question_answerer(
@@ -52,10 +57,10 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         )
 
         outputs = question_answerer(
-            question=["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
+            question=["What field is HuggingFace working ?", "In what field is HuggingFace ?"],
             context=[
-                "HuggingFace is a startup based in New-York founded in Paris",
-                "HuggingFace is a startup based in New-York founded in Paris",
+                "HuggingFace is a startup based in New-York",
+                "HuggingFace is a startup founded in Paris",
             ],
         )
         self.assertEqual(

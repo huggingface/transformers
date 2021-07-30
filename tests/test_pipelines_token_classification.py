@@ -38,7 +38,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
 
         outputs = token_classifier("A simple string")

@@ -493,13 +493,15 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             raise ValueError("We expect lists of floats, nothing else")
         return shape
 
-    def run_pipeline_test(self, model, tokenizer):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         if isinstance(model.config, LxmertConfig):
             # This is an bimodal model, we need to find a more consistent way
             # to switch on those models.
             return
 
-        feature_extractor = FeatureExtractionPipeline(model=model, tokenizer=tokenizer)
+        feature_extractor = FeatureExtractionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
         if feature_extractor.model.config.is_encoder_decoder:
             # encoder_decoder models are trickier for this pipeline.
             # Do we want encoder + decoder inputs to get some featues?
@@ -510,12 +512,22 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         try:
             outputs = feature_extractor("This is a test")
         except ValueError:
-            outputs = feature_extractor(Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"))
+            try:
+                outputs = feature_extractor(Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"))
+            except ValueError:
+                from transformers.pipelines.automatic_speech_recognition import ffmpeg_read
+
+                filename = "./tests/fixtures/tests_samples/sample1.flac"
+                with open(filename, "rb") as f:
+                    inputs = f.read()
+                inputs = ffmpeg_read(inputs, tokenizer.sampling_rate)
+                outputs = feature_extractor(inputs)
+
         shape = self.get_shape(outputs)
         self.assertEqual(shape[0], 1)
 
         try:
-            outputs = feature_extractor(["This is a test", "Another test"])
+            outputs = feature_extractor(["This is a test", "Another simple test"])
         except ValueError:
             outputs = feature_extractor(
                 [
