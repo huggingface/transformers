@@ -1,5 +1,6 @@
 # coding=utf-8
-# Copyright Ori Ram, Yuval Kirstain, Jonathan Berant, Amir Globerson, Omer Levy and The HuggingFace Inc. team. All rights reserved.
+# Copyright Ori Ram, Yuval Kirstain, Jonathan Berant, Amir Globerson, Omer Levy and The HuggingFace Inc. team.
+# All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -100,9 +101,7 @@ class SplinterTokenizer(BertTokenizer):
         tokens. A Splinter sequence has the following format:
 
         - single sequence: ``[CLS] X [SEP]``
-        - pair of sequences for question answering:
-        ``[CLS] question_tokens [QUESTION] . [SEP] context_tokens [SEP]`` or alternatively ``[CLS] context_tokens [SEP]
-            question_tokens [QUESTION] . [SEP]``
+        - pair of sequences for question answering: ``[CLS] question_tokens [QUESTION] . [SEP] context_tokens [SEP]``
 
         Args:
             token_ids_0 (:obj:`List[int]`):
