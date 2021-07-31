@@ -34,6 +34,7 @@ from transformers import (
     TensorType,
     TokenSpan,
     is_tokenizers_available,
+    T5Tokenizer,
 )
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from transformers.testing_utils import CaptureStderr, require_flax, require_tf, require_tokenizers, require_torch, slow
@@ -285,3 +286,11 @@ class TokenizerUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+
+    @require_tokenizers
+    def test_convert_ids_to_tokens(self):
+    tokenizer = T5Tokenizer.from_pretrained("t5-small")
+    input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
+    tokens_estimate = tokenizer.convert_ids_to_tokens(input_ids[0].numpy().tolist())
+    tokens_truth = ['▁The', '<extra_id_0>', '▁walks', '▁in', '<extra_id_1>', '▁park', '</s>']
+    self.assertEqual(tokens_estimate, tokens_truth)

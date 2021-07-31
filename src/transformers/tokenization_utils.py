@@ -393,6 +393,24 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             ids.append(self._convert_token_to_id_with_added_voc(token))
         return ids
 
+    def convert_ids_to_tokens(self, ids: Union[int, List[int]]) -> Union[str, List[str]]:
+        """
+        Converts an integer id (or sequence of ids) to a token string (or sequence of tokens), using the vocabulary.
+
+        Args:
+            ids (:obj: `id` or :obj:`List[int]`): One or several ids to convert to token(s).
+
+        Returns:
+            :obj:`str` or :obj:`List[str]`: The token string or list of tokens.
+        """
+        if ids is None:
+            return None
+        if not hasattr(self, 'tokens_decoder'):
+            self.tokens_decoder = dict(map(reversed, self.added_tokens_encoder.items()))
+        if isinstance(ids, str):
+            return self.tokens_decoder[ids]
+        return [self.tokens_decoder[id] for id in ids]
+
     def _convert_token_to_id_with_added_voc(self, token):
         if token is None:
             return None
