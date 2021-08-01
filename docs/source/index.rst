@@ -255,7 +255,7 @@ Supported models
     `fairseq S2T: Fast Speech-to-Text Modeling with fairseq <https://arxiv.org/abs/2010.05171>`__ by Changhan Wang, Yun
     Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino.
 53. :doc:`Splinter <model_doc/splinter>` (from Tel Aviv University) released together with the paper `Few-Shot Question
-    Answering by Pretraining Span Selection  <https://arxiv.org/abs/2101.00438>`__ by Ori Ram, Yuval Kirstain, Jonathan
+    Answering by Pretraining Span Selection <https://arxiv.org/abs/2101.00438>`__ by Ori Ram, Yuval Kirstain, Jonathan
     Berant, Amir Globerson, Omer Levy.
 54. :doc:`SqueezeBert <model_doc/squeezebert>` released with the paper `SqueezeBERT: What can computer vision teach NLP
     about efficient neural networks? <https://arxiv.org/abs/2006.11316>`__ by Forrest N. Iandola, Albert E. Shaw, Ravi
