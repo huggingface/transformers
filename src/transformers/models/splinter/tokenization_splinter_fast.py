@@ -99,9 +99,7 @@ class SplinterTokenizerFast(BertTokenizerFast):
         tokens. A Splinter sequence has the following format:
 
         - single sequence: ``[CLS] X [SEP]``
-        - pair of sequences for question answering:
-        ``[CLS] question_tokens [QUESTION] . [SEP] context_tokens [SEP]`` or alternatively ``[CLS] context_tokens [SEP]
-        question_tokens [QUESTION] . [SEP]``
+        - pair of sequences for question answering: ``[CLS] question_tokens [QUESTION] . [SEP] context_tokens [SEP]``
 
         Args:
             token_ids_0 (:obj:`List[int]`):
