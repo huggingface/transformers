@@ -71,6 +71,7 @@ from ..rag.configuration_rag import RagConfig
 from ..reformer.configuration_reformer import ReformerConfig
 from ..rembert.configuration_rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
 from ..retribert.configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
+from ..retrieval.configuration_retrieval import RetrievalConfig
 from ..roberta.configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from ..roformer.configuration_roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig
 from ..speech_to_text.configuration_speech_to_text import (
@@ -219,6 +220,7 @@ CONFIG_MAPPING = OrderedDict(
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
         ("tapas", TapasConfig),
+        ("retrieval", RetrievalConfig),
     ]
 )
 
@@ -286,6 +288,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mpnet", "MPNet"),
         ("tapas", "TAPAS"),
         ("hubert", "Hubert"),
+        ("retrieval", "RetrievalModel"),
     ]
 )
 
