@@ -133,6 +133,4 @@ class SplinterTokenizerFast(BertTokenizerFast):
 
         Returns :obj:`None` if the token has not been set.
         """
-        if self._cls_token is None:
-            return None
         return self.convert_tokens_to_ids(self.question_token)
