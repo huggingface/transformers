@@ -51,7 +51,7 @@ class SplinterTokenizerFast(BertTokenizerFast):
 
     It adds a special question token in order to create question representations from its contextualized embedding.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
     """
 
