@@ -1455,7 +1455,7 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
             >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
 
-            >>> text = "My friends are cool but they eat too many carbs."
+            >>> text = "summarize: My friends are cool but they eat too many carbs."
             >>> inputs = tokenizer(text, max_length=512, return_tensors='jax')
             >>> encoder_outputs = model.encode(**inputs)
 
@@ -1602,7 +1602,7 @@ FLAX_T5_CONDITIONAL_GENERATION_DOCSTRING = """
         >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
         >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+        >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=512, return_tensors='jax')
 
         >>> # Generate Summary
