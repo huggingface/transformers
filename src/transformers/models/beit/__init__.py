@@ -29,6 +29,7 @@ if is_vision_available():
 if is_torch_available():
     _import_structure["modeling_beit"] = [
         "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "BEiTForMaskedImageModeling",
         "BEiTForImageClassification",
         "BEiTModel",
         "BEiTPreTrainedModel",
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_beit import (
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BEiTForMaskedImageModeling,
             BEiTForImageClassification,
             BEiTModel,
             BEiTPreTrainedModel,

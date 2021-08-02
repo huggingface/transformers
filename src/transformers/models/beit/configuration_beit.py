@@ -65,7 +65,7 @@ class BEiTConfig(PretrainedConfig):
             The number of input channels.
         use_absolute_position_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use BERT-style absolute position embeddings.
-        use_relative_position_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        use_relative_position_bias (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use T5-style relative position embeddings in the self-attention layers.
         use_shared_relative_position_bias (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use the same relative position embeddings across all self-attention layers of the Transformer.
@@ -109,7 +109,7 @@ class BEiTConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         use_absolute_position_embeddings=False,
-        use_relative_position_bias=True,
+        use_relative_position_bias=False,
         use_shared_relative_position_bias=False,
         layer_scale_init_value=0.1,
         drop_path_rate=0.1,

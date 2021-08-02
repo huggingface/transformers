@@ -23,7 +23,7 @@ from PIL import Image
 from torchvision import transforms
 
 import requests
-from transformers import BEiTConfig, BEiTFeatureExtractor, BEiTForImageClassification, BEiTModel
+from transformers import BEiTConfig, BEiTFeatureExtractor, BEiTForImageClassification, BEiTForMaskedImageModeling
 from transformers.utils import logging
 from transformers.utils.imagenet_classes import id2label
 
@@ -146,12 +146,15 @@ def convert_beit_checkpoint(checkpoint_path, pytorch_dump_folder_path, task="MIM
     base_model = False
     if task == "MIM":
         # masked image modeling
+        config.use_shared_relative_position_bias = True
         base_model = True
     elif task == "IFT":
         # intermediate fine-tuning on ImageNet-22k
+        config.use_relative_position_bias = True
         config.num_labels = 21841
     elif task == "FT":
         # fine-tuning on ImageNet-1k
+        config.use_relative_position_bias = True
         config.num_labels = 1000
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -168,7 +171,7 @@ def convert_beit_checkpoint(checkpoint_path, pytorch_dump_folder_path, task="MIM
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
     else:
-        raise ValueError(f"Size {size} not supported, should be either 'base' or 'large'")
+        raise ValueError(f"Size {size} not found in model name, should be either 'base' or 'large'")
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))['model']
@@ -178,57 +181,34 @@ def convert_beit_checkpoint(checkpoint_path, pytorch_dump_folder_path, task="MIM
     read_in_q_k_v(state_dict, config, base_model)
 
     # load HuggingFace model
-    model = BEiTForImageClassification(config)
+    if task == "MIM":
+        model = BEiTForMaskedImageModeling(config)
+    else:
+        model = BEiTForImageClassification(config)
     model.eval()
     model.load_state_dict(state_dict)
     
     # Check outputs on an image
-    # TODO prepare image using BEiTFeatureExtractor instead of torchvision
-    #feature_extractor = BEiTFeatureExtractor(size=config.image_size)
-    #encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
-    #pixel_values = encoding["pixel_values"]
-
-    image = prepare_img()
-    
-    # define image transforms
-    resize_im = config.image_size > 32
-    mean = (0.5, 0.5, 0.5)
-    std = (0.5, 0.5, 0.5)
-    t = []
-    if resize_im:
-        if config.image_size < 384:
-                crop_pct = 224 / 256
-        size = int(config.image_size / crop_pct)
-        t.append(
-            transforms.Resize(size, interpolation=transforms.InterpolationMode.BICUBIC),  # to maintain same ratio w.r.t. 224 images
-        )
-        t.append(transforms.CenterCrop(config.image_size))
-
-    t.append(transforms.ToTensor())
-    t.append(transforms.Normalize(mean, std))
-
-    transform_test = transforms.Compose(t)
-
-    pixel_values = transform_test(image).unsqueeze(0) # batch size of 1
-
-    # test:
-    transform = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor(), transforms.Normalize(mean, std)])
-    pixel_values = transform(image).unsqueeze(0)
-
-    print("Sum of pixel values:", pixel_values.sum())
+    feature_extractor = BEiTFeatureExtractor(size=224, resample=Image.BILINEAR, do_center_crop=False)
+    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    pixel_values = encoding["pixel_values"]
     
     outputs = model(pixel_values)
     logits = outputs.logits
 
-    print("Sum of logits:", logits.sum())
+    print("Sum of logits:", logits.sum().item())
     print("Shape of logits:", logits.shape)
     print("Predicted class idx:", logits.argmax(-1).item())
+
+    assert logits.shape == torch.Size([1, 1000])
+    print("Logits:", logits[0, :3])
+    assert torch.allclose(logits[0,:3], torch.tensor([-1.2385, -1.0987, -1.0108]), atol=1e-3)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    #print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    #feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

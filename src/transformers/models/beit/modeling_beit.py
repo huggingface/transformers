@@ -25,7 +25,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_beit import BEiTConfig
@@ -118,7 +118,7 @@ class BEiTEmbeddings(nn.Module):
         
         embeddings = self.patch_embeddings(pixel_values)
 
-        print("Sum of patch embeddings:", embeddings.sum().item())
+        #print("Sum of patch embeddings:", embeddings.sum().item())
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
@@ -127,7 +127,7 @@ class BEiTEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         
         
-        print("Sum of final embeddings:", embeddings.sum().item())
+        #print("Sum of final embeddings:", embeddings.sum().item())
         
         return embeddings
 
@@ -205,10 +205,10 @@ class BEiTSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
-        print("Shape of attention scores:", attention_scores.shape)
+        #print("Shape of attention scores:", attention_scores.shape)
         
-        print("Attention scores before relative position bias:")
-        print(attention_scores[0,0,:3,:3])
+        #print("Attention scores before relative position bias:")
+        #print(attention_scores[0,0,:3,:3])
         
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
@@ -218,8 +218,8 @@ class BEiTSelfAttention(nn.Module):
         if relative_position_bias is not None:
             attention_scores = attention_scores + relative_position_bias
         
-        print("Attention scores after relative position bias:")
-        print(attention_scores[0,0,:3,:3])
+        #print("Attention scores after relative position bias:")
+        #print(attention_scores[0,0,:3,:3])
         
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -357,7 +357,7 @@ class BEiTLayer(nn.Module):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        print("Hidden states after self-attention:", attention_output[0,:3,:3])
+        #print("Hidden states after self-attention:", attention_output[0,:3,:3])
         
         #print("First elements of lambda weights:", self.lambda_1[:3])
         #print("Sum of lambda_1 weights:", self.lambda_1.sum().item())
@@ -483,16 +483,16 @@ class BEiTEncoder(nn.Module):
                     layer_head_mask,
                 )
             else:
-                print("----------------------------------")
+                #print("----------------------------------")
             
-                print(f"Hidden states before layer {i}", hidden_states[0, :3, :3])
+                #print(f"Hidden states before layer {i}", hidden_states[0, :3, :3])
                 
                 relative_position_bias = self.relative_position_bias() if self.relative_position_bias is not None else None
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
             
             hidden_states = layer_outputs[0]
 
-            print(f"Hidden states after layer {i}", hidden_states[0, :3, :3])
+            #print(f"Hidden states after layer {i}", hidden_states[0, :3, :3])
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -646,8 +646,8 @@ class BEiTModel(BEiTPreTrainedModel):
 
         embedding_output = self.embeddings(pixel_values)
 
-        print("Shape of embedding output:", embedding_output.shape)
-        print("Sum of embedding output:", embedding_output.sum())
+        #print("Shape of embedding output:", embedding_output.shape)
+        #print("Sum of embedding output:", embedding_output.sum())
         
         encoder_outputs = self.encoder(
             embedding_output,
@@ -690,6 +690,92 @@ class BEiTPooler(nn.Module):
         #pooled_output = self.dense(pooled_output)
         #pooled_output = self.activation(pooled_output)
         return pooled_output
+
+
+@add_start_docstrings(
+    """
+    BEiT Model transformer with a "language" modeling head on top.
+    """,
+    BEIT_START_DOCSTRING,
+)
+class BEiTForMaskedImageModeling(BEiTPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.beit = BEiTModel(config, add_pooling_layer=True)
+
+        # Classifier head
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values=None,
+        head_mask=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import BEiTFeatureExtractor, BEiTForImageClassification
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = BEiTFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
+            >>> model = BEiTForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
+            >>> # model predicts one of the 1000 ImageNet classes
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.beit(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+        prediction_scores = self.lm_head(sequence_output[:,1:])
+
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if not return_dict:
+            output = (prediction_scores,) + outputs[2:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
+        return MaskedLMOutput(
+            loss=masked_lm_loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(

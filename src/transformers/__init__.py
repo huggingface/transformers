@@ -559,6 +559,7 @@ if is_torch_available():
     _import_structure["models.beit"].extend(
         [
             "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BEiTForMaskedImageModeling",
             "BEiTForImageClassification",
             "BEiTModel",
             "BEiTPreTrainedModel",
@@ -2183,6 +2184,7 @@ if TYPE_CHECKING:
         )
         from .models.beit import (
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BEiTForMaskedImageModeling,
             BEiTForImageClassification,
             BEiTModel,
             BEiTPreTrainedModel,
