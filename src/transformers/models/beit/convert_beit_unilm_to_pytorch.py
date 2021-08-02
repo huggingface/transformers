@@ -173,7 +173,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     model.load_state_dict(state_dict)
     
     # Check outputs on an image
-    feature_extractor = BEiTFeatureExtractor(size=224, resample=Image.BILINEAR, do_center_crop=False)
+    feature_extractor = BEiTFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     
