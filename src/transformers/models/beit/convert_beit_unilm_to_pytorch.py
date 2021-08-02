@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config):
+def create_rename_keys(config, has_classification_head=True):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
@@ -57,15 +57,16 @@ def create_rename_keys(config):
         ]
     )
 
-    # layernorm + classification head
-    rename_keys.extend(
-        [
-            ("fc_norm.weight", "beit.pooler.layernorm.weight"),
-            ("fc_norm.bias", "beit.pooler.layernorm.bias"),
-            ("head.weight", "classifier.weight"),
-            ("head.bias", "classifier.bias"),
-        ]
-    )
+    if has_classification_head:
+        # layernorm + classification head
+        rename_keys.extend(
+            [
+                ("fc_norm.weight", "beit.pooler.layernorm.weight"),
+                ("fc_norm.bias", "beit.pooler.layernorm.bias"),
+                ("head.weight", "classifier.weight"),
+                ("head.bias", "classifier.bias"),
+            ]
+        )
 
     return rename_keys
 
@@ -125,10 +126,12 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # define default BEiT configuration
     config = BEiTConfig()
+    has_classification_head = True
     # set config parameters based on URL
     if checkpoint_url[-9:-4] == "pt22k":
         # masked image modeling
         config.use_shared_relative_position_bias = True
+        has_classification_head = False
     elif checkpoint_url[-9:-4] == "ft22k":
         # intermediate fine-tuning on ImageNet-22k
         config.use_relative_position_bias = True
@@ -159,7 +162,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location='cpu', check_hash=True)['model']
-    rename_keys = create_rename_keys(config)
+    rename_keys = create_rename_keys(config, has_classification_head=has_classification_head)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config)
