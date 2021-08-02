@@ -42,7 +42,7 @@ Tips:
   behavior is to use this token when two sequences are given (for example, in the run_qa.py script).
 - If you plan on using Splinter outside run_qa.py, please keep in mind the question token - it might be important for
   the success of your model, especially in a few-shot setting.
-- Please note the 'initialize_new_qass' flag in SplinterConfig. It controls whether the QASS layer's pretrained
+- Please note the ``initialize_new_qass`` flag in :class:`~transformers.SplinterConfig`. It controls whether the QASS layer's pretrained
   parameters are used, or replaced with randomly initialized ones (see ablations in the paper for a detailed
   discussion).
 
