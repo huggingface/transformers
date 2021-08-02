@@ -135,53 +135,53 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_beit_checkpoint(checkpoint_path, pytorch_dump_folder_path, task="MIM", size="base", image_size=224):
+def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     """
     Copy/paste/tweak model's weights to our BEiT structure.
     """
 
     # define default BEiT configuration
     config = BEiTConfig()
-    # task 
+    # set config parameters based on URL
     base_model = False
-    if task == "MIM":
+    if checkpoint_url[-9:-4] == "pt22k":
         # masked image modeling
         config.use_shared_relative_position_bias = True
         base_model = True
-    elif task == "IFT":
+    elif checkpoint_url[-9:-4] == "ft22k":
         # intermediate fine-tuning on ImageNet-22k
         config.use_relative_position_bias = True
         config.num_labels = 21841
-    elif task == "FT":
+    elif checkpoint_url[-8:-4] == "to1k":
         # fine-tuning on ImageNet-1k
         config.use_relative_position_bias = True
         config.num_labels = 1000
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
-        config.image_size = image_size
+        config.image_size = int(checkpoint_url[59:62])
     else:
-        raise ValueError(f"Task {task} not supported")
+        raise ValueError(f"Checkpoint not supported, URL should either end with 'pt22k', 'ft22k' or 'to1k'")
         
     # size of the architecture
-    if size == "base":
+    if "base" in checkpoint_url:
         pass
-    elif size == "large":
+    elif "large" in checkpoint_url:
         config.hidden_size = 1024
         config.intermediate_size = 4096
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
     else:
-        raise ValueError(f"Size {size} not found in model name, should be either 'base' or 'large'")
+        raise ValueError(f"Size {size} not found in checkpoint url, should be either 'base' or 'large'")
 
     # load state_dict of original model, remove and rename some keys
-    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))['model']
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location='cpu', check_hash=True)['model']
     rename_keys = create_rename_keys(config, base_model)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config, base_model)
 
     # load HuggingFace model
-    if task == "MIM":
+    if checkpoint_url[-9:-4] == "pt22k":
         model = BEiTForMaskedImageModeling(config)
     else:
         model = BEiTForImageClassification(config)
@@ -202,7 +202,8 @@ def convert_beit_checkpoint(checkpoint_path, pytorch_dump_folder_path, task="MIM
 
     assert logits.shape == torch.Size([1, 1000])
     print("Logits:", logits[0, :3])
-    assert torch.allclose(logits[0,:3], torch.tensor([-1.2385, -1.0987, -1.0108]), atol=1e-3)
+    if "beit_base_patch16_224_pt22k_ft22kto1k" in checkpoint_url:
+        assert torch.allclose(logits[0,:3], torch.tensor([-1.2385, -1.0987, -1.0108]), atol=1e-3)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
@@ -215,18 +216,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--checkpoint_path", default=None, type=str, help="Path to the original PyTorch checkpoint (.pth file)."
+        "--checkpoint_url", 
+        default="https://unilm.blob.core.windows.net/beit/beit_base_patch16_224_pt22k_ft22kto1k.pth", 
+        type=str, 
+        help="URL to the original PyTorch checkpoint (.pth file)."
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
-    parser.add_argument(
-        "--task",
-        default="MIM",
-        type=str,
-        help="Task on which the model was trained. Can be either 'MIM' (masked image modeling), 'IFT' (intermediate fine-tuning) or 'FT' (fine-tuning)."
-    )
-    parser.add_argument("--size", default="base", type=str, help="Model size (base or large)")
-    parser.add_argument("--image_size", default=224, type=int, help="Image size")
     args = parser.parse_args()
-    convert_beit_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.task, args.size, args.image_size)
+    convert_beit_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path)
