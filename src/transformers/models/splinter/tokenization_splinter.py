@@ -47,8 +47,10 @@ class SplinterTokenizer(BertTokenizer):
     r"""
     Construct a Splinter tokenizer.
 
-    :class:`~transformers.SplinterTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    :class:`~transformers.SplinterTokenizer` is similar to :class:`~transformers.BertTokenizer` and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
+
+    It adds a special question token in order to create question representations from its contextualized embedding.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
     parameters.
