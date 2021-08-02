@@ -151,7 +151,7 @@ class SplinterTokenizer(BertTokenizer):
             return [0] + [0] * len(token_ids_0) + [0, 0, 0] + [1] * len(token_ids_1) + [1]
         else:
             # Input is context-then-question
-            return [0] + [0] * len(token_ids_0) + [0] + [1] * len(token_ids_1) + [1] + [1] + [1]
+            return [0] + [0] * len(token_ids_0) + [0] + [1] * len(token_ids_1) + [1, 1, 1]
 
     @property
     def question_token_id(self) -> Optional[int]:
