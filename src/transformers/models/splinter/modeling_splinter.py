@@ -570,7 +570,6 @@ class SplinterPreTrainedModel(PreTrainedModel):
     """
 
     config_class = SplinterConfig
-    load_tf_weights = load_tf_weights_in_splinter
     base_model_prefix = "splinter"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
