@@ -19,14 +19,13 @@ from typing import Tuple
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import logging
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gptj import GPTJConfig
 
 
@@ -45,6 +44,23 @@ GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
 ]
 
+def fixed_pos_embedding(dim=None, seq_len=None):
+    inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2) / dim))
+    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(seq_len), inv_freq).float()
+    return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
+
+def rotate_every_two(x):
+    shape = x.shape
+    x1 = x[:, :, :, ::2]
+    x2 = x[:, :, :, 1::2]
+    x = torch.stack((-x2, x1), axis=-1).reshape(shape)
+    return x
+
+def apply_rotary_pos_emb(x, sin, cos, offset=0):
+    sin = torch.repeat_interleave(sin[:, offset:x.shape[1]+offset, ...], 2, dim=-1)
+    cos = torch.repeat_interleave(cos[:, offset:x.shape[1]+offset, ...], 2, dim=-1)
+    return (x * cos) + (rotate_every_two(x) * sin)
+
 
 class GPTJAttention(nn.Module):
     def __init__(self, config):
@@ -59,11 +75,11 @@ class GPTJAttention(nn.Module):
         )
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
-        self.attn_dropout = nn.Dropout(config.attention_dropout)
-        self.resid_dropout = nn.Dropout(config.resid_dropout)
+        self.attn_dropout = nn.Dropout(config.attn_pdrop)
+        self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
         self.embed_dim = config.hidden_size
-        self.num_heads = config.num_heads
+        self.num_heads = config.n_head
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
@@ -74,6 +90,11 @@ class GPTJAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+
+        self.rotary_dim = config.rotary_dim
+        sin, cos = fixed_pos_embedding(dim=self.rotary_dim, seq_len=max_positions)
+        self.register_buffer("sin", sin[None, :, None, :])
+        self.register_buffer("cos", cos[None, :, None, :])
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -115,8 +136,7 @@ class GPTJAttention(nn.Module):
         Splits hidden_size dim into attn_head_size and num_heads
         """
         new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
-        tensor = tensor.view(*new_shape)
-        return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+        return tensor.view(*new_shape) # (batch, seq_length, head, head_features)
 
     def _merge_heads(self, tensor, num_heads, attn_head_size):
         """
@@ -125,6 +145,9 @@ class GPTJAttention(nn.Module):
         tensor = tensor.permute(0, 2, 1, 3).contiguous()
         new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
         return tensor.view(new_shape)
+    
+    def _transpose_for_scores(self, tensor):
+        return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 
     def forward(
         self,
@@ -142,6 +165,27 @@ class GPTJAttention(nn.Module):
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
+        
+        past_len = 0
+        if layer_past is not None:
+            past_len = layer_past[0].shape[-2]
+
+        # apply rotary embeddings
+        k_rot = key[..., :self.rotary_dim]
+        k_pass = key[..., self.rotary_dim:]
+
+        q_rot = query[..., :self.rotary_dim]
+        q_pass = query[..., self.rotary_dim:]
+        
+        k_rot = apply_rotary_pos_emb(k_rot, self.sin, self.cos, offset=past_len)
+        q_rot = apply_rotary_pos_emb(q_rot, self.sin, self.cos, offset=past_len)
+
+        key = torch.cat([k_rot, k_pass], dim=-1)
+        query = torch.cat([q_rot, q_pass], dim=-1)
+        
+        key = self._transpose_for_scores(key)
+        query = self._transpose_for_scores(query)
+        value = self._transpose_for_scores(value)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -156,7 +200,7 @@ class GPTJAttention(nn.Module):
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
-        attn_output = self.c_proj(attn_output)
+        attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
         outputs = (attn_output, present)
@@ -189,7 +233,6 @@ class GPTJLayer(nn.Module):
 
         self.layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = GPTJAttention(config)
-
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
@@ -200,7 +243,8 @@ class GPTJLayer(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-    ):
+    ):  
+        residual = hidden_states
         hidden_states = self.layernorm(hidden_states)
         attn_outputs = self.attn(
             hidden_states,
@@ -214,7 +258,7 @@ class GPTJLayer(nn.Module):
         outputs = attn_outputs[1:]
 
         feed_forward_hidden_states = self.mlp(hidden_states)
-        hidden_states = attn_output + feed_forward_hidden_states
+        hidden_states = attn_output + feed_forward_hidden_states + residual
 
         if use_cache:
             outputs = (hidden_states,) + outputs
@@ -384,6 +428,7 @@ class GPTJModel(GPTJPreTrainedModel):
         past_key_values=None,
         attention_mask=None,
         token_type_ids=None,
+        position_ids=None, 
         head_mask=None,
         inputs_embeds=None,
         use_cache=None,
@@ -415,7 +460,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
         if past_key_values is None:
             past_length = 0
-            past_key_values = tuple([None] * len(self.h))
+            past_key_values = tuple([None] * len(self.layers))
         else:
             past_length = past_key_values[0][0].size(-2)
 
@@ -459,7 +504,7 @@ class GPTJModel(GPTJPreTrainedModel):
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
-        for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+        for i, (block, layer_past) in enumerate(zip(self.layers, past_key_values)):
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
