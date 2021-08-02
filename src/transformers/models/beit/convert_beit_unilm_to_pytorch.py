@@ -200,11 +200,43 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     print("Shape of logits:", logits.shape)
     print("Predicted class idx:", logits.argmax(-1).item())
 
-    assert logits.shape == torch.Size([1, 1000])
-    print("Logits:", logits[0, :3])
-    if "beit_base_patch16_224_pt22k_ft22kto1k" in checkpoint_url:
-        assert torch.allclose(logits[0,:3], torch.tensor([-1.2385, -1.0987, -1.0108]), atol=1e-3)
-
+    # verify logits
+    expected_shape = torch.Size([1, 1000])
+    if checkpoint_url[:-4].endswith("beit_base_patch16_224_pt22k_ft22k"):
+        expected_shape = torch.Size([1, 21841])
+        expected_logits = torch.tensor([2.2288, 2.4671, 0.7395])
+        expected_class_idx = 2397
+    elif checkpoint_url[:-4].endswith("beit_large_patch16_224_pt22k_ft22k"):
+        expected_shape = torch.Size([1, 21841])
+        expected_logits = torch.tensor([1.6881, -0.2787,  0.5901])
+        expected_class_idx = 2396
+    elif checkpoint_url[:-4].endswith("beit_base_patch16_224_pt22k_ft1k"):
+        expected_logits = torch.tensor([0.1241, 0.0798, -0.6569])
+        expected_class_idx = 285
+    elif checkpoint_url[:-4].endswith("beit_base_patch16_224_pt22k_ft22kto1k"):
+        expected_logits = torch.tensor([-1.2385, -1.0987, -1.0108])
+        expected_class_idx = 281
+    elif checkpoint_url[:-4].endswith("beit_base_patch16_384_pt22k_ft22kto1k"):
+        expected_logits = torch.tensor([-1.5303, -0.9484, -0.3147])
+        expected_class_idx = 761
+    elif checkpoint_url[:-4].endswith("beit_large_patch16_224_pt22k_ft1k"):
+        expected_logits = torch.tensor([0.4610, -0.0928, 0.2086])
+        expected_class_idx = 761
+    elif checkpoint_url[:-4].endswith("beit_large_patch16_224_pt22k_ft22kto1k"):
+        expected_logits = torch.tensor([-0.4804, 0.6257, -0.1837])
+        expected_class_idx = 761
+    elif checkpoint_url[:-4].endswith("beit_large_patch16_384_pt22k_ft22kto1k"):
+        expected_logits = torch.tensor([[-0.5122,  0.5117, -0.2113]])
+        expected_class_idx  = 761
+    elif checkpoint_url[:-4].endswith("beit_large_patch16_512_pt22k_ft22kto1k"):
+        expected_logits = torch.tensor([-0.3062,  0.7261,  0.4852])
+        expected_class_idx = 761
+    else:
+        raise ValueError("Can't verify logits as model is not supported")
+    
+    assert logits.shape == expected_shape
+    assert torch.allclose(logits[0,:3], expected_logits, atol=1e-3)
+    
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
