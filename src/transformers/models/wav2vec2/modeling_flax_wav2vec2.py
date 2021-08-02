@@ -936,8 +936,8 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-        >>> model = FlaxWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-lv60")
+        >>> model = FlaxWav2Vec2Model.from_pretrained("facebook/wav2vec2-large-lv60")
 
         >>> def map_to_array(batch):
         >>>     speech, _ = sf.read(batch["file"])
@@ -947,7 +947,7 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
         >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
-        >>> input_values = processor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
+        >>> input_values = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="np").input_values  # Batch size 1
         >>> hidden_states = model(input_values).last_hidden_state
 """
 
@@ -1037,8 +1037,8 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-        >>> model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
+        >>> model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60")
 
         >>> def map_to_array(batch):
         >>>     speech, _ = sf.read(batch["file"])
@@ -1048,7 +1048,7 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
         >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
-        >>> input_values = processor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
+        >>> input_values = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="np").input_values  # Batch size 1
         >>> logits = model(input_values).logits
         >>> predicted_ids = jnp.argmax(logits, axis=-1)
 
@@ -1219,12 +1219,12 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
         >>> import numpy as np
         >>> import jax.numpy as jnp
         >>> from transformers import Wav2Vec2FeatureExtractor, FlaxWav2Vec2ForPreTraining
-        >>> from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
+        >>> from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_indices
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base")
-        >>> model = FlaxWav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base")
+        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-large-lv60")
+        >>> model = FlaxWav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-lv60")
 
 
         >>> def map_to_array(batch):
@@ -1247,7 +1247,7 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
 
         >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
         >>> cosine_sim = optax.cosine_similarity(
-        ...     outputs.projected_states, outputs.projected_quantized_states, axis=-1
+        ...     outputs.projected_states, outputs.projected_quantized_states
         ... )
 
         >>> # show that cosine similarity is much higher than random

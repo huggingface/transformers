@@ -907,6 +907,7 @@ FLAX_CLIP_TEXT_MODEL_DOCSTRING = """
     Returns:
 
     Example::
+
         >>> from transformers import CLIPTokenizer, FlaxCLIPTextModel
 
         >>> model = FlaxCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
@@ -957,6 +958,7 @@ FLAX_CLIP_VISION_MODEL_DOCSTRING = """
     Returns:
 
     Example::
+
         >>> from PIL import Image
         >>> import requests
 
@@ -1078,6 +1080,7 @@ FLAX_CLIP_MODEL_DOCSTRING = """
     Returns:
 
     Example::
+
         >>> import jax
         >>> from PIL import Image
         >>> import requests
