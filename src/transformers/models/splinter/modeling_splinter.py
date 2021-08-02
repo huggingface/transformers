@@ -137,10 +137,6 @@ def load_tf_weights_in_splinter(model, config, tf_checkpoint_path):
     return model
 
 
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
 # Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->Splinter
 class SplinterEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -1517,8 +1513,6 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
 
         self.splinter = SplinterModel(config)
         self.initialize_new_qass = config.initialize_new_qass
-        # self.cls = ClassificationHead(config) if not self.initialize_new_qass else None
-        # self.new_cls = ClassificationHead(config) if self.initialize_new_qass else None
         self.splinter_qass = QuestionAwareSpanSelectionHead(config) if not self.initialize_new_qass else None
         self.new_splinter_qass = QuestionAwareSpanSelectionHead(config) if self.initialize_new_qass else None
         self.question_token_id = config.question_token_id
@@ -1587,7 +1581,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         outputs = self.splinter(
             input_ids,
             attention_mask=attention_mask,
-            # token_type_ids=token_type_ids,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1627,8 +1621,6 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         if not return_dict:
             output = (start_logits, end_logits) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
-
-        print(start_logits[0])
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
