@@ -148,7 +148,7 @@ class SplinterTokenizer(BertTokenizer):
 
         if self.padding_side == "right":
             # Input is question-then-context
-            return [0] + [0] * len(token_ids_0) + [0] + [0] + [0] + [1] * len(token_ids_1) + [1]
+            return [0] + [0] * len(token_ids_0) + [0, 0, 0] + [1] * len(token_ids_1) + [1]
         else:
             # Input is context-then-question
             return [0] + [0] * len(token_ids_0) + [0] + [1] * len(token_ids_1) + [1] + [1] + [1]
