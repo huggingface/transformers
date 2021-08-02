@@ -1005,6 +1005,8 @@ class Trainer:
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
+        # fix for https://github.com/huggingface/transformers/issues/12970
+        resume_from_checkpoint = None if not resume_from_checkpoint else resume_from_checkpoint
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
