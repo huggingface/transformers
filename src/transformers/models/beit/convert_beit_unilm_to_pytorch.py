@@ -139,7 +139,10 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.num_labels = 1000
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
-        config.image_size = int(checkpoint_url[59:62])
+        if '384' in checkpoint_url:
+            config.image_size = 384
+        if '512' in checkpoint_url:
+            config.image_size = 512
     else:
         raise ValueError(f"Checkpoint not supported, URL should either end with 'pt22k', 'ft22k' or 'to1k'")
         
