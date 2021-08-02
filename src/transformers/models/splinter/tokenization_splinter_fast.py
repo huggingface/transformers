@@ -49,7 +49,7 @@ class SplinterTokenizerFast(BertTokenizerFast):
     :class:`~transformers.SplinterTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
     """
 
