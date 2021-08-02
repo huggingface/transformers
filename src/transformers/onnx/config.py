@@ -19,18 +19,13 @@ from typing import Any, Callable, List, Mapping, Optional
 from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
 
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
+from .features import FeaturesManager
 
 
 DEFAULT_ONNX_OPSET = 11
 
 # 2 Gb
 EXTERNAL_DATA_FORMAT_SIZE_LIMIT = 2 * 1024 * 1024 * 1024
-
-_TASK_TO_COMMON_OUTPUTS = {
-    "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
-    "causal_lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
-    "sequence_classification": OrderedDict({"logits": {0: "batch"}}),
-}
 
 
 @dataclasses.dataclass
@@ -53,8 +48,8 @@ class OnnxConfig(ABC):
     def __init__(self, config: PretrainedConfig, task: str = "default", patching_specs: List[PatchingSpec] = None):
         self._config = config
 
-        if task not in _TASK_TO_COMMON_OUTPUTS:
-            raise ValueError(f"{task} is not a supported task, supported tasks: {_TASK_TO_COMMON_OUTPUTS.keys()}")
+        if task not in FeaturesManager._TASKS_TO_COMMON_OUTPUTS:
+            raise ValueError(f"{task} is not a supported task, supported tasks: {FeaturesManager._TASKS_TO_COMMON_OUTPUTS.keys()}")
         self.task = task
 
         self._patching_specs = []
@@ -65,7 +60,7 @@ class OnnxConfig(ABC):
             self._patching_specs.append(final_spec)
 
     @classmethod
-    def default(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":
+    def from_model_config(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":
         """
         Instantiate a OnnxConfig for a specific model
 
@@ -96,7 +91,7 @@ class OnnxConfig(ABC):
         Returns:
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
-        return _TASK_TO_COMMON_OUTPUTS[self.task]
+        return FeaturesManager._TASKS_TO_COMMON_OUTPUTS[self.task]
 
     @property
     def values_override(self) -> Optional[Mapping[str, Any]]:
