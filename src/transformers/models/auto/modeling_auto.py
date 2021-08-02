@@ -32,7 +32,11 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertModel"),
         ("fnet", "FNetModel"),
         ("segformer", "SegformerModel"),
+<<<<<<< HEAD
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
+=======
+        ("perceiver", "PerceiverModel"),
+>>>>>>> First draft
         ("gptj", "GPTJModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
         ("beit", "BeitModel"),
