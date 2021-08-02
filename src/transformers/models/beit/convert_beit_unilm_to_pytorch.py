@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config, base_model=False):
+def create_rename_keys(config):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
@@ -57,40 +57,23 @@ def create_rename_keys(config, base_model=False):
         ]
     )
 
-    if base_model:
-        # layernorm + pooler
-        rename_keys.extend(
-            [
-                ("norm.weight", "layernorm.weight"),
-                ("norm.bias", "layernorm.bias"),
-                ("pre_logits.fc.weight", "pooler.dense.weight"),
-                ("pre_logits.fc.bias", "pooler.dense.bias"),
-            ]
-        )
-
-        # if just the base model, we should remove "beit" from all keys that start with "beit"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("beit") else pair for pair in rename_keys]
-    else:
-        # layernorm + classification head
-        rename_keys.extend(
-            [
-                ("fc_norm.weight", "beit.pooler.layernorm.weight"),
-                ("fc_norm.bias", "beit.pooler.layernorm.bias"),
-                ("head.weight", "classifier.weight"),
-                ("head.bias", "classifier.bias"),
-            ]
-        )
+    # layernorm + classification head
+    rename_keys.extend(
+        [
+            ("fc_norm.weight", "beit.pooler.layernorm.weight"),
+            ("fc_norm.bias", "beit.pooler.layernorm.bias"),
+            ("head.weight", "classifier.weight"),
+            ("head.bias", "classifier.bias"),
+        ]
+    )
 
     return rename_keys
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config, base_model=False):
+def read_in_q_k_v(state_dict, config):
     for i in range(config.num_hidden_layers):
-        if base_model:
-            prefix = ""
-        else:
-            prefix = "beit."
+        prefix = "beit."
         # queries, keys and values
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         q_bias = state_dict.pop(f"blocks.{i}.attn.q_bias")
@@ -143,11 +126,9 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # define default BEiT configuration
     config = BEiTConfig()
     # set config parameters based on URL
-    base_model = False
     if checkpoint_url[-9:-4] == "pt22k":
         # masked image modeling
         config.use_shared_relative_position_bias = True
-        base_model = True
     elif checkpoint_url[-9:-4] == "ft22k":
         # intermediate fine-tuning on ImageNet-22k
         config.use_relative_position_bias = True
@@ -175,10 +156,10 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location='cpu', check_hash=True)['model']
-    rename_keys = create_rename_keys(config, base_model)
+    rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
-    read_in_q_k_v(state_dict, config, base_model)
+    read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
     if checkpoint_url[-9:-4] == "pt22k":
@@ -196,7 +177,6 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     outputs = model(pixel_values)
     logits = outputs.logits
 
-    print("Sum of logits:", logits.sum().item())
     print("Shape of logits:", logits.shape)
     print("Predicted class idx:", logits.argmax(-1).item())
 

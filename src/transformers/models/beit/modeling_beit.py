@@ -186,7 +186,7 @@ class BEiTSelfAttention(nn.Module):
         if window_size:
             self.relative_position_bias = BEiTRelativePositionBias(config, window_size=window_size)
         else:
-            self_relative_position_bias = None
+            self.relative_position_bias = None
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -694,7 +694,7 @@ class BEiTPooler(nn.Module):
 
 @add_start_docstrings(
     """
-    BEiT Model transformer with a "language" modeling head on top.
+    BEiT Model transformer with a "language" modeling head on top (to predict visual tokens).
     """,
     BEIT_START_DOCSTRING,
 )
@@ -731,7 +731,7 @@ class BEiTForMaskedImageModeling(BEiTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import BEiTFeatureExtractor, BEiTForImageClassification
+            >>> from transformers import BEiTFeatureExtractor, BEiTForMaskedImageModeling
             >>> from PIL import Image
             >>> import requests
 
@@ -739,14 +739,11 @@ class BEiTForMaskedImageModeling(BEiTPreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
             >>> feature_extractor = BEiTFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
-            >>> model = BEiTForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
+            >>> model = BEiTForMaskedImageModeling.from_pretrained('microsoft/beit-base-patch16-224')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
-            >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class_idx = logits.argmax(-1).item()
-            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

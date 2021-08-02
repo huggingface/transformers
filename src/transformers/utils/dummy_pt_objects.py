@@ -588,6 +588,41 @@ class PretrainedBartModel:
         requires_backends(cls, ["torch"])
 
 
+BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BEiTForMaskedImageModeling:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class BEiTForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BEiTModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class BEiTPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
