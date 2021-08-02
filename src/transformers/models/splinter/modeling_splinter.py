@@ -141,6 +141,7 @@ def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
 
 
+# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->Splinter
 class SplinterEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -188,6 +189,7 @@ class SplinterEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Splinter
 class SplinterSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -313,6 +315,7 @@ class SplinterSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Splinter
 class SplinterSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -327,6 +330,7 @@ class SplinterSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Splinter
 class SplinterAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -376,6 +380,7 @@ class SplinterAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Splinter
 class SplinterIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -391,6 +396,7 @@ class SplinterIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Splinter
 class SplinterOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -405,6 +411,7 @@ class SplinterOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Splinter
 class SplinterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -488,6 +495,7 @@ class SplinterLayer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Splinter
 class SplinterEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -632,6 +640,7 @@ class SplinterOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->Splinter
 class SplinterPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -723,6 +732,7 @@ SPLINTER_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->Splinter
 @add_start_docstrings(
     "The bare Splinter Model transformer outputting raw hidden-states without any specific head on top.",
     SPLINTER_START_DOCSTRING,
