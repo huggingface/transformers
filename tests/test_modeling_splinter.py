@@ -456,7 +456,7 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
 class SplinterModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = SplinterForMaskedLM.from_pretrained("splinter-base")
+        model = SplinterForMaskedLM.from_pretrained("tau/splinter-base")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
