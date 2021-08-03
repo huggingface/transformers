@@ -917,7 +917,7 @@ FLAX_CLIP_TEXT_MODEL_DOCSTRING = """
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooled_output # pooled (EOS token) states
+        >>> pooler_output = outputs.pooler_output # pooled (EOS token) states
 """
 
 overwrite_call_docstring(FlaxCLIPTextModel, CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_DOCSTRING)
@@ -974,7 +974,7 @@ FLAX_CLIP_VISION_MODEL_DOCSTRING = """
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooled_output # pooled CLS states
+        >>> pooler_output = outputs.pooler_output # pooled CLS states
 """
 
 overwrite_call_docstring(FlaxCLIPVisionModel, CLIP_VISION_INPUTS_DOCSTRING + FLAX_CLIP_VISION_MODEL_DOCSTRING)

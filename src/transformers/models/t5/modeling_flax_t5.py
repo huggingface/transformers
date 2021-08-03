@@ -1320,6 +1320,27 @@ append_call_sample_docstring(
     FlaxT5Model, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
 )
 
+FLAX_T5_MODEL_DOCSTRING = """
+    Returns:
+
+    Example::
+
+        >>> from transformers import T5Tokenizer, FlaxT5Model
+
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = FlaxT5Model.from_pretrained('t5-small')
+
+        >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="np").input_ids
+        >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+"""
+
+
+overwrite_call_docstring(FlaxT5Model, T5_INPUTS_DOCSTRING + FLAX_T5_MODEL_DOCSTRING)
+append_replace_return_docstrings(FlaxT5Model, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
 class FlaxT5ForConditionalGenerationModule(nn.Module):

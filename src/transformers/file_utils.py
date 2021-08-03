@@ -1056,7 +1056,7 @@ FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
 
-        >>> outputs = model(**inputs, labels=labels)
+        >>> outputs = model(**inputs)
         >>> logits = outputs.logits
 """
 
@@ -1115,9 +1115,10 @@ FLAX_CAUSAL_LM_SAMPLE = r"""
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
-        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+        >>> outputs = model(**inputs)
 
-        >>> logits = outputs.logits
+        >>> # retrieve logts for next token
+        >>> next_token_logits = outputs.logits[:, -1]
 """
 
 FLAX_SAMPLE_DOCSTRINGS = {
