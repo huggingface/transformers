@@ -828,7 +828,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(b, b1, delta=1e-8)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
-    @require_torch_non_multi_gpu
     def test_training_with_resume_from_checkpoint_flase(self):
         # This test will fail flakily for more than 1 GPUs since the result will be slightly more different
         # TODO: investigate why it fails for 2 GPUs?
