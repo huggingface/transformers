@@ -1491,7 +1491,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             start_prefix = cls.base_model_prefix + "."
         if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
             model_to_load = getattr(model, cls.base_model_prefix)
-            if any(key in expected_keys_not_prefixed for key in loaded_keys) > 0:
+            if any(key in expected_keys_not_prefixed for key in loaded_keys):
                 raise ValueError(
                     "The state dictionary of the model you are training to load is corrupted. Are you sure it was "
                     "properly saved?"
