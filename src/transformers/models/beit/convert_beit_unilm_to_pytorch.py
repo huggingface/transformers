@@ -57,7 +57,15 @@ def create_rename_keys(config, has_lm_head=False):
         ]
     )
 
-    if not has_lm_head:
+    if has_lm_head:
+        # a shared relative position bias is used for the different layers
+        rename_keys.extend(
+            [
+                ("rel_pos_bias.relative_position_bias_table", "beit.encoder.relative_position_bias.relative_position_bias_table"),
+                ("rel_pos_bias.relative_position_index", "beit.encoder.relative_position_bias.relative_position_index"),
+            ]
+        )
+    else:
         # layernorm + classification head
         rename_keys.extend(
             [
@@ -99,15 +107,7 @@ def read_in_q_k_v(state_dict, config, has_lm_head=False):
         state_dict[f"{prefix}encoder.layer.{i}.lambda_2"] = gamma_2
         
         # relative_position bias table + index
-        print(state_dict.keys())
-        if has_lm_head:
-            # a shared relative position bias is used for the different layers
-            table = state_dict.pop(f"rel_pos_bias.relative_position_bias_table")
-            index = state_dict.pop(f"rel_pos_bias.relative_position_index")
-
-            state_dict[f"{prefix}encoder.relative_position_bias.relative_position_bias_table"] = table
-            state_dict[f"{prefix}encoder.relative_position_bias.relative_position_index"] = index
-        else:
+        if not has_lm_head:
             # each layer has its own relative position bias
             table = state_dict.pop(f"blocks.{i}.attn.relative_position_bias_table")
             index = state_dict.pop(f"blocks.{i}.attn.relative_position_index")
