@@ -19,7 +19,6 @@ import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-
 from flax.core.frozen_dict import FrozenDict
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
@@ -801,8 +800,8 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
                 `What are input IDs? <../glossary.html#input-ids>`__
 
         Returns:
-            text_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The text embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPTextModel`.
+            text_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPTextModel`.
 
         Examples::
 
@@ -855,9 +854,8 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
                 :meth:`transformers.CLIPFeatureExtractor.__call__` for details.
 
         Returns:
-            image_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The image embeddings
-            obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.FlaxCLIPVisionModel`
+            image_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The image embeddings obtained
+            by applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPVisionModel`
 
         Examples::
 
