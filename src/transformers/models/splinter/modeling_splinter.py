@@ -1473,7 +1473,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
                 )
             else:
                 question_position_for_each_example = torch.zeros(
-                    inputs_embeds.size(0), dtype=torch.int64, layout=inputs_embeds.layout, device=inputs_embeds.device
+                    inputs_embeds.size(0), dtype=torch.long, layout=inputs_embeds.layout, device=inputs_embeds.device
                 )
             question_positions = question_position_for_each_example.unsqueeze(-1)
             question_positions_were_none = True
