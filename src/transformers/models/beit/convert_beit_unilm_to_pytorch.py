@@ -99,6 +99,7 @@ def read_in_q_k_v(state_dict, config, has_lm_head=False):
         state_dict[f"{prefix}encoder.layer.{i}.lambda_2"] = gamma_2
         
         # relative_position bias table + index
+        print(state_dict.keys())
         if has_lm_head:
             # a shared relative position bias is used for the different layers
             table = state_dict.pop(f"rel_pos_bias.relative_position_bias_table")
