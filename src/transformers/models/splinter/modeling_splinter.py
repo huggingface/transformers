@@ -1347,22 +1347,9 @@ class SplinterForTokenClassification(SplinterPreTrainedModel):
         )
 
 
-def gather_positions(input_tensor, positions):
-    """
-    :param input_tensor: shape [batch_size, seq_length, dim] :param positions: shape [batch_size, num_positions]
-    :return: [batch_size, num_positions, dim]
-
-    Gathers specific vectors along the sequence dimension for classification
-    """
-    _, _, dim = input_tensor.size()
-    index = positions.unsqueeze(-1).repeat(1, 1, dim)  # [batch_size, num_positions, dim]
-    gathered_output = torch.gather(input_tensor, dim=1, index=index)  # [batch_size, num_positions, dim]
-    return gathered_output
-
-
 class SplinterFullyConnectedLayer(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_act="gelu"):
-        super(SplinterFullyConnectedLayer, self).__init__()
+        super().__init__()
 
         self.input_dim = input_dim
         self.output_dim = output_dim
@@ -1396,7 +1383,9 @@ class QuestionAwareSpanSelectionHead(nn.Module):
         self.end_classifier = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def forward(self, inputs, positions):
-        gathered_reps = gather_positions(inputs, positions)
+        _, _, dim = inputs.size()
+        index = positions.unsqueeze(-1).repeat(1, 1, dim)  # [batch_size, num_positions, dim]
+        gathered_reps = torch.gather(inputs, dim=1, index=index)  # [batch_size, num_positions, dim]
 
         query_start_reps = self.query_start_transform(gathered_reps)  # [batch_size, num_positions, dim]
         query_end_reps = self.query_end_transform(gathered_reps)  # [batch_size, num_positions, dim]
