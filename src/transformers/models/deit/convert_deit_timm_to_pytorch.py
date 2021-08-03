@@ -21,11 +21,13 @@ from pathlib import Path
 import torch
 from PIL import Image
 
+from huggingface_hub import hf_hub_url, cached_download
+import json
+
 import requests
 import timm
 from transformers import DeiTConfig, DeiTFeatureExtractor, DeiTForImageClassificationWithTeacher
 from transformers.utils import logging
-from transformers.utils.imagenet_classes import id2label
 
 
 logging.set_verbosity_info()
@@ -139,6 +141,9 @@ def convert_deit_checkpoint(deit_name, pytorch_dump_folder_path):
     base_model = False
     # dataset (fine-tuned on ImageNet 2012), patch_size and image_size
     config.num_labels = 1000
+    REPO_ID = "datasets/huggingface/label-files"
+    FILENAME = "imagenet-1k-id2label.json"
+    id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
     config.patch_size = int(deit_name[-6:-4])

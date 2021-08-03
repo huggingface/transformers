@@ -18,6 +18,9 @@
 import argparse
 from pathlib import Path
 
+from huggingface_hub import hf_hub_url, cached_download
+import json
+
 import torch
 from PIL import Image
 from torchvision import transforms
@@ -25,7 +28,6 @@ from torchvision import transforms
 import requests
 from transformers import BEiTConfig, BEiTFeatureExtractor, BEiTForImageClassification, BEiTForMaskedImageModeling
 from transformers.utils import logging
-from transformers.utils.imagenet_classes import id2label
 
 
 logging.set_verbosity_info()
@@ -140,6 +142,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # define default BEiT configuration
     config = BEiTConfig()
     has_lm_head = False
+    REPO_ID = "datasets/huggingface/label-files"
     # set config parameters based on URL
     if checkpoint_url[-9:-4] == "pt22k":
         # masked image modeling
@@ -150,10 +153,16 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         # intermediate fine-tuning on ImageNet-22k
         config.use_relative_position_bias = True
         config.num_labels = 21841
+        FILENAME = "imagenet-22k-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
     elif checkpoint_url[-8:-4] == "to1k":
         # fine-tuning on ImageNet-1k
         config.use_relative_position_bias = True
         config.num_labels = 1000
+        FILENAME = "imagenet-1k-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
         if '384' in checkpoint_url:
