@@ -195,6 +195,7 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
         REPO_ID = "datasets/huggingface/label-files"
         FILENAME = "coco-detection-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
+        id2label = {int(k):v for k,v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
 

@@ -155,6 +155,10 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.num_labels = 21841
         FILENAME = "imagenet-22k-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
+        id2label = {int(k):v for k,v in id2label.items()}
+        # this dataset contains 21843 labels but the model only has 21841
+        del id2label[9205]
+        del id2label[15027]
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
     elif checkpoint_url[-8:-4] == "to1k":
@@ -163,6 +167,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.num_labels = 1000
         FILENAME = "imagenet-1k-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
+        id2label = {int(k):v for k,v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
         if '384' in checkpoint_url:
