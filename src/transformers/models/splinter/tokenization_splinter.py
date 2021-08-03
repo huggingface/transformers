@@ -26,20 +26,20 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "splinter-base": "https://huggingface.co/splinter-base/resolve/main/vocab.txt",
-        "splinter-large": "https://huggingface.co/splinter-large/resolve/main/vocab.txt",
+        "tau/splinter-base": "https://huggingface.co/tau/splinter-base/resolve/main/vocab.txt",
+        "tau/splinter-large": "https://huggingface.co/tau/splinter-large/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "splinter-base": 512,
-    "splinter-large": 512,
+    "tau/splinter-base": 512,
+    "tau/splinter-large": 512,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "splinter-base": {"do_lower_case": False},
-    "splinter-large": {"do_lower_case": False},
+    "tau/splinter-base": {"do_lower_case": False},
+    "tau/splinter-large": {"do_lower_case": False},
 }
 
 

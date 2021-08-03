@@ -21,8 +21,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "splinter-base": "https://huggingface.co/splinter-base/resolve/main/config.json",
-    "splinter-large": "https://huggingface.co/splinter-large/resolve/main/config.json",
+    "tau/splinter-base": "https://huggingface.co/tau/splinter-base/resolve/main/config.json",
+    "tau/splinter-large": "https://huggingface.co/tau/splinter-large/resolve/main/config.json",
     # See all Splinter models at https://huggingface.co/models?filter=splinter
 }
 
@@ -31,8 +31,8 @@ class SplinterConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.SplinterModel`. It is used to
     instantiate an Splinter model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the Splinter `splinter-base
-    <https://huggingface.co/splinter-base>`__ architecture.
+    a configuration with the defaults will yield a similar configuration to that of the Splinter `tau/splinter-base
+    <https://huggingface.co/tau/splinter-base>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -81,10 +81,10 @@ class SplinterConfig(PretrainedConfig):
 
         >>> from transformers import SplinterModel, SplinterConfig
 
-        >>> # Initializing a Splinter splinter-base style configuration
+        >>> # Initializing a Splinter tau/splinter-base style configuration
         >>> configuration = SplinterConfig()
 
-        >>> # Initializing a model from the splinter-base style configuration
+        >>> # Initializing a model from the tau/splinter-base style configuration
         >>> model = SplinterModel(configuration)
 
         >>> # Accessing the model configuration

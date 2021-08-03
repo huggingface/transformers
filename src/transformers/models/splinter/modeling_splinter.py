@@ -51,13 +51,13 @@ from .configuration_splinter import SplinterConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "splinter-base"
+_CHECKPOINT_FOR_DOC = "tau/splinter-base"
 _CONFIG_FOR_DOC = "SplinterConfig"
 _TOKENIZER_FOR_DOC = "SplinterTokenizer"
 
 SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "splinter-base",
-    "splinter-large",
+    "tau/splinter-base",
+    "tau/splinter-large",
     # See all Splinter models at https://huggingface.co/models?filter=splinter
 ]
 
@@ -990,10 +990,10 @@ class SplinterForCausalLM(SplinterPreTrainedModel):
             >>> from transformers import SplinterTokenizer, SplinterForCausalLM, SplinterConfig
             >>> import torch
 
-            >>> tokenizer = SplinterTokenizer.from_pretrained('splinter-base')
-            >>> config = SplinterConfig.from_pretrained("splinter-base")
+            >>> tokenizer = SplinterTokenizer.from_pretrained('tau/splinter-base')
+            >>> config = SplinterConfig.from_pretrained("tau/splinter-base")
             >>> config.is_decoder = True
-            >>> model = SplinterForCausalLM.from_pretrained('splinter-base', config=config)
+            >>> model = SplinterForCausalLM.from_pretrained('tau/splinter-base', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
