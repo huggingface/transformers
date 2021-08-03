@@ -829,7 +829,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_flase(self):
-
         train_dataset = RegressionDataset(length=128)
         eval_dataset = RegressionDataset()
 
