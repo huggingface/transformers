@@ -92,7 +92,7 @@ class DropPath(nn.Module):
 
 class BEiTEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings.
+    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
 
     """
 
@@ -100,6 +100,10 @@ class BEiTEmbeddings(nn.Module):
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        if config.use_mask_token:
+            self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        else:
+            self.mask_token = None
         self.patch_embeddings = PatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
@@ -113,22 +117,23 @@ class BEiTEmbeddings(nn.Module):
             self.position_embeddings = None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values):
-        batch_size = pixel_values.shape[0]
+    def forward(self, pixel_values, bool_masked_pos=None):
         
         embeddings = self.patch_embeddings(pixel_values)
-
-        #print("Sum of patch embeddings:", embeddings.sum().item())
+        batch_size, seq_len, _ = embeddings.size()
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        if bool_masked_pos is not None:
+            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
+            # replace the masked visual tokens by mask_tokens
+            w = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            embeddings = embeddings * (1 - w) + mask_tokens * w
+        
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
         if self.position_embeddings is not None:
             embeddings = embeddings + self.position_embeddings
         embeddings = self.dropout(embeddings)
-        
-        
-        #print("Sum of final embeddings:", embeddings.sum().item())
-        
+                
         return embeddings
 
 
@@ -603,6 +608,7 @@ class BEiTModel(BEiTPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
+        bool_masked_pos=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -643,7 +649,7 @@ class BEiTModel(BEiTPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos)
 
         #print("Shape of embedding output:", embedding_output.shape)
         #print("Sum of embedding output:", embedding_output.sum())
@@ -702,9 +708,10 @@ class BEiTForMaskedImageModeling(BEiTPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.beit = BEiTModel(config, add_pooling_layer=True)
+        self.beit = BEiTModel(config, add_pooling_layer=False)
 
         # Classifier head
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()
@@ -714,6 +721,7 @@ class BEiTForMaskedImageModeling(BEiTPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
+        bool_masked_pos=None,
         head_mask=None,
         labels=None,
         output_attentions=None,
@@ -755,6 +763,7 @@ class BEiTForMaskedImageModeling(BEiTPreTrainedModel):
         )
 
         sequence_output = outputs[0]
+        sequence_output = self.layernorm(sequence_output)
         prediction_scores = self.lm_head(sequence_output[:,1:])
 
         masked_lm_loss = None

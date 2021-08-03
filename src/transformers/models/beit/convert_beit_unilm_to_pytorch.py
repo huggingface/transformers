@@ -58,11 +58,14 @@ def create_rename_keys(config, has_lm_head=False):
     )
 
     if has_lm_head:
-        # a shared relative position bias is used for the different layers
+        # mask token + shared relative position bias + layernorm
         rename_keys.extend(
             [
+                ("mask_token", "beit.embeddings.mask_token"),
                 ("rel_pos_bias.relative_position_bias_table", "beit.encoder.relative_position_bias.relative_position_bias_table"),
                 ("rel_pos_bias.relative_position_index", "beit.encoder.relative_position_bias.relative_position_index"),
+                ("norm.weight", "layernorm.weight"),
+                ("norm.bias", "layernorm.bias"),
             ]
         )
     else:
@@ -141,6 +144,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     if checkpoint_url[-9:-4] == "pt22k":
         # masked image modeling
         config.use_shared_relative_position_bias = True
+        config.use_mask_token = True
         has_lm_head = True
     elif checkpoint_url[-9:-4] == "ft22k":
         # intermediate fine-tuning on ImageNet-22k
@@ -193,12 +197,13 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     outputs = model(pixel_values)
     logits = outputs.logits
 
-    print("Shape of logits:", logits.shape)
-    print("Predicted class idx:", logits.argmax(-1).item())
-
     # verify logits
     expected_shape = torch.Size([1, 1000])
-    if checkpoint_url[:-4].endswith("beit_base_patch16_224_pt22k_ft22k"):
+    if checkpoint_url[:-4].endswith("beit_base_patch16_224_pt22k"):
+        expected_shape = torch.Size([1, 196, 8192])
+    elif checkpoint_url[:-4].endswith("beit_large_patch16_224_pt22k"):
+        expected_shape = torch.Size([1, 196, 8192])
+    elif checkpoint_url[:-4].endswith("beit_base_patch16_224_pt22k_ft22k"):
         expected_shape = torch.Size([1, 21841])
         expected_logits = torch.tensor([2.2288, 2.4671, 0.7395])
         expected_class_idx = 2397
@@ -231,7 +236,10 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         raise ValueError("Can't verify logits as model is not supported")
     
     assert logits.shape == expected_shape
-    assert torch.allclose(logits[0,:3], expected_logits, atol=1e-3)
+    print("Shape of logits:", logits.shape)
+    if not has_lm_head:
+        print("Predicted class idx:", logits.argmax(-1).item())
+        assert torch.allclose(logits[0,:3], expected_logits, atol=1e-3)
     
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
