@@ -1360,9 +1360,9 @@ def gather_positions(input_tensor, positions):
     return gathered_output
 
 
-class FullyConnectedLayer(nn.Module):
+class SplinterFullyConnectedLayer(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_act="gelu"):
-        super(FullyConnectedLayer, self).__init__()
+        super(SplinterFullyConnectedLayer, self).__init__()
 
         self.input_dim = input_dim
         self.output_dim = output_dim
@@ -1387,10 +1387,10 @@ class QuestionAwareSpanSelectionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.query_start_transform = FullyConnectedLayer(config.hidden_size, config.hidden_size)
-        self.query_end_transform = FullyConnectedLayer(config.hidden_size, config.hidden_size)
-        self.start_transform = FullyConnectedLayer(config.hidden_size, config.hidden_size)
-        self.end_transform = FullyConnectedLayer(config.hidden_size, config.hidden_size)
+        self.query_start_transform = SplinterFullyConnectedLayer(config.hidden_size, config.hidden_size)
+        self.query_end_transform = SplinterFullyConnectedLayer(config.hidden_size, config.hidden_size)
+        self.start_transform = SplinterFullyConnectedLayer(config.hidden_size, config.hidden_size)
+        self.end_transform = SplinterFullyConnectedLayer(config.hidden_size, config.hidden_size)
 
         self.start_classifier = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.end_classifier = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
