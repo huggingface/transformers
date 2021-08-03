@@ -20,17 +20,18 @@ import unittest
 
 from transformers import BEiTConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import _config_zero_init, ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import BEiTForImageClassification, BEiTModel
+    from transformers import MODEL_MAPPING, BEiTForImageClassification, BEiTForMaskedImageModeling, BEiTModel
     from transformers.models.beit.modeling_beit import BEIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
@@ -44,6 +45,7 @@ class BEiTModelTester:
     def __init__(
         self,
         parent,
+        vocab_size=100,
         batch_size=13,
         image_size=30,
         patch_size=2,
@@ -63,6 +65,7 @@ class BEiTModelTester:
         scope=None,
     ):
         self.parent = parent
+        self.vocab_size = 100
         self.batch_size = batch_size
         self.image_size = image_size
         self.patch_size = patch_size
@@ -93,6 +96,7 @@ class BEiTModelTester:
 
     def get_config(self):
         return BEiTConfig(
+            vocab_size=self.vocab_size,
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -117,6 +121,17 @@ class BEiTModelTester:
         patch_size = to_2tuple(self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+
+    def create_and_check_for_masked_lm(self, config, pixel_values, labels):
+        model = BEiTForMaskedImageModeling(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        # expected sequence length = num_patches
+        image_size = to_2tuple(self.image_size)
+        patch_size = to_2tuple(self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches, self.vocab_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -148,6 +163,7 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
         (
             BEiTModel,
             BEiTForImageClassification,
+            BEiTForMaskedImageModeling,
         )
         if is_torch_available()
         else ()
@@ -194,6 +210,44 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class in get_values(MODEL_MAPPING):
+                continue
+            # we don't test BEiTForMaskedImageModeling
+            if model_class.__name__ == "BEiTForMaskedImageModeling":
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+    
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                # we skip lambda parameters as these require special initial values
+                # determined by config.layer_scale_init_value
+                if "lambda" in name:
+                    continue
+                if param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+    
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -301,6 +355,10 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_for_masked_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
