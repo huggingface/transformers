@@ -832,8 +832,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # This test will fail flakily for more than 1 GPUs since the result will be slightly more different
         # TODO: investigate why it fails for 2 GPUs?
 
-        if torch.cuda.is_available():
-            torch.backends.cudnn.deterministic = True
         train_dataset = RegressionDataset(length=128)
         eval_dataset = RegressionDataset()
 
