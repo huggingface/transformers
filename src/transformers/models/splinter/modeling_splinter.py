@@ -1372,10 +1372,10 @@ class SplinterFullyConnectedLayer(nn.Module):
         self.LayerNorm = nn.LayerNorm(self.output_dim)
 
     def forward(self, inputs):
-        temp = self.dense(inputs)
-        temp = self.act_fn(temp)
-        temp = self.LayerNorm(temp)
-        return temp
+        hidden_states = self.dense(inputs)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
 
 
 class QuestionAwareSpanSelectionHead(nn.Module):
@@ -1403,15 +1403,16 @@ class QuestionAwareSpanSelectionHead(nn.Module):
         start_reps = self.start_transform(inputs)  # [batch_size, seq_length, dim]
         end_reps = self.end_transform(inputs)  # [batch_size, seq_length, dim]
 
-        temp = self.start_classifier(query_start_reps)  # [batch_size, num_positions, dim]
+        hidden_states = self.start_classifier(query_start_reps)  # [batch_size, num_positions, dim]
         start_reps = start_reps.permute(0, 2, 1)  # [batch_size, dim, seq_length]
-        start_logits = torch.matmul(temp, start_reps)
+        start_logits = torch.matmul(hidden_states, start_reps)
 
-        temp = self.end_classifier(query_end_reps)
+        hidden_states = self.end_classifier(query_end_reps)
         end_reps = end_reps.permute(0, 2, 1)
-        end_logits = torch.matmul(temp, end_reps)
+        end_logits = torch.matmul(hidden_states, end_reps)
 
         return start_logits, end_logits
+
 
 
 class ClassificationHead(nn.Module):
