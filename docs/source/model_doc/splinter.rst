@@ -40,7 +40,7 @@ Tips:
   behaviour in the :class:`~transformers.SplinterForQuestionAnswering` class. Therefore:
 - Use :class:`~transformers.SplinterTokenizer` (rather than :class:`~transformers.BertTokenizer`), as it already
   contains this special token. Also, its default behavior is to use this token when two sequences are given (for
-  example, in the run_qa.py script).
+  example, in the `run_qa.py` script).
 - If you plan on using Splinter outside `run_qa.py`, please keep in mind the question token - it might be important for
   the success of your model, especially in a few-shot setting.
 - Please note the ``initialize_new_qass`` flag in :class:`~transformers.SplinterConfig`. It controls whether the QASS
