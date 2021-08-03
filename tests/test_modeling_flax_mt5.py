@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import is_flax_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
 
 
 if is_flax_available():
@@ -43,8 +43,8 @@ class MT5IntegrationTest(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = FlaxMT5ForConditionalGeneration.from_pretrained("google/byt5-small")
-        tokenizer = AutoTokenizer.from_pretrained("google/byt5-small")
+        model = FlaxMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
+        tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="np").input_ids
         labels = tokenizer("Hi I am", return_tensors="np").input_ids
@@ -54,18 +54,6 @@ class MT5IntegrationTest(unittest.TestCase):
         logits = model(input_ids, decoder_input_ids=decoder_input_ids).logits
         loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
 
-        mtf_score = -(labels.shape[-1] * loss.item())
-
-        EXPECTED_SCORE = -60.7397
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
-
-        model = FlaxMT5ForConditionalGeneration.from_pretrained("google/mt5-small", return_dict=True).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
-
-        input_ids = tokenizer("Hello there", return_tensors="np").input_ids
-        labels = tokenizer("Hi I am", return_tensors="np").input_ids
-
-        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
         EXPECTED_SCORE = -84.9127
