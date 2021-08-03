@@ -1403,17 +1403,6 @@ class QuestionAwareSpanSelectionHead(nn.Module):
         return start_logits, end_logits
 
 
-
-class ClassificationHead(nn.Module):
-    # TODO(Ori/Yuval): document
-    def __init__(self, config):
-        super().__init__()
-        self.span_predictions = QuestionAwareSpanSelectionHead(config)
-
-    def forward(self, inputs, positions):
-        return self.span_predictions(inputs, positions)
-
-
 @add_start_docstrings(
     """
     Splinter Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
