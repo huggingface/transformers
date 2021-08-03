@@ -1478,9 +1478,6 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
             question_positions = question_position_for_each_example.unsqueeze(-1)
             question_positions_were_none = True
 
-        if attention_mask is not None:
-            attention_mask[input_ids == 102] = 0
-
         outputs = self.splinter(
             input_ids,
             attention_mask=attention_mask,
