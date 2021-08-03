@@ -157,6 +157,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
         id2label = {int(k):v for k,v in id2label.items()}
         # this dataset contains 21843 labels but the model only has 21841
+        # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
         del id2label[9205]
         del id2label[15027]
         config.id2label = id2label

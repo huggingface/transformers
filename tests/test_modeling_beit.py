@@ -328,14 +328,16 @@ class BEiTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            BEiTFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224")
+            #TODO rename nielsr to microsoft
+            BEiTFeatureExtractor.from_pretrained("nielsr/beit-base-patch16-224")
             if is_vision_available()
             else None
         )
 
     @slow
-    def test_inference_image_classification_head(self):
-        model = BEiTForImageClassification.from_pretrained("microsoft/beit-base-patch16-224").to(
+    def test_inference_image_classification_head_imagenet_1k(self):
+        #TODO rename nielsr to microsoft
+        model = BEiTForImageClassification.from_pretrained("nielsr/beit-base-patch16-224").to(
             torch_device
         )
 
@@ -350,6 +352,28 @@ class BEiTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.0266, 0.1912, -1.2861]).to(torch_device)
+        expected_slice = torch.tensor([-1.2385, -1.0987, -1.0108]).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_image_classification_head_imagenet_22k(self):
+        #TODO rename nielsr to microsoft
+        model = BEiTForImageClassification.from_pretrained("nielsr/beit-large-patch16-224-pt22k-ft22k").to(
+            torch_device
+        )
+
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 21841))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor([1.6881, -0.2787,  0.5901]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
