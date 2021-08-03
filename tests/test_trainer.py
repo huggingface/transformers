@@ -829,8 +829,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_flase(self):
-        # This test will fail flakily for more than 1 GPUs since the result will be slightly more different
-        # TODO: investigate why it fails for 2 GPUs?
 
         train_dataset = RegressionDataset(length=128)
         eval_dataset = RegressionDataset()
