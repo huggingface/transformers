@@ -74,7 +74,7 @@ class SplinterConfig(PretrainedConfig):
         initialize_new_qass (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If :obj:`True`, use randomly initialized paraeters for the Question-Aware Span Selection head on top of
             Splinter.
-        question_token_id (:obj:`int`, `optional`, defaults to :obj:`104`):
+        question_token_id (:obj:`int`, `optional`, defaults to 104):
             The id of the ``[QUESTION]`` token.
 
         Example::
