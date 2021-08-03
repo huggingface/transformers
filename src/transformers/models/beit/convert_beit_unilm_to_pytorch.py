@@ -100,12 +100,14 @@ def read_in_q_k_v(state_dict, config, has_lm_head=False):
         
         # relative_position bias table + index
         if has_lm_head:
+            # a shared relative position bias is used for the different layers
             table = state_dict.pop(f"rel_pos_bias.relative_position_bias_table")
             index = state_dict.pop(f"rel_pos_bias.relative_position_index")
 
             state_dict[f"{prefix}encoder.relative_position_bias.relative_position_bias_table"] = table
             state_dict[f"{prefix}encoder.relative_position_bias.relative_position_index"] = index
         else:
+            # each layer has its own relative position bias
             table = state_dict.pop(f"blocks.{i}.attn.relative_position_bias_table")
             index = state_dict.pop(f"blocks.{i}.attn.relative_position_index")
 
@@ -172,7 +174,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     rename_keys = create_rename_keys(config, has_lm_head=has_lm_head)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
-    read_in_q_k_v(state_dict, config)
+    read_in_q_k_v(state_dict, config, has_lm_head=has_lm_head)
 
     # load HuggingFace model
     if checkpoint_url[-9:-4] == "pt22k":
