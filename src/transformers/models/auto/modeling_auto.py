@@ -37,10 +37,7 @@ from ..bart.modeling_bart import (
     BartForSequenceClassification,
     BartModel,
 )
-from ..beit.modeling_beit import (
-    BEiTForImageClassification,
-    BEiTModel,
-)
+from ..beit.modeling_beit import BEiTForImageClassification, BEiTModel
 from ..bert.modeling_bert import (
     BertForMaskedLM,
     BertForMultipleChoice,

@@ -30,11 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        MODEL_MAPPING,
-        BEiTForImageClassification,
-        BEiTModel,
-    )
+    from transformers import BEiTForImageClassification, BEiTModel
     from transformers.models.beit.modeling_beit import BEIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
@@ -237,8 +233,8 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
             out_len = len(outputs)
 
@@ -263,8 +259,8 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
     def test_hidden_states_output(self):
@@ -328,7 +324,7 @@ class BEiTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            #TODO rename nielsr to microsoft
+            # TODO rename nielsr to microsoft
             BEiTFeatureExtractor.from_pretrained("nielsr/beit-base-patch16-224")
             if is_vision_available()
             else None
@@ -336,10 +332,8 @@ class BEiTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        #TODO rename nielsr to microsoft
-        model = BEiTForImageClassification.from_pretrained("nielsr/beit-base-patch16-224").to(
-            torch_device
-        )
+        # TODO rename nielsr to microsoft
+        model = BEiTForImageClassification.from_pretrained("nielsr/beit-base-patch16-224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -358,7 +352,7 @@ class BEiTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_22k(self):
-        #TODO rename nielsr to microsoft
+        # TODO rename nielsr to microsoft
         model = BEiTForImageClassification.from_pretrained("nielsr/beit-large-patch16-224-pt22k-ft22k").to(
             torch_device
         )
@@ -374,6 +368,6 @@ class BEiTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 21841))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([1.6881, -0.2787,  0.5901]).to(torch_device)
+        expected_slice = torch.tensor([1.6881, -0.2787, 0.5901]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

@@ -76,6 +76,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         ("ViTConfig", "ViTForImageClassification"),
         ("DeiTConfig", "('DeiTForImageClassification', 'DeiTForImageClassificationWithTeacher')"),
+        ("BEiTConfig", "BEiTForImageClassification"),
     ]
 )
 
@@ -261,6 +262,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_MAPPING_NAMES = OrderedDict(
     [
+        ("BEiTConfig", "BEiTModel"),
         ("RemBertConfig", "RemBertModel"),
         ("VisualBertConfig", "VisualBertModel"),
         ("CanineConfig", "CanineModel"),

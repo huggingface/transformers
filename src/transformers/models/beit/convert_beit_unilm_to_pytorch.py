@@ -16,16 +16,14 @@
 
 
 import argparse
-from pathlib import Path
-
-from huggingface_hub import hf_hub_url, cached_download
 import json
+from pathlib import Path
 
 import torch
 from PIL import Image
-from torchvision import transforms
 
 import requests
+from huggingface_hub import cached_download, hf_hub_url
 from transformers import BEiTConfig, BEiTFeatureExtractor, BEiTForImageClassification, BEiTForMaskedImageModeling
 from transformers.utils import logging
 
@@ -64,8 +62,14 @@ def create_rename_keys(config, has_lm_head=False):
         rename_keys.extend(
             [
                 ("mask_token", "beit.embeddings.mask_token"),
-                ("rel_pos_bias.relative_position_bias_table", "beit.encoder.relative_position_bias.relative_position_bias_table"),
-                ("rel_pos_bias.relative_position_index", "beit.encoder.relative_position_bias.relative_position_index"),
+                (
+                    "rel_pos_bias.relative_position_bias_table",
+                    "beit.encoder.relative_position_bias.relative_position_bias_table",
+                ),
+                (
+                    "rel_pos_bias.relative_position_index",
+                    "beit.encoder.relative_position_bias.relative_position_index",
+                ),
                 ("norm.weight", "layernorm.weight"),
                 ("norm.bias", "layernorm.bias"),
             ]
@@ -93,7 +97,9 @@ def read_in_q_k_v(state_dict, config, has_lm_head=False):
         q_bias = state_dict.pop(f"blocks.{i}.attn.q_bias")
         v_bias = state_dict.pop(f"blocks.{i}.attn.v_bias")
 
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:config.hidden_size,:]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
+            : config.hidden_size, :
+        ]
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = q_bias
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
@@ -103,22 +109,26 @@ def read_in_q_k_v(state_dict, config, has_lm_head=False):
         ]
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = v_bias
 
-        # gamma_1 and gamma_2 
+        # gamma_1 and gamma_2
         # we call them lambda because otherwise they are renamed when using .from_pretrained
         gamma_1 = state_dict.pop(f"blocks.{i}.gamma_1")
         gamma_2 = state_dict.pop(f"blocks.{i}.gamma_2")
 
         state_dict[f"{prefix}encoder.layer.{i}.lambda_1"] = gamma_1
         state_dict[f"{prefix}encoder.layer.{i}.lambda_2"] = gamma_2
-        
+
         # relative_position bias table + index
         if not has_lm_head:
             # each layer has its own relative position bias
             table = state_dict.pop(f"blocks.{i}.attn.relative_position_bias_table")
             index = state_dict.pop(f"blocks.{i}.attn.relative_position_index")
 
-            state_dict[f"{prefix}encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_bias_table"] = table
-            state_dict[f"{prefix}encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_index"] = index
+            state_dict[
+                f"{prefix}encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_bias_table"
+            ] = table
+            state_dict[
+                f"{prefix}encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_index"
+            ] = index
 
 
 def rename_key(dct, old, new):
@@ -155,7 +165,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.num_labels = 21841
         FILENAME = "imagenet-22k-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
-        id2label = {int(k):v for k,v in id2label.items()}
+        id2label = {int(k): v for k, v in id2label.items()}
         # this dataset contains 21843 labels but the model only has 21841
         # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
         del id2label[9205]
@@ -168,16 +178,16 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.num_labels = 1000
         FILENAME = "imagenet-1k-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
-        id2label = {int(k):v for k,v in id2label.items()}
+        id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
-        if '384' in checkpoint_url:
+        if "384" in checkpoint_url:
             config.image_size = 384
-        if '512' in checkpoint_url:
+        if "512" in checkpoint_url:
             config.image_size = 512
     else:
-        raise ValueError(f"Checkpoint not supported, URL should either end with 'pt22k', 'ft22k' or 'to1k'")
-        
+        raise ValueError("Checkpoint not supported, URL should either end with 'pt22k', 'ft22k' or 'to1k'")
+
     # size of the architecture
     if "base" in checkpoint_url:
         pass
@@ -187,10 +197,10 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
     else:
-        raise ValueError(f"Size {size} not found in checkpoint url, should be either 'base' or 'large'")
+        raise ValueError("Should either find 'base' or 'large' in checkpoint URL")
 
     # load state_dict of original model, remove and rename some keys
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location='cpu', check_hash=True)['model']
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["model"]
     rename_keys = create_rename_keys(config, has_lm_head=has_lm_head)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
@@ -203,12 +213,12 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         model = BEiTForImageClassification(config)
     model.eval()
     model.load_state_dict(state_dict)
-    
+
     # Check outputs on an image
     feature_extractor = BEiTFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
-    
+
     outputs = model(pixel_values)
     logits = outputs.logits
 
@@ -224,7 +234,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         expected_class_idx = 2397
     elif checkpoint_url[:-4].endswith("beit_large_patch16_224_pt22k_ft22k"):
         expected_shape = torch.Size([1, 21841])
-        expected_logits = torch.tensor([1.6881, -0.2787,  0.5901])
+        expected_logits = torch.tensor([1.6881, -0.2787, 0.5901])
         expected_class_idx = 2396
     elif checkpoint_url[:-4].endswith("beit_base_patch16_224_pt22k_ft1k"):
         expected_logits = torch.tensor([0.1241, 0.0798, -0.6569])
@@ -242,20 +252,21 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         expected_logits = torch.tensor([-0.4804, 0.6257, -0.1837])
         expected_class_idx = 761
     elif checkpoint_url[:-4].endswith("beit_large_patch16_384_pt22k_ft22kto1k"):
-        expected_logits = torch.tensor([[-0.5122,  0.5117, -0.2113]])
-        expected_class_idx  = 761
+        expected_logits = torch.tensor([[-0.5122, 0.5117, -0.2113]])
+        expected_class_idx = 761
     elif checkpoint_url[:-4].endswith("beit_large_patch16_512_pt22k_ft22kto1k"):
-        expected_logits = torch.tensor([-0.3062,  0.7261,  0.4852])
+        expected_logits = torch.tensor([-0.3062, 0.7261, 0.4852])
         expected_class_idx = 761
     else:
         raise ValueError("Can't verify logits as model is not supported")
-    
+
     assert logits.shape == expected_shape
     print("Shape of logits:", logits.shape)
     if not has_lm_head:
         print("Predicted class idx:", logits.argmax(-1).item())
-        assert torch.allclose(logits[0,:3], expected_logits, atol=1e-3)
-    
+        assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
+        assert logits.argmax(-1).item() == expected_class_idx
+
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
@@ -267,10 +278,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--checkpoint_url", 
-        default="https://unilm.blob.core.windows.net/beit/beit_base_patch16_224_pt22k_ft22kto1k.pth", 
-        type=str, 
-        help="URL to the original PyTorch checkpoint (.pth file)."
+        "--checkpoint_url",
+        default="https://unilm.blob.core.windows.net/beit/beit_base_patch16_224_pt22k_ft22kto1k.pth",
+        type=str,
+        help="URL to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."

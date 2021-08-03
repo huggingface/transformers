@@ -14,8 +14,8 @@
 # limitations under the License.
 """ BEiT model configuration """
 
-from ...utils import logging
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -28,14 +28,16 @@ BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BEiTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.BEiTModel`.
-    It is used to instantiate an BEiT model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the BEiT `microsoft/beit-base-patch16-224-in22k <https://huggingface.co/microsoft/beit-base-patch16-224-in22k>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.BEiTModel`. It is used to
+    instantiate an BEiT model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the BEiT
+    `microsoft/beit-base-patch16-224-in22k <https://huggingface.co/microsoft/beit-base-patch16-224-in22k>`__
+    architecture.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 8092):
-            Vocabulary size of the BEiT model. Defines the number of different image tokens that can be used during pre-training.
+            Vocabulary size of the BEiT model. Defines the number of different image tokens that can be used during
+            pre-training.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -76,8 +78,8 @@ class BEiTConfig(PretrainedConfig):
         drop_path_rate (:obj:`float`, `optional`, defaults to 0.1):
             Stochastic depth rate per sample (when applied in the main path of residual layers).
         use_mean_pooling (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the CLS token,
-            before applying the classification head.
+            Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
+            CLS token, before applying the classification head.
 
     Example::
 
@@ -142,4 +144,3 @@ class BEiTConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.use_mean_pooling = use_mean_pooling
-        

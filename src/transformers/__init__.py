@@ -413,12 +413,12 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.beit"].append("BEiTFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
-    _import_structure["models.beit"].append("BEiTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
@@ -559,8 +559,8 @@ if is_torch_available():
     _import_structure["models.beit"].extend(
         [
             "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BEiTForMaskedImageModeling",
             "BEiTForImageClassification",
+            "BEiTForMaskedImageModeling",
             "BEiTModel",
             "BEiTPreTrainedModel",
         ]
@@ -2184,8 +2184,8 @@ if TYPE_CHECKING:
         )
         from .models.beit import (
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BEiTForMaskedImageModeling,
             BEiTForImageClassification,
+            BEiTForMaskedImageModeling,
             BEiTModel,
             BEiTPreTrainedModel,
         )
