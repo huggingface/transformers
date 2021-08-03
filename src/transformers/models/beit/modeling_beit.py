@@ -450,7 +450,7 @@ class BEiTEncoder(nn.Module):
         
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]  
-        self.layer = nn.ModuleList([BEiTLayer(config, window_size=window_size, drop_path_rate=dpr[i]) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([BEiTLayer(config, window_size=window_size if config.use_relative_position_bias else None, drop_path_rate=dpr[i]) for i in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -580,8 +580,7 @@ class BEiTModel(BEiTPreTrainedModel):
         self.config = config
 
         self.embeddings = BEiTEmbeddings(config)
-        window_size = self.embeddings.patch_embeddings.patch_shape if config.use_relative_position_bias else None
-        self.encoder = BEiTEncoder(config, window_size=window_size)
+        self.encoder = BEiTEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
  
         self.layernorm = nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = BEiTPooler(config) if add_pooling_layer else None
