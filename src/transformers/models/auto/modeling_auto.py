@@ -37,6 +37,7 @@ from ..bart.modeling_bart import (
     BartForSequenceClassification,
     BartModel,
 )
+from ..beit.modeling_beit import BeitForImageClassification, BeitModel
 from ..bert.modeling_bert import (
     BertForMaskedLM,
     BertForMultipleChoice,
@@ -240,6 +241,15 @@ from ..reformer.modeling_reformer import (
     ReformerModel,
     ReformerModelWithLMHead,
 )
+from ..rembert.modeling_rembert import (
+    RemBertForCausalLM,
+    RemBertForMaskedLM,
+    RemBertForMultipleChoice,
+    RemBertForQuestionAnswering,
+    RemBertForSequenceClassification,
+    RemBertForTokenClassification,
+    RemBertModel,
+)
 from ..retribert.modeling_retribert import RetriBertModel
 from ..roberta.modeling_roberta import (
     RobertaForCausalLM,
@@ -311,9 +321,9 @@ from ..xlnet.modeling_xlnet import (
 )
 from .auto_factory import _BaseAutoModelClass, auto_class_update
 from .configuration_auto import (
-    gptjConfig,
     AlbertConfig,
     BartConfig,
+    BeitConfig,
     BertConfig,
     BertGenerationConfig,
     BigBirdConfig,
@@ -337,6 +347,7 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    GPTJConfig,
     GPTNeoConfig,
     HubertConfig,
     IBertConfig,
@@ -356,6 +367,7 @@ from .configuration_auto import (
     PegasusConfig,
     ProphetNetConfig,
     ReformerConfig,
+    RemBertConfig,
     RetriBertConfig,
     RobertaConfig,
     RoFormerConfig,
@@ -380,7 +392,8 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
-        (gptjConfig, gptjModel),
+        (BeitConfig, BeitModel),
+        (RemBertConfig, RemBertModel),
         (VisualBertConfig, VisualBertModel),
         (CanineConfig, CanineModel),
         (RoFormerConfig, RoFormerModel),
@@ -389,6 +402,7 @@ MODEL_MAPPING = OrderedDict(
         (DeiTConfig, DeiTModel),
         (LukeConfig, LukeModel),
         (DetrConfig, DetrModel),
+        (GPTJConfig, GPTJModel),
         (GPTNeoConfig, GPTNeoModel),
         (BigBirdConfig, BigBirdModel),
         (Speech2TextConfig, Speech2TextModel),
@@ -485,9 +499,10 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-(gptjConfig, gptjForMaskedLM),
+        (RemBertConfig, RemBertForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
+        (GPTJConfig, GPTJForCausalLM),
         (GPTNeoConfig, GPTNeoForCausalLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Speech2TextConfig, Speech2TextForConditionalGeneration),
@@ -534,9 +549,10 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-        (gptjConfig, gptjForCausalLM),
+        (RemBertConfig, RemBertForCausalLM),
         (RoFormerConfig, RoFormerForCausalLM),
         (BigBirdPegasusConfig, BigBirdPegasusForCausalLM),
+        (GPTJConfig, GPTJForCausalLM),
         (GPTNeoConfig, GPTNeoForCausalLM),
         (BigBirdConfig, BigBirdForCausalLM),
         (CamembertConfig, CamembertForCausalLM),
@@ -571,13 +587,14 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
         # Model for Image Classification mapping
         (ViTConfig, ViTForImageClassification),
         (DeiTConfig, (DeiTForImageClassification, DeiTForImageClassificationWithTeacher)),
+        (BeitConfig, BeitForImageClassification),
     ]
 )
 
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-(gptjConfig, gptjForMaskedLM),
+        (RemBertConfig, RemBertForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
@@ -639,7 +656,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        (gptjConfig, gptjForSequenceClassification),
+        (RemBertConfig, RemBertForSequenceClassification),
         (CanineConfig, CanineForSequenceClassification),
         (RoFormerConfig, RoFormerForSequenceClassification),
         (BigBirdPegasusConfig, BigBirdPegasusForSequenceClassification),
@@ -667,6 +684,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForSequenceClassification),
         (DebertaV2Config, DebertaV2ForSequenceClassification),
         (GPT2Config, GPT2ForSequenceClassification),
+        (GPTJConfig, GPTJForSequenceClassification),
         (GPTNeoConfig, GPTNeoForSequenceClassification),
         (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
         (ReformerConfig, ReformerForSequenceClassification),
@@ -681,7 +699,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
-        (gptjConfig, gptjForQuestionAnswering),
         (CanineConfig, CanineForQuestionAnswering),
         (RoFormerConfig, RoFormerForQuestionAnswering),
         (BigBirdPegasusConfig, BigBirdPegasusForQuestionAnswering),
@@ -724,7 +741,11 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+<<<<<<< HEAD
 (gptjConfig, gptjForTokenClassification),
+=======
+        (RemBertConfig, RemBertForTokenClassification),
+>>>>>>> 83e5a10603ca902c266e40fc98a01dd8a9b04ac4
         (CanineConfig, CanineForTokenClassification),
         (RoFormerConfig, RoFormerForTokenClassification),
         (BigBirdConfig, BigBirdForTokenClassification),
@@ -756,7 +777,11 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+<<<<<<< HEAD
 (gptjConfig, gptjForMultipleChoice),
+=======
+        (RemBertConfig, RemBertForMultipleChoice),
+>>>>>>> 83e5a10603ca902c266e40fc98a01dd8a9b04ac4
         (CanineConfig, CanineForMultipleChoice),
         (RoFormerConfig, RoFormerForMultipleChoice),
         (BigBirdConfig, BigBirdForMultipleChoice),
