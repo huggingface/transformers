@@ -30,7 +30,7 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, replace_return_docstrings
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -1192,6 +1192,7 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
+    @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -1517,36 +1518,37 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
         return model_kwargs
 
 
-FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = """
+FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = r"""
     Returns:
 
     Summarization example::
 
-        >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
+        >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration, MBartConfig
 
         >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
         >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='jax')
+        >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
 
         >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], decoder_start_token_id=tokenizer.lang_code_to_id[tgt_lang]).sequences
-        >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True).sequences
+        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
 
     Mask filling example::
 
         >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
         >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
-        >>> TXT = "My friends are <mask> but they eat too many carbs."
+        >>> # de_DE is the language symbol id <LID> for German
+        >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
 
         >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-        >>> input_ids = tokenizer([TXT], return_tensors='jax')['input_ids']
+        >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='np')['input_ids']
         >>> logits = model(input_ids).logits
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-        >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
-        >>> values, predictions = jax.lax.top_k(probs)
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero()[0].item()
+        >>> probs = logits[0, masked_index].softmax(dim=0)
+        >>> values, predictions = probs.topk(5)
 
         >>> tokenizer.decode(predictions).split()
 """

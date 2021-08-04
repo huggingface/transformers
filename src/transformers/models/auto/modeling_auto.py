@@ -37,6 +37,7 @@ from ..bart.modeling_bart import (
     BartForSequenceClassification,
     BartModel,
 )
+from ..beit.modeling_beit import BeitForImageClassification, BeitModel
 from ..bert.modeling_bert import (
     BertForMaskedLM,
     BertForMultipleChoice,
@@ -322,6 +323,7 @@ from .auto_factory import _BaseAutoModelClass, auto_class_update
 from .configuration_auto import (
     AlbertConfig,
     BartConfig,
+    BeitConfig,
     BertConfig,
     BertGenerationConfig,
     BigBirdConfig,
@@ -390,6 +392,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (BeitConfig, BeitModel),
         (RemBertConfig, RemBertModel),
         (VisualBertConfig, VisualBertModel),
         (CanineConfig, CanineModel),
@@ -582,6 +585,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
         # Model for Image Classification mapping
         (ViTConfig, ViTForImageClassification),
         (DeiTConfig, (DeiTForImageClassification, DeiTForImageClassificationWithTeacher)),
+        (BeitConfig, BeitForImageClassification),
     ]
 )
 

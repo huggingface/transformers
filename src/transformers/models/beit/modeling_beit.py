@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViT model. """
+""" PyTorch BEiT model. """
 
 
 import collections.abc
@@ -25,20 +25,20 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
-from .configuration_vit import ViTConfig
+from .configuration_beit import BeitConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "ViTConfig"
-_CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224"
+_CONFIG_FOR_DOC = "BeitConfig"
+_CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224"
 
-VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vit-base-patch16-224",
-    # See all ViT models at https://huggingface.co/models?filter=vit
+BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "microsoft/beit-base-patch16-224",
+    # See all BEiT models at https://huggingface.co/models?filter=beit
 ]
 
 
@@ -51,13 +51,46 @@ def to_2tuple(x):
     return (x, x)
 
 
+# Based on https://github.com/rwightman/pytorch-image-models/blob/a2727c1bf78ba0d7b5727f5f95e37fb7f8866b1f/timm/models/layers/drop.py
+def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
+    """
+    if drop_prob == 0.0 or not training:
+        return x
+    keep_prob = 1 - drop_prob
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    random_tensor.floor_()  # binarize
+    output = x.div(keep_prob) * random_tensor
+    return output
+
+
+class DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob=None):
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x):
+        return drop_path(x, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
+
+
 # Based on timm implementation, which can be found here:
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-
-
-class ViTEmbeddings(nn.Module):
+class BeitEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings.
+    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
 
     """
 
@@ -65,6 +98,10 @@ class ViTEmbeddings(nn.Module):
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        if config.use_mask_token:
+            self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        else:
+            self.mask_token = None
         self.patch_embeddings = PatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
@@ -72,17 +109,29 @@ class ViTEmbeddings(nn.Module):
             embed_dim=config.hidden_size,
         )
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+        if config.use_absolute_position_embeddings:
+            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+        else:
+            self.position_embeddings = None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values):
-        batch_size = pixel_values.shape[0]
+    def forward(self, pixel_values, bool_masked_pos=None):
+
         embeddings = self.patch_embeddings(pixel_values)
+        batch_size, seq_len, _ = embeddings.size()
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        if bool_masked_pos is not None:
+            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
+            # replace the masked visual tokens by mask_tokens
+            w = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            embeddings = embeddings * (1 - w) + mask_tokens * w
+
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-        embeddings = embeddings + self.position_embeddings
+        if self.position_embeddings is not None:
+            embeddings = embeddings + self.position_embeddings
         embeddings = self.dropout(embeddings)
+
         return embeddings
 
 
@@ -91,7 +140,6 @@ class ViTEmbeddings(nn.Module):
 class PatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
-
     """
 
     def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
@@ -99,9 +147,11 @@ class PatchEmbeddings(nn.Module):
         image_size = to_2tuple(image_size)
         patch_size = to_2tuple(patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
+        self.patch_shape = patch_shape
 
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
@@ -116,8 +166,8 @@ class PatchEmbeddings(nn.Module):
         return x
 
 
-class ViTSelfAttention(nn.Module):
-    def __init__(self, config):
+class BeitSelfAttention(nn.Module):
+    def __init__(self, config, window_size=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -130,17 +180,22 @@ class ViTSelfAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+        if window_size:
+            self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
+        else:
+            self.relative_position_bias = None
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
+    def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None):
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -151,6 +206,14 @@ class ViTSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
+        # Add relative position bias if present.
+        if self.relative_position_bias is not None:
+            attention_scores = attention_scores + self.relative_position_bias().unsqueeze(0)
+
+        # Add shared relative position bias if provided.
+        if relative_position_bias is not None:
+            attention_scores = attention_scores + relative_position_bias
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -174,9 +237,9 @@ class ViTSelfAttention(nn.Module):
         return outputs
 
 
-class ViTSelfOutput(nn.Module):
+class BeitSelfOutput(nn.Module):
     """
-    The residual connection is defined in ViTLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in BeitLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
@@ -185,19 +248,18 @@ class ViTSelfOutput(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
-
+    def forward(self, hidden_states, input_tensor, gamma=None):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         return hidden_states
 
 
-class ViTAttention(nn.Module):
-    def __init__(self, config):
+class BeitAttention(nn.Module):
+    def __init__(self, config, window_size=None):
         super().__init__()
-        self.attention = ViTSelfAttention(config)
-        self.output = ViTSelfOutput(config)
+        self.attention = BeitSelfAttention(config, window_size=window_size)
+        self.output = BeitSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -218,8 +280,8 @@ class ViTAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
+    def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None):
+        self_outputs = self.attention(hidden_states, head_mask, output_attentions, relative_position_bias)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -227,7 +289,7 @@ class ViTAttention(nn.Module):
         return outputs
 
 
-class ViTIntermediate(nn.Module):
+class BeitIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -237,81 +299,139 @@ class ViTIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states):
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
 
 
-class ViTOutput(nn.Module):
+class BeitOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
-        hidden_states = hidden_states + input_tensor
 
         return hidden_states
 
 
-class ViTLayer(nn.Module):
+class BeitLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config):
+    def __init__(self, config, window_size=None, drop_path_rate=0.0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ViTAttention(config)
-        self.intermediate = ViTIntermediate(config)
-        self.output = ViTOutput(config)
+        self.attention = BeitAttention(config, window_size=window_size)
+        self.intermediate = BeitIntermediate(config)
+        self.output = BeitOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
+        init_values = config.layer_scale_init_value
+        if init_values > 0:
+            self.lambda_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+            self.lambda_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+        else:
+            self.lambda_1, self.lambda_2 = None, None
+
+    def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None):
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
+            relative_position_bias=relative_position_bias,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        # first residual connection
-        hidden_states = attention_output + hidden_states
+        # apply lambda_1 if present
+        if self.lambda_1 is not None:
+            attention_output = self.lambda_1 * attention_output
 
-        # in ViT, layernorm is also applied after self-attention
+        # first residual connection
+        hidden_states = self.drop_path(attention_output) + hidden_states
+
+        # in BEiT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
 
-        # TODO feedforward chunking not working for now
-        # layer_output = apply_chunking_to_forward(
-        #     self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, layer_output
-        # )
-
         layer_output = self.intermediate(layer_output)
+        layer_output = self.output(layer_output)
 
-        # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
+        if self.lambda_2 is not None:
+            layer_output = self.lambda_2 * layer_output
+
+        # second residual connection
+        layer_output = self.drop_path(layer_output) + hidden_states
 
         outputs = (layer_output,) + outputs
 
         return outputs
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output)
-        return layer_output
+
+class BeitRelativePositionBias(nn.Module):
+    def __init__(self, config, window_size):
+        super().__init__()
+        self.window_size = window_size
+        self.num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
+        self.relative_position_bias_table = nn.Parameter(
+            torch.zeros(self.num_relative_distance, config.num_attention_heads)
+        )  # 2*Wh-1 * 2*Ww-1, nH
+        # cls to token & token 2 cls & cls to cls
+
+        # get pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(window_size[0])
+        coords_w = torch.arange(window_size[1])
+        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
+        coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
+        relative_coords[:, :, 0] += window_size[0] - 1  # shift to start from 0
+        relative_coords[:, :, 1] += window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * window_size[1] - 1
+        relative_position_index = torch.zeros(
+            size=(window_size[0] * window_size[1] + 1,) * 2, dtype=relative_coords.dtype
+        )
+        relative_position_index[1:, 1:] = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+        relative_position_index[0, 0:] = self.num_relative_distance - 3
+        relative_position_index[0:, 0] = self.num_relative_distance - 2
+        relative_position_index[0, 0] = self.num_relative_distance - 1
+
+        self.register_buffer("relative_position_index", relative_position_index)
+
+    def forward(self):
+        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
+            self.window_size[0] * self.window_size[1] + 1, self.window_size[0] * self.window_size[1] + 1, -1
+        )  # Wh*Ww,Wh*Ww,nH
+
+        return relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
 
 
-class ViTEncoder(nn.Module):
-    def __init__(self, config):
+class BeitEncoder(nn.Module):
+    def __init__(self, config, window_size=None):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        if config.use_shared_relative_position_bias:
+            self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
+        else:
+            self.relative_position_bias = None
+
+        # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        self.layer = nn.ModuleList(
+            [
+                BeitLayer(
+                    config,
+                    window_size=window_size if config.use_relative_position_bias else None,
+                    drop_path_rate=dpr[i],
+                )
+                for i in range(config.num_hidden_layers)
+            ]
+        )
 
     def forward(
         self,
@@ -344,7 +464,10 @@ class ViTEncoder(nn.Module):
                     layer_head_mask,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                relative_position_bias = (
+                    self.relative_position_bias() if self.relative_position_bias is not None else None
+                )
+                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
 
             hidden_states = layer_outputs[0]
 
@@ -363,14 +486,14 @@ class ViTEncoder(nn.Module):
         )
 
 
-class ViTPreTrainedModel(PreTrainedModel):
+class BeitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ViTConfig
-    base_model_prefix = "vit"
+    config_class = BeitConfig
+    base_model_prefix = "beit"
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -389,23 +512,23 @@ class ViTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-VIT_START_DOCSTRING = r"""
+BEIT_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.ViTConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.BeitConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
 """
 
-VIT_INPUTS_DOCSTRING = r"""
+BEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
-            :meth:`transformers.ViTFeatureExtractor.__call__` for details.
+            Pixel values. Pixel values can be obtained using :class:`~transformers.BeitFeatureExtractor`. See
+            :meth:`transformers.BeitFeatureExtractor.__call__` for details.
 
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
@@ -425,19 +548,21 @@ VIT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ViT Model transformer outputting raw hidden-states without any specific head on top.",
-    VIT_START_DOCSTRING,
+    "The bare Beit Model transformer outputting raw hidden-states without any specific head on top.",
+    BEIT_START_DOCSTRING,
 )
-class ViTModel(ViTPreTrainedModel):
+class BeitModel(BeitPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ViTEmbeddings(config)
-        self.encoder = ViTEncoder(config)
+        self.embeddings = BeitEmbeddings(config)
+        self.encoder = BeitEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
 
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ViTPooler(config) if add_pooling_layer else None
+        self.layernorm = (
+            nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        )
+        self.pooler = BeitPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -452,11 +577,12 @@ class ViTModel(ViTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
+        bool_masked_pos=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -467,15 +593,15 @@ class ViTModel(ViTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ViTFeatureExtractor, ViTModel
+            >>> from transformers import BeitFeatureExtractor, BeitModel
             >>> from PIL import Image
             >>> import requests
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-            >>> model = ViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
+            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
+            >>> model = BeitModel.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -497,7 +623,7 @@ class ViTModel(ViTPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -521,41 +647,128 @@ class ViTModel(ViTPreTrainedModel):
         )
 
 
-class ViTPooler(nn.Module):
+class BeitPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.layernorm = (
+            nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.use_mean_pooling else None
+        )
 
     def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
+        if self.layernorm is not None:
+            # Mean pool the final hidden states of the patch tokens
+            patch_tokens = hidden_states[:, 1:, :]
+            pooled_output = self.layernorm(patch_tokens.mean(1))
+        else:
+            # Pool by simply taking the final hidden state of the [CLS] token
+            pooled_output = hidden_states[:, 0]
+
         return pooled_output
 
 
 @add_start_docstrings(
-    """
-    ViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
-    """,
-    VIT_START_DOCSTRING,
+    "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).", BEIT_START_DOCSTRING
 )
-class ViTForImageClassification(ViTPreTrainedModel):
+class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.vit = ViTModel(config, add_pooling_layer=False)
+        self.beit = BeitModel(config, add_pooling_layer=False)
+
+        # Classifier head
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values=None,
+        bool_masked_pos=None,
+        head_mask=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
+            >>> model = BeitForMaskedImageModeling.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.beit(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+        sequence_output = self.layernorm(sequence_output)
+        prediction_scores = self.lm_head(sequence_output[:, 1:])
+
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            masked_lm_loss = loss_fct(prediction_scores[bool_masked_pos], labels)
+
+        if not return_dict:
+            output = (prediction_scores,) + outputs[2:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
+        return MaskedLMOutput(
+            loss=masked_lm_loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Beit Model transformer with an image classification head on top (a linear layer on top of the average of the final
+    hidden states of the patch tokens) e.g. for ImageNet.
+    """,
+    BEIT_START_DOCSTRING,
+)
+class BeitForImageClassification(BeitPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.beit = BeitModel(config, add_pooling_layer=True)
 
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -576,15 +789,15 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ViTFeatureExtractor, ViTForImageClassification
+            >>> from transformers import BeitFeatureExtractor, BeitForImageClassification
             >>> from PIL import Image
             >>> import requests
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
-            >>> model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
+            >>> model = BeitForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -595,7 +808,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.vit(
+        outputs = self.beit(
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -603,9 +816,9 @@ class ViTForImageClassification(ViTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
