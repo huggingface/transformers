@@ -49,6 +49,7 @@ from ..flaubert.configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE
 from ..fsmt.configuration_fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig
 from ..funnel.configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
 from ..gpt2.configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
+from ..gptj.configuration_gptj import GPT_J_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
 from ..gpt_neo.configuration_gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
 from ..hubert.configuration_hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
 from ..ibert.configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
@@ -104,6 +105,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -164,6 +166,7 @@ CONFIG_MAPPING = OrderedDict(
         ("deit", DeiTConfig),
         ("luke", LukeConfig),
         ("detr", DetrConfig),
+        ("gpt_j", GPTJConfig),
         ("gpt_neo", GPTNeoConfig),
         ("big_bird", BigBirdConfig),
         ("speech_to_text", Speech2TextConfig),
@@ -230,6 +233,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("deit", "DeiT"),
         ("luke", "LUKE"),
         ("detr", "DETR"),
+        ("gpt_j", "GPTJ"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),
