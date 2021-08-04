@@ -105,8 +105,9 @@ Supported models
 3. :doc:`BARThez <model_doc/barthez>` (from École polytechnique) released with the paper `BARThez: a Skilled Pretrained
    French Sequence-to-Sequence Model <https://arxiv.org/abs/2010.12321>`__ by Moussa Kamal Eddine, Antoine J.-P.
    Tixier, Michalis Vazirgiannis.
-4. :doc:`BEiT <model_doc/beit>` (from Microsoft) released with the paper `BEiT: BERT Pre-Training of Image Transformers
-   <https://arxiv.org/abs/2106.08254>`__ by Hangbo Bao, Li Dong, Furu Wei.
+4. `BEiT <https://huggingface.co/transformers/master/model_doc/beit.html>`__ (from Microsoft) released with the paper
+   `BEiT: BERT Pre-Training of Image Transformers <https://arxiv.org/abs/2106.08254>`__ by Hangbo Bao, Li Dong, Furu
+   Wei.
 5. :doc:`BERT <model_doc/bert>` (from Google) released with the paper `BERT: Pre-training of Deep Bidirectional
    Transformers for Language Understanding <https://arxiv.org/abs/1810.04805>`__ by Jacob Devlin, Ming-Wei Chang,
    Kenton Lee and Kristina Toutanova.

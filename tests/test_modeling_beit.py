@@ -160,9 +160,7 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (BEiTModel, BEiTForImageClassification, BEiTForMaskedImageModeling) 
-        if is_torch_available()
-        else ()
+        (BEiTModel, BEiTForImageClassification, BEiTForMaskedImageModeling) if is_torch_available() else ()
     )
 
     test_pruning = False

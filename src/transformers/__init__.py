@@ -147,7 +147,7 @@ _import_structure = {
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
-    "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BEiTConfig", "BEiTFeatureExtractor"],
+    "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BEiTConfig"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BasicTokenizer",
