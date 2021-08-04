@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from ...file_utils import (
     _LazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
@@ -51,6 +52,9 @@ if is_torch_available():
 if is_tf_available():
     _import_structure["modeling_tf_mt5"] = ["TFMT5EncoderModel", "TFMT5ForConditionalGeneration", "TFMT5Model"]
 
+if is_flax_available():
+    _import_structure["modeling_flax_mt5"] = ["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"]
+
 
 if TYPE_CHECKING:
     from .configuration_mt5 import MT5Config
@@ -60,6 +64,9 @@ if TYPE_CHECKING:
 
     if is_tf_available():
         from .modeling_tf_mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
+
+    if is_flax_available():
+        from .modeling_flax_mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
 
 else:
     import sys

@@ -1691,6 +1691,7 @@ if is_flax_available():
             "FlaxMBartPreTrainedModel",
         ]
     )
+    _import_structure["models.mt5"].extend(["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForMaskedLM",
@@ -3120,6 +3121,7 @@ if TYPE_CHECKING:
             FlaxMBartModel,
             FlaxMBartPreTrainedModel,
         )
+        from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
         from .models.roberta import (
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,
