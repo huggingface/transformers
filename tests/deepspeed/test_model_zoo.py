@@ -64,6 +64,7 @@ DEBERTA_TINY = "hf-internal-testing/tiny-deberta"
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
 ELECTRA_TINY = "hf-internal-testing/tiny-electra"
 ALBERT_TINY = "hf-internal-testing/tiny-albert"
+LAYOUTLM_TINY = "hf-internal-testing/tiny-layoutlm"
 
 # classification
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
@@ -72,12 +73,12 @@ BERT_TINY = "hf-internal-testing/tiny-bert"
 
 # TODO: to add:
 #
+# deberta-v2
 # funnel
 # longformer
 # dpr
 # gpt_neo
 # camembert
-# deberta-v2
 # m2m_100
 # tapas
 # vit
@@ -131,6 +132,7 @@ def make_task_cmds():
             "electra",
             "distilbert",
             "albert",
+            "layoutlm",
         ],
         qa=[
             "roberta",
