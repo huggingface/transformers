@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for ViT."""
+"""Feature extractor class for BEiT."""
 
 from typing import List, Optional, Union
 
@@ -28,9 +28,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a ViT feature extractor.
+    Constructs a BEiT feature extractor.
 
     This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
@@ -38,16 +38,22 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     Args:
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 224):
+        size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 256):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
             integer is provided, then the input will be resized to (size, size). Only has an effect if :obj:`do_resize`
             is set to :obj:`True`.
-        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
+        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
             :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
             Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+        do_center_crop (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to crop the input at the center. If the input size is smaller than :obj:`crop_size` along any edge,
+            the image is padded with 0's and then center cropped.
+        crop_size (:obj:`int`, `optional`, defaults to 224):
+            Desired output size when applying center-cropping. Only has an effect if :obj:`do_center_crop` is set to
+            :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to normalize the input with mean and standard deviation.
+            Whether or not to normalize the input with :obj:`image_mean` and :obj:`image_std`.
         image_mean (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
             The sequence of means for each channel, to be used when normalizing images.
         image_std (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
@@ -59,8 +65,10 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     def __init__(
         self,
         do_resize=True,
-        size=224,
-        resample=Image.BILINEAR,
+        size=256,
+        resample=Image.BICUBIC,
+        do_center_crop=True,
+        crop_size=224,
         do_normalize=True,
         image_mean=None,
         image_std=None,
@@ -70,6 +78,8 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
+        self.do_center_crop = do_center_crop
+        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
@@ -134,9 +144,11 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if not is_batched:
             images = [images]
 
-        # transformations (resizing + normalization)
-        if self.do_resize and self.size is not None:
+        # transformations (resizing + center cropping + normalization)
+        if self.do_resize and self.size is not None and self.resample is not None:
             images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+        if self.do_center_crop and self.crop_size is not None:
+            images = [self.center_crop(image, self.crop_size) for image in images]
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
