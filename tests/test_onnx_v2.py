@@ -138,7 +138,8 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
         for name, config in OnnxConfigWithPastTestCaseV2.SUPPORTED_WITH_PAST_CONFIGS:
             with self.subTest(name):
                 self.assertFalse(
-                    OnnxConfigWithPast.default(config()).use_past, "OnnxConfigWithPast.default() should not use_past"
+                    OnnxConfigWithPast.from_model_config(config()).use_past,
+                    "OnnxConfigWithPast.from_model_config() should not use_past",
                 )
 
                 self.assertTrue(
@@ -154,7 +155,7 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
             with self.subTest(name):
 
                 # without past
-                onnx_config_default = OnnxConfigWithPast.default(config())
+                onnx_config_default = OnnxConfigWithPast.from_model_config(config())
                 self.assertIsNotNone(onnx_config_default.values_override, "values_override should not be None")
                 self.assertIn("use_cache", onnx_config_default.values_override, "use_cache should be present")
                 self.assertFalse(
