@@ -223,10 +223,11 @@ def rotate_every_two(x):
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
     x = torch.stack((-x2, x1), axis=-1)
-    return rearrange(x, '... d j -> ... (d j)')
+    return x.flatten(-2) #in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 def apply_rotary_pos_emb(x, sincos, offset=0):
-    sin, cos = map(lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2), sincos)
+    sin, cos = map(lambda t: t[None, offset:x.shape[1]+offset, None, :].repeat_interleave(2, 3), sincos)
+    #einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
     return (x * cos) + (rotate_every_two(x) * sin)
 
 class GPTJAttentionMixin:
