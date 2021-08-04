@@ -347,9 +347,9 @@ class FlaxModelTesterMixin:
             base_params = flatten_dict(unfreeze(model.params))
 
             # convert Flax model to PyTorch model
-            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
+            pt_model_class = getattr(transformers, base_class.__name__[4:])  # Skip the "Flax" at the beginning
             pt_model = pt_model_class(config).eval()
-            pt_model = load_flax_weights_in_pytorch_model(pt_model, base_params)
+            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
 
             # check that all base model weights are loaded correctly
             with tempfile.TemporaryDirectory() as tmpdirname:

@@ -59,7 +59,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_pa
 
 
 def rename_key_and_reshape_tensor(pt_tuple_key, pt_tensor, random_flax_state_dict, model_prefix):
-    """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary """
+    """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
     # layer norm
     if pt_tuple_key[-1] in ["weight", "gamma"]:
         renamed_pt_tuple_key = pt_tuple_key[:-1] + ("scale",)
@@ -120,7 +120,9 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
             pt_tuple_key = pt_tuple_key[1:]
 
         # Correctly rename weight parameters
-        pt_tuple_key, pt_tensor = rename_key_and_reshape_tensor(pt_tuple_key, pt_tensor, random_flax_state_dict, model_prefix)
+        pt_tuple_key, pt_tensor = rename_key_and_reshape_tensor(
+            pt_tuple_key, pt_tensor, random_flax_state_dict, model_prefix
+        )
 
         # add model prefix if necessary
         require_base_model_prefix = (model_prefix,) + pt_tuple_key in random_flax_state_dict
