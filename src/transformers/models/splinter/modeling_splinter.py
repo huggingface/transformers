@@ -62,7 +62,6 @@ SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->Splinter
 class SplinterEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -561,7 +560,6 @@ class SplinterOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->Splinter
 class SplinterPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -572,6 +570,7 @@ class SplinterPreTrainedModel(PreTrainedModel):
     base_model_prefix = "splinter"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -652,7 +651,6 @@ SPLINTER_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->Splinter
 @add_start_docstrings(
     "The bare Splinter Model transformer outputting raw hidden-states without any specific head on top.",
     SPLINTER_START_DOCSTRING,
