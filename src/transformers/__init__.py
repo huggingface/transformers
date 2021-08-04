@@ -147,7 +147,7 @@ _import_structure = {
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
-    "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BEiTConfig"],
+    "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BasicTokenizer",
@@ -413,7 +413,7 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
-    _import_structure["models.beit"].append("BEiTFeatureExtractor")
+    _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
@@ -558,10 +558,10 @@ if is_torch_available():
     _import_structure["models.beit"].extend(
         [
             "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BEiTForImageClassification",
-            "BEiTForMaskedImageModeling",
-            "BEiTModel",
-            "BEiTPreTrainedModel",
+            "BeitForImageClassification",
+            "BeitForMaskedImageModeling",
+            "BeitModel",
+            "BeitPreTrainedModel",
         ]
     )
     _import_structure["models.bert"].extend(
@@ -1822,7 +1822,7 @@ if TYPE_CHECKING:
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
-    from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BEiTConfig
+    from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BasicTokenizer,
@@ -2058,7 +2058,7 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
-        from .models.beit import BEiTFeatureExtractor
+        from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
@@ -2183,10 +2183,10 @@ if TYPE_CHECKING:
         )
         from .models.beit import (
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BEiTForImageClassification,
-            BEiTForMaskedImageModeling,
-            BEiTModel,
-            BEiTPreTrainedModel,
+            BeitForImageClassification,
+            BeitForMaskedImageModeling,
+            BeitModel,
+            BeitPreTrainedModel,
         )
         from .models.bert import (
             BERT_PRETRAINED_MODEL_ARCHIVE_LIST,

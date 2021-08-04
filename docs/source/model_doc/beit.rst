@@ -43,7 +43,7 @@ Tips:
   outperform both the original model (ViT) as well as Data-efficient Image Transformers (DeiT) when fine-tuned on
   ImageNet-1K and CIFAR-100.
 - As the BEiT models expect each image to be of the same size (resolution), one can use
-  :class:`~transformers.BEiTFeatureExtractor` to resize (or rescale) and normalize images for the model.
+  :class:`~transformers.BeitFeatureExtractor` to resize (or rescale) and normalize images for the model.
 - Both the patch resolution and image resolution used during pre-training or fine-tuning are reflected in the name of
   each checkpoint. For example, :obj:`microsoft/beit-base-patch16-224` refers to a base-sized architecture with patch
   resolution of 16x16 and fine-tuning resolution of 224x224. All checkpoints can be found on the `hub
@@ -56,42 +56,42 @@ Tips:
   relative position bias among the several self-attention layers. During fine-tuning, each layer's relative position
   bias is initialized with the shared relative position bias obtained after pre-training. Note that, if one wants to
   pre-train a model from scratch, one needs to either set the :obj:`use_relative_position_bias` or the
-  :obj:`use_relative_position_bias` attribute of :class:`~transformers.BEiTConfig` to :obj:`True` in order to add
+  :obj:`use_relative_position_bias` attribute of :class:`~transformers.BeitConfig` to :obj:`True` in order to add
   position embeddings.
 
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
 <https://github.com/microsoft/unilm/tree/master/beit>`__.
 
-BEiTConfig
+BeitConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BEiTConfig
+.. autoclass:: transformers.BeitConfig
     :members:
 
 
-BEiTFeatureExtractor
+BeitFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BEiTFeatureExtractor
+.. autoclass:: transformers.BeitFeatureExtractor
     :members: __call__
 
 
-BEiTModel
+BeitModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BEiTModel
+.. autoclass:: transformers.BeitModel
     :members: forward
 
 
-BEiTForMaskedImageModeling
+BeitForMaskedImageModeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BEiTForMaskedImageModeling
+.. autoclass:: transformers.BeitForMaskedImageModeling
     :members: forward
 
 
-BEiTForImageClassification
+BeitForImageClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BEiTForImageClassification
+.. autoclass:: transformers.BeitForImageClassification
     :members: forward

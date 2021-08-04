@@ -30,10 +30,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BEiTFeatureExtractor
+    from transformers import BeitFeatureExtractor
 
 
-class BEiTFeatureExtractionTester(unittest.TestCase):
+class BeitFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -78,12 +78,12 @@ class BEiTFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class BEiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = BEiTFeatureExtractor if is_vision_available() else None
+    feature_extraction_class = BeitFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = BEiTFeatureExtractionTester(self)
+        self.feature_extract_tester = BeitFeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):

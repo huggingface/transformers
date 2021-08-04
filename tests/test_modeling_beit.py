@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import BEiTConfig
+from transformers import BeitConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -31,17 +31,17 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_MAPPING, BEiTForImageClassification, BEiTForMaskedImageModeling, BEiTModel
+    from transformers import MODEL_MAPPING, BeitForImageClassification, BeitForMaskedImageModeling, BeitModel
     from transformers.models.beit.modeling_beit import BEIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BEiTFeatureExtractor
+    from transformers import BeitFeatureExtractor
 
 
-class BEiTModelTester:
+class BeitModelTester:
     def __init__(
         self,
         parent,
@@ -95,7 +95,7 @@ class BEiTModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return BEiTConfig(
+        return BeitConfig(
             vocab_size=self.vocab_size,
             image_size=self.image_size,
             patch_size=self.patch_size,
@@ -112,7 +112,7 @@ class BEiTModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = BEiTModel(config=config)
+        model = BeitModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -123,7 +123,7 @@ class BEiTModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
     def create_and_check_for_masked_lm(self, config, pixel_values, labels):
-        model = BEiTForMaskedImageModeling(config=config)
+        model = BeitForMaskedImageModeling(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -135,7 +135,7 @@ class BEiTModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = BEiTForImageClassification(config)
+        model = BeitForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -153,14 +153,14 @@ class BEiTModelTester:
 
 
 @require_torch
-class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
+class BeitModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as BEiT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
-        (BEiTModel, BEiTForImageClassification, BEiTForMaskedImageModeling) if is_torch_available() else ()
+        (BeitModel, BeitForImageClassification, BeitForMaskedImageModeling) if is_torch_available() else ()
     )
 
     test_pruning = False
@@ -169,8 +169,8 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = BEiTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BEiTConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = BeitModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=BeitConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -214,8 +214,8 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             if model_class in get_values(MODEL_MAPPING):
                 continue
-            # we don't test BEiTForMaskedImageModeling
-            if model_class.__name__ == "BEiTForMaskedImageModeling":
+            # we don't test BeitForMaskedImageModeling
+            if model_class.__name__ == "BeitForMaskedImageModeling":
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -361,7 +361,7 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in BEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BEiTModel.from_pretrained(model_name)
+            model = BeitModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -372,19 +372,16 @@ def prepare_img():
 
 
 @require_vision
-class BEiTModelIntegrationTest(unittest.TestCase):
+class BeitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            # TODO rename nielsr to microsoft
-            BEiTFeatureExtractor.from_pretrained("nielsr/beit-base-patch16-224")
-            if is_vision_available()
-            else None
+            BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224") if is_vision_available() else None
         )
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = BEiTForImageClassification.from_pretrained("microsoft/beit-base-patch16-224").to(torch_device)
+        model = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -407,7 +404,7 @@ class BEiTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_22k(self):
-        model = BEiTForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k").to(
+        model = BeitForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k").to(
             torch_device
         )
 

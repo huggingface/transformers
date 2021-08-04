@@ -26,9 +26,9 @@ BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class BEiTConfig(PretrainedConfig):
+class BeitConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.BEiTModel`. It is used to
+    This is the configuration class to store the configuration of a :class:`~transformers.BeitModel`. It is used to
     instantiate an BEiT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the BEiT
     `microsoft/beit-base-patch16-224-in22k <https://huggingface.co/microsoft/beit-base-patch16-224-in22k>`__
@@ -83,13 +83,13 @@ class BEiTConfig(PretrainedConfig):
 
     Example::
 
-        >>> from transformers import BEiTModel, BEiTConfig
+        >>> from transformers import BeitModel, BeitConfig
 
         >>> # Initializing a BEiT beit-base-patch16-224-in22k style configuration
-        >>> configuration = BEiTConfig()
+        >>> configuration = BeitConfig()
 
         >>> # Initializing a model from the beit-base-patch16-224-in22k style configuration
-        >>> model = BEiTModel(configuration)
+        >>> model = BeitModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config

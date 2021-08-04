@@ -22,34 +22,34 @@ from ...file_utils import _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
-    "configuration_beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BEiTConfig"],
+    "configuration_beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
 }
 
 if is_vision_available():
-    _import_structure["feature_extraction_beit"] = ["BEiTFeatureExtractor"]
+    _import_structure["feature_extraction_beit"] = ["BeitFeatureExtractor"]
 
 if is_torch_available():
     _import_structure["modeling_beit"] = [
         "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BEiTForImageClassification",
-        "BEiTForMaskedImageModeling",
-        "BEiTModel",
-        "BEiTPreTrainedModel",
+        "BeitForImageClassification",
+        "BeitForMaskedImageModeling",
+        "BeitModel",
+        "BeitPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BEiTConfig
+    from .configuration_beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
 
     if is_vision_available():
-        from .feature_extraction_beit import BEiTFeatureExtractor
+        from .feature_extraction_beit import BeitFeatureExtractor
 
     if is_torch_available():
         from .modeling_beit import (
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BEiTForImageClassification,
-            BEiTForMaskedImageModeling,
-            BEiTModel,
-            BEiTPreTrainedModel,
+            BeitForImageClassification,
+            BeitForMaskedImageModeling,
+            BeitModel,
+            BeitPreTrainedModel,
         )
 
 

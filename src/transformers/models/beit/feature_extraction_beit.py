@@ -28,7 +28,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class BEiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a BEiT feature extractor.
 

@@ -28,12 +28,12 @@ from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_fo
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
-from .configuration_beit import BEiTConfig
+from .configuration_beit import BeitConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "BEiTConfig"
+_CONFIG_FOR_DOC = "BeitConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224"
 
 BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -88,7 +88,7 @@ class DropPath(nn.Module):
 
 # Based on timm implementation, which can be found here:
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class BEiTEmbeddings(nn.Module):
+class BeitEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
 
@@ -166,7 +166,7 @@ class PatchEmbeddings(nn.Module):
         return x
 
 
-class BEiTSelfAttention(nn.Module):
+class BeitSelfAttention(nn.Module):
     def __init__(self, config, window_size=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -186,7 +186,7 @@ class BEiTSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
         if window_size:
-            self.relative_position_bias = BEiTRelativePositionBias(config, window_size=window_size)
+            self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
         else:
             self.relative_position_bias = None
 
@@ -237,9 +237,9 @@ class BEiTSelfAttention(nn.Module):
         return outputs
 
 
-class BEiTSelfOutput(nn.Module):
+class BeitSelfOutput(nn.Module):
     """
-    The residual connection is defined in BEiTLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in BeitLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
@@ -255,11 +255,11 @@ class BEiTSelfOutput(nn.Module):
         return hidden_states
 
 
-class BEiTAttention(nn.Module):
+class BeitAttention(nn.Module):
     def __init__(self, config, window_size=None):
         super().__init__()
-        self.attention = BEiTSelfAttention(config, window_size=window_size)
-        self.output = BEiTSelfOutput(config)
+        self.attention = BeitSelfAttention(config, window_size=window_size)
+        self.output = BeitSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -289,7 +289,7 @@ class BEiTAttention(nn.Module):
         return outputs
 
 
-class BEiTIntermediate(nn.Module):
+class BeitIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -305,7 +305,7 @@ class BEiTIntermediate(nn.Module):
         return hidden_states
 
 
-class BEiTOutput(nn.Module):
+class BeitOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -318,16 +318,16 @@ class BEiTOutput(nn.Module):
         return hidden_states
 
 
-class BEiTLayer(nn.Module):
+class BeitLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config, window_size=None, drop_path_rate=0.0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = BEiTAttention(config, window_size=window_size)
-        self.intermediate = BEiTIntermediate(config)
-        self.output = BEiTOutput(config)
+        self.attention = BeitAttention(config, window_size=window_size)
+        self.intermediate = BeitIntermediate(config)
+        self.output = BeitOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -373,7 +373,7 @@ class BEiTLayer(nn.Module):
         return outputs
 
 
-class BEiTRelativePositionBias(nn.Module):
+class BeitRelativePositionBias(nn.Module):
     def __init__(self, config, window_size):
         super().__init__()
         self.window_size = window_size
@@ -411,12 +411,12 @@ class BEiTRelativePositionBias(nn.Module):
         return relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
 
 
-class BEiTEncoder(nn.Module):
+class BeitEncoder(nn.Module):
     def __init__(self, config, window_size=None):
         super().__init__()
         self.config = config
         if config.use_shared_relative_position_bias:
-            self.relative_position_bias = BEiTRelativePositionBias(config, window_size=window_size)
+            self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
         else:
             self.relative_position_bias = None
 
@@ -424,7 +424,7 @@ class BEiTEncoder(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
         self.layer = nn.ModuleList(
             [
-                BEiTLayer(
+                BeitLayer(
                     config,
                     window_size=window_size if config.use_relative_position_bias else None,
                     drop_path_rate=dpr[i],
@@ -486,13 +486,13 @@ class BEiTEncoder(nn.Module):
         )
 
 
-class BEiTPreTrainedModel(PreTrainedModel):
+class BeitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = BEiTConfig
+    config_class = BeitConfig
     base_model_prefix = "beit"
 
     def _init_weights(self, module):
@@ -518,7 +518,7 @@ BEIT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config (:class:`~transformers.BEiTConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.BeitConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
@@ -527,8 +527,8 @@ BEIT_START_DOCSTRING = r"""
 BEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.BEiTFeatureExtractor`. See
-            :meth:`transformers.BEiTFeatureExtractor.__call__` for details.
+            Pixel values. Pixel values can be obtained using :class:`~transformers.BeitFeatureExtractor`. See
+            :meth:`transformers.BeitFeatureExtractor.__call__` for details.
 
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
@@ -548,21 +548,21 @@ BEIT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare BEiT Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Beit Model transformer outputting raw hidden-states without any specific head on top.",
     BEIT_START_DOCSTRING,
 )
-class BEiTModel(BEiTPreTrainedModel):
+class BeitModel(BeitPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = BEiTEmbeddings(config)
-        self.encoder = BEiTEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
+        self.embeddings = BeitEmbeddings(config)
+        self.encoder = BeitEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
 
         self.layernorm = (
             nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         )
-        self.pooler = BEiTPooler(config) if add_pooling_layer else None
+        self.pooler = BeitPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -593,15 +593,15 @@ class BEiTModel(BEiTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import BEiTFeatureExtractor, BEiTModel
+            >>> from transformers import BeitFeatureExtractor, BeitModel
             >>> from PIL import Image
             >>> import requests
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = BEiTFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
-            >>> model = BEiTModel.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
+            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
+            >>> model = BeitModel.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -647,7 +647,7 @@ class BEiTModel(BEiTPreTrainedModel):
         )
 
 
-class BEiTPooler(nn.Module):
+class BeitPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.layernorm = (
@@ -667,14 +667,14 @@ class BEiTPooler(nn.Module):
 
 
 @add_start_docstrings(
-    "BEiT Model transformer with a 'language' modeling head on top (to predict visual tokens).", BEIT_START_DOCSTRING
+    "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).", BEIT_START_DOCSTRING
 )
-class BEiTForMaskedImageModeling(BEiTPreTrainedModel):
+class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.beit = BEiTModel(config, add_pooling_layer=False)
+        self.beit = BeitModel(config, add_pooling_layer=False)
 
         # Classifier head
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -704,15 +704,15 @@ class BEiTForMaskedImageModeling(BEiTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import BEiTFeatureExtractor, BEiTForMaskedImageModeling
+            >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
             >>> from PIL import Image
             >>> import requests
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = BEiTFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
-            >>> model = BEiTForMaskedImageModeling.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
+            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
+            >>> model = BeitForMaskedImageModeling.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -751,17 +751,17 @@ class BEiTForMaskedImageModeling(BEiTPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BEiT Model transformer with an image classification head on top (a linear layer on top of the average of the final
+    Beit Model transformer with an image classification head on top (a linear layer on top of the average of the final
     hidden states of the patch tokens) e.g. for ImageNet.
     """,
     BEIT_START_DOCSTRING,
 )
-class BEiTForImageClassification(BEiTPreTrainedModel):
+class BeitForImageClassification(BeitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.beit = BEiTModel(config, add_pooling_layer=True)
+        self.beit = BeitModel(config, add_pooling_layer=True)
 
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
@@ -789,15 +789,15 @@ class BEiTForImageClassification(BEiTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import BEiTFeatureExtractor, BEiTForImageClassification
+            >>> from transformers import BeitFeatureExtractor, BeitForImageClassification
             >>> from PIL import Image
             >>> import requests
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = BEiTFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
-            >>> model = BEiTForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
+            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
+            >>> model = BeitForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)

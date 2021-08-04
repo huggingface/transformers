@@ -24,7 +24,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import BEiTConfig, BEiTFeatureExtractor, BEiTForImageClassification, BEiTForMaskedImageModeling
+from transformers import BeitConfig, BeitFeatureExtractor, BeitForImageClassification, BeitForMaskedImageModeling
 from transformers.utils import logging
 
 
@@ -150,7 +150,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     """
 
     # define default BEiT configuration
-    config = BEiTConfig()
+    config = BeitConfig()
     has_lm_head = False
     repo_id = "datasets/huggingface/label-files"
     # set config parameters based on URL
@@ -208,14 +208,14 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # load HuggingFace model
     if checkpoint_url[-9:-4] == "pt22k":
-        model = BEiTForMaskedImageModeling(config)
+        model = BeitForMaskedImageModeling(config)
     else:
-        model = BEiTForImageClassification(config)
+        model = BeitForImageClassification(config)
     model.eval()
     model.load_state_dict(state_dict)
 
     # Check outputs on an image
-    feature_extractor = BEiTFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
+    feature_extractor = BeitFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
