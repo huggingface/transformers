@@ -201,7 +201,7 @@ def validate_model_outputs(
                 f"Got {ref_value.shape} (reference) and {ort_value.shape} (ONNX)"
             )
         else:
-            logger.info(f"\t\t-[✓] {ort_value.shape} matchs {ref_value.shape}")
+            logger.info(f"\t\t-[✓] {ort_value.shape} matches {ref_value.shape}")
 
         # Values
         if not np.allclose(ref_value, ort_value, atol=atol):
