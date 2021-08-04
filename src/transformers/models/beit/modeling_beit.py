@@ -600,8 +600,8 @@ class BEiTModel(BEiTPreTrainedModel):
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = BEiTFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-in21k')
-            >>> model = BEiTModel.from_pretrained('microsoft/beit-base-patch16-224-in21k')
+            >>> feature_extractor = BEiTFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
+            >>> model = BEiTModel.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)

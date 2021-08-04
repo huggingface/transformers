@@ -384,8 +384,7 @@ class BEiTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        # TODO rename nielsr to microsoft
-        model = BEiTForImageClassification.from_pretrained("nielsr/beit-base-patch16-224").to(torch_device)
+        model = BEiTForImageClassification.from_pretrained("microsoft/beit-base-patch16-224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -393,19 +392,22 @@ class BEiTModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         outputs = model(**inputs)
+        logits = outputs.logits
 
         # verify the logits
         expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
+        self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor([-1.2385, -1.0987, -1.0108]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+
+        expected_class_idx = 281
+        self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
 
     @slow
     def test_inference_image_classification_head_imagenet_22k(self):
-        # TODO rename nielsr to microsoft
-        model = BEiTForImageClassification.from_pretrained("nielsr/beit-large-patch16-224-pt22k-ft22k").to(
+        model = BEiTForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k").to(
             torch_device
         )
 
@@ -415,11 +417,15 @@ class BEiTModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         outputs = model(**inputs)
+        logits = outputs.logits
 
         # verify the logits
         expected_shape = torch.Size((1, 21841))
-        self.assertEqual(outputs.logits.shape, expected_shape)
+        self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor([1.6881, -0.2787, 0.5901]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+
+        expected_class_idx = 2396
+        self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
