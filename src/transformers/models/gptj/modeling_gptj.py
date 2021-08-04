@@ -19,6 +19,7 @@ import os
 
 import torch
 import torch.utils.checkpoint
+from typing import Optional, Tuple
 from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
@@ -32,7 +33,10 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPast,
     CausalLMOutputWithCrossAttentions,
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -48,7 +52,6 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_gptj import GPTJConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -219,10 +222,11 @@ def rotate_every_two(x):
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
     x = torch.stack((-x2, x1), axis=-1)
-    return rearrange(x, '... d j -> ... (d j)')
+    return x.flatten(-2) #in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 def apply_rotary_pos_emb(x, sincos, offset=0):
-    sin, cos = map(lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2), sincos)
+    sin, cos = map(lambda t: t[None, offset:x.shape[1]+offset, None, :].repeat_interleave(2, 3), sincos)
+    #einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
     return (x * cos) + (rotate_every_two(x) * sin)
 
 class GPTJAttentionMixin:
@@ -541,7 +545,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-gptj_START_DOCSTRING = r"""
+GPTJ_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
@@ -552,7 +556,7 @@ gptj_START_DOCSTRING = r"""
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-gptj_INPUTS_DOCSTRING = r"""
+GPTJ_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
@@ -605,7 +609,7 @@ gptj_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare gptj Model transformer outputting raw hidden-states without any specific head on top.",
-    gptj_START_DOCSTRING,
+    GPTJ_START_DOCSTRING,
 )
 class GPTJModel(GPTJPreTrainedModel):
     def __init__(self, config):
@@ -957,7 +961,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
     the last value in each row of the batch).
     """,
-    GPT_J_START_DOCSTRING,
+    GPTJ_START_DOCSTRING,
 )
 class GPTJForSequenceClassification(GPTJPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
@@ -970,7 +974,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(GPT_J_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
