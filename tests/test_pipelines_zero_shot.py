@@ -22,9 +22,7 @@ from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     pipeline_task = "zero-shot-classification"
-    small_models = [
-        "sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english"
-    ]  # Models tested without the @slow decorator
+    small_models = ["sgugger/tiny-distilbert-classification"]  # Models tested without the @slow decorator
     large_models = ["roberta-large-mnli"]  # Models tested with the @slow decorator
     valid_inputs = [
         {"sequences": "Who are you voting for in 2020?", "candidate_labels": "politics"},
