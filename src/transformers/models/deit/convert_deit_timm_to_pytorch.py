@@ -140,9 +140,9 @@ def convert_deit_checkpoint(deit_name, pytorch_dump_folder_path):
     base_model = False
     # dataset (fine-tuned on ImageNet 2012), patch_size and image_size
     config.num_labels = 1000
-    REPO_ID = "datasets/huggingface/label-files"
-    FILENAME = "imagenet-1k-id2label.json"
-    id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
+    repo_id = "datasets/huggingface/label-files"
+    filename = "imagenet-1k-id2label.json"
+    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}

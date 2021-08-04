@@ -152,7 +152,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # define default BEiT configuration
     config = BEiTConfig()
     has_lm_head = False
-    REPO_ID = "datasets/huggingface/label-files"
+    repo_id = "datasets/huggingface/label-files"
     # set config parameters based on URL
     if checkpoint_url[-9:-4] == "pt22k":
         # masked image modeling
@@ -163,8 +163,8 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         # intermediate fine-tuning on ImageNet-22k
         config.use_relative_position_bias = True
         config.num_labels = 21841
-        FILENAME = "imagenet-22k-id2label.json"
-        id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
+        filename = "imagenet-22k-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         # this dataset contains 21843 labels but the model only has 21841
         # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
@@ -176,8 +176,8 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         # fine-tuning on ImageNet-1k
         config.use_relative_position_bias = True
         config.num_labels = 1000
-        FILENAME = "imagenet-1k-id2label.json"
-        id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
+        filename = "imagenet-1k-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}

@@ -147,9 +147,9 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         config.image_size = int(vit_name[-9:-6])
     else:
         config.num_labels = 1000
-        REPO_ID = "datasets/huggingface/label-files"
-        FILENAME = "imagenet-1k-id2label.json"
-        id2label = json.load(open(cached_download(hf_hub_url(REPO_ID, FILENAME)), "r"))
+        repo_id = "datasets/huggingface/label-files"
+        filename = "imagenet-1k-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}

@@ -2059,6 +2059,7 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.beit import BEiTFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor

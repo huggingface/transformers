@@ -24,7 +24,7 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import _config_zero_init, ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -229,7 +229,7 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-    
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -247,7 +247,7 @@ class BEiTModelTest(ModelTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
-    
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True

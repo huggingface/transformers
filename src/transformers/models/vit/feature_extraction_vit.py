@@ -21,12 +21,7 @@ from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType
-from ...image_utils import (
-    IMAGENET_INCEPTION_MEAN,
-    IMAGENET_INCEPTION_STD,
-    ImageFeatureExtractionMixin,
-    is_torch_tensor,
-)
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 
 
@@ -76,8 +71,8 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.size = size
         self.resample = resample
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_INCEPTION_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_INCEPTION_STD
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     def __call__(
         self,

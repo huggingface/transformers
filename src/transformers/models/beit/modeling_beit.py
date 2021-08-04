@@ -210,11 +210,6 @@ class BEiTSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
-        # print("Shape of attention scores:", attention_scores.shape)
-
-        # print("Attention scores before relative position bias:")
-        # print(attention_scores[0,0,:3,:3])
-
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
             attention_scores = attention_scores + self.relative_position_bias().unsqueeze(0)
@@ -222,9 +217,6 @@ class BEiTSelfAttention(nn.Module):
         # Add shared relative position bias if provided.
         if relative_position_bias is not None:
             attention_scores = attention_scores + relative_position_bias
-
-        # print("Attention scores after relative position bias:")
-        # print(attention_scores[0,0,:3,:3])
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -362,43 +354,24 @@ class BEiTLayer(nn.Module):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        # print("Hidden states after self-attention:", attention_output[0,:3,:3])
-
-        # print("First elements of lambda weights:", self.lambda_1[:3])
-        # print("Sum of lambda_1 weights:", self.lambda_1.sum().item())
-
         # apply lambda_1 if present
         if self.lambda_1 is not None:
             attention_output = self.lambda_1 * attention_output
 
-        # print("Hidden states after lambda 1:", attention_output[0,:3,:3])
-
         # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
-
-        # print("Sum of hidden states after first residual connection:", hidden_states.sum().item())
 
         # in BEiT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
 
-        # print("Sum of hidden states after layernorm:", layer_output.sum().item())
-
         layer_output = self.intermediate(layer_output)
         layer_output = self.output(layer_output)
-
-        # print("Sum of hidden states after intermediate + output:", layer_output.sum().item())
 
         if self.lambda_2 is not None:
             layer_output = self.lambda_2 * layer_output
 
-        # print("Sum of hidden states after lambda_2:", layer_output.sum().item())
-
-        # print("Sum of hidden states which are added:", hidden_states.sum().item())
-
         # second residual connection
         layer_output = self.drop_path(layer_output) + hidden_states
-
-        # print("Sum of hidden states after second residual connection:", layer_output.sum().item())
 
         outputs = (layer_output,) + outputs
 
@@ -439,9 +412,7 @@ class BEiTRelativePositionBias(nn.Module):
         relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
             self.window_size[0] * self.window_size[1] + 1, self.window_size[0] * self.window_size[1] + 1, -1
         )  # Wh*Ww,Wh*Ww,nH
-        # print("Sum of relative position bias:", relative_position_bias.sum())
-        # print("Relative position bias first elements:", relative_position_bias[:3,:3,:3])
-        # print("Relative position bias last elements:", relative_position_bias[-3:,-3:,-3:])
+
         return relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
 
 
@@ -498,18 +469,12 @@ class BEiTEncoder(nn.Module):
                     layer_head_mask,
                 )
             else:
-                # print("----------------------------------")
-
-                # print(f"Hidden states before layer {i}", hidden_states[0, :3, :3])
-
                 relative_position_bias = (
                     self.relative_position_bias() if self.relative_position_bias is not None else None
                 )
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
 
             hidden_states = layer_outputs[0]
-
-            # print(f"Hidden states after layer {i}", hidden_states[0, :3, :3])
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -665,9 +630,6 @@ class BEiTModel(BEiTPreTrainedModel):
 
         embedding_output = self.embeddings(pixel_values, bool_masked_pos)
 
-        # print("Shape of embedding output:", embedding_output.shape)
-        # print("Sum of embedding output:", embedding_output.sum())
-
         encoder_outputs = self.encoder(
             embedding_output,
             head_mask=head_mask,
@@ -696,8 +658,6 @@ class BEiTPooler(nn.Module):
         self.layernorm = (
             nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.use_mean_pooling else None
         )
-        # self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        # self.activation = nn.Tanh()
 
     def forward(self, hidden_states):
         if self.layernorm is not None:
@@ -708,16 +668,11 @@ class BEiTPooler(nn.Module):
             # Pool by simply taking the final hidden state of the [CLS] token
             pooled_output = hidden_states[:, 0]
 
-        # pooled_output = self.dense(pooled_output)
-        # pooled_output = self.activation(pooled_output)
         return pooled_output
 
 
 @add_start_docstrings(
-    """
-    BEiT Model transformer with a "language" modeling head on top (to predict visual tokens).
-    """,
-    BEIT_START_DOCSTRING,
+    "BEiT Model transformer with a 'language' modeling head on top (to predict visual tokens).", BEIT_START_DOCSTRING
 )
 class BEiTForMaskedImageModeling(BEiTPreTrainedModel):
     def __init__(self, config):

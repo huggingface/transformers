@@ -35,8 +35,7 @@ directly fine-tune the model parameters on downstream tasks by appending task la
 Experimental results on image classification and semantic segmentation show that our model achieves competitive results
 with previous pre-training methods. For example, base-size BEiT achieves 83.2% top-1 accuracy on ImageNet-1K,
 significantly outperforming from-scratch DeiT training (81.8%) with the same setup. Moreover, large-size BEiT obtains
-86.3% only using ImageNet-1K, even outperforming ViT-L with supervised pre-training on ImageNet-22K (85.2%). The code
-and pretrained models are available at this https URL.*
+86.3% only using ImageNet-1K, even outperforming ViT-L with supervised pre-training on ImageNet-22K (85.2%).*
 
 Tips:
 
