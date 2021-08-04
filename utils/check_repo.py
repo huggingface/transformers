@@ -82,8 +82,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_camembert.py",
-    "test_modeling_flax_bert.py",
-    "test_modeling_flax_roberta.py",
+    "test_modeling_flax_mt5.py",
     "test_modeling_mbart.py",
     "test_modeling_mt5.py",
     "test_modeling_pegasus.py",
