@@ -632,7 +632,9 @@ Additionally, `deepspeed==0.4.4` added a new option ``round_robin_gradients`` wh
         }
     }
 
-This Stage 2 optimization for CPU offloading that parallelizes gradient copying to CPU memory among ranks by fine-grained gradient partitioning. Performance benefit grows with gradient accumulation steps (more copying between optimizer steps) or GPU count (increased parallelism).
+This Stage 2 optimization for CPU offloading that parallelizes gradient copying to CPU memory among ranks by
+fine-grained gradient partitioning. Performance benefit grows with gradient accumulation steps (more copying between
+optimizer steps) or GPU count (increased parallelism).
 
 
 .. _deepspeed-zero3-config:
