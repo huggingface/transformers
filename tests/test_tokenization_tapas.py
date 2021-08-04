@@ -820,6 +820,12 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     for key, value in normal_tokens.items():
                         self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
 
+    @unittest.skip(
+        "TAPAS tokenizer only supports 2 truncation strategies, namely 'drop_rows_to_fit' and 'do_not_truncate'."
+    )
+    def test_right_and_left_truncation(self):
+        pass
+
     @unittest.skip("TAPAS cannot handle `prepare_for_model` without passing by `encode_plus` or `batch_encode_plus`")
     def test_prepare_for_model(self):
         pass
