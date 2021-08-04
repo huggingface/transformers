@@ -23,7 +23,6 @@ import numpy as np
 import flax
 import jax
 import jax.numpy as jnp
-import jaxlib.xla_extension as jax_xla
 from jax import lax
 
 from .file_utils import ModelOutput
@@ -49,11 +48,11 @@ class FlaxGreedySearchOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, max_length)`):
+        sequences (:obj:`jnp.ndarray` of shape :obj:`(batch_size, max_length)`):
             The generated sequences.
     """
 
-    sequences: jax_xla.DeviceArray = None
+    sequences: jnp.ndarray = None
 
 
 @flax.struct.dataclass
@@ -63,11 +62,11 @@ class FlaxSampleOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, max_length)`):
+        sequences (:obj:`jnp.ndarray` of shape :obj:`(batch_size, max_length)`):
             The generated sequences.
     """
 
-    sequences: jax_xla.DeviceArray = None
+    sequences: jnp.ndarray = None
 
 
 @flax.struct.dataclass
@@ -77,44 +76,44 @@ class FlaxBeamSearchOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, max_length)`):
+        sequences (:obj:`jnp.ndarray` of shape :obj:`(batch_size, max_length)`):
             The generated sequences.
-        scores (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size,)`):
+        scores (:obj:`jnp.ndarray` of shape :obj:`(batch_size,)`):
             The scores (log probabilites) of the generated sequences.
     """
 
-    sequences: jax_xla.DeviceArray = None
-    scores: jax_xla.DeviceArray = None
+    sequences: jnp.ndarray = None
+    scores: jnp.ndarray = None
 
 
 @flax.struct.dataclass
 class GreedyState:
-    cur_len: jax_xla.DeviceArray
-    sequences: jax_xla.DeviceArray
-    running_token: jax_xla.DeviceArray
-    is_sent_finished: jax_xla.DeviceArray
-    model_kwargs: Dict[str, jax_xla.DeviceArray]
+    cur_len: jnp.ndarray
+    sequences: jnp.ndarray
+    running_token: jnp.ndarray
+    is_sent_finished: jnp.ndarray
+    model_kwargs: Dict[str, jnp.ndarray]
 
 
 @flax.struct.dataclass
 class SampleState:
-    cur_len: jax_xla.DeviceArray
-    sequences: jax_xla.DeviceArray
-    running_token: jax_xla.DeviceArray
-    is_sent_finished: jax_xla.DeviceArray
-    prng_key: jax_xla.DeviceArray
-    model_kwargs: Dict[str, jax_xla.DeviceArray]
+    cur_len: jnp.ndarray
+    sequences: jnp.ndarray
+    running_token: jnp.ndarray
+    is_sent_finished: jnp.ndarray
+    prng_key: jnp.ndarray
+    model_kwargs: Dict[str, jnp.ndarray]
 
 
 @flax.struct.dataclass
 class BeamSearchState:
-    cur_len: jax_xla.DeviceArray
-    running_sequences: jax_xla.DeviceArray
-    running_scores: jax_xla.DeviceArray
-    sequences: jax_xla.DeviceArray
-    scores: jax_xla.DeviceArray
-    is_sent_finished: jax_xla.DeviceArray
-    model_kwargs: Dict[str, jax_xla.DeviceArray]
+    cur_len: jnp.ndarray
+    running_sequences: jnp.ndarray
+    running_scores: jnp.ndarray
+    sequences: jnp.ndarray
+    scores: jnp.ndarray
+    is_sent_finished: jnp.ndarray
+    model_kwargs: Dict[str, jnp.ndarray]
 
 
 class FlaxGenerationMixin:
@@ -156,14 +155,14 @@ class FlaxGenerationMixin:
 
     def generate(
         self,
-        input_ids: jax_xla.DeviceArray,
+        input_ids: jnp.ndarray,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         decoder_start_token_id: Optional[int] = None,
         do_sample: Optional[bool] = None,
-        prng_key: Optional[jax_xla.DeviceArray] = None,
+        prng_key: Optional[jnp.ndarray] = None,
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
         temperature: Optional[float] = None,
@@ -175,7 +174,7 @@ class FlaxGenerationMixin:
         length_penalty: Optional[float] = None,
         early_stopping: Optional[bool] = None,
         trace: bool = True,
-        params: Optional[Dict[str, jax_xla.DeviceArray]] = None,
+        params: Optional[Dict[str, jnp.ndarray]] = None,
         **model_kwargs,
     ):
         r"""
@@ -191,7 +190,7 @@ class FlaxGenerationMixin:
 
         Parameters:
 
-            input_ids (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 The sequence used as a prompt for the generation.
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
@@ -217,7 +216,7 @@ class FlaxGenerationMixin:
             trace (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether to trace generation. Setting ``trace=False`` should only be used for debugging and will lead to
                 a considerably slower runtime.
-            params (:obj:`Dict[str, jax_xla.DeviceArray]`, `optional`):
+            params (:obj:`Dict[str, jnp.ndarray]`, `optional`):
                 Optionally the model parameters can be passed. Can be useful for parallelized generation.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
@@ -395,8 +394,8 @@ class FlaxGenerationMixin:
         eos_token_id: Optional[int] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
-        params: Optional[Dict[str, jax_xla.DeviceArray]] = None,
-        model_kwargs: Optional[Dict[str, jax_xla.DeviceArray]] = None,
+        params: Optional[Dict[str, jnp.ndarray]] = None,
+        model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
     ):
         # init values
         max_length = max_length if max_length is not None else self.config.max_length
@@ -479,12 +478,12 @@ class FlaxGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        prng_key: Optional[jax_xla.DeviceArray] = None,
+        prng_key: Optional[jnp.ndarray] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         logits_warper: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
-        params: Optional[Dict[str, jax_xla.DeviceArray]] = None,
-        model_kwargs: Optional[Dict[str, jax_xla.DeviceArray]] = None,
+        params: Optional[Dict[str, jnp.ndarray]] = None,
+        model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
     ):
         # init values
         max_length = max_length if max_length is not None else self.config.max_length
@@ -580,8 +579,8 @@ class FlaxGenerationMixin:
         early_stopping: Optional[bool] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
-        params: Optional[Dict[str, jax_xla.DeviceArray]] = None,
-        model_kwargs: Optional[Dict[str, jax_xla.DeviceArray]] = None,
+        params: Optional[Dict[str, jnp.ndarray]] = None,
+        model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
     ):
         """
         This beam search function is heavily inspired by Flax's official example:
