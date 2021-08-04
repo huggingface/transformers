@@ -31,16 +31,10 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_splinter"] = [
         "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SplinterForCausalLM",
-        "SplinterForMaskedLM",
-        "SplinterForMultipleChoice",
         "SplinterForQuestionAnswering",
-        "SplinterForSequenceClassification",
-        "SplinterForTokenClassification",
         "SplinterLayer",
         "SplinterModel",
         "SplinterPreTrainedModel",
-        "load_tf_weights_in_splinter",
     ]
 
 
@@ -54,16 +48,10 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SplinterForCausalLM,
-            SplinterForMaskedLM,
-            SplinterForMultipleChoice,
             SplinterForQuestionAnswering,
-            SplinterForSequenceClassification,
-            SplinterForTokenClassification,
             SplinterLayer,
             SplinterModel,
             SplinterPreTrainedModel,
-            load_tf_weights_in_splinter,
         )
 
 

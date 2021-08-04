@@ -268,15 +268,7 @@ from ..roformer.modeling_roformer import (
     RoFormerModel,
 )
 from ..speech_to_text.modeling_speech_to_text import Speech2TextForConditionalGeneration, Speech2TextModel
-from ..splinter.modeling_splinter import (
-    SplinterForCausalLM,
-    SplinterForMaskedLM,
-    SplinterForMultipleChoice,
-    SplinterForQuestionAnswering,
-    SplinterForSequenceClassification,
-    SplinterForTokenClassification,
-    SplinterModel,
-)
+from ..splinter.modeling_splinter import SplinterForQuestionAnswering, SplinterModel
 from ..squeezebert.modeling_squeezebert import (
     SqueezeBertForMaskedLM,
     SqueezeBertForMultipleChoice,
@@ -547,7 +539,6 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (DebertaV2Config, DebertaV2ForMaskedLM),
         (IBertConfig, IBertForMaskedLM),
         (MegatronBertConfig, MegatronBertForCausalLM),
-        (SplinterConfig, SplinterForMaskedLM),
     ]
 )
 
@@ -583,7 +574,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (BlenderbotConfig, BlenderbotForCausalLM),
         (BlenderbotSmallConfig, BlenderbotSmallForCausalLM),
         (MegatronBertConfig, MegatronBertForCausalLM),
-        (SplinterConfig, SplinterForCausalLM),
     ]
 )
 
@@ -626,7 +616,6 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
         (IBertConfig, IBertForMaskedLM),
-        (SplinterConfig, SplinterForMaskedLM),
     ]
 )
 
@@ -697,7 +686,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (MPNetConfig, MPNetForSequenceClassification),
         (TapasConfig, TapasForSequenceClassification),
         (IBertConfig, IBertForSequenceClassification),
-        (SplinterConfig, SplinterForSequenceClassification),
     ]
 )
 
@@ -774,7 +762,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForTokenClassification),
         (DebertaV2Config, DebertaV2ForTokenClassification),
         (IBertConfig, IBertForTokenClassification),
-        (SplinterConfig, SplinterForTokenClassification),
     ]
 )
 
@@ -803,7 +790,6 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMultipleChoice),
         (MPNetConfig, MPNetForMultipleChoice),
         (IBertConfig, IBertForMultipleChoice),
-        (SplinterConfig, SplinterForMultipleChoice),
     ]
 )
 
