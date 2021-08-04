@@ -957,7 +957,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
     the last value in each row of the batch).
     """,
-    GPT_J_START_DOCSTRING,
+    GPTJ_START_DOCSTRING,
 )
 class GPTJForSequenceClassification(GPTJPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
@@ -970,7 +970,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(GPT_J_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,

@@ -21,7 +21,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GPT_J_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "EleutherAI/gptj-6B": "https://huggingface.co/EleutherAI/gptj-6B/resolve/main/config.json",
     # See all GPTJ models at https://huggingface.co/models?filter=gpt_j
 }
