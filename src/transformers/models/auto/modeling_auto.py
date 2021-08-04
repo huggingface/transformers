@@ -741,11 +741,6 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
-<<<<<<< HEAD
-(gptjConfig, gptjForTokenClassification),
-=======
-        (RemBertConfig, RemBertForTokenClassification),
->>>>>>> 83e5a10603ca902c266e40fc98a01dd8a9b04ac4
         (CanineConfig, CanineForTokenClassification),
         (RoFormerConfig, RoFormerForTokenClassification),
         (BigBirdConfig, BigBirdForTokenClassification),
@@ -777,11 +772,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
-<<<<<<< HEAD
-(gptjConfig, gptjForMultipleChoice),
-=======
-        (RemBertConfig, RemBertForMultipleChoice),
->>>>>>> 83e5a10603ca902c266e40fc98a01dd8a9b04ac4
         (CanineConfig, CanineForMultipleChoice),
         (RoFormerConfig, RoFormerForMultipleChoice),
         (BigBirdConfig, BigBirdForMultipleChoice),
