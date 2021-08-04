@@ -1040,16 +1040,10 @@ if is_torch_available():
     _import_structure["models.splinter"].extend(
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SplinterForCausalLM",
-            "SplinterForMaskedLM",
-            "SplinterForMultipleChoice",
             "SplinterForQuestionAnswering",
-            "SplinterForSequenceClassification",
-            "SplinterForTokenClassification",
             "SplinterLayer",
             "SplinterModel",
             "SplinterPreTrainedModel",
-            "load_tf_weights_in_splinter",
         ]
     )
     _import_structure["models.squeezebert"].extend(
@@ -2589,16 +2583,10 @@ if TYPE_CHECKING:
         )
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SplinterForCausalLM,
-            SplinterForMaskedLM,
-            SplinterForMultipleChoice,
             SplinterForQuestionAnswering,
-            SplinterForSequenceClassification,
-            SplinterForTokenClassification,
             SplinterLayer,
             SplinterModel,
             SplinterPreTrainedModel,
-            load_tf_weights_in_splinter,
         )
         from .models.squeezebert import (
             SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

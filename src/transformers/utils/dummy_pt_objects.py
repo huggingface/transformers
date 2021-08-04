@@ -3089,52 +3089,7 @@ class Speech2TextPreTrainedModel:
 SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class SplinterForCausalLM:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class SplinterForMaskedLM:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class SplinterForMultipleChoice:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
 class SplinterForQuestionAnswering:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class SplinterForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class SplinterForTokenClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -3164,10 +3119,6 @@ class SplinterPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
-
-
-def load_tf_weights_in_splinter(*args, **kwargs):
-    requires_backends(load_tf_weights_in_splinter, ["torch"])
 
 
 SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
