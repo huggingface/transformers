@@ -60,35 +60,40 @@ def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_pa
 
 def rename_key_and_reshape_tensor(pt_tuple_key, pt_tensor, random_flax_state_dict, model_prefix):
     """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
+
+    def is_key_or_prefix_key_in_dict(key):
+        return len(set(random_flax_state_dict) & set([key, (model_prefix,) + key])) > 0
+
     # layer norm
-    if pt_tuple_key[-1] in ["weight", "gamma"]:
-        renamed_pt_tuple_key = pt_tuple_key[:-1] + ("scale",)
-        if len(set(random_flax_state_dict) & set([renamed_pt_tuple_key, (model_prefix,) + renamed_pt_tuple_key])) > 0:
-            return renamed_pt_tuple_key, pt_tensor
-    # embedding
-    if pt_tuple_key[-1] == "weight":
-        renamed_pt_tuple_key = pt_tuple_key[:-1] + ("embedding",)
-        if len(set(random_flax_state_dict) & set([renamed_pt_tuple_key, (model_prefix,) + renamed_pt_tuple_key])) > 0:
-            return renamed_pt_tuple_key, pt_tensor
-    # conv layer
-    if pt_tuple_key[-1] == "weight" and pt_tensor.ndim == 4:
-        if len(set(random_flax_state_dict) & set([pt_tuple_key, (model_prefix,) + pt_tuple_key])) == 0:
-            renamed_pt_tuple_key = pt_tuple_key[:-1] + ("kernel",)
-            pt_tensor = pt_tensor.transpose(2, 3, 1, 0)
-            return renamed_pt_tuple_key, pt_tensor
-    # linear layer
-    if pt_tuple_key[-1] == "weight":
-        if len(set(random_flax_state_dict) & set([pt_tuple_key, (model_prefix,) + pt_tuple_key])) == 0:
-            renamed_pt_tuple_key = pt_tuple_key[:-1] + ("kernel",)
-            pt_tensor = pt_tensor.T
-            return renamed_pt_tuple_key, pt_tensor
-    # old layer norm weight
-    if pt_tuple_key[-1] == "gamma":
-        renamed_pt_tuple_key = pt_tuple_key[:-1] + ("weight",)
+    renamed_pt_tuple_key = pt_tuple_key[:-1] + ("scale",)
+    if pt_tuple_key[-1] in ["weight", "gamma"] and is_key_or_prefix_key_in_dict(renamed_pt_tuple_key):
         return renamed_pt_tuple_key, pt_tensor
-    # old layer norm bias
+
+    # embedding
+    renamed_pt_tuple_key = pt_tuple_key[:-1] + ("embedding",)
+    if pt_tuple_key[-1] == "weight" and is_key_or_prefix_key_in_dict(renamed_pt_tuple_key):
+        return renamed_pt_tuple_key, pt_tensor
+
+    # conv layer
+    renamed_pt_tuple_key = pt_tuple_key[:-1] + ("kernel",)
+    if pt_tuple_key[-1] == "weight" and pt_tensor.ndim == 4 and not is_key_or_prefix_key_in_dict(pt_tuple_key):
+        pt_tensor = pt_tensor.transpose(2, 3, 1, 0)
+        return renamed_pt_tuple_key, pt_tensor
+
+    # linear layer
+    renamed_pt_tuple_key = pt_tuple_key[:-1] + ("kernel",)
+    if pt_tuple_key[-1] == "weight" and not is_key_or_prefix_key_in_dict(pt_tuple_key):
+        pt_tensor = pt_tensor.T
+        return renamed_pt_tuple_key, pt_tensor
+
+    # old PyTorch layer norm weight
+    renamed_pt_tuple_key = pt_tuple_key[:-1] + ("weight",)
+    if pt_tuple_key[-1] == "gamma":
+        return renamed_pt_tuple_key, pt_tensor
+
+    # old PyTorch layer norm bias
+    renamed_pt_tuple_key = pt_tuple_key[:-1] + ("bias",)
     if pt_tuple_key[-1] == "beta":
-        renamed_pt_tuple_key = pt_tuple_key[:-1] + ("bias",)
         return renamed_pt_tuple_key, pt_tensor
 
     return pt_tuple_key, pt_tensor
