@@ -14,8 +14,6 @@
 
 import unittest
 
-import numpy as np
-
 from transformers import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -26,7 +24,6 @@ from transformers.testing_utils import is_pipeline_test, nested_simplify, requir
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
-from .test_pipelines_common import MonoInputPipelineCommonMixin
 
 @is_pipeline_test
 class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
