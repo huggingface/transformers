@@ -224,7 +224,7 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
                 `What are input IDs? <../glossary.html#input-ids>`__
 
         Returns:
-            text_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The text embeddings
+            text_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The text embeddings
             obtained by applying the projection layer to the pooled output of text model.
         """
         if position_ids is None:
@@ -273,7 +273,7 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
                 :meth:`transformers.ImageFeatureExtractionMixin.__call__` for details.
 
         Returns:
-            image_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The image embeddings
+            image_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The image embeddings
             obtained by applying the projection layer to the pooled output of vision model.
         """
 
