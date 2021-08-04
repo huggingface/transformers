@@ -52,7 +52,7 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_gptj import GPTJConfig
-
+from einops import repeat, rearrange
 
 logger = logging.get_logger(__name__)
 
