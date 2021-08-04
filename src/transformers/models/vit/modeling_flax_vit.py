@@ -581,7 +581,7 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
 
     Example::
 
-        >>> from transformers import FlaxViTFeatureExtractor, ViTForImageClassification
+        >>> from transformers import ViTFeatureExtractor, FlaxViTForImageClassification
         >>> from PIL import Image
         >>> import jax
         >>> import requests
@@ -595,9 +595,10 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
         >>> inputs = feature_extractor(images=image, return_tensors="jax")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
+
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = jax.numpy.argmax(logits, axis=-1)
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx.item()])
 """
 
 overwrite_call_docstring(FlaxViTForImageClassification, FLAX_VISION_CLASSIF_DOCSTRING)
