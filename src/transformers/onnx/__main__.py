@@ -26,10 +26,10 @@ def main():
     parser = ArgumentParser("Hugging Face ONNX Exporter tool")
     parser.add_argument("-m", "--model", type=str, required=True, help="Model's name of path on disk to load.")
     parser.add_argument(
-        "--features",
-        choices=["default"],
+        "--feature",
+        choices=list(FeaturesManager.AVAILABLE_FEATURES),
         default="default",
-        help="Export the model with some additional features.",
+        help="Export the model with some additional feature.",
     )
     parser.add_argument(
         "--opset", type=int, default=12, help="ONNX opset version to export the model with (default 12)."
@@ -48,8 +48,8 @@ def main():
 
     # Allocate the model
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = FeaturesManager.get_model_from_features(args.features, args.model)
-    model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, features=args.features)
+    model = FeaturesManager.get_model_from_feature(args.feature, args.model)
+    model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
     onnx_config = model_onnx_config(model.config)
 
     # Ensure the requested opset is sufficient

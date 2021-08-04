@@ -138,6 +138,8 @@ def validate_model_outputs(
 
     logger.info("Validating ONNX model...")
 
+    # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
+    # dynamic input shapes.
     reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
 
     # Create ONNX Runtime session
@@ -150,6 +152,10 @@ def validate_model_outputs(
 
     # We flatten potential collection of outputs (i.e. past_keys) to a flat structure
     for name, value in ref_outputs.items():
+        # Overwriting the output name as "present" since it is the name used for the ONNX ouputs
+        # ("past_key_values" being taken for the ONNX inputs)
+        if name == "past_key_values":
+            name = "present"
         if isinstance(value, (list, tuple)):
             value = flatten_output_collection_property(name, value)
             ref_outputs_dict.update(value)

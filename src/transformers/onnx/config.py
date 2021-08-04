@@ -19,7 +19,6 @@ from typing import Any, Callable, List, Mapping, Optional
 from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
 
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
-from .features import FeaturesManager
 
 
 DEFAULT_ONNX_OPSET = 11
@@ -45,11 +44,27 @@ class OnnxConfig(ABC):
     DEFAULT_FIXED_BATCH = 2
     DEFAULT_FIXED_SEQUENCE = 8
 
+    _TASKS_TO_COMMON_OUTPUTS = {
+        "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
+        "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
+        "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "multiple-choice": OrderedDict({"logits": {0: "batch"}}),
+        "question-answering": OrderedDict(
+            {
+                "start_logits": {0: "batch", 1: "sequence"},
+                "end_logits": {0: "batch", 1: "sequence"},
+            }
+        ),
+    }
+
     def __init__(self, config: PretrainedConfig, task: str = "default", patching_specs: List[PatchingSpec] = None):
         self._config = config
 
-        if task not in FeaturesManager._TASKS_TO_COMMON_OUTPUTS:
-            raise ValueError(f"{task} is not a supported task, supported tasks: {FeaturesManager._TASKS_TO_COMMON_OUTPUTS.keys()}")
+        if task not in self._TASKS_TO_COMMON_OUTPUTS:
+            raise ValueError(
+                f"{task} is not a supported task, supported tasks: {self._TASKS_TO_COMMON_OUTPUTS.keys()}"
+            )
         self.task = task
 
         self._patching_specs = []
@@ -91,7 +106,7 @@ class OnnxConfig(ABC):
         Returns:
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
-        return FeaturesManager._TASKS_TO_COMMON_OUTPUTS[self.task]
+        return self._TASKS_TO_COMMON_OUTPUTS[self.task]
 
     @property
     def values_override(self) -> Optional[Mapping[str, Any]]:
