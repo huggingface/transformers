@@ -63,6 +63,7 @@ from ..rag.tokenization_rag import RagTokenizer
 from ..retribert.tokenization_retribert import RetriBertTokenizer
 from ..roberta.tokenization_roberta import RobertaTokenizer
 from ..roformer.tokenization_roformer import RoFormerTokenizer
+from ..splinter.tokenization_splinter import SplinterTokenizer
 from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
 from ..tapas.tokenization_tapas import TapasTokenizer
 from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
@@ -114,6 +115,7 @@ from .configuration_auto import (
     RobertaConfig,
     RoFormerConfig,
     Speech2TextConfig,
+    SplinterConfig,
     SqueezeBertConfig,
     T5Config,
     TapasConfig,
@@ -200,6 +202,7 @@ if is_tokenizers_available():
     from ..retribert.tokenization_retribert_fast import RetriBertTokenizerFast
     from ..roberta.tokenization_roberta_fast import RobertaTokenizerFast
     from ..roformer.tokenization_roformer_fast import RoFormerTokenizerFast
+    from ..splinter.tokenization_splinter_fast import SplinterTokenizerFast
     from ..squeezebert.tokenization_squeezebert_fast import SqueezeBertTokenizerFast
     from ..t5.tokenization_t5_fast import T5TokenizerFast
     from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
@@ -271,6 +274,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (LxmertConfig, (LxmertTokenizer, LxmertTokenizerFast)),
         (LayoutLMConfig, (LayoutLMTokenizer, LayoutLMTokenizerFast)),
         (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
+        (SplinterConfig, (SplinterTokenizer, SplinterTokenizerFast)),
         (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
