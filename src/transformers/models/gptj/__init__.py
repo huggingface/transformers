@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,53 +17,33 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_torch_available
 
 
 _import_structure = {
     "configuration_gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
-    "tokenization_gptj": ["GPTJTokenizer"],
 }
-
-if is_tokenizers_available():
-    _import_structure["tokenization_gptj_fast"] = ["GPTJTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_gptj"] = [
         "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTJForCausalLM",
-        "GPTJForMaskedLM",
-        "GPTJForMultipleChoice",
-        "GPTJForQuestionAnswering",
-        "GPTJForSequenceClassification",
-        "GPTJForTokenClassification",
         "GPTJLayer",
         "GPTJModel",
         "GPTJPreTrainedModel",
-        "load_tf_weights_in_gptj",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
-    from .tokenization_gptj import GPTJTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_gptj_fast import GPTJTokenizerFast
 
     if is_torch_available():
         from .modeling_gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTJForCausalLM,
-            GPTJForMaskedLM,
-            GPTJForMultipleChoice,
-            GPTJForQuestionAnswering,
-            GPTJForSequenceClassification,
-            GPTJForTokenClassification,
             GPTJLayer,
             GPTJModel,
             GPTJPreTrainedModel,
-            load_tf_weights_in_gptj,
         )
 
 
