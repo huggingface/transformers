@@ -28,14 +28,13 @@ GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class GPTJConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.GPTJModel`.
-    It is used to instantiate an GPTJ model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the GPTJ `EleutherAI/gptj-6B <https://huggingface.co/EleutherAI/gptj-6B>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.GPTJModel`. It is used to
+    instantiate an GPTJ model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the GPTJ `EleutherAI/gptj-6B
+    <https://huggingface.co/EleutherAI/gptj-6B>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
@@ -52,15 +51,15 @@ class GPTJConfig(PretrainedConfig):
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.GPTJModel` or
             :class:`~transformers.TFGPTJModel`.
@@ -73,6 +72,7 @@ class GPTJConfig(PretrainedConfig):
             relevant if ``config.is_decoder=True``.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
+
         Example::
 
         >>> from transformers import GPTJModel, GPTJConfig
@@ -88,7 +88,6 @@ class GPTJConfig(PretrainedConfig):
     """
     model_type = "gptj"
 
-    
     def __init__(
         self,
         vocab_size=50257,
@@ -100,9 +99,9 @@ class GPTJConfig(PretrainedConfig):
         rotary_dim=64,
         n_inner=None,
         activation_function="gelu",
-        resid_pdrop=0.1,
-        embd_pdrop=0.1,
-        attn_pdrop=0.1,
+        resid_pdrop=0.0,
+        embd_pdrop=0.0,
+        attn_pdrop=0.0,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         summary_type="cls_index",
@@ -160,4 +159,3 @@ class GPTJConfig(PretrainedConfig):
     @property
     def num_hidden_layers(self):
         return self.n_layer
-

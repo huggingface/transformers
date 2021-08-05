@@ -133,7 +133,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig", "GPTJTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -201,6 +200,7 @@ _import_structure = {
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
+    "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig", "GPTJTokenizer"],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
@@ -493,21 +493,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.gptj"].extend(
-        [
-            "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GPTJForMaskedLM",
-            "GPTJForCausalLM",
-            "GPTJForMultipleChoice",
-            "GPTJForQuestionAnswering",
-            "GPTJForSequenceClassification",
-            "GPTJForTokenClassification",
-            "GPTJLayer",
-            "GPTJModel",
-            "GPTJPreTrainedModel",
-            "load_tf_weights_in_gptj",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -522,7 +507,6 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
-
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -567,6 +551,7 @@ if is_torch_available():
             "PretrainedBartModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -794,6 +779,21 @@ if is_torch_available():
             "GPTNeoModel",
             "GPTNeoPreTrainedModel",
             "load_tf_weights_in_gpt_neo",
+        ]
+    )
+    _import_structure["models.gptj"].extend(
+        [
+            "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTJForCausalLM",
+            "GPTJForMaskedLM",
+            "GPTJForMultipleChoice",
+            "GPTJForQuestionAnswering",
+            "GPTJForSequenceClassification",
+            "GPTJForTokenClassification",
+            "GPTJLayer",
+            "GPTJModel",
+            "GPTJPreTrainedModel",
+            "load_tf_weights_in_gptj",
         ]
     )
     _import_structure["models.hubert"].extend(

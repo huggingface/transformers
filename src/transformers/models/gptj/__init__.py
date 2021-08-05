@@ -31,8 +31,8 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_gptj"] = [
         "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GPTJForMaskedLM",
         "GPTJForCausalLM",
+        "GPTJForMaskedLM",
         "GPTJForMultipleChoice",
         "GPTJForQuestionAnswering",
         "GPTJForSequenceClassification",
