@@ -114,10 +114,10 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     random_flax_state_dict = flatten_dict(flax_model.params)
     flax_state_dict = {}
 
-    load_head_into_base = (model_prefix not in flax_model.params) and (
+    load_model_with_head_into_base_model = (model_prefix not in flax_model.params) and (
         model_prefix in set([k.split(".")[0] for k in pt_state_dict.keys()])
     )
-    load_base_into_head = (model_prefix in flax_model.params) and (
+    load_base_model_into_model_with_head = (model_prefix in flax_model.params) and (
         model_prefix not in set([k.split(".")[0] for k in pt_state_dict.keys()])
     )
 
@@ -128,7 +128,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
 
         # remove base model prefix if necessary
         has_base_model_prefix = pt_tuple_key[0] == model_prefix
-        if load_head_into_base and has_base_model_prefix:
+        if load_model_with_head_into_base_model and has_base_model_prefix:
             pt_tuple_key = pt_tuple_key[1:]
 
         # Correctly rename weight parameters
@@ -138,7 +138,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
 
         # add model prefix if necessary
         require_base_model_prefix = (model_prefix,) + flax_key in random_flax_state_dict
-        if load_base_into_head and require_base_model_prefix:
+        if load_base_model_into_model_with_head and require_base_model_prefix:
             flax_key = (model_prefix,) + flax_key
 
         if flax_key in random_flax_state_dict:
@@ -192,10 +192,10 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     flax_state_dict = flatten_dict(flax_state)
     pt_model_dict = pt_model.state_dict()
 
-    load_head_into_base = (pt_model.base_model_prefix in flax_state) and (
+    load_model_with_head_into_base_model = (pt_model.base_model_prefix in flax_state) and (
         pt_model.base_model_prefix not in set([k.split(".")[0] for k in pt_model_dict.keys()])
     )
-    load_base_into_head = (pt_model.base_model_prefix not in flax_state) and (
+    load_base_model_into_model_with_head = (pt_model.base_model_prefix not in flax_state) and (
         pt_model.base_model_prefix in set([k.split(".")[0] for k in pt_model_dict.keys()])
     )
 
@@ -208,9 +208,9 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         require_base_model_prefix = ".".join((pt_model.base_model_prefix,) + flax_key_tuple) in pt_model_dict
 
         # adapt flax_key to prepare for loading from/to base model only
-        if load_head_into_base and has_base_model_prefix:
+        if load_model_with_head_into_base_model and has_base_model_prefix:
             flax_key_tuple = flax_key_tuple[1:]
-        elif load_base_into_head and require_base_model_prefix:
+        elif load_base_model_into_model_with_head and require_base_model_prefix:
             flax_key_tuple = (pt_model.base_model_prefix,) + flax_key_tuple
 
         # rename flax weights to PyTorch format
