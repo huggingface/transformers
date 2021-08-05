@@ -191,6 +191,7 @@ CONFIG_MAPPING = OrderedDict(
         ("gptj", GPTJConfig),
         ("gpt_neo", GPTNeoConfig),
         ("hubert", HubertConfig),
+        ("ibert", IBertConfig),
         ("layoutlm", LayoutLMConfig),
         ("led", LEDConfig),
         ("longformer", LongformerConfig),
