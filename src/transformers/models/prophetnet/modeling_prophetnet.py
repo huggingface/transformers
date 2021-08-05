@@ -42,6 +42,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ProphenetConfig"
 _TOKENIZER_FOR_DOC = "ProphetNetTokenizer"
+_CHECKPOINT_FOR_DOC = "microsoft/prophetnet-large-uncased"
 
 PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/prophetnet-large-uncased",

@@ -34,6 +34,7 @@ from .configuration_hubert import HubertConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "HubertConfig"
+_CHECKPOINT_FOR_DOC = "facebook/hubert-base-ls960"
 
 HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/hubert-base-ls960",

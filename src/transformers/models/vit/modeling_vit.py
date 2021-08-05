@@ -34,9 +34,10 @@ from .configuration_vit import ViTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ViTConfig"
+_CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224"
 
 VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nielsr/vit-base-patch16-224",
+    "google/vit-base-patch16-224",
     # See all ViT models at https://huggingface.co/models?filter=vit
 ]
 
@@ -451,7 +452,7 @@ class ViTModel(ViTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -554,7 +555,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

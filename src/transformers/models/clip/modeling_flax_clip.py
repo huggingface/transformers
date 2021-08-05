@@ -19,7 +19,6 @@ import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import jaxlib.xla_extension as jax_xla
 from flax.core.frozen_dict import FrozenDict
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
@@ -156,16 +155,16 @@ CLIP_INPUTS_DOCSTRING = r"""
 class FlaxCLIPOutput(ModelOutput):
     """
     Args:
-        logits_per_image:(:obj:`jax_xla.DeviceArray` of shape :obj:`(image_batch_size, text_batch_size)`):
+        logits_per_image:(:obj:`jnp.ndarray` of shape :obj:`(image_batch_size, text_batch_size)`):
             The scaled dot product scores between :obj:`image_embeds` and :obj:`text_embeds`. This represents the
             image-text similarity scores.
-        logits_per_text:(:obj:`jax_xla.DeviceArray` of shape :obj:`(text_batch_size, image_batch_size)`):
+        logits_per_text:(:obj:`jnp.ndarray` of shape :obj:`(text_batch_size, image_batch_size)`):
             The scaled dot product scores between :obj:`text_embeds` and :obj:`image_embeds`. This represents the
             text-image similarity scores.
-        text_embeds(:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`):
+        text_embeds(:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of
             :class:`~transformers.FlaxCLIPTextModel`.
-        image_embeds(:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`):
+        image_embeds(:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
             :class:`~transformers.FlaxCLIPVisionModel`.
         text_model_output(:obj:`FlaxBaseModelOutputWithPooling`):
@@ -174,10 +173,10 @@ class FlaxCLIPOutput(ModelOutput):
             The output of the :class:`~transformers.FlaxCLIPVisionModel`.
     """
 
-    logits_per_image: jax_xla.DeviceArray = None
-    logits_per_text: jax_xla.DeviceArray = None
-    text_embeds: jax_xla.DeviceArray = None
-    image_embeds: jax_xla.DeviceArray = None
+    logits_per_image: jnp.ndarray = None
+    logits_per_text: jnp.ndarray = None
+    text_embeds: jnp.ndarray = None
+    image_embeds: jnp.ndarray = None
     text_model_output: FlaxBaseModelOutputWithPooling = None
     vision_model_output: FlaxBaseModelOutputWithPooling = None
 
@@ -801,8 +800,8 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
                 `What are input IDs? <../glossary.html#input-ids>`__
 
         Returns:
-            text_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The text embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPTextModel`.
+            text_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPTextModel`.
 
         Examples::
 
@@ -855,9 +854,8 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
                 :meth:`transformers.CLIPFeatureExtractor.__call__` for details.
 
         Returns:
-            image_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The image embeddings
-            obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.FlaxCLIPVisionModel`
+            image_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The image embeddings obtained
+            by applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPVisionModel`
 
         Examples::
 
@@ -943,7 +941,7 @@ FLAX_CLIP_TEXT_MODEL_DOCSTRING = """
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooled_output # pooled (EOS token) states
+        >>> pooler_output = outputs.pooler_output # pooled (EOS token) states
 """
 
 overwrite_call_docstring(FlaxCLIPTextModel, CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_DOCSTRING)
@@ -999,7 +997,7 @@ FLAX_CLIP_VISION_MODEL_DOCSTRING = """
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooled_output # pooled CLS states
+        >>> pooler_output = outputs.pooler_output # pooled CLS states
 """
 
 overwrite_call_docstring(FlaxCLIPVisionModel, CLIP_VISION_INPUTS_DOCSTRING + FLAX_CLIP_VISION_MODEL_DOCSTRING)
