@@ -442,7 +442,7 @@ class GPTJModel(GPTJPreTrainedModel):
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
         if past_key_values is None:
-            past_key_values = tuple([None] * len(self.layers))
+            past_key_values = tuple([None] * len(self.blocks))
 
         # GPTJAttention mask.
         if attention_mask is not None:
