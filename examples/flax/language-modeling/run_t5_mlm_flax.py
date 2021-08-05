@@ -531,9 +531,6 @@ if __name__ == "__main__":
     def tokenize_function(examples):
         return tokenizer(examples[text_column_name], return_attention_mask=False)
 
-    datasets["train"] = datasets["train"].select(range(20000))
-    datasets["validation"] = datasets["validation"].select(range(4000))
-
     tokenized_datasets = datasets.map(
         tokenize_function,
         batched=True,
