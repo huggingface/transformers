@@ -588,6 +588,41 @@ class PretrainedBartModel:
         requires_backends(cls, ["torch"])
 
 
+BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BeitForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BeitForMaskedImageModeling:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class BeitModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class BeitPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2790,6 +2825,90 @@ class ReformerPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
+
+REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class RemBertForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class RemBertForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class RemBertForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class RemBertForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class RemBertForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class RemBertForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class RemBertLayer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RemBertModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class RemBertPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+def load_tf_weights_in_rembert(*args, **kwargs):
+    requires_backends(load_tf_weights_in_rembert, ["torch"])
 
 
 RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None

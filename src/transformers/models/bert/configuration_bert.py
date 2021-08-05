@@ -104,6 +104,8 @@ class BertConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
+        classifier_dropout (:obj:`float`, `optional`):
+            The dropout ratio for the classification head.
 
     Examples::
 
@@ -138,6 +140,7 @@ class BertConfig(PretrainedConfig):
         gradient_checkpointing=False,
         position_embedding_type="absolute",
         use_cache=True,
+        classifier_dropout=None,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -157,6 +160,7 @@ class BertConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
+        self.classifier_dropout = classifier_dropout
 
 
 class BertOnnxConfig(OnnxConfig):

@@ -642,6 +642,24 @@ class FlaxMBartPreTrainedModel:
         requires_backends(cls, ["flax"])
 
 
+class FlaxMT5ForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxMT5Model:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
 class FlaxRobertaForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
