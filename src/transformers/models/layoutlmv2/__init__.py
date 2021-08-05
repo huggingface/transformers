@@ -26,6 +26,9 @@ _import_structure = {
     "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
 }
 
+if is_tokenizers_available():
+    _import_structure["tokenization_layoutlmv2_fast"] = ["LayoutLMv2TokenizerFast"]
+
 if is_vision_available():
     _import_structure["feature_extraction_layoutlmv2"] = ["LayoutLMv2FeatureExtractor"]
     _import_structure["processing_layoutlmv2"] = ["LayoutLMv2Processor"]
@@ -44,6 +47,9 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
     from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
 
     if is_vision_available():
         from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
