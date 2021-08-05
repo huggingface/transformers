@@ -57,6 +57,11 @@ from transformers.models.t5.modeling_flax_t5 import shift_tokens_right
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+JAX_CPU = jax.devices("cpu")[0]
+
+
+def to_cpu_device(device_array):
+    return jax.device_put(device_array, JAX_CPU)  # return DeviceArray, hopefully non-blocking
 
 
 @dataclass
@@ -353,7 +358,8 @@ class FlaxDataCollatorForT5MLM:
             np.random.shuffle(mask_indices)
             first_in_segment = np.pad(mask_indices, [[1, 0]])
             segment_id = np.cumsum(first_in_segment)
-            segment_length = np.asarray(jax.ops.segment_sum(np.ones_like(segment_id), segment_id))
+            # count length of sub segments assuming that list is sorted
+            _, segment_length = np.unique(segment_id, return_counts=True)
             return segment_length
 
         noise_span_lengths = _random_segmentation(num_noise_tokens, num_noise_spans)
@@ -529,6 +535,9 @@ if __name__ == "__main__":
     # Since we make sure that all sequences are of the same length, no attention_mask is needed.
     def tokenize_function(examples):
         return tokenizer(examples[text_column_name], return_attention_mask=False)
+
+    datasets["train"] = datasets["train"].select(range(20000))
+    datasets["validation"] = datasets["validation"].select(range(4000))
 
     tokenized_datasets = datasets.map(
         tokenize_function,
@@ -720,7 +729,7 @@ if __name__ == "__main__":
     state = jax_utils.replicate(state)
 
     train_time = 0
-    epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
+    epochs = tqdm(range(num_epochs), desc=f"Epoch ... ", position=0)
     for epoch in epochs:
         # ======================== Training ================================
         train_start = time.time()
