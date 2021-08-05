@@ -304,3 +304,15 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         # Generate dummy inputs according to compute batch and sequence
         dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
         return OrderedDict(dict(tokenizer(dummy_input, return_tensors=framework)))
+
+    @staticmethod
+    def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
+        if name in ["present", "past_key_values"]:
+            flatten_output = {}
+            for idx, t in enumerate(field):
+                flatten_output[f"{name}.{idx}.key"] = t[0]
+                flatten_output[f"{name}.{idx}.value"] = t[1]
+
+            return flatten_output
+
+        return super().flatten_output_collection_property(name, field)
