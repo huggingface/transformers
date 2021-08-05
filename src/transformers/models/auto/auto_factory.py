@@ -417,7 +417,7 @@ def auto_class_update(cls, checkpoint_for_example="bert-base-cased", head_doc=""
     from_config_docstring = from_config_docstring.replace("BaseAutoModelClass", name)
     from_config_docstring = from_config_docstring.replace("checkpoint_placeholder", checkpoint_for_example)
     from_config.__doc__ = from_config_docstring
-    from_config = replace_list_option_in_docstrings(model_mapping, use_model_types=False)(from_config)
+    from_config = replace_list_option_in_docstrings(model_mapping._model_mapping, use_model_types=False)(from_config)
     cls.from_config = classmethod(from_config)
 
     if name.startswith("TF"):
@@ -433,7 +433,7 @@ def auto_class_update(cls, checkpoint_for_example="bert-base-cased", head_doc=""
     shortcut = checkpoint_for_example.split("/")[-1].split("-")[0]
     from_pretrained_docstring = from_pretrained_docstring.replace("shortcut_placeholder", shortcut)
     from_pretrained.__doc__ = from_pretrained_docstring
-    from_pretrained = replace_list_option_in_docstrings(model_mapping)(from_pretrained)
+    from_pretrained = replace_list_option_in_docstrings(model_mapping._model_mapping)(from_pretrained)
     cls.from_pretrained = classmethod(from_pretrained)
     return cls
 
