@@ -37,12 +37,7 @@ if TYPE_CHECKING:
     from .configuration_gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
 
     if is_torch_available():
-        from .modeling_gptj import (
-            GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTJForCausalLM,
-            GPTJModel,
-            GPTJPreTrainedModel,
-        )
+        from .modeling_gptj import GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST, GPTJForCausalLM, GPTJModel, GPTJPreTrainedModel
 
 
 else:

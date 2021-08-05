@@ -88,9 +88,6 @@ class GPTJAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
 
         self.rotary_dim = config.rotary_dim
-        sin, cos = fixed_pos_embedding(dim=self.rotary_dim, seq_len=max_positions)
-        self.register_buffer("sin", sin[None, :, None, :])
-        self.register_buffer("cos", cos[None, :, None, :])
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
