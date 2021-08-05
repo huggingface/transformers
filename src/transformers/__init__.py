@@ -807,10 +807,8 @@ if is_torch_available():
         [
             "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTJForCausalLM",
-            "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
-            "load_tf_weights_in_gptj",
         ]
     )
     _import_structure["models.gpt_neo"].extend(
@@ -2420,10 +2418,8 @@ if TYPE_CHECKING:
         from .models.gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTJForCausalLM,
-            GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
-            load_tf_weights_in_gptj,
         )
         from .models.gpt_neo import (
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
