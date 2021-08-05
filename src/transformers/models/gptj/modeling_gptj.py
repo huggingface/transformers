@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "gpt2"
 _CONFIG_FOR_DOC = "GPTJConfig"
-_TOKENIZER_FOR_DOC = "GPTJTokenizer"
+_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gpt2",
@@ -44,22 +44,22 @@ GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
 ]
 
-def fixed_pos_embedding(dim=None, seq_len=None):
-    inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(seq_len), inv_freq).float()
+
+def fixed_pos_embedding(tensor, dim, seq_len):
+    inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
+    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(seq_len), inv_freq).to(tensor)
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
-def rotate_every_two(x):
-    shape = x.shape
-    x1 = x[:, :, :, ::2]
-    x2 = x[:, :, :, 1::2]
-    x = torch.stack((-x2, x1), axis=-1).reshape(shape)
-    return x
 
-def apply_rotary_pos_emb(x, sin, cos, offset=0):
-    sin = torch.repeat_interleave(sin[:, offset:x.shape[1]+offset, ...], 2, dim=-1)
-    cos = torch.repeat_interleave(cos[:, offset:x.shape[1]+offset, ...], 2, dim=-1)
-    return (x * cos) + (rotate_every_two(x) * sin)
+def rotate_every_two(tensor):
+    rotate_half_tensor = torch.stack((tensor[..., 1::2], tensor[..., ::2]), axis=-1).reshape_as(tensor)
+    return rotate_half_tensor
+
+
+def apply_rotary_pos_emb(tensor, sin, cos, offset=0):
+    sin = torch.repeat_interleave(sin[None, offset : tensor.shape[1] + offset, None, :], 2, dim=-1)
+    cos = torch.repeat_interleave(cos[None, offset : tensor.shape[1] + offset, None, :], 2, dim=-1)
+    return (tensor * cos) + (rotate_every_two(tensor) * sin)
 
 
 class GPTJAttention(nn.Module):
@@ -116,6 +116,11 @@ class GPTJAttention(nn.Module):
 
         attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
 
+        # Apply causal mask
+        query_length, key_length = query.size(-2), key.size(-2)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+        attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
+
         if attention_mask is not None:
             # Apply the attention mask
             attn_weights = attn_weights + attention_mask
@@ -136,7 +141,7 @@ class GPTJAttention(nn.Module):
         Splits hidden_size dim into attn_head_size and num_heads
         """
         new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
-        return tensor.view(*new_shape) # (batch, seq_length, head, head_features)
+        return tensor.view(*new_shape)  # (batch, seq_length, head, head_features)
 
     def _merge_heads(self, tensor, num_heads, attn_head_size):
         """
@@ -145,9 +150,25 @@ class GPTJAttention(nn.Module):
         tensor = tensor.permute(0, 2, 1, 3).contiguous()
         new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
         return tensor.view(new_shape)
-    
+
     def _transpose_for_scores(self, tensor):
         return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+
+    @staticmethod
+    def apply_rotary_position_embeddings(query, key, rotary_dim, seq_len, past_len):
+        k_rot = key[..., :rotary_dim]
+        k_pass = key[..., rotary_dim:]
+
+        q_rot = query[..., :rotary_dim]
+        q_pass = query[..., rotary_dim:]
+
+        sin, cos = fixed_pos_embedding(k_rot, rotary_dim, seq_len)
+        k_rot = apply_rotary_pos_emb(k_rot, sin, cos, offset=past_len)
+        q_rot = apply_rotary_pos_emb(q_rot, sin, cos, offset=past_len)
+
+        key = torch.cat([k_rot, k_pass], dim=-1)
+        query = torch.cat([q_rot, q_pass], dim=-1)
+        return query, key
 
     def forward(
         self,
@@ -165,24 +186,15 @@ class GPTJAttention(nn.Module):
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
-        
+
         past_len = 0
         if layer_past is not None:
             past_len = layer_past[0].shape[-2]
+        seq_len = query.shape[1] + past_len
 
         # apply rotary embeddings
-        k_rot = key[..., :self.rotary_dim]
-        k_pass = key[..., self.rotary_dim:]
+        query, key = self.apply_rotary_position_embeddings(query, key, self.rotary_dim, seq_len, past_len)
 
-        q_rot = query[..., :self.rotary_dim]
-        q_pass = query[..., self.rotary_dim:]
-        
-        k_rot = apply_rotary_pos_emb(k_rot, self.sin, self.cos, offset=past_len)
-        q_rot = apply_rotary_pos_emb(q_rot, self.sin, self.cos, offset=past_len)
-
-        key = torch.cat([k_rot, k_pass], dim=-1)
-        query = torch.cat([q_rot, q_pass], dim=-1)
-        
         key = self._transpose_for_scores(key)
         query = self._transpose_for_scores(query)
         value = self._transpose_for_scores(value)
@@ -243,7 +255,7 @@ class GPTJLayer(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-    ):  
+    ):
         residual = hidden_states
         hidden_states = self.layernorm(hidden_states)
         attn_outputs = self.attn(
@@ -428,7 +440,7 @@ class GPTJModel(GPTJPreTrainedModel):
         past_key_values=None,
         attention_mask=None,
         token_type_ids=None,
-        position_ids=None, 
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         use_cache=None,
@@ -663,7 +675,8 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
-        lm_logits = self.lm_head(hidden_states)
+        # always keep logits in fp32
+        lm_logits = self.lm_head(hidden_states).to(torch.float32)
 
         loss = None
         if labels is not None:
