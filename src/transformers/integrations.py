@@ -401,6 +401,7 @@ class TensorBoardCallback(TrainerCallback):
     def on_train_end(self, args, state, control, **kwargs):
         if self.tb_writer:
             self.tb_writer.close()
+            self.tb_writer = None
 
 
 class WandbCallback(TrainerCallback):
@@ -600,7 +601,7 @@ class AzureMLCallback(TrainerCallback):
             self.azureml_run = Run.get_context()
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        if self.azureml_run:
+        if self.azureml_run and state.is_world_process_zero:
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
                     self.azureml_run.log(k, v, description=k)
