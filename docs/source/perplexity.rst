@@ -96,7 +96,7 @@ dataset in memory.
 
 .. code-block:: python
 
-    from nlp import load_dataset
+    from datasets import load_dataset
     test = load_dataset('wikitext', 'wikitext-2-raw-v1', split='test')
     encodings = tokenizer('\n\n'.join(test['text']), return_tensors='pt')
 
