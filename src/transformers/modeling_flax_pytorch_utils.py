@@ -25,13 +25,9 @@ import jax.numpy as jnp
 import transformers
 from flax.serialization import from_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
-from transformers.file_utils import is_torch_available
 
 from .utils import logging
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -65,10 +61,10 @@ def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_pa
 
 def rename_key_and_reshape_tensor(
     pt_tuple_key: Tuple[str],
-    pt_tensor: torch.FloatTensor,
+    pt_tensor: np.ndarray,
     random_flax_state_dict: Dict[str, jnp.ndarray],
     model_prefix: str,
-) -> (Tuple[str], torch.FloatTensor):
+) -> (Tuple[str], np.ndarray):
     """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
 
     def is_key_or_prefix_key_in_dict(key: Tuple[str]) -> bool:
@@ -128,6 +124,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # Need to change some parameters name to match Flax names
     for pt_key, pt_tensor in pt_state_dict.items():
 
+        pt_tensor = pt_tensor.numpy()
         pt_tuple_key = tuple(pt_key.split("."))
 
         # remove base model prefix if necessary
