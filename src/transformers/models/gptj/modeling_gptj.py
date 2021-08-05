@@ -46,6 +46,7 @@ def fixed_pos_embedding(tensor, dim, seq_len):
     sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(seq_len), inv_freq).to(tensor)
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
+
 class GPTJAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -129,8 +130,8 @@ class GPTJAttention(nn.Module):
         q_pass = query[..., rotary_dim:]
 
         sin, cos = fixed_pos_embedding(k_rot, rotary_dim, seq_len)
-        sin = torch.repeat_interleave(sin[None, past_len : seq_len, None, :], 2, dim=-1)
-        cos = torch.repeat_interleave(cos[None, past_len : seq_len, None, :], 2, dim=-1)
+        sin = torch.repeat_interleave(sin[None, past_len:seq_len, None, :], 2, dim=-1)
+        cos = torch.repeat_interleave(cos[None, past_len:seq_len, None, :], 2, dim=-1)
 
         rotate_half_query = torch.stack((q_rot[..., 1::2], q_rot[..., ::2]), axis=-1)
         rotate_half_query = rotate_half_query.reshape_as(q_rot)

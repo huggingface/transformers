@@ -42,6 +42,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
+        ("GPTJConfig", "GPTJForCausalLM"),
         ("RemBertConfig", "RemBertForCausalLM"),
         ("RoFormerConfig", "RoFormerForCausalLM"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForCausalLM"),
@@ -262,6 +263,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_MAPPING_NAMES = OrderedDict(
     [
+        ("GPTJConfig", "GPTJModel"),
         ("BeitConfig", "BeitModel"),
         ("RemBertConfig", "RemBertModel"),
         ("VisualBertConfig", "VisualBertModel"),
