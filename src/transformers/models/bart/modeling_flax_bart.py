@@ -19,6 +19,8 @@ import random
 from functools import partial
 from typing import Callable, Optional, Tuple
 
+import numpy as np
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -28,7 +30,7 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, replace_return_docstrings
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -212,15 +214,15 @@ BART_DECODE_INPUTS_DOCSTRING = r"""
 """
 
 
-def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
+def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
     """
     Shift input ids one token to the right.
     """
-    shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
-    shifted_input_ids = jax.ops.index_update(shifted_input_ids, (..., 0), decoder_start_token_id)
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    shifted_input_ids = np.zeros_like(input_ids)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1]
+    shifted_input_ids[:, 0] = decoder_start_token_id
 
+    shifted_input_ids = np.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
     return shifted_input_ids
 
 
@@ -229,7 +231,6 @@ class FlaxBartAttention(nn.Module):
     embed_dim: int
     num_heads: int
     dropout: float = 0.0
-    is_decoder: bool = False
     causal: bool = False
     bias: bool = True
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -510,7 +511,6 @@ class FlaxBartDecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
-            is_decoder=True,
             causal=True,
         )
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -523,7 +523,6 @@ class FlaxBartDecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
-            is_decoder=True,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.fc1 = nn.Dense(
@@ -911,7 +910,7 @@ class FlaxBartModule(nn.Module):
         )
 
 
-class FlaxBartPretrainedModel(FlaxPreTrainedModel):
+class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
     config_class = BartConfig
     base_model_prefix: str = "model"
     module_class: nn.Module = None
@@ -1168,6 +1167,7 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -1232,7 +1232,7 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
     "The bare Bart Model transformer outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
 )
-class FlaxBartModel(FlaxBartPretrainedModel):
+class FlaxBartModel(FlaxBartPreTrainedModel):
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     module_class = FlaxBartModule
@@ -1318,7 +1318,7 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
 )
-class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
+class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
     module_class = FlaxBartForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
 
@@ -1521,7 +1521,7 @@ FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
         >>> input_ids = tokenizer([TXT], return_tensors='jax')['input_ids']
         >>> logits = model(input_ids).logits
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero()[0].item()
         >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
         >>> values, predictions = jax.lax.top_k(probs)
 
@@ -1623,7 +1623,7 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
     """,
     BART_START_DOCSTRING,
 )
-class FlaxBartForSequenceClassification(FlaxBartPretrainedModel):
+class FlaxBartForSequenceClassification(FlaxBartPreTrainedModel):
     module_class = FlaxBartForSequenceClassificationModule
     dtype = jnp.float32
 
@@ -1710,7 +1710,7 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
     """,
     BART_START_DOCSTRING,
 )
-class FlaxBartForQuestionAnswering(FlaxBartPretrainedModel):
+class FlaxBartForQuestionAnswering(FlaxBartPreTrainedModel):
     module_class = FlaxBartForQuestionAnsweringModule
     dtype = jnp.float32
 

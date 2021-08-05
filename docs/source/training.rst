@@ -152,7 +152,7 @@ To fine-tune our model, we just need to call
     trainer.train()
 
 which will start a training that you can follow with a progress bar, which should take a couple of minutes to complete
-(as long as you hav access to a GPU). It won't actually tell you anything useful about how well (or badly) your model
+(as long as you have access to a GPU). It won't actually tell you anything useful about how well (or badly) your model
 is performing however as by default, there is no evaluation during training, and we didn't tell the
 :class:`~transformers.Trainer` to compute any metrics. Let's have a look on how to do that now!
 

@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_flax_available, is_tf_available, is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -87,6 +87,7 @@ if is_tf_available():
 if is_flax_available():
     _import_structure["modeling_flax_auto"] = [
         "FLAX_MODEL_FOR_CAUSAL_LM_MAPPING",
+        "FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
         "FLAX_MODEL_FOR_MASKED_LM_MAPPING",
         "FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
         "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -175,6 +176,7 @@ if TYPE_CHECKING:
     if is_flax_available():
         from .modeling_flax_auto import (
             FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+            FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_MASKED_LM_MAPPING,
             FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -198,19 +200,6 @@ if TYPE_CHECKING:
         )
 
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)

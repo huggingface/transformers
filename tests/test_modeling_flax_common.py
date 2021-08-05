@@ -16,14 +16,27 @@ import copy
 import inspect
 import random
 import tempfile
+import unittest
 from typing import List, Tuple
 
 import numpy as np
 
 import transformers
-from transformers import is_flax_available, is_torch_available
+from huggingface_hub import HfApi
+from requests.exceptions import HTTPError
+from transformers import BertConfig, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
+from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
+    CaptureLogger,
+    is_pt_flax_cross_test,
+    is_staging_test,
+    require_flax,
+    slow,
+)
+from transformers.utils import logging
 
 
 if is_flax_available():
@@ -31,10 +44,15 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    import jaxlib.xla_extension as jax_xla
     from flax.core.frozen_dict import unfreeze
     from flax.traverse_util import flatten_dict
-    from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, FLAX_MODEL_MAPPING
+    from transformers import (
+        FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        FLAX_MODEL_MAPPING,
+        FlaxAutoModelForSequenceClassification,
+        FlaxBertModel,
+    )
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -108,7 +126,7 @@ class FlaxModelTesterMixin:
         if "ForMultipleChoice" in model_class.__name__:
             inputs_dict = {
                 k: jnp.broadcast_to(v[:, None], (v.shape[0], self.model_tester.num_choices, v.shape[-1]))
-                if isinstance(v, (jax_xla.DeviceArray, np.ndarray))
+                if isinstance(v, (jnp.ndarray, np.ndarray))
                 else v
                 for k, v in inputs_dict.items()
             }
@@ -504,3 +522,91 @@ class FlaxModelTesterMixin:
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
+
+    def test_load_with_mismatched_shapes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class not in get_values(FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+                continue
+
+            with self.subTest(msg=f"Testing {model_class}"):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    model = model_class(config)
+                    model.save_pretrained(tmp_dir)
+
+                    # Fails when we don't set ignore_mismatched_sizes=True
+                    with self.assertRaises(ValueError):
+                        new_model = FlaxAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+
+                    logger = logging.get_logger("transformers.modeling_flax_utils")
+                    with CaptureLogger(logger) as cl:
+                        new_model = FlaxAutoModelForSequenceClassification.from_pretrained(
+                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True
+                        )
+                    self.assertIn("the shapes did not match", cl.out)
+
+                    logits = new_model(**inputs_dict)["logits"]
+                    self.assertEqual(logits.shape[1], 42)
+
+
+@require_flax
+@is_staging_test
+class FlaxModelPushToHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model-flax")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model-flax-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = FlaxBertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                os.path.join(tmp_dir, "test-model-flax"), push_to_hub=True, use_auth_token=self._token
+            )
+
+            new_model = FlaxBertModel.from_pretrained(f"{USER}/test-model-flax")
+
+            base_params = flatten_dict(unfreeze(model.params))
+            new_params = flatten_dict(unfreeze(new_model.params))
+
+            for key in base_params.keys():
+                max_diff = (base_params[key] - new_params[key]).sum().item()
+                self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_push_to_hub_in_organization(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = FlaxBertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                os.path.join(tmp_dir, "test-model-flax-org"),
+                push_to_hub=True,
+                use_auth_token=self._token,
+                organization="valid_org",
+            )
+
+            new_model = FlaxBertModel.from_pretrained("valid_org/test-model-flax-org")
+
+            base_params = flatten_dict(unfreeze(model.params))
+            new_params = flatten_dict(unfreeze(new_model.params))
+
+            for key in base_params.keys():
+                max_diff = (base_params[key] - new_params[key]).sum().item()
+                self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")

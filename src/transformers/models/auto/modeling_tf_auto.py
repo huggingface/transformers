@@ -101,6 +101,7 @@ from ..funnel.modeling_tf_funnel import (
     TFFunnelModel,
 )
 from ..gpt2.modeling_tf_gpt2 import TFGPT2ForSequenceClassification, TFGPT2LMHeadModel, TFGPT2Model
+from ..hubert.modeling_tf_hubert import TFHubertModel
 from ..layoutlm.modeling_tf_layoutlm import (
     TFLayoutLMForMaskedLM,
     TFLayoutLMForSequenceClassification,
@@ -140,6 +141,15 @@ from ..mpnet.modeling_tf_mpnet import (
 from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
 from ..openai.modeling_tf_openai import TFOpenAIGPTForSequenceClassification, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
+from ..rembert.modeling_tf_rembert import (
+    TFRemBertForCausalLM,
+    TFRemBertForMaskedLM,
+    TFRemBertForMultipleChoice,
+    TFRemBertForQuestionAnswering,
+    TFRemBertForSequenceClassification,
+    TFRemBertForTokenClassification,
+    TFRemBertModel,
+)
 from ..roberta.modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
@@ -188,7 +198,7 @@ from ..xlnet.modeling_tf_xlnet import (
     TFXLNetLMHeadModel,
     TFXLNetModel,
 )
-from .auto_factory import auto_class_factory
+from .auto_factory import _BaseAutoModelClass, auto_class_update
 from .configuration_auto import (
     AlbertConfig,
     BartConfig,
@@ -204,6 +214,7 @@ from .configuration_auto import (
     FlaubertConfig,
     FunnelConfig,
     GPT2Config,
+    HubertConfig,
     LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
@@ -215,6 +226,7 @@ from .configuration_auto import (
     MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
+    RemBertConfig,
     RobertaConfig,
     RoFormerConfig,
     T5Config,
@@ -232,6 +244,7 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (RemBertConfig, TFRemBertModel),
         (RoFormerConfig, TFRoFormerModel),
         (ConvBertConfig, TFConvBertModel),
         (LEDConfig, TFLEDModel),
@@ -266,6 +279,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (BlenderbotConfig, TFBlenderbotModel),
         (BlenderbotSmallConfig, TFBlenderbotSmallModel),
         (Wav2Vec2Config, TFWav2Vec2Model),
+        (HubertConfig, TFHubertModel),
     ]
 )
 
@@ -299,6 +313,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+        (RemBertConfig, TFRemBertForMaskedLM),
         (RoFormerConfig, TFRoFormerForMaskedLM),
         (ConvBertConfig, TFConvBertForMaskedLM),
         (LEDConfig, TFLEDForConditionalGeneration),
@@ -330,6 +345,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
+        (RemBertConfig, TFRemBertForCausalLM),
         (RoFormerConfig, TFRoFormerForCausalLM),
         (BertConfig, TFBertLMHeadModel),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
@@ -347,6 +363,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
+        (RemBertConfig, TFRemBertForMaskedLM),
         (RoFormerConfig, TFRoFormerForMaskedLM),
         (ConvBertConfig, TFConvBertForMaskedLM),
         (DistilBertConfig, TFDistilBertForMaskedLM),
@@ -385,6 +402,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (RemBertConfig, TFRemBertForSequenceClassification),
         (RoFormerConfig, TFRoFormerForSequenceClassification),
         (ConvBertConfig, TFConvBertForSequenceClassification),
         (DistilBertConfig, TFDistilBertForSequenceClassification),
@@ -412,6 +430,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (RemBertConfig, TFRemBertForQuestionAnswering),
         (RoFormerConfig, TFRoFormerForQuestionAnswering),
         (ConvBertConfig, TFConvBertForQuestionAnswering),
         (DistilBertConfig, TFDistilBertForQuestionAnswering),
@@ -434,6 +453,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+        (RemBertConfig, TFRemBertForTokenClassification),
         (RoFormerConfig, TFRoFormerForTokenClassification),
         (ConvBertConfig, TFConvBertForTokenClassification),
         (DistilBertConfig, TFDistilBertForTokenClassification),
@@ -457,6 +477,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        (RemBertConfig, TFRemBertForMultipleChoice),
         (RoFormerConfig, TFRoFormerForMultipleChoice),
         (ConvBertConfig, TFConvBertForMultipleChoice),
         (CamembertConfig, TFCamembertForMultipleChoice),
@@ -484,54 +505,89 @@ TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
 )
 
 
-TFAutoModel = auto_class_factory("TFAutoModel", TF_MODEL_MAPPING)
+class TFAutoModel(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_MAPPING
 
-TFAutoModelForPreTraining = auto_class_factory(
-    "TFAutoModelForPreTraining", TF_MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
-)
+
+TFAutoModel = auto_class_update(TFAutoModel)
+
+
+class TFAutoModelForPreTraining(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_PRETRAINING_MAPPING
+
+
+TFAutoModelForPreTraining = auto_class_update(TFAutoModelForPreTraining, head_doc="pretraining")
+
 
 # Private on purpose, the public class will add the deprecation warnings.
-_TFAutoModelWithLMHead = auto_class_factory(
-    "TFAutoModelWithLMHead", TF_MODEL_WITH_LM_HEAD_MAPPING, head_doc="language modeling"
+class _TFAutoModelWithLMHead(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_WITH_LM_HEAD_MAPPING
+
+
+_TFAutoModelWithLMHead = auto_class_update(_TFAutoModelWithLMHead, head_doc="language modeling")
+
+
+class TFAutoModelForCausalLM(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
+
+
+TFAutoModelForCausalLM = auto_class_update(TFAutoModelForCausalLM, head_doc="causal language modeling")
+
+
+class TFAutoModelForMaskedLM(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_MASKED_LM_MAPPING
+
+
+TFAutoModelForMaskedLM = auto_class_update(TFAutoModelForMaskedLM, head_doc="masked language modeling")
+
+
+class TFAutoModelForSeq2SeqLM(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+
+
+TFAutoModelForSeq2SeqLM = auto_class_update(
+    TFAutoModelForSeq2SeqLM, head_doc="sequence-to-sequence language modeling", checkpoint_for_example="t5-base"
 )
 
-TFAutoModelForCausalLM = auto_class_factory(
-    "TFAutoModelForCausalLM", TF_MODEL_FOR_CAUSAL_LM_MAPPING, head_doc="causal language modeling"
+
+class TFAutoModelForSequenceClassification(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+
+
+TFAutoModelForSequenceClassification = auto_class_update(
+    TFAutoModelForSequenceClassification, head_doc="sequence classification"
 )
 
-TFAutoModelForMaskedLM = auto_class_factory(
-    "TFAutoModelForMaskedLM", TF_MODEL_FOR_MASKED_LM_MAPPING, head_doc="masked language modeling"
+
+class TFAutoModelForQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
+
+
+TFAutoModelForQuestionAnswering = auto_class_update(TFAutoModelForQuestionAnswering, head_doc="question answering")
+
+
+class TFAutoModelForTokenClassification(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+
+
+TFAutoModelForTokenClassification = auto_class_update(
+    TFAutoModelForTokenClassification, head_doc="token classification"
 )
 
-TFAutoModelForSeq2SeqLM = auto_class_factory(
-    "TFAutoModelForSeq2SeqLM",
-    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    head_doc="sequence-to-sequence language modeling",
-    checkpoint_for_example="t5-base",
-)
 
-TFAutoModelForSequenceClassification = auto_class_factory(
-    "TFAutoModelForSequenceClassification",
-    TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-    head_doc="sequence classification",
-)
+class TFAutoModelForMultipleChoice(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING
 
-TFAutoModelForQuestionAnswering = auto_class_factory(
-    "TFAutoModelForQuestionAnswering", TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING, head_doc="question answering"
-)
 
-TFAutoModelForTokenClassification = auto_class_factory(
-    "TFAutoModelForTokenClassification", TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING, head_doc="token classification"
-)
+TFAutoModelForMultipleChoice = auto_class_update(TFAutoModelForMultipleChoice, head_doc="multiple choice")
 
-TFAutoModelForMultipleChoice = auto_class_factory(
-    "TFAutoModelForMultipleChoice", TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING, head_doc="multiple choice"
-)
 
-TFAutoModelForNextSentencePrediction = auto_class_factory(
-    "TFAutoModelForNextSentencePrediction",
-    TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-    head_doc="next sentence prediction",
+class TFAutoModelForNextSentencePrediction(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING
+
+
+TFAutoModelForNextSentencePrediction = auto_class_update(
+    TFAutoModelForNextSentencePrediction, head_doc="next sentence prediction"
 )
 
 

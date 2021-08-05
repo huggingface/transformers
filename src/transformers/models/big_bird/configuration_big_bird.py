@@ -84,6 +84,8 @@ class BigBirdConfig(PretrainedConfig):
             "block_sparse"`.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        classifier_dropout (:obj:`float`, `optional`):
+            The dropout ratio for the classification head.
 
         Example::
 
@@ -126,6 +128,7 @@ class BigBirdConfig(PretrainedConfig):
         block_size=64,
         num_random_blocks=3,
         gradient_checkpointing=False,
+        classifier_dropout=None,
         **kwargs
     ):
         super().__init__(
@@ -157,3 +160,4 @@ class BigBirdConfig(PretrainedConfig):
         self.use_bias = use_bias
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
+        self.classifier_dropout = classifier_dropout

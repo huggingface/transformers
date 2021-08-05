@@ -30,3 +30,12 @@ class DetrModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["timm", "vision"])
+
+
+class DetrPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["timm", "vision"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["timm", "vision"])
