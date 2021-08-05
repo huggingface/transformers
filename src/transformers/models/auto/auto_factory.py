@@ -13,11 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Factory function to build auto-model classes."""
+import importlib
+from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import copy_func
 from ...utils import logging
-from .configuration_auto import AutoConfig, replace_list_option_in_docstrings
+from .configuration_auto import AutoConfig, config_key_to_module_name, replace_list_option_in_docstrings
 
 
 logger = logging.get_logger(__name__)
@@ -445,3 +447,60 @@ def get_values(model_mapping):
             result.append(model)
 
     return result
+
+
+def getattribute_from_module(module, attr):
+    if attr is None:
+        return None
+    if isinstance(attr, tuple):
+        return tuple(getattribute_from_module(module, a) for a in attr)
+    return getattr(module, attr)
+
+
+class LazyAutoMapping(OrderedDict):
+    def __init__(self, config_mapping, model_mapping):
+        self._config_mapping = config_mapping
+        self._reverse_config_mapping = {v: k for k, v in config_mapping.items()}
+        self._model_mapping = model_mapping
+        self._modules = {}
+
+    def __getitem__(self, key):
+        config_key = self._reverse_config_mapping[key.__name__]
+        if config_key not in self._model_mapping:
+            raise KeyError(key)
+        model_name = self._model_mapping[config_key]
+        return self._load_attr_from_module(config_key, model_name)
+
+    def _load_attr_from_module(self, config_key, attr):
+        module_name = config_key_to_module_name(config_key)
+        if not module_name in self._modules:
+            self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
+        return getattribute_from_module(self._modules[module_name], attr)
+
+    def keys(self):
+        return [
+            self._load_attr_from_module(key, name)
+            for key, name in self._config_mapping.items()
+            if key in self._model_mapping.keys()
+        ]
+
+    def values(self):
+        return [self._load_attr_from_module(key, name) for key, name in self._model_mapping.items()]
+
+    def items(self):
+        return [
+            (
+                self._load_attr_from_module(key, self._config_mapping[key]),
+                self._load_attr_from_module(key, self._model_mapping[key]),
+            )
+            for key in self._model_mapping.keys()
+        ]
+
+    def __iter__(self):
+        return iter(self._mapping.keys())
+
+    def __contains__(self, item):
+        if not hasattr(item, "__name__") or item.__name__ not in self._reverse_config_mapping:
+            return False
+        config_key = self._reverse_config_mapping[item.__name__]
+        return config_key in self._model_mapping

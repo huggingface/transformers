@@ -21,6 +21,7 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
+print("Loading BERT config")
 
 logger = logging.get_logger(__name__)
 
