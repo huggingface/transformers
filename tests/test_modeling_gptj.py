@@ -44,19 +44,19 @@ class GPTJModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
+        rotary_dim=4,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
+        hidden_dropout_prob=0.0,
+        attention_probs_dropout_prob=0.0,
         max_position_embeddings=512,
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
-        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -68,6 +68,7 @@ class GPTJModelTester:
         self.use_mc_token_ids = use_mc_token_ids
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.rotary_dim = rotary_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -133,6 +134,7 @@ class GPTJModelTester:
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
+            rotary_dim=self.rotary_dim,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
@@ -353,6 +355,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (GPTJModel, GPTJForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
     fx_ready_model_classes = all_model_classes
+    test_pruning = False
     test_missing_keys = False
     test_model_parallel = False
 
