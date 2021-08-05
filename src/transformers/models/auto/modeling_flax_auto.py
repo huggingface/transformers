@@ -18,79 +18,8 @@
 from collections import OrderedDict
 
 from ...utils import logging
-from ..bart.modeling_flax_bart import (
-    FlaxBartForConditionalGeneration,
-    FlaxBartForQuestionAnswering,
-    FlaxBartForSequenceClassification,
-    FlaxBartModel,
-)
-from ..bert.modeling_flax_bert import (
-    FlaxBertForMaskedLM,
-    FlaxBertForMultipleChoice,
-    FlaxBertForNextSentencePrediction,
-    FlaxBertForPreTraining,
-    FlaxBertForQuestionAnswering,
-    FlaxBertForSequenceClassification,
-    FlaxBertForTokenClassification,
-    FlaxBertModel,
-)
-from ..big_bird.modeling_flax_big_bird import (
-    FlaxBigBirdForMaskedLM,
-    FlaxBigBirdForMultipleChoice,
-    FlaxBigBirdForPreTraining,
-    FlaxBigBirdForQuestionAnswering,
-    FlaxBigBirdForSequenceClassification,
-    FlaxBigBirdForTokenClassification,
-    FlaxBigBirdModel,
-)
-from ..clip.modeling_flax_clip import FlaxCLIPModel
-from ..electra.modeling_flax_electra import (
-    FlaxElectraForMaskedLM,
-    FlaxElectraForMultipleChoice,
-    FlaxElectraForPreTraining,
-    FlaxElectraForQuestionAnswering,
-    FlaxElectraForSequenceClassification,
-    FlaxElectraForTokenClassification,
-    FlaxElectraModel,
-)
-from ..gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
-from ..gpt_neo.modeling_flax_gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel
-from ..marian.modeling_flax_marian import FlaxMarianModel, FlaxMarianMTModel
-from ..mbart.modeling_flax_mbart import (
-    FlaxMBartForConditionalGeneration,
-    FlaxMBartForQuestionAnswering,
-    FlaxMBartForSequenceClassification,
-    FlaxMBartModel,
-)
-from ..mt5.modeling_flax_mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
-from ..roberta.modeling_flax_roberta import (
-    FlaxRobertaForMaskedLM,
-    FlaxRobertaForMultipleChoice,
-    FlaxRobertaForQuestionAnswering,
-    FlaxRobertaForSequenceClassification,
-    FlaxRobertaForTokenClassification,
-    FlaxRobertaModel,
-)
-from ..t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
-from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
-from ..wav2vec2.modeling_flax_wav2vec2 import FlaxWav2Vec2ForPreTraining, FlaxWav2Vec2Model
-from .auto_factory import _BaseAutoModelClass, auto_class_update
-from .configuration_auto import (
-    BartConfig,
-    BertConfig,
-    BigBirdConfig,
-    CLIPConfig,
-    ElectraConfig,
-    GPT2Config,
-    GPTNeoConfig,
-    MarianConfig,
-    MBartConfig,
-    MT5Config,
-    RobertaConfig,
-    T5Config,
-    ViTConfig,
-    Wav2Vec2Config,
-)
+from .auto_factory import _BaseAutoModelClass, LazyAutoMapping, auto_class_update
+from .configuration_auto import CONFIG_MAPPING_NAMES
 
 
 logger = logging.get_logger(__name__)
