@@ -124,7 +124,6 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # Need to change some parameters name to match Flax names
     for pt_key, pt_tensor in pt_state_dict.items():
 
-        pt_tensor = pt_tensor.numpy()
         pt_tuple_key = tuple(pt_key.split("."))
 
         # remove base model prefix if necessary
@@ -150,7 +149,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
                 )
 
         # also add unexpected weight so that warning is thrown
-        flax_state_dict[flax_key] = jnp.asarray(pt_tensor)
+        flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
 
     return unflatten_dict(flax_state_dict)
 
