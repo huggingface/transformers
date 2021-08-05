@@ -204,6 +204,7 @@ CONFIG_MAPPING = OrderedDict(
         ("mobilebert", MobileBertConfig),
         ("mpnet", MPNetConfig),
         ("mt5", MT5Config),
+        ("openai-gpt", OpenAIGPTConfig),
         ("pegasus", PegasusConfig),
         ("prophetnet", ProphetNetConfig),
         ("rag", RagConfig),
