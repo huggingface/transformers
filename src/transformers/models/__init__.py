@@ -61,6 +61,7 @@ from . import (
     m2m_100,
     marian,
     mbart,
+    mbart50,
     megatron_bert,
     mmbt,
     mobilebert,

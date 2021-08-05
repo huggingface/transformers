@@ -485,7 +485,7 @@ class LazyAutoMapping(OrderedDict):
         ]
 
     def values(self):
-        return [self._load_attr_from_module(key, name) for key, name in self._model_mapping.items()]
+        return [self._load_attr_from_module(key, name) for key, name in self._model_mapping.items() if key in self._config_mapping.keys()]
 
     def items(self):
         return [
@@ -493,7 +493,7 @@ class LazyAutoMapping(OrderedDict):
                 self._load_attr_from_module(key, self._config_mapping[key]),
                 self._load_attr_from_module(key, self._model_mapping[key]),
             )
-            for key in self._model_mapping.keys()
+            for key in self._model_mapping.keys() if key in self._config_mapping.keys()
         ]
 
     def __iter__(self):

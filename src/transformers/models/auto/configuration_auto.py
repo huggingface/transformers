@@ -211,6 +211,13 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mpnet", "MPNet"),
         ("tapas", "TAPAS"),
         ("hubert", "Hubert"),
+        ("barthez", "BARThez"),
+        ("phobert", "PhoBERT"),
+        ("cpm", "CPM"),
+        ("bertweet", "Bertweet"),
+        ("bert-japanese", "BertJapanese"),
+        ("byt5", "ByT5"),
+        ("mbart50", "mBART-50"),
     ]
 )
 
@@ -315,7 +322,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = LazyLoadAllMappings(CONFIG_ARCHIVE_MAP_MAPPI
 
 def _get_class_name(model_class):
     if isinstance(model_class, (list, tuple)):
-        return " or ".join([f":class:`~transformers.{c}`" for c in model_class])
+        return " or ".join([f":class:`~transformers.{c}`" for c in model_class if c is not None])
     return f":class:`~transformers.{model_class}`"
 
 
@@ -330,14 +337,14 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
             }
         else:
             model_type_to_name = {
-                model_type: _get_class_name(model_class) for model_type, model_class in config_to_class.items()
+                model_type: _get_class_name(model_class) for model_type, model_class in config_to_class.items() if model_type in MODEL_NAMES_MAPPING
             }
         lines = [
             f"{indent}- **{model_type}** -- {model_type_to_name[model_type]} ({MODEL_NAMES_MAPPING[model_type]} model)"
             for model_type in sorted(model_type_to_name.keys())
         ]
     else:
-        config_to_name = {CONFIG_MAPPING_NAMES[config]: _get_class_name(clas) for config, clas in config_to_class.items()}
+        config_to_name = {CONFIG_MAPPING_NAMES[config]: _get_class_name(clas) for config, clas in config_to_class.items() if config in CONFIG_MAPPING_NAMES}
         config_to_model_name = {
             config: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING_NAMES.items()
         }
