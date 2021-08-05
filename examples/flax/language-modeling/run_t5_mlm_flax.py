@@ -721,7 +721,7 @@ if __name__ == "__main__":
     state = jax_utils.replicate(state)
 
     train_time = 0
-    epochs = tqdm(range(num_epochs), desc=f"Epoch ... ", position=0)
+    epochs = tqdm(range(num_epochs), desc="Epoch ... ", position=0)
     for epoch in epochs:
         # ======================== Training ================================
         train_start = time.time()
