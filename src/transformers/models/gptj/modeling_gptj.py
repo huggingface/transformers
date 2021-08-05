@@ -46,18 +46,6 @@ def fixed_pos_embedding(tensor, dim, seq_len):
     sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(seq_len), inv_freq).to(tensor)
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
-
-def rotate_every_two(tensor):
-    rotate_half_tensor = torch.stack((tensor[..., 1::2], tensor[..., ::2]), axis=-1).reshape_as(tensor)
-    return rotate_half_tensor
-
-
-def apply_rotary_pos_emb(tensor, sin, cos, offset=0):
-    sin = torch.repeat_interleave(sin[None, offset : tensor.shape[1] + offset, None, :], 2, dim=-1)
-    cos = torch.repeat_interleave(cos[None, offset : tensor.shape[1] + offset, None, :], 2, dim=-1)
-    return (tensor * cos) + (rotate_every_two(tensor) * sin)
-
-
 class GPTJAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -141,11 +129,20 @@ class GPTJAttention(nn.Module):
         q_pass = query[..., rotary_dim:]
 
         sin, cos = fixed_pos_embedding(k_rot, rotary_dim, seq_len)
-        k_rot = apply_rotary_pos_emb(k_rot, sin, cos, offset=past_len)
-        q_rot = apply_rotary_pos_emb(q_rot, sin, cos, offset=past_len)
+        sin = torch.repeat_interleave(sin[None, past_len : seq_len, None, :], 2, dim=-1)
+        cos = torch.repeat_interleave(cos[None, past_len : seq_len, None, :], 2, dim=-1)
 
-        key = torch.cat([k_rot, k_pass], dim=-1)
+        rotate_half_query = torch.stack((q_rot[..., 1::2], q_rot[..., ::2]), axis=-1)
+        rotate_half_query = rotate_half_query.reshape_as(q_rot)
+        q_rot = (q_rot * cos) + (rotate_half_query * sin)
+
+        rotate_half_key = torch.stack((k_rot[..., 1::2], k_rot[..., ::2]), axis=-1)
+        rotate_half_key = rotate_half_key.reshape_as(k_rot)
+        k_rot = (k_rot * cos) + (rotate_half_key * sin)
+
         query = torch.cat([q_rot, q_pass], dim=-1)
+        key = torch.cat([k_rot, k_pass], dim=-1)
+
         return query, key
 
     def forward(
