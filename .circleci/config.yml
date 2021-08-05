@@ -815,7 +815,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,testing,sentencepiece,speech,vision,timm]
+            - run: pip install .[torch,testing,vision]
             - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
@@ -826,7 +826,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
+                    python -m pytest tests/*layoutlmv2* --dist=loadfile -s --make-reports=tests_detectron2
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -887,6 +887,7 @@ workflows:
             - run_tests_onnxruntime
             - run_tests_hub
             - build_doc
+            - run_tests_detectron2
             - deploy_doc: *workflow_filters
     nightly:
         triggers:
