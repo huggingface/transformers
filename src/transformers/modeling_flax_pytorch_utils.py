@@ -17,6 +17,7 @@
 
 import os
 from pickle import UnpicklingError
+from typing import Dict, Tuple
 
 import numpy as np
 
@@ -24,9 +25,13 @@ import jax.numpy as jnp
 import transformers
 from flax.serialization import from_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
+from transformers.file_utils import is_torch_available
 
 from .utils import logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -58,10 +63,16 @@ def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_pa
     return flax_state_dict
 
 
-def rename_key_and_reshape_tensor(pt_tuple_key, pt_tensor, random_flax_state_dict, model_prefix):
+def rename_key_and_reshape_tensor(
+    pt_tuple_key: Tuple[str],
+    pt_tensor: torch.FloatTensor,
+    random_flax_state_dict: Dict[str, jnp.ndarray],
+    model_prefix: str,
+) -> (Tuple[str], torch.FloatTensor):
     """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
 
-    def is_key_or_prefix_key_in_dict(key):
+    def is_key_or_prefix_key_in_dict(key: Tuple[str]) -> bool:
+        """Checks if ``key`` of ``(prefix,) + key`` is in random_flax_state_dict"""
         return len(set(random_flax_state_dict) & set([key, (model_prefix,) + key])) > 0
 
     # layer norm
@@ -125,24 +136,24 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
             pt_tuple_key = pt_tuple_key[1:]
 
         # Correctly rename weight parameters
-        pt_tuple_key, pt_tensor = rename_key_and_reshape_tensor(
+        flax_key, flax_tensor = rename_key_and_reshape_tensor(
             pt_tuple_key, pt_tensor, random_flax_state_dict, model_prefix
         )
 
         # add model prefix if necessary
-        require_base_model_prefix = (model_prefix,) + pt_tuple_key in random_flax_state_dict
+        require_base_model_prefix = (model_prefix,) + flax_key in random_flax_state_dict
         if load_base_into_head and require_base_model_prefix:
-            pt_tuple_key = (model_prefix,) + pt_tuple_key
+            flax_key = (model_prefix,) + flax_key
 
-        if pt_tuple_key in random_flax_state_dict:
-            if pt_tensor.shape != random_flax_state_dict[pt_tuple_key].shape:
+        if flax_key in random_flax_state_dict:
+            if flax_tensor.shape != random_flax_state_dict[flax_key].shape:
                 raise ValueError(
                     f"PyTorch checkpoint seems to be incorrect. Weight {pt_key} was expected to be of shape "
-                    f"{random_flax_state_dict[pt_tuple_key].shape}, but is {pt_tensor.shape}."
+                    f"{random_flax_state_dict[flax_key].shape}, but is {flax_tensor.shape}."
                 )
 
         # also add unexpected weight so that warning is thrown
-        flax_state_dict[pt_tuple_key] = jnp.asarray(pt_tensor)
+        flax_state_dict[flax_key] = jnp.asarray(pt_tensor)
 
     return unflatten_dict(flax_state_dict)
 
