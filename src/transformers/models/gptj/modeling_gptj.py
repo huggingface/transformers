@@ -24,24 +24,20 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_gptj import GPTJConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "gpt2"
+_CHECKPOINT_FOR_DOC = "EleutherAI/gptj-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "gpt2",
-    "gpt2-medium",
-    "gpt2-large",
-    "gpt2-xl",
-    "distilgpt2",
-    # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
+    "EleutherAI/gptj-6B",
+    # See all GPTJ models at https://huggingface.co/models?filter=gptj
 ]
 
 
@@ -73,7 +69,7 @@ class GPTJAttention(nn.Module):
                 1, 1, max_positions, max_positions
             ),
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e9))
+        self.register_buffer("masked_bias", torch.tensor(-1e10))
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -95,21 +91,6 @@ class GPTJAttention(nn.Module):
         sin, cos = fixed_pos_embedding(dim=self.rotary_dim, seq_len=max_positions)
         self.register_buffer("sin", sin[None, :, None, :])
         self.register_buffer("cos", cos[None, :, None, :])
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, self.head_dim, self.pruned_heads)
-        index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
-
-        # Prune conv1d layers
-        self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
-        self.c_proj = prune_conv1d_layer(self.c_proj, index, dim=0)
-
-        # Update hyper params
-        self.split_size = (self.split_size // self.num_heads) * (self.num_heads - len(heads))
-        self.num_heads = self.num_heads - len(heads)
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
@@ -420,13 +401,6 @@ class GPTJModel(GPTJPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        """
-        for layer, heads in heads_to_prune.items():
-            self.h[layer].attn.prune_heads(heads)
-
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -471,10 +445,7 @@ class GPTJModel(GPTJPreTrainedModel):
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
         if past_key_values is None:
-            past_length = 0
             past_key_values = tuple([None] * len(self.layers))
-        else:
-            past_length = past_key_values[0][0].size(-2)
 
         # GPTJAttention mask.
         if attention_mask is not None:
