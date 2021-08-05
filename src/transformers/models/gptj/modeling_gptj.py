@@ -218,7 +218,7 @@ class GPTJMLP(nn.Module):
         return hidden_states
 
 
-class GPTJLayer(nn.Module):
+class GPTJBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         hidden_size = config.hidden_size
@@ -390,7 +390,7 @@ class GPTJModel(GPTJPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.layers = nn.ModuleList([GPTJLayer(config) for _ in range(config.num_hidden_layers)])
+        self.blocks = nn.ModuleList([GPTJBlock(config) for _ in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
@@ -487,7 +487,7 @@ class GPTJModel(GPTJPreTrainedModel):
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
-        for i, (block, layer_past) in enumerate(zip(self.layers, past_key_values)):
+        for i, (block, layer_past) in enumerate(zip(self.blocks, past_key_values)):
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
