@@ -14,7 +14,12 @@
 # limitations under the License.
 """ GPT Neo model configuration """
 
+from collections import OrderedDict
+from typing import Any, Mapping, Optional
+
+from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
 
 
@@ -173,3 +178,140 @@ class GPTNeoConfig(PretrainedConfig):
     @property
     def num_hidden_layers(self):
         return self.num_layers
+
+
+def custom_unfold(input, dimension, size, step):
+    """Custom torch.Tensor.unfold implementation to enable the export to ONNX."""
+    import torch
+
+    shape = input.size()
+    rank = len(shape)
+    sizedim = shape[dimension]
+
+    low_indices = torch.arange(0, sizedim, step)
+    min_length = torch.div(sizedim - size, step, rounding_mode="floor") + 1
+    indices = torch.arange(size) + low_indices[:min_length][:, None]
+
+    s = [slice(None)] * rank
+    s[dimension] = indices
+    sliced = input[s]
+
+    perm = list(range(0, rank + 1))
+    perm.append(perm.pop(dimension + 1))
+
+    return sliced.permute(perm)
+
+
+def custom_get_block_length_and_num_blocks(seq_length, window_size):
+    """
+    Custom implementation for GPTNeoAttentionMixin._get_block_length_and_num_blocks to enable the export to ONNX as
+    original implmentation uses Python variables and control flow.
+    """
+    import torch
+
+    candidates = torch.arange(1, window_size)
+    remainders = torch.remainder(seq_length, candidates)
+    divisor_indices = remainders == 0
+    divisors = candidates[divisor_indices]
+    largest_divisor = torch.max(divisors)
+    return largest_divisor, torch.div(seq_length, largest_divisor, rounding_mode="floor")
+
+
+class GPTNeoOnnxConfig(OnnxConfigWithPast):
+    def __init__(self, config: PretrainedConfig, task: str = "default", use_past: bool = False):
+        if is_torch_available():
+            import torch
+
+            from .modeling_gpt_neo import GPTNeoAttentionMixin
+
+            patching_specs = [
+                PatchingSpec(torch.Tensor, name="unfold", custom_op=custom_unfold),
+                PatchingSpec(
+                    GPTNeoAttentionMixin,
+                    name="_get_block_length_and_num_blocks",
+                    custom_op=custom_get_block_length_and_num_blocks,
+                    op_wrapper=staticmethod,
+                ),
+            ]
+
+        super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
+
+        self._num_local_attention = len([type_ for type_ in self._config.attention_layers if type_ == "local"])
+        self._key_values_dynamic_axis = []
+        for i in range(self._config.num_layers):
+            if self._config.attention_layers[i] == "local":
+                self._key_values_dynamic_axis.append({0: "batch", 1: "sequence"})
+            else:
+                self._key_values_dynamic_axis.append({0: "batch", 2: "sequence"})
+                self._key_values_dynamic_axis.append({0: "batch", 2: "sequence"})
+
+    @property
+    def _number_key_values(self):
+        return (self._config.num_layers * 2) - self._num_local_attention
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
+        if self.use_past:
+            for i in range(self._number_key_values):
+                common_inputs[f"past_key_values.{i}"] = self._key_values_dynamic_axis[i]
+
+        common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
+
+        return common_inputs
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_outputs = super().outputs
+        if self.use_past:
+            for i in range(self._number_key_values):
+                common_outputs[f"present.{i}"] = self._key_values_dynamic_axis[i]
+
+        return common_outputs
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+        common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+
+        # We need to order the input in the way they appears in the forward()
+        ordered_inputs = OrderedDict({"input_ids": common_inputs["input_ids"]})
+
+        batch = common_inputs["input_ids"].shape[0]
+        past_shapes = {
+            "global": (batch, self._config.num_heads, 1, self._config.hidden_size // self._config.num_attention_heads),
+            "local": (batch, 1, self._config.hidden_size),
+        }
+
+        # Need to add the past_keys
+        if self.use_past:
+            if not is_torch_available():
+                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+            else:
+                import torch
+
+                ordered_inputs["past_key_values"] = []
+                for i in range(self._config.num_layers):
+                    attention_type = self._config.attention_layers[i]
+                    if attention_type == "global":
+                        ordered_inputs["past_key_values"].append(
+                            (
+                                torch.zeros(past_shapes[attention_type]),
+                                torch.zeros(past_shapes[attention_type]),
+                            )
+                        )
+                    else:
+                        ordered_inputs["past_key_values"].append((torch.zeros(past_shapes[attention_type]),))
+
+        ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
+        if self.use_past:
+            ordered_inputs["attention_mask"] = torch.cat(
+                [ordered_inputs["attention_mask"], torch.zeros(batch, 1)], dim=1
+            )
+
+        return ordered_inputs
