@@ -10,93 +10,56 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-gptj
+GPT J
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The gptj model was proposed in `<INSERT PAPER NAME HERE>
-<<INSERT PAPER LINK HERE>>`__  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The GPT J model was released in the `kingoflolz/mesh-transformer-jax <https://github.com/kingoflolz/mesh-transformer-jax>`__ repository by Ben Wang and Aran Komatsuzaki. It is a GPT2 like causal language model trained on the
+`Pile <https://pile.eleuther.ai/>`__ dataset.
 
-The abstract from the paper is the following:
+The architecture is similar to GPT2 except that GPT J uses local attention in every other layer with a window size of
+256 tokens.
 
-*<INSERT PAPER ABSTRACT HERE>*
+This model was contributed by `Stella Biderman <https://huggingface.co/stellaathena>`__.
 
-Tips:
+Generation
+_______________________________________________________________________________________________________________________
 
-<INSERT TIPS ABOUT MODEL HERE>
+The :obj:`generate()` method can be used to generate text using GPT J model.
 
-This model was contributed by `<INSERT YOUR HF USERNAME HERE> 
-<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>>`__. The original code can be found `here 
-<<INSERT LINK TO GITHUB REPO HERE>>`__.
+.. code-block::
 
-gptjConfig
+    >>> from transformers import GPTNeoForCausalLM, GPT2Tokenizer
+    >>> model = GPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+    >>> tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+
+    >>> prompt = "In a shocking finding, scientists discovered a herd of unicorns living in a remote, " \
+    ...          "previously unexplored valley, in the Andes Mountains. Even more surprising to the " \
+    ...          "researchers was the fact that the unicorns spoke perfect English."
+
+    >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+
+    >>> gen_tokens = model.generate(input_ids, do_sample=True, temperature=0.9, max_length=100,)
+    >>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
+
+
+GPTJConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.gptjConfig
+.. autoclass:: transformers.GPTJConfig
     :members:
 
-
-gptjTokenizer
+GPTJModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.gptjTokenizer
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
-
-
-gptjTokenizerFast
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.gptjTokenizerFast
-    :members:
-
-
-gptjModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.gptjModel
+.. autoclass:: transformers.GPTJModel
     :members: forward
 
 
-gptjForCausalLM
+GPTJForCausalLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.gptjForCausalLM
-    :members: forward
-
-
-gptjForMaskedLM
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.gptjForMaskedLM
-    :members: forward
-
-
-gptjForSequenceClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.gptjForSequenceClassification
-    :members: forward
-
-
-gptjForMultipleChoice
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.gptjForMultipleChoice
-    :members: forward
-
-
-gptjForTokenClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.gptjForTokenClassification
-    :members: forward
-
-
-gptjForQuestionAnswering
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.gptjForQuestionAnswering
+.. autoclass:: transformers.GPTJForCausalLM
     :members: forward
