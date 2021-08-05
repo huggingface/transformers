@@ -57,11 +57,6 @@ from transformers.models.t5.modeling_flax_t5 import shift_tokens_right
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
-JAX_CPU = jax.devices("cpu")[0]
-
-
-def to_cpu_device(device_array):
-    return jax.device_put(device_array, JAX_CPU)  # return DeviceArray, hopefully non-blocking
 
 
 @dataclass
