@@ -111,6 +111,8 @@ def export(
     if not inputs_match:
         raise ValueError("Model and config inputs doesn't match")
 
+    config.patch_ops()
+
     # export can works with named args but the dict containing named args as to be last element of the args tuple
     export(
         model,
@@ -124,6 +126,8 @@ def export(
         enable_onnx_checker=True,
         opset_version=opset,
     )
+
+    config.restore_ops()
 
     return matched_inputs, onnx_outputs
 
@@ -140,6 +144,8 @@ def validate_model_outputs(
 
     logger.info("Validating ONNX model...")
 
+    # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
+    # dynamic input shapes.
     reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
 
     # Create ONNX Runtime session
@@ -152,6 +158,10 @@ def validate_model_outputs(
 
     # We flatten potential collection of outputs (i.e. past_keys) to a flat structure
     for name, value in ref_outputs.items():
+        # Overwriting the output name as "present" since it is the name used for the ONNX ouputs
+        # ("past_key_values" being taken for the ONNX inputs)
+        if name == "past_key_values":
+            name = "present"
         if isinstance(value, (list, tuple)):
             value = flatten_output_collection_property(name, value)
             ref_outputs_dict.update(value)
@@ -186,7 +196,7 @@ def validate_model_outputs(
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
-        ref_value = ref_outputs_dict[name].numpy()
+        ref_value = ref_outputs_dict[name].detach().numpy()
         logger.info(f'\t- Validating ONNX Model output "{name}":')
 
         # Shape
@@ -197,7 +207,7 @@ def validate_model_outputs(
                 f"Got {ref_value.shape} (reference) and {ort_value.shape} (ONNX)"
             )
         else:
-            logger.info(f"\t\t-[✓] {ort_value.shape} matchs {ref_value.shape}")
+            logger.info(f"\t\t-[✓] {ort_value.shape} matches {ref_value.shape}")
 
         # Values
         if not np.allclose(ref_value, ort_value, atol=atol):
