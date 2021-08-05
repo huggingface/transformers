@@ -816,6 +816,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[torch,testing,vision]
+            - run: pip install torchvision
             - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
