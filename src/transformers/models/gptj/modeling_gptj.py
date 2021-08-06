@@ -432,7 +432,7 @@ class GPTJMLP(nn.Module):
         embed_dim = config.n_ctx
         self.c_fc = nn.Linear(embed_dim, intermediate_size)
         self.c_proj = nn.Linear(intermediate_size, embed_dim)
-        self.act = ACT2FN[config.hidden_act]
+        self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, hidden_states):
