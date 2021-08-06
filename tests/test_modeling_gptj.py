@@ -397,9 +397,9 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @slow
     def test_batch_generation(self):
-        model = GPTJForCausalLM.from_pretrained("gptj")
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gptj")
+        tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
         tokenizer.padding_side = "left"
 
