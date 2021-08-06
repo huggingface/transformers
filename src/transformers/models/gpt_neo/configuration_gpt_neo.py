@@ -15,7 +15,7 @@
 """ GPT Neo model configuration """
 
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
+from typing import Any, Dict, Iterable, Mapping, Optional
 
 from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
@@ -253,8 +253,12 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
-            for i in range(self._number_key_values):
-                common_inputs[f"past_key_values.{i}"] = self._key_values_dynamic_axis[i]
+            for i in range(self._config.num_layers):
+                if self._config.attention_layers[i] == "local":
+                    common_inputs[f"past_key_values.{i}.key_value"] = {0: "batch", 1: "sequence"}
+                else:
+                    common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "sequence"}
+                    common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "sequence"}
 
         common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
 
@@ -264,9 +268,12 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         common_outputs = super().outputs
         if self.use_past:
-            for i in range(self._number_key_values):
-                common_outputs[f"present.{i}"] = self._key_values_dynamic_axis[i]
-
+            for i in range(self._config.num_layers):
+                if self._config.attention_layers[i] == "local":
+                    common_outputs[f"present.{i}.key_value"] = {0: "batch", 1: "sequence"}
+                else:
+                    common_outputs[f"present.{i}.key"] = {0: "batch", 2: "sequence"}
+                    common_outputs[f"present.{i}.value"] = {0: "batch", 2: "sequence"}
         return common_outputs
 
     def generate_dummy_inputs(
@@ -315,3 +322,18 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
             )
 
         return ordered_inputs
+
+    @staticmethod
+    def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
+        if name in ["present", "past_key_values"]:
+            flatten_output = {}
+            for idx, t in enumerate(field):
+                if len(t) == 1:
+                    flatten_output[f"{name}.{idx}.key_value"] = t[0]
+                else:
+                    flatten_output[f"{name}.{idx}.key"] = t[0]
+                    flatten_output[f"{name}.{idx}.value"] = t[1]
+
+            return flatten_output
+
+        return super().flatten_output_collection_property(name, field)
