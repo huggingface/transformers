@@ -44,8 +44,8 @@ FEATURE_EXTRACTOR_MAPPING = LazyAutoMapping(CONFIG_MAPPING_NAMES, FEATURE_EXTRAC
 
 
 def feature_extractor_class_from_name(class_name: str):
-    for module_name, tokenizers in FEATURE_EXTRACTOR_MAPPING_NAMES.items():
-        if class_name in tokenizers:
+    for module_name, extractors in FEATURE_EXTRACTOR_MAPPING_NAMES.items():
+        if class_name in extractors:
             break
 
     module = importlib.import_module(f".{module_name}", "transformers.models")

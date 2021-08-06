@@ -418,7 +418,7 @@ class AutoConfig:
         )
 
     @classmethod
-    # @replace_list_option_in_docstrings()
+    @replace_list_option_in_docstrings()
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
         Instantiate one of the configuration classes of the library from a pretrained model configuration.
