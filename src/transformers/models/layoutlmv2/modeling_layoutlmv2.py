@@ -528,15 +528,7 @@ def my_convert_sync_batchnorm(module, process_group=None):
 class VisualBackbone(nn.Module):
     def __init__(self, config):
         super().__init__()
-        detectron2_config = detectron2.config.get_cfg()
-        _C = detectron2_config
-        for k, v in config.detectron2_config_args.items():
-            attributes = k.split(".")
-            to_set = _C
-            for attribute in attributes[:-1]:
-                to_set = getattr(to_set, attribute)
-            setattr(to_set, attributes[-1], v)
-        self.cfg = detectron2_config
+        self.cfg = config.get_detectron2_config()
         meta_arch = self.cfg.MODEL.META_ARCHITECTURE
         model = META_ARCH_REGISTRY.get(meta_arch)(self.cfg)
         assert isinstance(model.backbone, detectron2.modeling.backbone.FPN)
