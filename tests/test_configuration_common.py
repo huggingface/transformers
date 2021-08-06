@@ -36,13 +36,24 @@ class ConfigTester(object):
         config = self.config_class(**self.inputs_dict)
         common_properties = ["hidden_size", "num_attention_heads", "num_hidden_layers"]
 
+        # Add common fields for text models
         if self.has_text_modality:
             common_properties.extend(["vocab_size"])
 
+        # Test that config has the common properties as getters
         for prop in common_properties:
-            self.parent.assertTrue(hasattr(config, prop))   #Tests that a getter exists
-            setattr(config, prop, 42)                       #Tests to set the value
-            self.parent.assertTrue(getattr(config, prop) == 42)
+            self.parent.assertTrue(hasattr(config, prop))
+
+        # Test that config has the common properties as setter
+        for idx, prop in enumerate(common_properties):
+            setattr(config, prop, idx)
+            self.parent.assertEqual(getattr(config, prop), idx)
+
+        # Test if config class can be called with Config(prop_name=..)
+        prop_values = {name: idx for idx, name in enumerate(common_properties)}
+        config = self.config_class(**prop_values)
+        for name, val in prop_values.items():
+            self.parent.assertEqual(getattr(config, name), val)
 
     def create_and_test_config_to_json_string(self):
         config = self.config_class(**self.inputs_dict)
