@@ -19,7 +19,7 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
-from .auto_factory import _LazyAutoMapping, _BaseAutoModelClass, auto_class_update
+from .auto_factory import _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
 from .configuration_auto import CONFIG_MAPPING_NAMES
 
 

@@ -290,6 +290,7 @@ class _LazyLoadAllMappings(OrderedDict):
     Args:
         mapping: The mapping to load.
     """
+
     def __init__(self, mapping):
         self._mapping = mapping
         self._initialized = False
