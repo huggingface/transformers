@@ -70,14 +70,16 @@ class GPTJConfig(PretrainedConfig):
             relevant if ``config.is_decoder=True``.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
+
         Example::
-        >>> from transformers import GPTJModel, GPTJConfig
-        >>> # Initializing a GPTJ EleutherAI/gptj-6B style configuration
-        >>> configuration = GPTJConfig()
-        >>> # Initializing a model from the EleutherAI/gptj-6B style configuration
-        >>> model = GPTJModel(configuration)
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
+        
+            >>> from transformers import GPTJModel, GPTJConfig
+            >>> # Initializing a GPTJ EleutherAI/gptj-6B style configuration
+            >>> configuration = GPTJConfig()
+            >>> # Initializing a model from the EleutherAI/gptj-6B style configuration
+            >>> model = GPTJModel(configuration)
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
     model_type = "gptj"
 
