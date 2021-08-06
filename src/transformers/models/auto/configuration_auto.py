@@ -237,7 +237,7 @@ def model_type_to_module_name(key):
 
 def config_class_to_model_type(config):
     """Converts a config class name to the corresponding model type"""
-    for key, cls in CONFIG_MAPPING_NAMES:
+    for key, cls in CONFIG_MAPPING_NAMES.items():
         if cls == config:
             return key
     return None
