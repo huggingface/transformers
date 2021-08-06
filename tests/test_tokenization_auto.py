@@ -102,7 +102,7 @@ class AutoTokenizerTest(unittest.TestCase):
             mapping = tuple(mapping.items())
             for index, (child_config, _) in enumerate(mapping[1:]):
                 for parent_config, _ in mapping[: index + 1]:
-                    with self.subTest(msg=f"Testing if {child_config.__name__} is child of {parent_config.__name__}"):
+                    with self.subTest(msg=f"Testing if {child_config} is child of {parent_config}"):
                         self.assertFalse(issubclass(child_config, parent_config))
 
     @require_tokenizers

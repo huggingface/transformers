@@ -454,7 +454,12 @@ def getattribute_from_module(module, attr):
         return None
     if isinstance(attr, tuple):
         return tuple(getattribute_from_module(module, a) for a in attr)
-    return getattr(module, attr)
+    if hasattr(module, attr):
+        return getattr(module, attr)
+    # Some of the mappings have entries model_type -> object of another model type. In that case we try to grab the
+    # object at the top level.
+    transformers_module = importlib.import_module("transformers")
+    return getattribute_from_module(transformers_module, attr)
 
 
 class LazyAutoMapping(OrderedDict):

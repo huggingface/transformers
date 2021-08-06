@@ -58,8 +58,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict(
         (
             "mt5",
             (
-                "T5Tokenizer" if is_sentencepiece_available() else None,
-                "T5TokenizerFast" if is_tokenizers_available() else None,
+                "MT5Tokenizer" if is_sentencepiece_available() else None,
+                "MT5TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
         ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
