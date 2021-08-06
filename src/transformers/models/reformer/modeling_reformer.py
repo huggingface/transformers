@@ -1747,8 +1747,6 @@ class ReformerOnlyLMHead(nn.Module):
         self.chunk_size_lm_head = config.chunk_size_lm_head
         self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
@@ -1757,6 +1755,10 @@ class ReformerOnlyLMHead(nn.Module):
     def forward_chunk(self, hidden_states):
         hidden_states = self.decoder(hidden_states)
         return hidden_states
+
+    def _tie_weights(self):
+        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+        self.bias = self.decoder.bias
 
 
 class ReformerPreTrainedModel(PreTrainedModel):

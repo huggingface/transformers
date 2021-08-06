@@ -594,6 +594,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 self = getattr(self, self.base_model_prefix)
             self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
 
+        for module in self.modules():
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
+
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
         uninitialized_encoder_weights: List[str] = []

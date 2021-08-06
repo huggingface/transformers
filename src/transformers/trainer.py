@@ -364,7 +364,7 @@ class Trainer:
         self.tokenizer = tokenizer
 
         if self.place_model_on_device:
-            model = model.to(args.device)
+            self._move_model_to_device(model, args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
         if self.is_model_parallel:
@@ -504,6 +504,12 @@ class Trainer:
                In the first case, will remove the first member of that class found in the list of callbacks.
         """
         self.callback_handler.remove_callback(callback)
+
+    def _move_model_to_device(self, model, device):
+        model = model.to(device)
+        # Moving a model to an XLA device disconnects the tied weights, so we have to retie them.
+        if self.args.parallel_mode == ParallelMode.TPU and hasattr(model, "tie_weights"):
+            model.tie_weights()
 
     def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
@@ -1017,7 +1023,7 @@ class Trainer:
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
         if args.fp16_full_eval and not args.do_train:
-            self.model = self.model.to(args.device)
+            self._move_model_to_device(self.model, args.device)
 
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
@@ -1078,7 +1084,7 @@ class Trainer:
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
             if self.place_model_on_device:
-                self.model = self.model.to(args.device)
+                self._move_model_to_device(self.model, args.device)
             self.model_wrapped = self.model
 
         # Keeping track whether we can can len() on the dataset or not
