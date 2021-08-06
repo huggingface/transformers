@@ -586,7 +586,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
             Selected in the range ``[0, config.n_positions - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_attention_heads,)` or :obj:`(num_layers, num_attention_heads)`, `optional`):
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_attention_heads,)` or :obj:`(n_layer, num_attention_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
@@ -622,7 +622,7 @@ class GPTJModel(GPTJPreTrainedModel):
         if not config.rotary:
             self.wpe = nn.Embedding(config.n_positions, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([GPTJBlock(config, layer_id=i) for i in range(config.num_layers)])
+        self.h = nn.ModuleList([GPTJBlock(config, layer_id=i) for i in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.rotary = None
         if config.rotary:
@@ -726,7 +726,7 @@ class GPTJModel(GPTJPreTrainedModel):
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x num_attention_heads x N x N
         # head_mask has shape n_layer x batch x num_attention_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
+        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
