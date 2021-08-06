@@ -299,16 +299,11 @@ Next we clone the model repository to add the tokenizer and model files.
 git clone https://huggingface.co/<your-username>/norwegian-t5-base
 ```
 
-To ensure that all tensorboard traces will be uploaded correctly, we need to 
-track them. You can run the following command inside your model repo to do so.
+To setup all relevant files for trairing, let's go into the cloned model directory.
 
-```
+```bash
 cd norwegian-t5-base
-git lfs track "*tfevents*"
 ```
-
-Great, we have set up our model repository. During training, we will automatically
-push the training logs and model weights to the repo.
 
 Next, let's add a symbolic link to the `run_t5_mlm_flax.py` and `t5_tokenizer_model` scripts.
 
@@ -379,6 +374,9 @@ model_dir = "./norwegian-t5-base"  # ${MODEL_DIR}
 config = T5Config.from_pretrained("google/t5-v1_1-base", vocab_size=tokenizer.get_vocab_size())
 config.save_pretrained(model_dir)
 ```
+
+Great, we have set up our model repository. During training, we will automatically
+push the training logs and model weights to the repo.
 
 ### Train model
 
