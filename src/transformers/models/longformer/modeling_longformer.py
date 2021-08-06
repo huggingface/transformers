@@ -1354,7 +1354,7 @@ class LongformerLMHead(nn.Module):
 
     def _retie_weights(self):
         # To re-tie those two weights if they get disconnected (on TPU)
-        self.bias = self.decoder.bias
+        self.decoder.bias = self.bias
 
 
 class LongformerPreTrainedModel(PreTrainedModel):
