@@ -290,7 +290,7 @@ class GPTJAttentionMixin:
         return attn_output, attn_weights
 
 class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
-    def __init__(self, attention_type, config):
+    def __init__(self, config):
         super().__init__()
 
         self.window_size = None
@@ -299,16 +299,7 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
             1, 1, max_positions, max_positions
         ).bool()
 
-        if attention_type == "local":
-            self.register_buffer(
-                "bias",
-                bias ^ torch.tril(bias, -config.window_size),
-            )
-        else:
-            self.register_buffer(
-                "bias",
-                bias,
-            )
+        self.register_buffer("bias", bias,)
 
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
@@ -412,17 +403,8 @@ class GPTJAttention(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.layer_id = layer_id
-        self.num_hidden_layers = config.num_hidden_layers
-        self.attention_type = self.num_hidden_layers[layer_id]
-
-        if self.attention_type in ["global", "local"]:
-            self.attention = GPTJSelfAttention(self.attention_type, config)
-        else:
-            raise NotImplementedError(
-                "Only attn layer types 'global' and 'local' exist, but got `config.num_hidden_layers`: "
-                f"{config.num_hidden_layers}. Select attn layer types from ['global', 'local'] only."
-            )
-
+        self.attention = GPTJSelfAttention(config)
+        
     def forward(
         self,
         hidden_states,
