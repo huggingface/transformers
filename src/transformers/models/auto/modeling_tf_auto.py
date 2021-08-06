@@ -19,489 +19,295 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
-
-# Add modeling imports here
-from ..albert.modeling_tf_albert import (
-    TFAlbertForMaskedLM,
-    TFAlbertForMultipleChoice,
-    TFAlbertForPreTraining,
-    TFAlbertForQuestionAnswering,
-    TFAlbertForSequenceClassification,
-    TFAlbertForTokenClassification,
-    TFAlbertModel,
-)
-from ..bart.modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel
-from ..bert.modeling_tf_bert import (
-    TFBertForMaskedLM,
-    TFBertForMultipleChoice,
-    TFBertForNextSentencePrediction,
-    TFBertForPreTraining,
-    TFBertForQuestionAnswering,
-    TFBertForSequenceClassification,
-    TFBertForTokenClassification,
-    TFBertLMHeadModel,
-    TFBertModel,
-)
-from ..blenderbot.modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration, TFBlenderbotModel
-from ..blenderbot_small.modeling_tf_blenderbot_small import (
-    TFBlenderbotSmallForConditionalGeneration,
-    TFBlenderbotSmallModel,
-)
-from ..camembert.modeling_tf_camembert import (
-    TFCamembertForMaskedLM,
-    TFCamembertForMultipleChoice,
-    TFCamembertForQuestionAnswering,
-    TFCamembertForSequenceClassification,
-    TFCamembertForTokenClassification,
-    TFCamembertModel,
-)
-from ..convbert.modeling_tf_convbert import (
-    TFConvBertForMaskedLM,
-    TFConvBertForMultipleChoice,
-    TFConvBertForQuestionAnswering,
-    TFConvBertForSequenceClassification,
-    TFConvBertForTokenClassification,
-    TFConvBertModel,
-)
-from ..ctrl.modeling_tf_ctrl import TFCTRLForSequenceClassification, TFCTRLLMHeadModel, TFCTRLModel
-from ..distilbert.modeling_tf_distilbert import (
-    TFDistilBertForMaskedLM,
-    TFDistilBertForMultipleChoice,
-    TFDistilBertForQuestionAnswering,
-    TFDistilBertForSequenceClassification,
-    TFDistilBertForTokenClassification,
-    TFDistilBertModel,
-)
-from ..dpr.modeling_tf_dpr import TFDPRQuestionEncoder
-from ..electra.modeling_tf_electra import (
-    TFElectraForMaskedLM,
-    TFElectraForMultipleChoice,
-    TFElectraForPreTraining,
-    TFElectraForQuestionAnswering,
-    TFElectraForSequenceClassification,
-    TFElectraForTokenClassification,
-    TFElectraModel,
-)
-from ..flaubert.modeling_tf_flaubert import (
-    TFFlaubertForMultipleChoice,
-    TFFlaubertForQuestionAnsweringSimple,
-    TFFlaubertForSequenceClassification,
-    TFFlaubertForTokenClassification,
-    TFFlaubertModel,
-    TFFlaubertWithLMHeadModel,
-)
-from ..funnel.modeling_tf_funnel import (
-    TFFunnelBaseModel,
-    TFFunnelForMaskedLM,
-    TFFunnelForMultipleChoice,
-    TFFunnelForPreTraining,
-    TFFunnelForQuestionAnswering,
-    TFFunnelForSequenceClassification,
-    TFFunnelForTokenClassification,
-    TFFunnelModel,
-)
-from ..gpt2.modeling_tf_gpt2 import TFGPT2ForSequenceClassification, TFGPT2LMHeadModel, TFGPT2Model
-from ..hubert.modeling_tf_hubert import TFHubertModel
-from ..layoutlm.modeling_tf_layoutlm import (
-    TFLayoutLMForMaskedLM,
-    TFLayoutLMForSequenceClassification,
-    TFLayoutLMForTokenClassification,
-    TFLayoutLMModel,
-)
-from ..led.modeling_tf_led import TFLEDForConditionalGeneration, TFLEDModel
-from ..longformer.modeling_tf_longformer import (
-    TFLongformerForMaskedLM,
-    TFLongformerForMultipleChoice,
-    TFLongformerForQuestionAnswering,
-    TFLongformerForSequenceClassification,
-    TFLongformerForTokenClassification,
-    TFLongformerModel,
-)
-from ..lxmert.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
-from ..marian.modeling_tf_marian import TFMarianModel, TFMarianMTModel
-from ..mbart.modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel
-from ..mobilebert.modeling_tf_mobilebert import (
-    TFMobileBertForMaskedLM,
-    TFMobileBertForMultipleChoice,
-    TFMobileBertForNextSentencePrediction,
-    TFMobileBertForPreTraining,
-    TFMobileBertForQuestionAnswering,
-    TFMobileBertForSequenceClassification,
-    TFMobileBertForTokenClassification,
-    TFMobileBertModel,
-)
-from ..mpnet.modeling_tf_mpnet import (
-    TFMPNetForMaskedLM,
-    TFMPNetForMultipleChoice,
-    TFMPNetForQuestionAnswering,
-    TFMPNetForSequenceClassification,
-    TFMPNetForTokenClassification,
-    TFMPNetModel,
-)
-from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
-from ..openai.modeling_tf_openai import TFOpenAIGPTForSequenceClassification, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
-from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
-from ..rembert.modeling_tf_rembert import (
-    TFRemBertForCausalLM,
-    TFRemBertForMaskedLM,
-    TFRemBertForMultipleChoice,
-    TFRemBertForQuestionAnswering,
-    TFRemBertForSequenceClassification,
-    TFRemBertForTokenClassification,
-    TFRemBertModel,
-)
-from ..roberta.modeling_tf_roberta import (
-    TFRobertaForMaskedLM,
-    TFRobertaForMultipleChoice,
-    TFRobertaForQuestionAnswering,
-    TFRobertaForSequenceClassification,
-    TFRobertaForTokenClassification,
-    TFRobertaModel,
-)
-from ..roformer.modeling_tf_roformer import (
-    TFRoFormerForCausalLM,
-    TFRoFormerForMaskedLM,
-    TFRoFormerForMultipleChoice,
-    TFRoFormerForQuestionAnswering,
-    TFRoFormerForSequenceClassification,
-    TFRoFormerForTokenClassification,
-    TFRoFormerModel,
-)
-from ..t5.modeling_tf_t5 import TFT5ForConditionalGeneration, TFT5Model
-from ..transfo_xl.modeling_tf_transfo_xl import (
-    TFTransfoXLForSequenceClassification,
-    TFTransfoXLLMHeadModel,
-    TFTransfoXLModel,
-)
-from ..wav2vec2.modeling_tf_wav2vec2 import TFWav2Vec2Model
-from ..xlm.modeling_tf_xlm import (
-    TFXLMForMultipleChoice,
-    TFXLMForQuestionAnsweringSimple,
-    TFXLMForSequenceClassification,
-    TFXLMForTokenClassification,
-    TFXLMModel,
-    TFXLMWithLMHeadModel,
-)
-from ..xlm_roberta.modeling_tf_xlm_roberta import (
-    TFXLMRobertaForMaskedLM,
-    TFXLMRobertaForMultipleChoice,
-    TFXLMRobertaForQuestionAnswering,
-    TFXLMRobertaForSequenceClassification,
-    TFXLMRobertaForTokenClassification,
-    TFXLMRobertaModel,
-)
-from ..xlnet.modeling_tf_xlnet import (
-    TFXLNetForMultipleChoice,
-    TFXLNetForQuestionAnsweringSimple,
-    TFXLNetForSequenceClassification,
-    TFXLNetForTokenClassification,
-    TFXLNetLMHeadModel,
-    TFXLNetModel,
-)
-from .auto_factory import _BaseAutoModelClass, auto_class_update
-from .configuration_auto import (
-    AlbertConfig,
-    BartConfig,
-    BertConfig,
-    BlenderbotConfig,
-    BlenderbotSmallConfig,
-    CamembertConfig,
-    ConvBertConfig,
-    CTRLConfig,
-    DistilBertConfig,
-    DPRConfig,
-    ElectraConfig,
-    FlaubertConfig,
-    FunnelConfig,
-    GPT2Config,
-    HubertConfig,
-    LayoutLMConfig,
-    LEDConfig,
-    LongformerConfig,
-    LxmertConfig,
-    MarianConfig,
-    MBartConfig,
-    MobileBertConfig,
-    MPNetConfig,
-    MT5Config,
-    OpenAIGPTConfig,
-    PegasusConfig,
-    RemBertConfig,
-    RobertaConfig,
-    RoFormerConfig,
-    T5Config,
-    TransfoXLConfig,
-    Wav2Vec2Config,
-    XLMConfig,
-    XLMRobertaConfig,
-    XLNetConfig,
-)
+from .auto_factory import _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
+from .configuration_auto import CONFIG_MAPPING_NAMES
 
 
 logger = logging.get_logger(__name__)
 
 
-TF_MODEL_MAPPING = OrderedDict(
+TF_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        (RemBertConfig, TFRemBertModel),
-        (RoFormerConfig, TFRoFormerModel),
-        (ConvBertConfig, TFConvBertModel),
-        (LEDConfig, TFLEDModel),
-        (LxmertConfig, TFLxmertModel),
-        (MT5Config, TFMT5Model),
-        (T5Config, TFT5Model),
-        (DistilBertConfig, TFDistilBertModel),
-        (AlbertConfig, TFAlbertModel),
-        (BartConfig, TFBartModel),
-        (CamembertConfig, TFCamembertModel),
-        (XLMRobertaConfig, TFXLMRobertaModel),
-        (LongformerConfig, TFLongformerModel),
-        (RobertaConfig, TFRobertaModel),
-        (LayoutLMConfig, TFLayoutLMModel),
-        (BertConfig, TFBertModel),
-        (OpenAIGPTConfig, TFOpenAIGPTModel),
-        (GPT2Config, TFGPT2Model),
-        (MobileBertConfig, TFMobileBertModel),
-        (TransfoXLConfig, TFTransfoXLModel),
-        (XLNetConfig, TFXLNetModel),
-        (FlaubertConfig, TFFlaubertModel),
-        (XLMConfig, TFXLMModel),
-        (CTRLConfig, TFCTRLModel),
-        (ElectraConfig, TFElectraModel),
-        (FunnelConfig, (TFFunnelModel, TFFunnelBaseModel)),
-        (DPRConfig, TFDPRQuestionEncoder),
-        (MPNetConfig, TFMPNetModel),
-        (BartConfig, TFBartModel),
-        (MBartConfig, TFMBartModel),
-        (MarianConfig, TFMarianModel),
-        (PegasusConfig, TFPegasusModel),
-        (BlenderbotConfig, TFBlenderbotModel),
-        (BlenderbotSmallConfig, TFBlenderbotSmallModel),
-        (Wav2Vec2Config, TFWav2Vec2Model),
-        (HubertConfig, TFHubertModel),
+        ("rembert", "TFRemBertModel"),
+        ("roformer", "TFRoFormerModel"),
+        ("convbert", "TFConvBertModel"),
+        ("led", "TFLEDModel"),
+        ("lxmert", "TFLxmertModel"),
+        ("mt5", "TFMT5Model"),
+        ("t5", "TFT5Model"),
+        ("distilbert", "TFDistilBertModel"),
+        ("albert", "TFAlbertModel"),
+        ("bart", "TFBartModel"),
+        ("camembert", "TFCamembertModel"),
+        ("xlm-roberta", "TFXLMRobertaModel"),
+        ("longformer", "TFLongformerModel"),
+        ("roberta", "TFRobertaModel"),
+        ("layoutlm", "TFLayoutLMModel"),
+        ("bert", "TFBertModel"),
+        ("openai-gpt", "TFOpenAIGPTModel"),
+        ("gpt2", "TFGPT2Model"),
+        ("mobilebert", "TFMobileBertModel"),
+        ("transfo-xl", "TFTransfoXLModel"),
+        ("xlnet", "TFXLNetModel"),
+        ("flaubert", "TFFlaubertModel"),
+        ("xlm", "TFXLMModel"),
+        ("ctrl", "TFCTRLModel"),
+        ("electra", "TFElectraModel"),
+        ("funnel", ("TFFunnelModel", "TFFunnelBaseModel")),
+        ("dpr", "TFDPRQuestionEncoder"),
+        ("mpnet", "TFMPNetModel"),
+        ("mbart", "TFMBartModel"),
+        ("marian", "TFMarianModel"),
+        ("pegasus", "TFPegasusModel"),
+        ("blenderbot", "TFBlenderbotModel"),
+        ("blenderbot-small", "TFBlenderbotSmallModel"),
+        ("wav2vec2", "TFWav2Vec2Model"),
+        ("hubert", "TFHubertModel"),
     ]
 )
 
-TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
+TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
-        (LxmertConfig, TFLxmertForPreTraining),
-        (T5Config, TFT5ForConditionalGeneration),
-        (DistilBertConfig, TFDistilBertForMaskedLM),
-        (AlbertConfig, TFAlbertForPreTraining),
-        (BartConfig, TFBartForConditionalGeneration),
-        (CamembertConfig, TFCamembertForMaskedLM),
-        (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
-        (RobertaConfig, TFRobertaForMaskedLM),
-        (LayoutLMConfig, TFLayoutLMForMaskedLM),
-        (BertConfig, TFBertForPreTraining),
-        (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
-        (GPT2Config, TFGPT2LMHeadModel),
-        (MobileBertConfig, TFMobileBertForPreTraining),
-        (TransfoXLConfig, TFTransfoXLLMHeadModel),
-        (XLNetConfig, TFXLNetLMHeadModel),
-        (FlaubertConfig, TFFlaubertWithLMHeadModel),
-        (XLMConfig, TFXLMWithLMHeadModel),
-        (CTRLConfig, TFCTRLLMHeadModel),
-        (ElectraConfig, TFElectraForPreTraining),
-        (FunnelConfig, TFFunnelForPreTraining),
-        (MPNetConfig, TFMPNetForMaskedLM),
+        ("lxmert", "TFLxmertForPreTraining"),
+        ("t5", "TFT5ForConditionalGeneration"),
+        ("distilbert", "TFDistilBertForMaskedLM"),
+        ("albert", "TFAlbertForPreTraining"),
+        ("bart", "TFBartForConditionalGeneration"),
+        ("camembert", "TFCamembertForMaskedLM"),
+        ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
+        ("roberta", "TFRobertaForMaskedLM"),
+        ("layoutlm", "TFLayoutLMForMaskedLM"),
+        ("bert", "TFBertForPreTraining"),
+        ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
+        ("gpt2", "TFGPT2LMHeadModel"),
+        ("mobilebert", "TFMobileBertForPreTraining"),
+        ("transfo-xl", "TFTransfoXLLMHeadModel"),
+        ("xlnet", "TFXLNetLMHeadModel"),
+        ("flaubert", "TFFlaubertWithLMHeadModel"),
+        ("xlm", "TFXLMWithLMHeadModel"),
+        ("ctrl", "TFCTRLLMHeadModel"),
+        ("electra", "TFElectraForPreTraining"),
+        ("funnel", "TFFunnelForPreTraining"),
+        ("mpnet", "TFMPNetForMaskedLM"),
     ]
 )
 
-TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
+TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
-        (RemBertConfig, TFRemBertForMaskedLM),
-        (RoFormerConfig, TFRoFormerForMaskedLM),
-        (ConvBertConfig, TFConvBertForMaskedLM),
-        (LEDConfig, TFLEDForConditionalGeneration),
-        (T5Config, TFT5ForConditionalGeneration),
-        (DistilBertConfig, TFDistilBertForMaskedLM),
-        (AlbertConfig, TFAlbertForMaskedLM),
-        (MarianConfig, TFMarianMTModel),
-        (BartConfig, TFBartForConditionalGeneration),
-        (CamembertConfig, TFCamembertForMaskedLM),
-        (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
-        (LongformerConfig, TFLongformerForMaskedLM),
-        (RobertaConfig, TFRobertaForMaskedLM),
-        (LayoutLMConfig, TFLayoutLMForMaskedLM),
-        (BertConfig, TFBertForMaskedLM),
-        (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
-        (GPT2Config, TFGPT2LMHeadModel),
-        (MobileBertConfig, TFMobileBertForMaskedLM),
-        (TransfoXLConfig, TFTransfoXLLMHeadModel),
-        (XLNetConfig, TFXLNetLMHeadModel),
-        (FlaubertConfig, TFFlaubertWithLMHeadModel),
-        (XLMConfig, TFXLMWithLMHeadModel),
-        (CTRLConfig, TFCTRLLMHeadModel),
-        (ElectraConfig, TFElectraForMaskedLM),
-        (FunnelConfig, TFFunnelForMaskedLM),
-        (MPNetConfig, TFMPNetForMaskedLM),
+        ("rembert", "TFRemBertForMaskedLM"),
+        ("roformer", "TFRoFormerForMaskedLM"),
+        ("convbert", "TFConvBertForMaskedLM"),
+        ("led", "TFLEDForConditionalGeneration"),
+        ("t5", "TFT5ForConditionalGeneration"),
+        ("distilbert", "TFDistilBertForMaskedLM"),
+        ("albert", "TFAlbertForMaskedLM"),
+        ("marian", "TFMarianMTModel"),
+        ("bart", "TFBartForConditionalGeneration"),
+        ("camembert", "TFCamembertForMaskedLM"),
+        ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
+        ("longformer", "TFLongformerForMaskedLM"),
+        ("roberta", "TFRobertaForMaskedLM"),
+        ("layoutlm", "TFLayoutLMForMaskedLM"),
+        ("bert", "TFBertForMaskedLM"),
+        ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
+        ("gpt2", "TFGPT2LMHeadModel"),
+        ("mobilebert", "TFMobileBertForMaskedLM"),
+        ("transfo-xl", "TFTransfoXLLMHeadModel"),
+        ("xlnet", "TFXLNetLMHeadModel"),
+        ("flaubert", "TFFlaubertWithLMHeadModel"),
+        ("xlm", "TFXLMWithLMHeadModel"),
+        ("ctrl", "TFCTRLLMHeadModel"),
+        ("electra", "TFElectraForMaskedLM"),
+        ("funnel", "TFFunnelForMaskedLM"),
+        ("mpnet", "TFMPNetForMaskedLM"),
     ]
 )
 
-TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
+TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
-        (RemBertConfig, TFRemBertForCausalLM),
-        (RoFormerConfig, TFRoFormerForCausalLM),
-        (BertConfig, TFBertLMHeadModel),
-        (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
-        (GPT2Config, TFGPT2LMHeadModel),
-        (TransfoXLConfig, TFTransfoXLLMHeadModel),
-        (XLNetConfig, TFXLNetLMHeadModel),
-        (
-            XLMConfig,
-            TFXLMWithLMHeadModel,
-        ),  # XLM can be MLM and CLM => model should be split similar to BERT; leave here for now
-        (CTRLConfig, TFCTRLLMHeadModel),
+        ("rembert", "TFRemBertForCausalLM"),
+        ("roformer", "TFRoFormerForCausalLM"),
+        ("bert", "TFBertLMHeadModel"),
+        ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
+        ("gpt2", "TFGPT2LMHeadModel"),
+        ("transfo-xl", "TFTransfoXLLMHeadModel"),
+        ("xlnet", "TFXLNetLMHeadModel"),
+        ("xlm", "TFXLMWithLMHeadModel"),
+        ("ctrl", "TFCTRLLMHeadModel"),
     ]
 )
 
-TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
+TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
-        (RemBertConfig, TFRemBertForMaskedLM),
-        (RoFormerConfig, TFRoFormerForMaskedLM),
-        (ConvBertConfig, TFConvBertForMaskedLM),
-        (DistilBertConfig, TFDistilBertForMaskedLM),
-        (AlbertConfig, TFAlbertForMaskedLM),
-        (CamembertConfig, TFCamembertForMaskedLM),
-        (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
-        (LongformerConfig, TFLongformerForMaskedLM),
-        (RobertaConfig, TFRobertaForMaskedLM),
-        (LayoutLMConfig, TFLayoutLMForMaskedLM),
-        (BertConfig, TFBertForMaskedLM),
-        (MobileBertConfig, TFMobileBertForMaskedLM),
-        (FlaubertConfig, TFFlaubertWithLMHeadModel),
-        (XLMConfig, TFXLMWithLMHeadModel),
-        (ElectraConfig, TFElectraForMaskedLM),
-        (FunnelConfig, TFFunnelForMaskedLM),
-        (MPNetConfig, TFMPNetForMaskedLM),
+        ("rembert", "TFRemBertForMaskedLM"),
+        ("roformer", "TFRoFormerForMaskedLM"),
+        ("convbert", "TFConvBertForMaskedLM"),
+        ("distilbert", "TFDistilBertForMaskedLM"),
+        ("albert", "TFAlbertForMaskedLM"),
+        ("camembert", "TFCamembertForMaskedLM"),
+        ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
+        ("longformer", "TFLongformerForMaskedLM"),
+        ("roberta", "TFRobertaForMaskedLM"),
+        ("layoutlm", "TFLayoutLMForMaskedLM"),
+        ("bert", "TFBertForMaskedLM"),
+        ("mobilebert", "TFMobileBertForMaskedLM"),
+        ("flaubert", "TFFlaubertWithLMHeadModel"),
+        ("xlm", "TFXLMWithLMHeadModel"),
+        ("electra", "TFElectraForMaskedLM"),
+        ("funnel", "TFFunnelForMaskedLM"),
+        ("mpnet", "TFMPNetForMaskedLM"),
     ]
 )
 
 
-TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
+TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
-        (LEDConfig, TFLEDForConditionalGeneration),
-        (MT5Config, TFMT5ForConditionalGeneration),
-        (T5Config, TFT5ForConditionalGeneration),
-        (MarianConfig, TFMarianMTModel),
-        (MBartConfig, TFMBartForConditionalGeneration),
-        (PegasusConfig, TFPegasusForConditionalGeneration),
-        (BlenderbotConfig, TFBlenderbotForConditionalGeneration),
-        (BlenderbotSmallConfig, TFBlenderbotSmallForConditionalGeneration),
-        (BartConfig, TFBartForConditionalGeneration),
+        ("led", "TFLEDForConditionalGeneration"),
+        ("mt5", "TFMT5ForConditionalGeneration"),
+        ("t5", "TFT5ForConditionalGeneration"),
+        ("marian", "TFMarianMTModel"),
+        ("mbart", "TFMBartForConditionalGeneration"),
+        ("pegasus", "TFPegasusForConditionalGeneration"),
+        ("blenderbot", "TFBlenderbotForConditionalGeneration"),
+        ("blenderbot-small", "TFBlenderbotSmallForConditionalGeneration"),
+        ("bart", "TFBartForConditionalGeneration"),
     ]
 )
 
-TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
+TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        (RemBertConfig, TFRemBertForSequenceClassification),
-        (RoFormerConfig, TFRoFormerForSequenceClassification),
-        (ConvBertConfig, TFConvBertForSequenceClassification),
-        (DistilBertConfig, TFDistilBertForSequenceClassification),
-        (AlbertConfig, TFAlbertForSequenceClassification),
-        (CamembertConfig, TFCamembertForSequenceClassification),
-        (XLMRobertaConfig, TFXLMRobertaForSequenceClassification),
-        (LongformerConfig, TFLongformerForSequenceClassification),
-        (RobertaConfig, TFRobertaForSequenceClassification),
-        (LayoutLMConfig, TFLayoutLMForSequenceClassification),
-        (BertConfig, TFBertForSequenceClassification),
-        (XLNetConfig, TFXLNetForSequenceClassification),
-        (MobileBertConfig, TFMobileBertForSequenceClassification),
-        (FlaubertConfig, TFFlaubertForSequenceClassification),
-        (XLMConfig, TFXLMForSequenceClassification),
-        (ElectraConfig, TFElectraForSequenceClassification),
-        (FunnelConfig, TFFunnelForSequenceClassification),
-        (GPT2Config, TFGPT2ForSequenceClassification),
-        (MPNetConfig, TFMPNetForSequenceClassification),
-        (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
-        (TransfoXLConfig, TFTransfoXLForSequenceClassification),
-        (CTRLConfig, TFCTRLForSequenceClassification),
+        ("rembert", "TFRemBertForSequenceClassification"),
+        ("roformer", "TFRoFormerForSequenceClassification"),
+        ("convbert", "TFConvBertForSequenceClassification"),
+        ("distilbert", "TFDistilBertForSequenceClassification"),
+        ("albert", "TFAlbertForSequenceClassification"),
+        ("camembert", "TFCamembertForSequenceClassification"),
+        ("xlm-roberta", "TFXLMRobertaForSequenceClassification"),
+        ("longformer", "TFLongformerForSequenceClassification"),
+        ("roberta", "TFRobertaForSequenceClassification"),
+        ("layoutlm", "TFLayoutLMForSequenceClassification"),
+        ("bert", "TFBertForSequenceClassification"),
+        ("xlnet", "TFXLNetForSequenceClassification"),
+        ("mobilebert", "TFMobileBertForSequenceClassification"),
+        ("flaubert", "TFFlaubertForSequenceClassification"),
+        ("xlm", "TFXLMForSequenceClassification"),
+        ("electra", "TFElectraForSequenceClassification"),
+        ("funnel", "TFFunnelForSequenceClassification"),
+        ("gpt2", "TFGPT2ForSequenceClassification"),
+        ("mpnet", "TFMPNetForSequenceClassification"),
+        ("openai-gpt", "TFOpenAIGPTForSequenceClassification"),
+        ("transfo-xl", "TFTransfoXLForSequenceClassification"),
+        ("ctrl", "TFCTRLForSequenceClassification"),
     ]
 )
 
-TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
+TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
-        (RemBertConfig, TFRemBertForQuestionAnswering),
-        (RoFormerConfig, TFRoFormerForQuestionAnswering),
-        (ConvBertConfig, TFConvBertForQuestionAnswering),
-        (DistilBertConfig, TFDistilBertForQuestionAnswering),
-        (AlbertConfig, TFAlbertForQuestionAnswering),
-        (CamembertConfig, TFCamembertForQuestionAnswering),
-        (XLMRobertaConfig, TFXLMRobertaForQuestionAnswering),
-        (LongformerConfig, TFLongformerForQuestionAnswering),
-        (RobertaConfig, TFRobertaForQuestionAnswering),
-        (BertConfig, TFBertForQuestionAnswering),
-        (XLNetConfig, TFXLNetForQuestionAnsweringSimple),
-        (MobileBertConfig, TFMobileBertForQuestionAnswering),
-        (FlaubertConfig, TFFlaubertForQuestionAnsweringSimple),
-        (XLMConfig, TFXLMForQuestionAnsweringSimple),
-        (ElectraConfig, TFElectraForQuestionAnswering),
-        (FunnelConfig, TFFunnelForQuestionAnswering),
-        (MPNetConfig, TFMPNetForQuestionAnswering),
+        ("rembert", "TFRemBertForQuestionAnswering"),
+        ("roformer", "TFRoFormerForQuestionAnswering"),
+        ("convbert", "TFConvBertForQuestionAnswering"),
+        ("distilbert", "TFDistilBertForQuestionAnswering"),
+        ("albert", "TFAlbertForQuestionAnswering"),
+        ("camembert", "TFCamembertForQuestionAnswering"),
+        ("xlm-roberta", "TFXLMRobertaForQuestionAnswering"),
+        ("longformer", "TFLongformerForQuestionAnswering"),
+        ("roberta", "TFRobertaForQuestionAnswering"),
+        ("bert", "TFBertForQuestionAnswering"),
+        ("xlnet", "TFXLNetForQuestionAnsweringSimple"),
+        ("mobilebert", "TFMobileBertForQuestionAnswering"),
+        ("flaubert", "TFFlaubertForQuestionAnsweringSimple"),
+        ("xlm", "TFXLMForQuestionAnsweringSimple"),
+        ("electra", "TFElectraForQuestionAnswering"),
+        ("funnel", "TFFunnelForQuestionAnswering"),
+        ("mpnet", "TFMPNetForQuestionAnswering"),
     ]
 )
 
-TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
+TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
-        (RemBertConfig, TFRemBertForTokenClassification),
-        (RoFormerConfig, TFRoFormerForTokenClassification),
-        (ConvBertConfig, TFConvBertForTokenClassification),
-        (DistilBertConfig, TFDistilBertForTokenClassification),
-        (AlbertConfig, TFAlbertForTokenClassification),
-        (CamembertConfig, TFCamembertForTokenClassification),
-        (FlaubertConfig, TFFlaubertForTokenClassification),
-        (XLMConfig, TFXLMForTokenClassification),
-        (XLMRobertaConfig, TFXLMRobertaForTokenClassification),
-        (LongformerConfig, TFLongformerForTokenClassification),
-        (RobertaConfig, TFRobertaForTokenClassification),
-        (LayoutLMConfig, TFLayoutLMForTokenClassification),
-        (BertConfig, TFBertForTokenClassification),
-        (MobileBertConfig, TFMobileBertForTokenClassification),
-        (XLNetConfig, TFXLNetForTokenClassification),
-        (ElectraConfig, TFElectraForTokenClassification),
-        (FunnelConfig, TFFunnelForTokenClassification),
-        (MPNetConfig, TFMPNetForTokenClassification),
+        ("rembert", "TFRemBertForTokenClassification"),
+        ("roformer", "TFRoFormerForTokenClassification"),
+        ("convbert", "TFConvBertForTokenClassification"),
+        ("distilbert", "TFDistilBertForTokenClassification"),
+        ("albert", "TFAlbertForTokenClassification"),
+        ("camembert", "TFCamembertForTokenClassification"),
+        ("flaubert", "TFFlaubertForTokenClassification"),
+        ("xlm", "TFXLMForTokenClassification"),
+        ("xlm-roberta", "TFXLMRobertaForTokenClassification"),
+        ("longformer", "TFLongformerForTokenClassification"),
+        ("roberta", "TFRobertaForTokenClassification"),
+        ("layoutlm", "TFLayoutLMForTokenClassification"),
+        ("bert", "TFBertForTokenClassification"),
+        ("mobilebert", "TFMobileBertForTokenClassification"),
+        ("xlnet", "TFXLNetForTokenClassification"),
+        ("electra", "TFElectraForTokenClassification"),
+        ("funnel", "TFFunnelForTokenClassification"),
+        ("mpnet", "TFMPNetForTokenClassification"),
     ]
 )
 
-TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
+TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
-        (RemBertConfig, TFRemBertForMultipleChoice),
-        (RoFormerConfig, TFRoFormerForMultipleChoice),
-        (ConvBertConfig, TFConvBertForMultipleChoice),
-        (CamembertConfig, TFCamembertForMultipleChoice),
-        (XLMConfig, TFXLMForMultipleChoice),
-        (XLMRobertaConfig, TFXLMRobertaForMultipleChoice),
-        (LongformerConfig, TFLongformerForMultipleChoice),
-        (RobertaConfig, TFRobertaForMultipleChoice),
-        (BertConfig, TFBertForMultipleChoice),
-        (DistilBertConfig, TFDistilBertForMultipleChoice),
-        (MobileBertConfig, TFMobileBertForMultipleChoice),
-        (XLNetConfig, TFXLNetForMultipleChoice),
-        (FlaubertConfig, TFFlaubertForMultipleChoice),
-        (AlbertConfig, TFAlbertForMultipleChoice),
-        (ElectraConfig, TFElectraForMultipleChoice),
-        (FunnelConfig, TFFunnelForMultipleChoice),
-        (MPNetConfig, TFMPNetForMultipleChoice),
+        ("rembert", "TFRemBertForMultipleChoice"),
+        ("roformer", "TFRoFormerForMultipleChoice"),
+        ("convbert", "TFConvBertForMultipleChoice"),
+        ("camembert", "TFCamembertForMultipleChoice"),
+        ("xlm", "TFXLMForMultipleChoice"),
+        ("xlm-roberta", "TFXLMRobertaForMultipleChoice"),
+        ("longformer", "TFLongformerForMultipleChoice"),
+        ("roberta", "TFRobertaForMultipleChoice"),
+        ("bert", "TFBertForMultipleChoice"),
+        ("distilbert", "TFDistilBertForMultipleChoice"),
+        ("mobilebert", "TFMobileBertForMultipleChoice"),
+        ("xlnet", "TFXLNetForMultipleChoice"),
+        ("flaubert", "TFFlaubertForMultipleChoice"),
+        ("albert", "TFAlbertForMultipleChoice"),
+        ("electra", "TFElectraForMultipleChoice"),
+        ("funnel", "TFFunnelForMultipleChoice"),
+        ("mpnet", "TFMPNetForMultipleChoice"),
     ]
 )
 
-TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
+TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
-        (BertConfig, TFBertForNextSentencePrediction),
-        (MobileBertConfig, TFMobileBertForNextSentencePrediction),
+        ("bert", "TFBertForNextSentencePrediction"),
+        ("mobilebert", "TFMobileBertForNextSentencePrediction"),
     ]
+)
+
+
+TF_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_MAPPING_NAMES)
+TF_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES)
+TF_MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES)
+TF_MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+TF_MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES)
+TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+)
+TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+)
+TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
+)
+TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
+)
+TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES
+)
+TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES
 )
 
 

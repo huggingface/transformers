@@ -1781,25 +1781,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if config_tokenizer_class is None:
                 # Third attempt. If we have not yet found the original type of the tokenizer,
                 # we are loading we see if we can infer it from the type of the configuration file
-                from .models.auto.configuration_auto import CONFIG_MAPPING  # tests_ignore
-                from .models.auto.tokenization_auto import TOKENIZER_MAPPING  # tests_ignore
+                from .models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES  # tests_ignore
 
                 if hasattr(config, "model_type"):
-                    config_class = CONFIG_MAPPING.get(config.model_type)
+                    model_type = config.model_type
                 else:
                     # Fallback: use pattern matching on the string.
-                    config_class = None
-                    for pattern, config_class_tmp in CONFIG_MAPPING.items():
+                    model_type = None
+                    for pattern in TOKENIZER_MAPPING_NAMES.keys():
                         if pattern in str(pretrained_model_name_or_path):
-                            config_class = config_class_tmp
+                            model_type = pattern
                             break
 
-                if config_class in TOKENIZER_MAPPING.keys():
-                    config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING[config_class]
-                    if config_tokenizer_class is not None:
-                        config_tokenizer_class = config_tokenizer_class.__name__
-                    else:
-                        config_tokenizer_class = config_tokenizer_class_fast.__name__
+                if model_type is not None:
+                    config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING_NAMES[model_type]
+                    if config_tokenizer_class is None:
+                        config_tokenizer_class = config_tokenizer_class_fast
 
         if config_tokenizer_class is not None:
             if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):

@@ -41,9 +41,7 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
 )
-from .training_args import ParallelMode
-from .utils import logging
-from .utils.modeling_auto_mapping import (
+from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
@@ -54,6 +52,8 @@ from .utils.modeling_auto_mapping import (
     MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
 )
+from .training_args import ParallelMode
+from .utils import logging
 
 
 TASK_MAPPING = {

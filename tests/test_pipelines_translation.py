@@ -23,7 +23,8 @@ from .test_pipelines_common import MonoInputPipelineCommonMixin
 
 
 if is_torch_available():
-    from transformers.models.mbart import MBart50TokenizerFast, MBartForConditionalGeneration
+    from transformers.models.mbart import MBartForConditionalGeneration
+    from transformers.models.mbart50 import MBart50TokenizerFast
 
 
 class TranslationEnToDePipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
