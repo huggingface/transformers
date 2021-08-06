@@ -84,7 +84,7 @@ class GPTJConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=50400,
-        n_positions=4096,
+        n_positions=2048,
         n_ctx=2048,
         n_embd=4096,
         n_layer=28,
