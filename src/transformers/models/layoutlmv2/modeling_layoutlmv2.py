@@ -529,9 +529,9 @@ class VisualBackbone(nn.Module):
     def __init__(self, config):
         super().__init__()
         detectron2_config = detectron2.config.get_cfg()
+        _C = detectron2_config
         for k,v in config.detectron2_config_args.items():
-            setattr(detectron2_config, "MODEL." + k, v)
-        print("Config:", detectron2_config)
+            setattr(_C, k, v)
         self.cfg = detectron2_config
         meta_arch = self.cfg.MODEL.META_ARCHITECTURE
         model = META_ARCH_REGISTRY.get(meta_arch)(self.cfg)

@@ -138,7 +138,7 @@ class LayoutLMv2Config(PretrainedConfig):
         has_relative_attention_bias=True,
         has_spatial_attention_bias=True,
         has_visual_segment_embedding=False,
-        detectron2_config_args={"MASK_ON":True, 
+        detectron2_config_args={"MODEL.MASK_ON":True, 
                                 "PIXEL_STD":[57.375, 57.120, 58.395], 
                                 "BACKBONE.NAME":"build_resnet_fpn_backbone",
                                 "FPN.IN_FEATURES":["res2", "res3", "res4", "res5"],
