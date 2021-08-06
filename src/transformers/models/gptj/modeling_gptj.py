@@ -412,15 +412,15 @@ class GPTJAttention(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.layer_id = layer_id
-        self.attention_layers = config.attention_layers
-        self.attention_type = self.attention_layers[layer_id]
+        self.num_hidden_layers = config.num_hidden_layers
+        self.attention_type = self.num_hidden_layers[layer_id]
 
         if self.attention_type in ["global", "local"]:
             self.attention = GPTJSelfAttention(self.attention_type, config)
         else:
             raise NotImplementedError(
-                "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
-                f"{config.attention_layers}. Select attn layer types from ['global', 'local'] only."
+                "Only attn layer types 'global' and 'local' exist, but got `config.num_hidden_layers`: "
+                f"{config.num_hidden_layers}. Select attn layer types from ['global', 'local'] only."
             )
 
     def forward(
@@ -749,7 +749,7 @@ class GPTJModel(GPTJPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-            attn_type = self.config.attention_layers[i]
+            attn_type = self.config.num_hidden_layers[i]
             attn_mask = global_attention_mask
 
             if output_hidden_states:
