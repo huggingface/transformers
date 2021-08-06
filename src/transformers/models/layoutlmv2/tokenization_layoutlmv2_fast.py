@@ -12,18 +12,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Tokenization class for LayoutLMv2."""
+"""Fast tokenization class for LayoutLMv2. It overwrites 2 methods of the slow tokenizer class,
+   namely _batch_encode_plus and _encode_plus, in which the Rust tokenizer is used.
+"""
 
 import json
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 from tokenizers import normalizers
 
-from ...file_utils import PaddingStrategy
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput, TextInputPair, TruncationStrategy
+from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
+from ...tokenization_utils_base import (
+    ENCODE_KWARGS_DOCSTRING,
+    BatchEncoding,
+    PreTokenizedInput,
+    TextInput,
+    TextInputPair,
+    TruncationStrategy,
+)
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
+from .tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING, LayoutLMv2Tokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -142,6 +151,285 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         self.do_lower_case = do_lower_case
 
+        # additional properties
+        self.cls_token_box = cls_token_box
+        self.sep_token_box = sep_token_box
+        self.pad_token_box = pad_token_box
+        self.pad_token_label = pad_token_label
+
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    def __call__(
+        self,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
+        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
+        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> BatchEncoding:
+        """
+        Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
+        sequences with word-level normalized bounding boxes and optional labels.
+
+        Args:
+            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string, a list of strings
+                (words of a single example or questions of a batch of examples) or a list of list of strings (batch of
+                words).
+            text_pair (:obj:`List[str]`, :obj:`List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
+                (pretokenized string).
+            boxes (:obj:`List[List[int]]`, :obj:`List[List[List[int]]]`):
+                Word-level bounding boxes. Each bounding box should be normalized to be on a 0-1000 scale.
+            word_labels (:obj:`List[int]`, :obj:`List[List[int]]`, `optional`):
+                Word-level integer labels (for token classification tasks such as FUNSD, CORD).
+        """
+        # Input type checking for clearer error
+        def _is_valid_text_input(t):
+            if isinstance(t, str):
+                # Strings are fine
+                return True
+            elif isinstance(t, (list, tuple)):
+                # List are fine as long as they are...
+                if len(t) == 0:
+                    # ... empty
+                    return True
+                elif isinstance(t[0], str):
+                    # ... list of strings
+                    return True
+                elif isinstance(t[0], (list, tuple)):
+                    # ... list with an empty list or with a list of strings
+                    return len(t[0]) == 0 or isinstance(t[0][0], str)
+                else:
+                    return False
+            else:
+                return False
+
+        if text_pair is not None:
+            # in case text + text_pair are provided, text = questions, text_pair = words
+            if not _is_valid_text_input(text):
+                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
+            if not isinstance(text_pair, (list, tuple)):
+                raise ValueError(
+                    "words must of type `List[str]` (single pretokenized example),"
+                    "or `List[List[str]]` (batch of pretokenized examples)."
+                )
+        else:
+            # in case only text is provided => must be words
+            if not isinstance(text, (list, tuple)):
+                raise ValueError(
+                    "Words must of type `List[str]` (single pretokenized example), "
+                    "or `List[List[str]]` (batch of pretokenized examples)."
+                )
+
+        if text_pair is not None:
+            is_batched = isinstance(text, (list, tuple))
+        else:
+            is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+
+        words = text if text_pair is None else text_pair
+        assert boxes is not None, "You must provide corresponding bounding boxes"
+        if is_batched:
+            assert len(words) == len(boxes), "You must provide words and boxes for an equal amount of examples"
+            for words_example, boxes_example in zip(words, boxes):
+                assert len(words_example) == len(
+                    boxes_example
+                ), "You must provide as many words as there are bounding boxes"
+        else:
+            assert len(words) == len(boxes), "You must provide as many words as there are bounding boxes"
+
+        if is_batched:
+            if text_pair is not None and len(text) != len(text_pair):
+                raise ValueError(
+                    f"batch length of `text`: {len(text)} does not match batch length of `text_pair`: {len(text_pair)}."
+                )
+            batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
+            is_pair = bool(text_pair is not None)
+            return self.batch_encode_plus(
+                batch_text_or_text_pairs=batch_text_or_text_pairs,
+                is_pair=is_pair,
+                boxes=boxes,
+                word_labels=word_labels,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
+        else:
+            return self.encode_plus(
+                text=text,
+                text_pair=text_pair,
+                boxes=boxes,
+                word_labels=word_labels,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
+
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    def batch_encode_plus(
+        self,
+        batch_text_or_text_pairs: Union[
+            List[TextInput],
+            List[TextInputPair],
+            List[PreTokenizedInput],
+        ],
+        is_pair: bool = None,
+        boxes: Optional[List[List[List[int]]]] = None,
+        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> BatchEncoding:
+        """ """
+
+        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
+        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            verbose=verbose,
+            **kwargs,
+        )
+
+        return self._batch_encode_plus(
+            batch_text_or_text_pairs=batch_text_or_text_pairs,
+            is_pair=is_pair,
+            boxes=boxes,
+            word_labels=word_labels,
+            add_special_tokens=add_special_tokens,
+            padding_strategy=padding_strategy,
+            truncation_strategy=truncation_strategy,
+            max_length=max_length,
+            stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+            **kwargs,
+        )
+
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    def encode_plus(
+        self,
+        text: Union[TextInput, PreTokenizedInput],
+        text_pair: Optional[PreTokenizedInput] = None,
+        boxes: Optional[List[List[int]]] = None,
+        word_labels: Optional[List[int]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> BatchEncoding:
+        """
+        Tokenize and prepare for the model a sequence or a pair of sequences. .. warning:: This method is deprecated,
+        ``__call__`` should be used instead.
+
+        Args:
+            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
+                The first sequence to be encoded. This can be a string, a list of strings or a list of list of strings.
+            text_pair (:obj:`List[str]` or :obj:`List[int]`, `optional`):
+                Optional second sequence to be encoded. This can be a list of strings (words of a single example) or a
+                list of list of strings (words of a batch of examples).
+        """
+
+        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
+        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            verbose=verbose,
+            **kwargs,
+        )
+
+        return self._encode_plus(
+            text=text,
+            boxes=boxes,
+            text_pair=text_pair,
+            word_labels=word_labels,
+            add_special_tokens=add_special_tokens,
+            padding_strategy=padding_strategy,
+            truncation_strategy=truncation_strategy,
+            max_length=max_length,
+            stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+            **kwargs,
+        )
+
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -179,11 +467,14 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
         )
-
+        
+        if is_pair:
+            batch_text_or_text_pairs = [(text.split(), text_pair) for text, text_pair in batch_text_or_text_pairs]
+        
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
-            is_pretokenized=True,  # set is_pretokenized to True by default
+            is_pretokenized=True,  # we set this to True as LayoutLMv2 always expects pretokenized inputs
         )
 
         # Convert encoding to dict
@@ -199,7 +490,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
+                return_offsets_mapping=True,  # set to True as we need them to create token_boxes and labels
                 return_length=return_length,
                 verbose=verbose,
             )
@@ -228,6 +519,47 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         for input_ids in sanitized_tokens["input_ids"]:
             self._eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
+
+        # create the token boxes
+        print("Boxes:", boxes)
+        
+        token_boxes = []
+        for batch_index in range(len(sanitized_tokens["input_ids"])):
+            token_boxes_example = []
+            for id, word_id in zip(
+                sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].word_ids
+            ):
+                if word_id is not None:
+                    token_boxes_example.append(boxes[batch_index][word_id])
+                else:
+                    if id == self.cls_token_id:
+                        token_boxes_example.append(self.cls_token_box)
+                    elif id == self.sep_token_id:
+                        token_boxes_example.append(self.sep_token_box)
+                    elif id == self.pad_token_id:
+                        token_boxes_example.append(self.pad_token_box)
+                    else:
+                        raise ValueError("Id not recognized")
+            token_boxes.append(token_boxes_example)
+
+        sanitized_tokens["bbox"] = token_boxes
+
+        # optionally, create the labels
+        if word_labels is not None:
+            labels = []
+            for batch_index in range(len(sanitized_tokens["input_ids"])):
+                labels_example = []
+                for id, word_id in zip(
+                    sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].word_ids
+                ):
+                    if word_id is not None:
+                        labels_example.append(word_labels[batch_index][word_id])
+                    else:
+                        labels_example.append(self.pad_token_label)
+                labels.append(labels_example)
+
+            sanitized_tokens["bbox"] = labels
+
         return BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
 
     def _encode_plus(
@@ -254,8 +586,13 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
     ) -> BatchEncoding:
 
         batched_input = [(text, text_pair)] if text_pair else [text]
+        batched_boxes = [boxes]
+        batched_word_labels = [word_labels] if word_labels is not None else None
         batched_output = self._batch_encode_plus(
             batched_input,
+            is_pair=bool(text_pair is not None),
+            boxes=batched_boxes,
+            word_labels=batched_word_labels,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,
@@ -287,3 +624,54 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         self._eventual_warn_about_too_long_sequence(batched_output["input_ids"], max_length, verbose)
 
         return batched_output
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A BERT sequence has the following format:
+        - single sequence: ``[CLS] X [SEP]``
+        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+        Returns:
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+        output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+
+        if token_ids_1:
+            output += token_ids_1 + [self.sep_token_id]
+
+        return output
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
+        pair mask has the following format:
+        ::
+            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
+        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+        Returns:
+            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            sequence(s).
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+    
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+        return tuple(files)
+

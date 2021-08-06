@@ -141,7 +141,7 @@ LayoutLMv2TokenizerFast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.LayoutLMv2TokenizerFast
-    :members: __call__, save_vocabulary
+    :members: __call__
 
 
 LayoutLMv2Processor
