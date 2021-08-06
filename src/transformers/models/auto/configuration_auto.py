@@ -313,19 +313,19 @@ class LazyLoadAllMappings(OrderedDict):
 
     def values(self):
         self._initialize()
-        return self._values.keys()
+        return self._data.values()
 
     def items(self):
         self._initialize()
-        return self._items.keys()
+        return self._data.keys()
 
     def __iter__(self):
         self._initialize()
-        return iter(self._items)
+        return iter(self._data)
 
     def __contains__(self, item):
         self._initialize()
-        return item in self._items
+        return item in self._data
 
 
 ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = LazyLoadAllMappings(CONFIG_ARCHIVE_MAP_MAPPING_NAMES)
