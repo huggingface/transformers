@@ -533,7 +533,7 @@ GPTJ_START_DOCSTRING = r"""
     usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.gptjConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.GPTJConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
