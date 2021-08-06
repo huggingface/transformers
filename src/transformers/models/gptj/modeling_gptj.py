@@ -621,7 +621,7 @@ class GPTJModel(GPTJPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         if not config.rotary:
             self.wpe = nn.Embedding(config.n_positions, self.embed_dim)
-        self.drop = nn.Dropout(config.embed_pdrop)
+        self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTJBlock(config, layer_id=i) for i in range(config.num_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.rotary = None
