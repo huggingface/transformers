@@ -427,7 +427,7 @@ class GPTJAttention(nn.Module):
 
 
 class GPTJMLP(nn.Module):
-    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * n_ctx
+    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * embed_dim
         super().__init__()
         embed_dim = config.n_embd
         self.c_fc = nn.Linear(embed_dim, intermediate_size)
@@ -446,7 +446,7 @@ class GPTJBlock(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
         n_ctx = config.n_ctx
-        inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * n_ctx
+        inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * embed_dim
         self.ln_1 = nn.LayerNorm(n_ctx, eps=config.layer_norm_epsilon)
         self.attn = GPTJAttention(config, layer_id)
         self.jax = config.jax
