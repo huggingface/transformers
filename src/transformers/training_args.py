@@ -1052,6 +1052,8 @@ class TrainingArguments:
                     logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
+                    elif is_sagemaker_dp_enabled():
+                        sm_dist.Barrier()
                     else:
                         torch.distributed.barrier()
                 yield
@@ -1061,6 +1063,8 @@ class TrainingArguments:
                     logger.debug(f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas")
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
+                    elif is_sagemaker_dp_enabled():
+                        sm_dist.Barrier()
                     else:
                         torch.distributed.barrier()
         else:
@@ -1071,9 +1075,7 @@ class TrainingArguments:
         Get number of steps used for a linear warmup.
         """
         warmup_steps = (
-            self.warmup_steps
-            if self.warmup_steps > 0
-            else math.ceil(num_training_steps * self.warmup_ratio)
+            self.warmup_steps if self.warmup_steps > 0 else math.ceil(num_training_steps * self.warmup_ratio)
         )
         return warmup_steps
 

@@ -851,9 +851,10 @@ class Trainer:
 
         for key, value in params.items():
             if not hasattr(self.args, key):
-                raise AttributeError(
+                logger.warn(
                     f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
                 )
+                continue
             old_attr = getattr(self.args, key, None)
             # Casting value to the proper type
             if old_attr is not None:
@@ -1004,6 +1005,7 @@ class Trainer:
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
+        resume_from_checkpoint = None if not resume_from_checkpoint else resume_from_checkpoint
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -1114,7 +1116,14 @@ class Trainer:
             num_train_samples = args.max_steps * total_train_batch_size
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
-            debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
+            if self.args.n_gpu > 1:
+                # nn.DataParallel(model) replicates the model, creating new variables and module
+                # references registered here no longer work on other gpus, breaking the module
+                raise ValueError(
+                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP (torch.distributed.launch)."
+                )
+            else:
+                debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if args.deepspeed:
@@ -1326,6 +1335,8 @@ class Trainer:
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
                     self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
+                else:
+                    self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
@@ -2507,10 +2518,11 @@ class Trainer:
         Returns:
             The url of the commit of your model in the given repository.
         """
-        if not self.args.should_save:
-            return
 
-        self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
+        if self.args.should_save:
+            self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
+        # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
+        # self.args.should_save.
         self.save_model()
 
         # Only push from one node.

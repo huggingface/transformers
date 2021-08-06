@@ -45,6 +45,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Speech2TextConfig"
 _TOKENIZER_FOR_DOC = "Speech2TextTokenizer"
+_CHECKPOINT_FOR_DOC = "facebook/s2t-small-librispeech-asr"
 
 
 SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -757,7 +758,6 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if attention_mask is not None:
             attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
 
@@ -1131,7 +1131,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="s2t_transformer_s",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
