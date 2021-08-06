@@ -201,7 +201,7 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
 class SplinterModelIntegrationTest(unittest.TestCase):
     @slow
     def test_splinter_question_answering(self):
-        model = SplinterForQuestionAnswering.from_pretrained("tau/splinter-base")
+        model = SplinterForQuestionAnswering.from_pretrained("tau/splinter-base-qass")
 
         # Input: "[CLS] Brad was born in [QUESTION]. He returned to the United Kingdom later."
         # Output should be the span "the United Kingdom"
