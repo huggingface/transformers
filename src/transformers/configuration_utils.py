@@ -219,7 +219,7 @@ class PretrainedConfig(PushToHubMixin):
     attribute_map: Dict[str, str] = {}
 
     def __setattr__(self, key, value):
-        if key in super().__getattribute__('attribute_map'): # self.attribute_map:
+        if key in super().__getattribute__('attribute_map'):
             key = super().__getattribute__('attribute_map')[key]
         super().__setattr__(key, value)
 
@@ -230,8 +230,6 @@ class PretrainedConfig(PushToHubMixin):
 
 
     def __init__(self, **kwargs):
-        #self.attribute_map = kwargs.pop("attribute_map", {})
-
         # Attributes with defaults
         self.return_dict = kwargs.pop("return_dict", True)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
