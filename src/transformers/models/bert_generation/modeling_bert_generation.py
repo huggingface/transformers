@@ -430,7 +430,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
 class BertGenerationOnlyLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def forward(self, hidden_states):
