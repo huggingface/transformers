@@ -86,7 +86,7 @@ class GPTJConfig(PretrainedConfig):
         vocab_size=50400,
         n_positions=2048,
         n_ctx=2048,
-        n_embd=4096,
+        n_embd=2048,
         n_layer=28,
         n_head=16,
         rotary_dim=64,
