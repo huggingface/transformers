@@ -234,11 +234,11 @@ class GPTJAttentionMixin:
     A few attention related utilities for attention modules in GPT J, to be used as a mixin.
     """
 
-    def _split_heads(self, tensor, num_heads, attn_head_size, rotary):
+    def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
         """
-        Splits hidden_size dim into attn_head_size and num_heads
+        Splits n_ctx dim into attn_head_size and num_attention_heads
         """
-        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
+        new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
         tensor = tensor.view(*new_shape)
         if rotary:
           return tensor
@@ -249,9 +249,9 @@ class GPTJAttentionMixin:
         else:
             raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
 
-    def _merge_heads(self, tensor, num_heads, attn_head_size):
+    def _merge_heads(self, tensor, num_attention_heads, attn_head_size):
         """
-        Merges attn_head_size dim and num_attn_heads dim into hidden_size
+        Merges attn_head_size dim and num_attn_heads dim into n_ctx
         """
         if len(tensor.shape) == 5:
             tensor = tensor.permute(0, 1, 3, 2, 4).contiguous()
@@ -259,10 +259,10 @@ class GPTJAttentionMixin:
             tensor = tensor.permute(0, 2, 1, 3).contiguous()
         else:
             raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
-        new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
+        new_shape = tensor.size()[:-2] + (num_attention_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def _attn(self, query, key, value, causal_mask, masked_bias, attn_dropout, attention_mask=None, head_mask=None, scale_attn=None):
+    def _attn(self, query, key, value, causal_mask, masked_bias, attn_pdrop, attention_mask=None, head_mask=None, scale_attn=None):
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
         key = key.to(torch.float32)
@@ -279,7 +279,7 @@ class GPTJAttentionMixin:
 
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
         attn_weights = attn_weights.to(value.dtype)
-        attn_weights = attn_dropout(attn_weights)
+        attn_weights = attn_pdrop(attn_weights)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -294,7 +294,7 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
         super().__init__()
 
         self.window_size = None
-        max_positions = config.max_position_embeddings
+        max_positions = config.n_positions
         bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
             1, 1, max_positions, max_positions
         ).bool()
@@ -312,19 +312,19 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
 
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
-        self.attn_dropout = nn.Dropout(config.attention_dropout)
-        self.resid_dropout = nn.Dropout(config.resid_dropout)
+        self.attn_pdrop = nn.Dropout(config.attention_pdrop)
+        self.resid_pdrop = nn.Dropout(config.resid_pdrop)
 
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_heads
-        self.head_dim = self.embed_dim // self.num_heads
+        self.embed_dim = config.n_ctx
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_attention_heads
         if config.jax:
             self.register_buffer("scale_attn", torch.sqrt(torch.tensor(self.head_dim)))
         else:
             self.scale_attn = None
-        if self.head_dim * self.num_heads != self.embed_dim:
+        if self.head_dim * self.num_attention_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+                f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and `num_attention_heads`: {self.num_attention_heads})."
             )
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -350,9 +350,9 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
-        query = self._split_heads(query, self.num_heads, self.head_dim, self.rotary)
-        key = self._split_heads(key, self.num_heads, self.head_dim, self.rotary)
-        value = self._split_heads(value, self.num_heads, self.head_dim, False)
+        query = self._split_heads(query, self.num_attention_heads, self.head_dim, self.rotary)
+        key = self._split_heads(key, self.num_attention_heads, self.head_dim, self.rotary)
+        value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
 
         if self.rotary:
             seq_len = key.shape[1]
@@ -395,12 +395,12 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
 
         attn_output, attn_weights = self._attn(
-            query, key, value, causal_mask, self.masked_bias, self.attn_dropout, attention_mask, head_mask, self.scale_attn
+            query, key, value, causal_mask, self.masked_bias, self.attn_pdrop, attention_mask, head_mask, self.scale_attn
         )
 
-        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
+        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)
-        attn_output = self.resid_dropout(attn_output)
+        attn_output = self.resid_pdrop(attn_output)
 
         outputs = (attn_output, present)
         if output_attentions:
@@ -445,13 +445,13 @@ class GPTJAttention(nn.Module):
 
 
 class GPTJMLP(nn.Module):
-    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * hidden_size
+    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * n_ctx
         super().__init__()
-        embed_dim = config.hidden_size
+        embed_dim = config.n_ctx
         self.c_fc = nn.Linear(embed_dim, intermediate_size)
         self.c_proj = nn.Linear(intermediate_size, embed_dim)
-        self.act = ACT2FN[config.activation_function]
-        self.dropout = nn.Dropout(config.resid_dropout)
+        self.act = ACT2FN[config.hidden_act]
+        self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, hidden_states):
         hidden_states = self.c_fc(hidden_states)
@@ -463,13 +463,13 @@ class GPTJMLP(nn.Module):
 class GPTJBlock(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
-        hidden_size = config.hidden_size
-        inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
-        self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        n_ctx = config.n_ctx
+        inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * n_ctx
+        self.ln_1 = nn.LayerNorm(n_ctx, eps=config.layer_norm_eps)
         self.attn = GPTJAttention(config, layer_id)
         self.jax = config.jax
         if not self.jax:
-            self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            self.ln_2 = nn.LayerNorm(n_ctx, eps=config.layer_norm_eps)
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
@@ -583,16 +583,16 @@ GPTJ_INPUTS_DOCSTRING = r"""
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Selected in the range ``[0, config.n_positions - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_attention_heads,)` or :obj:`(num_layers, num_attention_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, n_ctx)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -615,18 +615,18 @@ class GPTJModel(GPTJPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.embed_dim = config.hidden_size
+        self.embed_dim = config.n_ctx
         self.jax = config.jax
         self.vocab_size = config.vocab_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         if not config.rotary:
-            self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
-        self.drop = nn.Dropout(config.embed_dropout)
+            self.wpe = nn.Embedding(config.n_positions, self.embed_dim)
+        self.drop = nn.Dropout(config.embed_pdrop)
         self.h = nn.ModuleList([GPTJBlock(config, layer_id=i) for i in range(config.num_layers)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.rotary = None
         if config.rotary:
-            rotary_dim = config.hidden_size // config.num_heads
+            rotary_dim = config.n_ctx // config.num_attention_heads
             if config.rotary_dim is not None:
                 rotary_dim = min(config.rotary_dim, rotary_dim)
             self.rotary = True
@@ -703,7 +703,7 @@ class GPTJModel(GPTJPreTrainedModel):
             global_attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+            # So we can broadcast to [batch_size, num_attention_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
             global_attention_mask = global_attention_mask[:, None, None, :]
@@ -724,8 +724,8 @@ class GPTJModel(GPTJPreTrainedModel):
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x num_heads x N x N
-        # head_mask has shape n_layer x batch x num_heads x N x N
+        # attention_probs has shape bsz x num_attention_heads x N x N
+        # head_mask has shape n_layer x batch x num_attention_heads x N x N
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
 
         if inputs_embeds is None:
@@ -821,7 +821,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         super().__init__(config)
         self.transformer = GPTJModel(config)
         self.jax = config.jax
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.jax)
+        self.lm_head = nn.Linear(config.n_ctx, config.vocab_size, bias=self.jax)
         self.init_weights()
 
     def get_output_embeddings(self):
@@ -970,7 +970,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTJModel(config)
-        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+        self.score = nn.Linear(config.n_ctx, self.num_labels, bias=False)
 
         self.init_weights()
 
