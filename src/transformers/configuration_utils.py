@@ -56,6 +56,8 @@ class PretrainedConfig(PushToHubMixin):
           :class:`~RagConfig`.
         - **keys_to_ignore_at_inference** (:obj:`List[str]`) -- A list of keys to ignore by default when looking at
           dictionary outputs of the model during inference.
+        - **attribute_map** (:obj:`Dict[str, str]`) -- A dict that maps model specific attribute names to the
+          standardized naming of attributes.
 
     Common attributes (present in all subclasses)
 
@@ -214,20 +216,21 @@ class PretrainedConfig(PushToHubMixin):
     """
     model_type: str = ""
     is_composition: bool = False
+    attribute_map: Dict[str, str] = {}
 
     def __setattr__(self, key, value):
-        if hasattr(self, 'attribute_map') and key in self.attribute_map:
-            key = self.attribute_map[key]
+        if key in super().__getattribute__('attribute_map'): # self.attribute_map:
+            key = super().__getattribute__('attribute_map')[key]
         super().__setattr__(key, value)
 
     def __getattribute__(self, key):
-        if key != 'attribute_map' and hasattr(self, 'attribute_map') and key in self.attribute_map:
-            key = self.attribute_map[key]
+        if key != 'attribute_map' and key in super().__getattribute__('attribute_map'):
+            key = super().__getattribute__('attribute_map')[key]
         return super().__getattribute__(key)
 
 
     def __init__(self, **kwargs):
-        self.attribute_map = kwargs.pop("attribute_map", {})
+        #self.attribute_map = kwargs.pop("attribute_map", {})
 
         # Attributes with defaults
         self.return_dict = kwargs.pop("return_dict", True)
