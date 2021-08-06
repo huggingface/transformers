@@ -49,21 +49,15 @@ Next we clone the model repository to add the tokenizer and model files.
 git clone https://huggingface.co/<your-username>/norwegian-roberta-base
 ```
 
-To ensure that all tensorboard traces will be uploaded correctly, we need to 
-track them. You can run the following command inside your model repo to do so.
+To setup all relevant files for trairing, let's go into the cloned model directory.
 
-```
+```bash
 cd norwegian-roberta-base
-git lfs track "*tfevents*"
 ```
-
-Great, we have set up our model repository. During training, we will automatically
-push the training logs and model weights to the repo.
 
 Next, let's add a symbolic link to the `run_mlm_flax.py`.
 
 ```bash
-export MODEL_DIR="./norwegian-roberta-base"
 ln -s ~/transformers/examples/flax/language-modeling/run_mlm_flax.py run_mlm_flax.py
 ```
 
@@ -71,14 +65,12 @@ ln -s ~/transformers/examples/flax/language-modeling/run_mlm_flax.py run_mlm_fla
 
 In the first step, we train a tokenizer to efficiently process the text input for the model. Similar to how it is shown in [How to train a new language model from scratch using Transformers and Tokenizers](https://huggingface.co/blog/how-to-train), we use a **`ByteLevelBPETokenizer`**.
 The tokenizer is trained on the complete Norwegian dataset of OSCAR
-and consequently saved in `${MODEL_DIR}`
+and consequently saved in the cloned model directory.
 This can take up to 10 minutes depending on your hardware ☕.
 
 ```python
 from datasets import load_dataset
 from tokenizers import trainers, Tokenizer, normalizers, ByteLevelBPETokenizer
-
-model_dir = "./norwegian-roberta-base"  # ${MODEL_DIR}
 
 # load dataset
 dataset = load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
@@ -100,7 +92,7 @@ tokenizer.train_from_iterator(batch_iterator(), vocab_size=50265, min_frequency=
 ])
 
 # Save files to disk
-tokenizer.save(f"{model_dir}/tokenizer.json")
+tokenizer.save("./")
 ```
 
 ### Create configuration
@@ -112,11 +104,12 @@ in the local model folder:
 ```python
 from transformers import RobertaConfig
 
-model_dir = "./norwegian-roberta-base"  # ${MODEL_DIR}
-
-config = RobertaConfig.from_pretrained("roberta-base", vocab_size=tokenizer.get_vocab_size())
-config.save_pretrained(model_dir)
+config = RobertaConfig.from_pretrained("roberta-base", vocab_size=50265)
+config.save_pretrained("./")
 ```
+
+Great, we have set up our model repository. During training, we will automatically
+push the training logs and model weights to the repo.
 
 ### Train model
 
@@ -124,10 +117,10 @@ Next we can run the example script to pretrain the model:
 
 ```bash
 ./run_mlm_flax.py \
-    --output_dir="${MODEL_DIR}" \
+    --output_dir="./" \
     --model_type="roberta" \
-    --config_name="${MODEL_DIR}" \
-    --tokenizer_name="${MODEL_DIR}" \
+    --config_name="./" \
+    --tokenizer_name="./" \
     --dataset_name="oscar" \
     --dataset_config_name="unshuffled_deduplicated_no" \
     --max_seq_length="128" \
@@ -272,6 +265,9 @@ Training should converge at a loss and perplexity
 of 3.24 and 25.72 respectively after 20 epochs on a single TPUv3-8.
 This should take less than ~21 hours.
 Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/2zEhLwJ0Qp2FAkI3WVH9qA).
+
+For a step-by-step walkthrough of how to do causal language modeling in Flax, please have a 
+look at [this](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/causal_language_modeling_flax.ipynb) google colab.
 
 ## T5-like span-masked language modeling
 
