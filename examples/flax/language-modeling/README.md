@@ -308,7 +308,6 @@ cd norwegian-t5-base
 Next, let's add a symbolic link to the `run_t5_mlm_flax.py` and `t5_tokenizer_model` scripts.
 
 ```bash
-export MODEL_DIR="./norwegian-t5-base"
 ln -s ~/transformers/examples/flax/language-modeling/run_t5_mlm_flax.py run_t5_mlm_flax.py
 ln -s ~/transformers/examples/flax/language-modeling/t5_tokenizer_model.py t5_tokenizer_model.py
 ```
@@ -321,7 +320,7 @@ a sentencepiece unigram tokenizer as shown in [t5_tokenizer_model.py](https://gi
 which is heavily inspired from [yandex-research/DeDLOC's tokenizer model](https://github.com/yandex-research/DeDLOC/blob/5c994bc64e573702a9a79add3ecd68b38f14b548/sahajbert/tokenizer/tokenizer_model.py) .
 
 The tokenizer is trained on the complete Norwegian dataset of OSCAR
-and consequently saved in `${MODEL_DIR}`
+and consequently saved in the cloned model directory.
 This can take up to 120 minutes depending on your hardware ☕☕☕ .
 
 ```python
@@ -332,7 +331,6 @@ from t5_tokenizer_model import SentencePieceUnigramTokenizer
 
 vocab_size = 32_000
 input_sentence_size = None
-model_dir = "./norwegian-t5-base"  # ${MODEL_DIR}
 
 # Initialize a dataset
 dataset = datasets.load_dataset("oscar", name="unshuffled_deduplicated_no", split="train")
@@ -357,7 +355,7 @@ tokenizer.train_from_iterator(
 )
 
 # Save files to disk
-tokenizer.save(f"{model_dir}/tokenizer.json")
+tokenizer.save("./tokenizer.json")
 ```
 
 ### Create configuration
@@ -369,10 +367,8 @@ in the local model folder:
 ```python
 from transformers import T5Config
 
-model_dir = "./norwegian-t5-base"  # ${MODEL_DIR}
-
 config = T5Config.from_pretrained("google/t5-v1_1-base", vocab_size=tokenizer.get_vocab_size())
-config.save_pretrained(model_dir)
+config.save_pretrained("./")
 ```
 
 Great, we have set up our model repository. During training, we will automatically
