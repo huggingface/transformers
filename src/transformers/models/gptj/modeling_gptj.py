@@ -447,11 +447,11 @@ class GPTJBlock(nn.Module):
         super().__init__()
         n_ctx = config.n_ctx
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * config.n_embd
-        self.ln_1 = nn.LayerNorm(n_ctx, eps=config.layer_norm_epsilon)
+        self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
         self.attn = GPTJAttention(config, layer_id)
         self.jax = config.jax
         if not self.jax:
-            self.ln_2 = nn.LayerNorm(n_ctx, eps=config.layer_norm_epsilon)
+            self.ln_2 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
@@ -731,7 +731,6 @@ class GPTJModel(GPTJPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-            attn_type = self.config.num_hidden_layers[i]
             attn_mask = global_attention_mask
 
             if output_hidden_states:
@@ -803,7 +802,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         super().__init__(config)
         self.transformer = GPTJModel(config)
         self.jax = config.jax
-        self.lm_head = nn.Linear(config.n_ctx, config.vocab_size, bias=self.jax)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=self.jax)
         self.init_weights()
 
     def get_output_embeddings(self):
