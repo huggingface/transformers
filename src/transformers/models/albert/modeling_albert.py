@@ -860,6 +860,7 @@ class AlbertMLMHead(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
         self.decoder = nn.Linear(config.embedding_size, config.vocab_size)
         self.activation = ACT2FN[config.hidden_act]
+        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
