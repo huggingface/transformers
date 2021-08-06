@@ -321,7 +321,7 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=not config.jax)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary = config.rotary
         self.rotary_dim = None
         if config.rotary_dim is not None:
