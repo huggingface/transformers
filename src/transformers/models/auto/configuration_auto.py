@@ -17,6 +17,7 @@ import importlib
 import re
 import warnings
 from collections import OrderedDict
+from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
 
@@ -339,7 +340,7 @@ class _LazyLoadAllMappings(OrderedDict):
 ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = _LazyLoadAllMappings(CONFIG_ARCHIVE_MAP_MAPPING_NAMES)
 
 
-def _get_class_name(model_class):
+def _get_class_name(model_class: Union[str, List[str]]):
     if isinstance(model_class, (list, tuple)):
         return " or ".join([f":class:`~transformers.{c}`" for c in model_class if c is not None])
     return f":class:`~transformers.{model_class}`"
