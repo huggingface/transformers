@@ -12,11 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for Splinter."""
-from typing import List, Optional
+"""Fast Tokenization classes for Splinter."""
 
+import json
+from typing import List, Optional, Tuple
+
+from tokenizers import normalizers
+
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_splinter import SplinterTokenizer
 
 
@@ -48,31 +52,59 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-class SplinterTokenizerFast(BertTokenizerFast):
+class SplinterTokenizerFast(PreTrainedTokenizerFast):
     r"""
-    Construct a fast Splinter tokenizer.
+    Construct a "fast" Splinter tokenizer (backed by HuggingFace's `tokenizers` library). Based on WordPiece.
 
-    :class:`~transformers.SplinterTokenizer` is similar to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
-    It adds a special question token in order to create question representations from its contextualized embedding.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
+    Args:
+        vocab_file (:obj:`str`):
+            File containing the vocabulary.
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to lowercase the input when tokenizing.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"[UNK]"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
+        question_token (:obj:`str`, `optional`, defaults to :obj:`"[QUESTION]"`):
+            The token used for constructing question representations.
+        clean_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to clean the text before tokenization by removing any control characters and replacing all
+            whitespaces by the classic one.
+        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see `this
+            issue <https://github.com/huggingface/transformers/issues/328>`__).
+        strip_accents: (:obj:`bool`, `optional`):
+            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
+            value for :obj:`lowercase` (as in the original BERT).
+        wordpieces_prefix: (:obj:`str`, `optional`, defaults to :obj:`"##"`):
+            The prefix for subwords.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = SplinterTokenizer
 
     def __init__(
         self,
-        vocab_file,
-        do_lower_case=False,
-        do_basic_tokenize=True,
-        never_split=None,
+        vocab_file=None,
+        tokenizer_file=None,
+        do_lower_case=True,
         unk_token="[UNK]",
         sep_token="[SEP]",
         pad_token="[PAD]",
@@ -84,10 +116,9 @@ class SplinterTokenizerFast(BertTokenizerFast):
         **kwargs
     ):
         super().__init__(
-            vocab_file=vocab_file,
+            vocab_file,
+            tokenizer_file=tokenizer_file,
             do_lower_case=do_lower_case,
-            do_basic_tokenize=do_basic_tokenize,
-            never_split=never_split,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -98,6 +129,26 @@ class SplinterTokenizerFast(BertTokenizerFast):
             additional_special_tokens=(question_token,),
             **kwargs,
         )
+
+        pre_tok_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
+        if (
+            pre_tok_state.get("lowercase", do_lower_case) != do_lower_case
+            or pre_tok_state.get("strip_accents", strip_accents) != strip_accents
+        ):
+            pre_tok_class = getattr(normalizers, pre_tok_state.pop("type"))
+            pre_tok_state["lowercase"] = do_lower_case
+            pre_tok_state["strip_accents"] = strip_accents
+            self.backend_tokenizer.normalizer = pre_tok_class(**pre_tok_state)
+
+        self.do_lower_case = do_lower_case
+
+    @property
+    def question_token_id(self):
+        """
+        :obj:`Optional[int]`: Id of the question token in the vocabulary, used to condition the answer on a question
+        representation.
+        """
+        return self.convert_tokens_to_ids(self.question_token)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -131,12 +182,35 @@ class SplinterTokenizerFast(BertTokenizerFast):
             # Input is context-then-question
             return cls + token_ids_0 + sep + token_ids_1 + question_suffix + sep
 
-    @property
-    def question_token_id(self) -> Optional[int]:
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
         """
-        :obj:`Optional[int]`: Id of the question token in the vocabulary, used to condition the answer on a question
-        representation.
+        Create the token type IDs corresponding to the sequences passed. `What are token type IDs?
+        <../glossary.html#token-type-ids>`__
 
-        Returns :obj:`None` if the token has not been set.
+        Should be overridden in a subclass if the model has a special way of building those.
+
+        Args:
+            token_ids_0 (:obj:`List[int]`): The first tokenized sequence.
+            token_ids_1 (:obj:`List[int]`, `optional`): The second tokenized sequence.
+
+        Returns:
+            :obj:`List[int]`: The token type ids.
         """
-        return self.convert_tokens_to_ids(self.question_token)
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+        question_suffix = [self.question_token_id] + [self.convert_tokens_to_ids(".")]
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+
+        if self.padding_side == "right":
+            # Input is question-then-context
+            return len(cls + token_ids_0 + question_suffix + sep) * [0] + len(token_ids_1 + sep) * [1]
+        else:
+            # Input is context-then-question
+            return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + question_suffix + sep) * [1]
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+        return tuple(files)
