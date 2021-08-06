@@ -1694,9 +1694,6 @@ if is_flax_available():
     _import_structure["models.gpt_neo"].extend(
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
-    _import_structure["models.gptj"].extend(
-        ["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"]
-    )
     _import_structure["models.marian"].extend(
         [
             "FlaxMarianModel",
@@ -1825,7 +1822,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig, GPTJTokenizer
+    from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2098,17 +2095,11 @@ if TYPE_CHECKING:
 
         from .models.gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTJForMaskedLM,
             GPTJForCausalLM,
-            GPTJForMultipleChoice,
-            GPTJForQuestionAnswering,
-            GPTJForSequenceClassification,
-            GPTJForTokenClassification,
             GPTJLayer,
             GPTJModel,
             GPTJPreTrainedModel,
-            load_tf_weights_in_gptj,
-        )
+\        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
