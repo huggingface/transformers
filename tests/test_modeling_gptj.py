@@ -87,7 +87,7 @@ class GPTJModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return GPTJConfig.from_pretrained("gptj")
+        return GPTJConfig.from_pretrained("EleutherAI/gpt-j-6B")
 
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
