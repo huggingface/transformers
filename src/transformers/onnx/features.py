@@ -21,6 +21,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoModelForMultipleChoice,
         AutoModelForQuestionAnswering,
+        AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
     )
@@ -46,6 +47,7 @@ class FeaturesManager:
     _TASKS_TO_AUTOMODELS = {
         "default": AutoModel,
         "causal-lm": AutoModelForCausalLM,
+        "seq2seq-lm": AutoModelForSeq2SeqLM,
         "sequence-classification": AutoModelForSequenceClassification,
         "token-classification": AutoModelForTokenClassification,
         "multiple-choice": AutoModelForMultipleChoice,
@@ -61,7 +63,9 @@ class FeaturesManager:
         "gpt2": supported_features_mapping("default", onnx_config_cls=GPT2OnnxConfig),
         "longformer": supported_features_mapping("default", onnx_config_cls=LongformerOnnxConfig),
         "roberta": supported_features_mapping("default", onnx_config_cls=RobertaOnnxConfig),
-        "t5": supported_features_mapping("default", onnx_config_cls=T5OnnxConfig),
+        "t5": supported_features_mapping(
+            "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=T5OnnxConfig
+        ),
         "xlm-roberta": supported_features_mapping("default", onnx_config_cls=XLMRobertaOnnxConfig),
         "gpt-neo": supported_features_mapping(
             "default",

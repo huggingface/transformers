@@ -14,7 +14,7 @@
 import dataclasses
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Any, Callable, List, Mapping, Optional
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional
 
 from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
 
@@ -59,6 +59,7 @@ class OnnxConfig(ABC):
     _TASKS_TO_COMMON_OUTPUTS = {
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
         "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
         "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "multiple-choice": OrderedDict({"logits": {0: "batch"}}),
@@ -228,6 +229,24 @@ class OnnxConfig(ABC):
             orig_op = spec.orig_op if spec.op_wrapper is None else spec.op_wrapper(spec.orig_op)
             setattr(spec.o, spec.name, orig_op)
 
+    @staticmethod
+    def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
+        """
+        Flatten any potential nested structure expanding the name of the field with the index of the element within the
+        structure.
+
+        Args:
+            name: The name of the nested structure
+            field: The structure to, potentially, be flattened
+
+        Returns:
+            (Dict[str, Any]): Outputs with flattened structure and key mapping this new structure.
+
+        """
+        from itertools import chain
+
+        return {f"{name}.{idx}": item for idx, item in enumerate(chain.from_iterable(field))}
+
 
 class OnnxConfigWithPast(OnnxConfig, ABC):
     def __init__(
@@ -285,3 +304,15 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         # Generate dummy inputs according to compute batch and sequence
         dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
         return OrderedDict(dict(tokenizer(dummy_input, return_tensors=framework)))
+
+    @staticmethod
+    def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
+        if name in ["present", "past_key_values"]:
+            flatten_output = {}
+            for idx, t in enumerate(field):
+                flatten_output[f"{name}.{idx}.key"] = t[0]
+                flatten_output[f"{name}.{idx}.value"] = t[1]
+
+            return flatten_output
+
+        return super().flatten_output_collection_property(name, field)
