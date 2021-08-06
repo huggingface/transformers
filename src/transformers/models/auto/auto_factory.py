@@ -473,7 +473,7 @@ class LazyAutoMapping(OrderedDict):
 
     def _load_attr_from_module(self, model_type, attr):
         module_name = model_type_to_module_name(model_type)
-        if not module_name in self._modules:
+        if module_name not in self._modules:
             self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
         return getattribute_from_module(self._modules[module_name], attr)
 

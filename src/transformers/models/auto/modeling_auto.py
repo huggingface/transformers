@@ -17,8 +17,6 @@
 import warnings
 from collections import OrderedDict
 
-from transformers.utils.modeling_auto_mapping import MODEL_MAPPING_NAMES
-
 from ...utils import logging
 from .auto_factory import LazyAutoMapping, _BaseAutoModelClass, auto_class_update
 from .configuration_auto import CONFIG_MAPPING_NAMES
