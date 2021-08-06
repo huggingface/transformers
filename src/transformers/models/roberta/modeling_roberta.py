@@ -1140,6 +1140,10 @@ class RobertaLMHead(nn.Module):
 
         return x
 
+    def _retie_weights(self):
+        # To re-tie those two weights if they get disconnected (on TPU)
+        self.decoder.bias = self.bias
+
 
 @add_start_docstrings(
     """

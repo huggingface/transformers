@@ -440,6 +440,10 @@ class BertGenerationOnlyLMHead(nn.Module):
         logits = self.decoder(hidden_states)
         return logits
 
+    def _retie_weights(self):
+        # To re-tie those two weights if they get disconnected (on TPU)
+        self.decoder.bias = self.bias
+
 
 @add_start_docstrings(
     """BertGeneration Model with a `language modeling` head on top for CLM fine-tuning. """,

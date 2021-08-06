@@ -874,6 +874,10 @@ class AlbertMLMHead(nn.Module):
 
         return prediction_scores
 
+    def _retie_weights(self):
+        # To re-tie those two weights if they get disconnected (on TPU)
+        self.decoder.bias = self.bias
+
 
 class AlbertSOPHead(nn.Module):
     def __init__(self, config):

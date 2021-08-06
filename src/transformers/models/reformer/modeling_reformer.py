@@ -1758,6 +1758,10 @@ class ReformerOnlyLMHead(nn.Module):
         hidden_states = self.decoder(hidden_states)
         return hidden_states
 
+    def _retie_weights(self):
+        # To re-tie those two weights if they get disconnected (on TPU)
+        self.decoder.bias = self.bias
+
 
 class ReformerPreTrainedModel(PreTrainedModel):
     """
