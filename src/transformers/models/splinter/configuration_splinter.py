@@ -71,9 +71,6 @@ class SplinterConfig(PretrainedConfig):
             relevant if ``config.is_decoder=True``.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
-        initialize_new_qass (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If :obj:`True`, use randomly initialized paraeters for the Question-Aware Span Selection head on top of
-            Splinter.
         question_token_id (:obj:`int`, `optional`, defaults to 104):
             The id of the ``[QUESTION]`` token.
 
