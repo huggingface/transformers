@@ -151,7 +151,7 @@ class AutoFeatureExtractor:
 
         model_type = config_class_to_model_type(type(config).__name__)
         if model_type is not None:
-            return FEATURE_EXTRACTOR_MAPPING[model_type].from_dict(config_dict, **kwargs)
+            return FEATURE_EXTRACTOR_MAPPING[type(config)].from_dict(config_dict, **kwargs)
         elif "feature_extractor_type" in config_dict:
             feature_extractor_class = feature_extractor_class_from_name(config_dict["feature_extractor_type"])
             return feature_extractor_class.from_dict(config_dict, **kwargs)
