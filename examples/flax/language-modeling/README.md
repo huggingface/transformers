@@ -180,7 +180,7 @@ Next we clone the model repository to add the tokenizer and model files.
 git clone https://huggingface.co/<your-username>/norwegian-gpt2
 ```
 
-To setup all relevant files for trairing, let's go into the cloned model directory.
+To setup all relevant files for training, let's go into the cloned model directory.
 
 ```bash
 cd norwegian-gpt2
