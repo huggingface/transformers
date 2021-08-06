@@ -244,7 +244,7 @@ def config_class_to_model_type(config):
     return None
 
 
-class LazyConfigMapping(OrderedDict):
+class _LazyConfigMapping(OrderedDict):
     """
     A dictionary that lazily load its values when they are requested.
     """
@@ -278,10 +278,17 @@ class LazyConfigMapping(OrderedDict):
         return item in self._mapping
 
 
-CONFIG_MAPPING = LazyConfigMapping(CONFIG_MAPPING_NAMES)
+CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
 
 
-class LazyLoadAllMappings(OrderedDict):
+class _LazyLoadAllMappings(OrderedDict):
+    """
+    A mapping that will load all pairs of key values at the first access (either by indexing, requestions keys, values,
+    etc.)
+
+    Args:
+        mapping: The mapping to load.
+    """
     def __init__(self, mapping):
         self._mapping = mapping
         self._initialized = False
@@ -329,7 +336,7 @@ class LazyLoadAllMappings(OrderedDict):
         return item in self._data
 
 
-ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = LazyLoadAllMappings(CONFIG_ARCHIVE_MAP_MAPPING_NAMES)
+ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = _LazyLoadAllMappings(CONFIG_ARCHIVE_MAP_MAPPING_NAMES)
 
 
 def _get_class_name(model_class):

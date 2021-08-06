@@ -21,7 +21,7 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...file_utils import FEATURE_EXTRACTOR_NAME
-from .auto_factory import LazyAutoMapping
+from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -40,7 +40,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-FEATURE_EXTRACTOR_MAPPING = LazyAutoMapping(CONFIG_MAPPING_NAMES, FEATURE_EXTRACTOR_MAPPING_NAMES)
+FEATURE_EXTRACTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FEATURE_EXTRACTOR_MAPPING_NAMES)
 
 
 def feature_extractor_class_from_name(class_name: str):

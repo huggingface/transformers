@@ -462,7 +462,14 @@ def getattribute_from_module(module, attr):
     return getattribute_from_module(transformers_module, attr)
 
 
-class LazyAutoMapping(OrderedDict):
+class _LazyAutoMapping(OrderedDict):
+    """"
+    A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
+
+    Args:
+        - config_mapping: The map model type to config class
+        - model_mapping: The map model type to model (or tokenizer) class
+    """
     def __init__(self, config_mapping, model_mapping):
         self._config_mapping = config_mapping
         self._reverse_config_mapping = {v: k for k, v in config_mapping.items()}

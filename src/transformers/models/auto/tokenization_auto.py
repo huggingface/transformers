@@ -32,7 +32,7 @@ from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from ..encoder_decoder import EncoderDecoderConfig
-from .auto_factory import LazyAutoMapping
+from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -191,7 +191,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-TOKENIZER_MAPPING = LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAMES)
+TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAMES)
 
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
