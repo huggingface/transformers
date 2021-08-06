@@ -860,8 +860,6 @@ class AlbertMLMHead(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
         self.decoder = nn.Linear(config.embedding_size, config.vocab_size)
         self.activation = ACT2FN[config.hidden_act]
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
@@ -873,6 +871,10 @@ class AlbertMLMHead(nn.Module):
         prediction_scores = hidden_states
 
         return prediction_scores
+
+    def _tie_weights(self):
+        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+        self.bias = self.decoder.bias
 
 
 class AlbertSOPHead(nn.Module):
