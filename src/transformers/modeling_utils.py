@@ -595,8 +595,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
 
         for module in self.modules():
-            if hasattr(module, "_retie_weights"):
-                module._retie_weights()
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
 
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
