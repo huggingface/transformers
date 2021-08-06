@@ -597,7 +597,7 @@ class GPTJModel(GPTJPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.embed_dim = config.n_ctx
+        self.embed_dim = config.n_embd
         self.jax = config.jax
         self.vocab_size = config.vocab_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
