@@ -1023,7 +1023,7 @@ class Trainer:
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
         if args.fp16_full_eval and not args.do_train:
-            self._move_model_to_device(model, args.device)
+            self._move_model_to_device(self.model, args.device)
 
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
@@ -1084,7 +1084,7 @@ class Trainer:
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
             if self.place_model_on_device:
-                self._move_model_to_device(model, args.device)
+                self._move_model_to_device(self.model, args.device)
             self.model_wrapped = self.model
 
         # Keeping track whether we can can len() on the dataset or not

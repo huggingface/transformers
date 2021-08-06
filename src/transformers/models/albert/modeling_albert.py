@@ -876,7 +876,7 @@ class AlbertMLMHead(nn.Module):
 
     def _retie_weights(self):
         # To re-tie those two weights if they get disconnected (on TPU)
-        self.decoder.bias = self.bias
+        self.bias = self.decoder.bias
 
 
 class AlbertSOPHead(nn.Module):

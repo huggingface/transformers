@@ -442,7 +442,7 @@ class BertGenerationOnlyLMHead(nn.Module):
 
     def _retie_weights(self):
         # To re-tie those two weights if they get disconnected (on TPU)
-        self.decoder.bias = self.bias
+        self.bias = self.decoder.bias
 
 
 @add_start_docstrings(
