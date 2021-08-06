@@ -89,62 +89,64 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict([
-    ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("canine", "CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("roformer", "ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("clip", "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("bigbird_pegasus", "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("deit", "DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("luke", "LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("detr", "DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("gpt_neo", "GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("big_bird", "BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("megatron-bert", "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("speech_to_text", "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("vit", "VIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("m2m_100", "M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("convbert", "CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("led", "LED_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("blenderbot-small", "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("bert", "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("bart","BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("blenderbot", "BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("mbart", "MBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("openai-gpt", "OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("transfo-xl", "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("gpt2", "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("ctrl", "CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("xlnet", "XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("xlm", "XLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("roberta", "ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("distilbert", "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("camembert", "CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("t5", "T5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("xlm-roberta", "XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("flaubert", "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("electra", "ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("longformer", "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("retribert", "RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("lxmert", "LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("layoutlm", "LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("dpr", "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("deberta", "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("deberta-v2", "DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("squeezebert", "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("xlm-prophetnet", "XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("prophetnet", "PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("mpnet", "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("tapas", "TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-])
+CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
+    [
+        ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("canine", "CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("roformer", "ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("clip", "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("bigbird_pegasus", "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("deit", "DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("luke", "LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("detr", "DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("gpt_neo", "GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("big_bird", "BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("megatron-bert", "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("speech_to_text", "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vit", "VIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("m2m_100", "M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("convbert", "CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("led", "LED_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("blenderbot-small", "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("bert", "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("blenderbot", "BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mbart", "MBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("openai-gpt", "OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("transfo-xl", "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("gpt2", "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("ctrl", "CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("xlnet", "XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("xlm", "XLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("roberta", "ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("distilbert", "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("camembert", "CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("t5", "T5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("xlm-roberta", "XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("flaubert", "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("electra", "ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("longformer", "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("retribert", "RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("lxmert", "LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("layoutlm", "LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("dpr", "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("deberta", "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("deberta-v2", "DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("squeezebert", "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("xlm-prophetnet", "XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("prophetnet", "PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mpnet", "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("tapas", "TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+    ]
+)
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
@@ -221,44 +223,53 @@ MODEL_NAMES_MAPPING = OrderedDict(
     ]
 )
 
-SPECIAL_CONFIG_KEY_TO_MODULE_NAME = OrderedDict([("openai-gpt", "openai")])
+SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict([("openai-gpt", "openai")])
 
 
-def config_key_to_module_name(key):
+def model_type_to_module_name(key):
     """Converts a config key to the corresponding module."""
     # Special treatment
-    if key in SPECIAL_CONFIG_KEY_TO_MODULE_NAME:
-        return SPECIAL_CONFIG_KEY_TO_MODULE_NAME[key]
+    if key in SPECIAL_MODEL_TYPE_TO_MODULE_NAME:
+        return SPECIAL_MODEL_TYPE_TO_MODULE_NAME[key]
 
     return key.replace("-", "_")
+
+
+def config_class_to_model_type(config):
+    """Converts a config class name to the corresponding model type"""
+    for key, cls in CONFIG_MAPPING_NAMES:
+        if cls == config:
+            return key
+    return None
 
 
 class LazyConfigMapping(OrderedDict):
     """
     A dictionary that lazily load its values when they are requested.
     """
+
     def __init__(self, mapping):
         self._mapping = mapping
         self._modules = {}
-    
+
     def __getitem__(self, key):
         if key not in self._mapping:
             raise KeyError(key)
         value = self._mapping[key]
-        module_name = config_key_to_module_name(key)
+        module_name = model_type_to_module_name(key)
         if not module_name in self._modules:
             self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
         return getattr(self._modules[module_name], value)
-    
+
     def keys(self):
         return self._mapping.keys()
-    
+
     def values(self):
         return [self[k] for k in self._mapping.keys()]
-    
+
     def items(self):
         return [(k, self[k]) for k in self._mapping.keys()]
-    
+
     def __iter__(self):
         return iter(self._mapping.keys())
 
@@ -274,40 +285,40 @@ class LazyLoadAllMappings(OrderedDict):
         self._mapping = mapping
         self._initialized = False
         self._data = {}
-    
+
     def _initialize(self):
         if self._initialized:
             return
         warnings.warn(
             "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP is deprecated and will be removed in v5 of Transformers. "
             "It does not contain all available model checkpoints, far from it. Checkout hf.co/models for that.",
-            FutureWarning
+            FutureWarning,
         )
-        
-        for config_key, map_name in self._mapping.items():
-            module_name = config_key_to_module_name(config_key)
+
+        for model_type, map_name in self._mapping.items():
+            module_name = model_type_to_module_name(model_type)
             module = importlib.import_module(f".{module_name}", "transformers.models")
             mapping = getattr(module, map_name)
             self._data.update(mapping)
 
         self._initialized = True
-    
+
     def __getitem__(self, key):
         self._initialize()
         return self._data[key]
-    
+
     def keys(self):
         self._initialize()
         return self._data.keys()
-    
+
     def values(self):
         self._initialize()
         return self._values.keys()
-    
+
     def items(self):
         self._initialize()
         return self._items.keys()
-    
+
     def __iter__(self):
         self._initialize()
         return iter(self._items)
@@ -332,19 +343,24 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
     if use_model_types:
         if config_to_class is None:
             model_type_to_name = {
-                model_type: f":class:`~transformers.{config}`"
-                for model_type, config in CONFIG_MAPPING_NAMES.items()
+                model_type: f":class:`~transformers.{config}`" for model_type, config in CONFIG_MAPPING_NAMES.items()
             }
         else:
             model_type_to_name = {
-                model_type: _get_class_name(model_class) for model_type, model_class in config_to_class.items() if model_type in MODEL_NAMES_MAPPING
+                model_type: _get_class_name(model_class)
+                for model_type, model_class in config_to_class.items()
+                if model_type in MODEL_NAMES_MAPPING
             }
         lines = [
             f"{indent}- **{model_type}** -- {model_type_to_name[model_type]} ({MODEL_NAMES_MAPPING[model_type]} model)"
             for model_type in sorted(model_type_to_name.keys())
         ]
     else:
-        config_to_name = {CONFIG_MAPPING_NAMES[config]: _get_class_name(clas) for config, clas in config_to_class.items() if config in CONFIG_MAPPING_NAMES}
+        config_to_name = {
+            CONFIG_MAPPING_NAMES[config]: _get_class_name(clas)
+            for config, clas in config_to_class.items()
+            if config in CONFIG_MAPPING_NAMES
+        }
         config_to_model_name = {
             config: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING_NAMES.items()
         }
@@ -402,7 +418,7 @@ class AutoConfig:
         )
 
     @classmethod
-    #@replace_list_option_in_docstrings()
+    # @replace_list_option_in_docstrings()
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
         Instantiate one of the configuration classes of the library from a pretrained model configuration.

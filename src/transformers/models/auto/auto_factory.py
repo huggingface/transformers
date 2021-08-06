@@ -19,7 +19,7 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import copy_func
 from ...utils import logging
-from .configuration_auto import AutoConfig, config_key_to_module_name, replace_list_option_in_docstrings
+from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 
 
 logger = logging.get_logger(__name__)
@@ -465,14 +465,14 @@ class LazyAutoMapping(OrderedDict):
         self._modules = {}
 
     def __getitem__(self, key):
-        config_key = self._reverse_config_mapping[key.__name__]
-        if config_key not in self._model_mapping:
+        model_type = self._reverse_config_mapping[key.__name__]
+        if model_type not in self._model_mapping:
             raise KeyError(key)
-        model_name = self._model_mapping[config_key]
-        return self._load_attr_from_module(config_key, model_name)
+        model_name = self._model_mapping[model_type]
+        return self._load_attr_from_module(model_type, model_name)
 
-    def _load_attr_from_module(self, config_key, attr):
-        module_name = config_key_to_module_name(config_key)
+    def _load_attr_from_module(self, model_type, attr):
+        module_name = model_type_to_module_name(model_type)
         if not module_name in self._modules:
             self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
         return getattribute_from_module(self._modules[module_name], attr)
@@ -485,7 +485,11 @@ class LazyAutoMapping(OrderedDict):
         ]
 
     def values(self):
-        return [self._load_attr_from_module(key, name) for key, name in self._model_mapping.items() if key in self._config_mapping.keys()]
+        return [
+            self._load_attr_from_module(key, name)
+            for key, name in self._model_mapping.items()
+            if key in self._config_mapping.keys()
+        ]
 
     def items(self):
         return [
@@ -493,7 +497,8 @@ class LazyAutoMapping(OrderedDict):
                 self._load_attr_from_module(key, self._config_mapping[key]),
                 self._load_attr_from_module(key, self._model_mapping[key]),
             )
-            for key in self._model_mapping.keys() if key in self._config_mapping.keys()
+            for key in self._model_mapping.keys()
+            if key in self._config_mapping.keys()
         ]
 
     def __iter__(self):
@@ -502,5 +507,5 @@ class LazyAutoMapping(OrderedDict):
     def __contains__(self, item):
         if not hasattr(item, "__name__") or item.__name__ not in self._reverse_config_mapping:
             return False
-        config_key = self._reverse_config_mapping[item.__name__]
-        return config_key in self._model_mapping
+        model_type = self._reverse_config_mapping[item.__name__]
+        return model_type in self._model_mapping

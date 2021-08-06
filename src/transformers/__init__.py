@@ -1989,8 +1989,7 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
-        from .models.mbart import MBartTokenizer
-        from .models.mbart import MBart50Tokenizer
+        from .models.mbart import MBart50Tokenizer, MBartTokenizer
         from .models.mt5 import MT5Tokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.reformer import ReformerTokenizer
