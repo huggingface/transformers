@@ -17,6 +17,7 @@
 
 import unittest
 
+import torch
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -200,4 +201,18 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
 class SplinterModelIntegrationTest(unittest.TestCase):
     @slow
     def test_splinter_question_answering(self):
-        pass
+        model = SplinterForQuestionAnswering.from_pretrained("tau/splinter-base")
+
+        # Input: "[CLS] Brad was born in [QUESTION]. He returned to the United Kingdom later."
+        # Output should be the span "the United Kingdom"
+        input_ids = torch.tensor([[101, 7796, 1108, 1255, 1107, 104, 119, 1124,
+                                   1608, 1106, 1103, 1244, 2325, 1224, 119, 102]])
+        output = model(input_ids)
+
+        expected_shape = torch.Size((1, 16))
+        self.assertEqual(output.start_logits.shape, expected_shape)
+        self.assertEqual(output.start_logits.shape, expected_shape)
+
+        self.assertEqual(torch.argmax(output.start_logits), 10)
+        self.assertEqual(torch.argmax(output.end_logits), 12)
+
