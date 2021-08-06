@@ -496,8 +496,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gptj_sample(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gptj")
-        model = GPTJForCausalLM.from_pretrained("gptj")
+        tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
         model.to(torch_device)
 
         torch.manual_seed(0)
