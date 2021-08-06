@@ -373,15 +373,15 @@ Next we can run the example script to pretrain the model:
 	--weight_decay="0.001" \
 	--warmup_steps="2000" \
 	--overwrite_output_dir \
-	--logging_steps="100" \
-	--save_steps="1000" \
-	--eval_steps="1000" \
+	--logging_steps="500" \
+	--save_steps="10000" \
+	--eval_steps="2500" \
 	--push_to_hub
 ```
 
 Training should converge at a loss and accuracy 
-of 2.2 and 58.0 respectively after 2 epochs on a single TPUv3-8.
-This should take around 24 hours.
+of 2.36 and 57.0 respectively after 3 epochs on a single TPUv3-8.
+This should take around 4.5 hours.
 Training statistics can be accessed on directly on the 🤗 [hub](https://huggingface.co/patrickvonplaten/t5-base-norwegian/tensorboard)
 
 ## Runtime evaluation
