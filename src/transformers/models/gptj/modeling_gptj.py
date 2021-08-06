@@ -303,7 +303,7 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
 
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
-        self.attn_pdrop = nn.Dropout(config.attention_pdrop)
+        self.attn_pdrop = nn.Dropout(config.attn_pdrop)
         self.resid_pdrop = nn.Dropout(config.resid_pdrop)
 
         self.embed_dim = config.n_ctx
