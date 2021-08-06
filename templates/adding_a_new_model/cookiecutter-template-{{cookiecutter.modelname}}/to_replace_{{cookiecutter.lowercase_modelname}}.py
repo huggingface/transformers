@@ -177,7 +177,7 @@
 
 # Below: "# Add archive maps here"
 # Replace with:
-        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP"),
 # End.
 
 # Below: "# Add full (and cased) model names here"
