@@ -363,6 +363,17 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
+    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
+        batched_input = [(text, pair)] if pair else [text]
+        encodings = self._tokenizer.encode_batch(
+            batched_input,
+            add_special_tokens=add_special_tokens,
+            is_pretokenized=False,  
+            **kwargs
+        )
+                
+        return encodings[0].tokens
+    
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
         self,
@@ -470,7 +481,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         
         if is_pair:
             batch_text_or_text_pairs = [(text.split(), text_pair) for text, text_pair in batch_text_or_text_pairs]
-        
+            
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
@@ -520,9 +531,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         for input_ids in sanitized_tokens["input_ids"]:
             self._eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
 
-        # create the token boxes
-        print("Boxes:", boxes)
-        
+        # create the token boxes 
         token_boxes = []
         for batch_index in range(len(sanitized_tokens["input_ids"])):
             token_boxes_example = []
@@ -585,6 +594,10 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         **kwargs
     ) -> BatchEncoding:
 
+        # make it a batched input
+        # 2 options: 
+        # 1) only text, in case text must be a list of str 
+        # 2) text + text_pair, in which case text = str and text_pair a list of str
         batched_input = [(text, text_pair)] if text_pair else [text]
         batched_boxes = [boxes]
         batched_word_labels = [word_labels] if word_labels is not None else None

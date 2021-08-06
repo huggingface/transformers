@@ -586,8 +586,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # test 2: two sequences
                 question, words, boxes = self.get_question_words_and_boxes()
 
-                sequences = tokenizer.encode(question, words, boxes, add_special_tokens=False)
-                attached_sequences = tokenizer.encode(question, words, boxes, add_special_tokens=True)
+                sequences = tokenizer.encode(question, words, boxes=boxes, add_special_tokens=False)
+                attached_sequences = tokenizer.encode(question, words, boxes=boxes, add_special_tokens=True)
 
                 # Method is implemented (e.g. not GPT-2)
                 if len(attached_sequences) != 2:
@@ -820,6 +820,44 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             if parameter.default != inspect.Parameter.empty:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 
+    def test_build_inputs_with_special_tokens(self):
+        if not self.test_slow_tokenizer:
+            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            return
+
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                # # Input string
+                # input_simple = tokenizer_p.tokenize("This is a sample input", add_special_tokens=False)
+                # input_pair = tokenizer_p.tokenize("This is a sample pair", add_special_tokens=False)
+
+                # # Generate output
+                # output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
+                # output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
+                # self.assertEqual(output_p, output_r)
+
+                # # Generate pair output
+                # output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
+                # output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
+                # self.assertEqual(output_p, output_r)
+
+                # Input tokens id
+                words, boxes = self.get_words_and_boxes()
+                input_simple = tokenizer_p.encode(words, boxes=boxes, add_special_tokens=False)
+                input_pair = tokenizer_p.encode(words, boxes=boxes, add_special_tokens=False)
+
+                # Generate output
+                output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
+                output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
+                self.assertEqual(output_p, output_r)
+
+                # Generate pair output
+                output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
+                output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
+                self.assertEqual(output_p, output_r)
+    
     def test_special_tokens_mask_input_pairs(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -983,6 +1021,43 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertIn(0, output["token_type_ids"])
                 self.assertIn(1, output["token_type_ids"])
 
+    def test_offsets_mapping(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                text = ["a", "wonderful", "test"]
+                boxes = [[1,8,12,20] for _ in range(len(text))]
+
+                # No pair
+                tokens_with_offsets = tokenizer_r.encode_plus(
+                    text, boxes=boxes, return_special_tokens_mask=True, return_offsets_mapping=True, add_special_tokens=True
+                )
+                added_tokens = tokenizer_r.num_special_tokens_to_add(False)
+                offsets = tokens_with_offsets["offset_mapping"]
+
+                # Assert there is the same number of tokens and offsets
+                self.assertEqual(len(offsets), len(tokens_with_offsets["input_ids"]))
+
+                # Assert there is online added_tokens special_tokens
+                self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
+
+                # Pairs
+                text = "what's his name"
+                pair = ["a", "wonderful", "test"]
+                boxes = [[1,8,12,20] for _ in range(len(pair))]
+                tokens_with_offsets = tokenizer_r.encode_plus(
+                    text, pair, boxes=boxes, return_special_tokens_mask=True, return_offsets_mapping=True, add_special_tokens=True
+                )
+                added_tokens = tokenizer_r.num_special_tokens_to_add(True)
+                offsets = tokens_with_offsets["offset_mapping"]
+
+                # Assert there is the same number of tokens and offsets
+                self.assertEqual(len(offsets), len(tokens_with_offsets["input_ids"]))
+
+                # Assert there is online added_tokens special_tokens
+                self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
+    
     @require_torch
     @slow
     @require_scatter
@@ -1158,7 +1233,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 words, boxes = self.get_words_and_boxes()
                 prepared_input_dict = tokenizer.prepare_for_model(words, boxes=boxes, add_special_tokens=True)
-
+                
                 input_dict = tokenizer.encode_plus(words, boxes=boxes, add_special_tokens=True)
 
                 self.assertEqual(input_dict, prepared_input_dict)
