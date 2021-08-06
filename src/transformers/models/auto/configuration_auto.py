@@ -91,6 +91,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
+        # Add archive maps here
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
