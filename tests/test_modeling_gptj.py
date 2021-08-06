@@ -466,7 +466,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gptj(self):
         for checkpointing in [True, False]:
-            model = GPTJForCausalLM.from_pretrained("gptj", gradient_checkpointing=checkpointing)
+            model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", gradient_checkpointing=checkpointing)
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
             expected_output_ids = [
