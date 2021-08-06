@@ -195,7 +195,7 @@ if is_torch_available():
     )
 
     PYTORCH_EXPORT_DEFAULT_MODELS = {
-        ("ALBERT", "albert-base-v2", AlbertModel, AlbertConfig, AlbertOnnxConfig),
+        ("ALBERT", "hf-internal-testing/tiny-albert", AlbertModel, AlbertConfig, AlbertOnnxConfig),
         ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
         ("BERT", "bert-base-cased", BertModel, BertConfig, BertOnnxConfig),
         ("DistilBERT", "distilbert-base-cased", DistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
@@ -229,7 +229,7 @@ class OnnxExportTestCaseV2(TestCase):
                 self.assertTrue(hasattr(onnx_config_class, "default"))
 
                 tokenizer = AutoTokenizer.from_pretrained(model)
-                model = model_class(config_class())
+                model = model_class(config_class.from_pretrained(model))
                 onnx_config = onnx_config_class.default(model.config)
 
                 with NamedTemporaryFile("w") as output:
