@@ -215,6 +215,42 @@ config = GPT2Config.from_pretrained("gpt2", resid_pdrop=0.0, embd_pdrop=0.0, att
 config.save_pretrained(model_dir)
 ```
 
+### Train tokenizer
+
+In the first step, we train a tokenizer to efficiently process the text input for the model. Similar to how it is shown in [How to train a new language model from scratch using Transformers and Tokenizers](https://huggingface.co/blog/how-to-train), we use a **`ByteLevelBPETokenizer`**.
+The tokenizer is trained on the complete Norwegian dataset of OSCAR
+and consequently saved in `${MODEL_DIR}`
+This can take up to 10 minutes depending on your hardware ☕.
+
+```python
+from datasets import load_dataset
+from tokenizers import trainers, Tokenizer, normalizers, ByteLevelBPETokenizer
+
+model_dir = "./norwegian-gpt2"  # ${MODEL_DIR}
+
+# load dataset
+dataset = load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
+
+# Instantiate tokenizer
+tokenizer = ByteLevelBPETokenizer()
+
+def batch_iterator(batch_size=1000):
+    for i in range(0, len(dataset), batch_size):
+        yield dataset[i: i + batch_size]["text"]
+
+# Customized training
+tokenizer.train_from_iterator(batch_iterator(), vocab_size=50257, min_frequency=2, special_tokens=[
+    "<s>",
+    "<pad>",
+    "</s>",
+    "<unk>",
+    "<mask>",
+])
+
+# Save files to disk
+tokenizer.save(f"{model_dir}/tokenizer.json")
+```
+
 ### Train model
 
 Next we can run the example script to pretrain the model:
@@ -373,15 +409,15 @@ Next we can run the example script to pretrain the model:
 	--weight_decay="0.001" \
 	--warmup_steps="2000" \
 	--overwrite_output_dir \
-	--logging_steps="100" \
-	--save_steps="1000" \
-	--eval_steps="1000" \
+	--logging_steps="500" \
+	--save_steps="10000" \
+	--eval_steps="2500" \
 	--push_to_hub
 ```
 
 Training should converge at a loss and accuracy 
-of 2.2 and 58.0 respectively after 2 epochs on a single TPUv3-8.
-This should take around 24 hours.
+of 2.36 and 57.0 respectively after 3 epochs on a single TPUv3-8.
+This should take around 4.5 hours.
 Training statistics can be accessed on directly on the 🤗 [hub](https://huggingface.co/patrickvonplaten/t5-base-norwegian/tensorboard)
 
 ## Runtime evaluation
