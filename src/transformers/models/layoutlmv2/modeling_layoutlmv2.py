@@ -47,9 +47,6 @@ if is_detectron2_available():
     import detectron2
     from detectron2.modeling import META_ARCH_REGISTRY
 
-    from .detectron2_config import add_layoutlmv2_config
-
-
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/layoutlmv2-base-uncased"
@@ -531,8 +528,11 @@ def my_convert_sync_batchnorm(module, process_group=None):
 class VisualBackbone(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.cfg = detectron2.config.get_cfg()
-        add_layoutlmv2_config(self.cfg)
+        detectron2_config = detectron2.config.get_cfg()
+        for k,v in config.detectron2_config_args.items():
+            setattr(detectron2_config, "MODEL." + k, v)
+        print("Config:", detectron2_config)
+        self.cfg = detectron2_config
         meta_arch = self.cfg.MODEL.META_ARCHITECTURE
         model = META_ARCH_REGISTRY.get(meta_arch)(self.cfg)
         assert isinstance(model.backbone, detectron2.modeling.backbone.FPN)

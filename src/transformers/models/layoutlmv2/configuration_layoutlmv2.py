@@ -92,6 +92,8 @@ class LayoutLMv2Config(PretrainedConfig):
             Whether or not to use a spatial attention bias in the self-attention mechanism.
         has_visual_segment_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to add visual segment embeddings.
+        detectron2_config_args (:obj:`dict`, `optional`, defaults to ...):
+            Dictionary containing the configuration arguments of the Detectron2 visual backbone.
 
     Example::
 
@@ -136,6 +138,33 @@ class LayoutLMv2Config(PretrainedConfig):
         has_relative_attention_bias=True,
         has_spatial_attention_bias=True,
         has_visual_segment_embedding=False,
+        detectron2_config_args={"MASK_ON":True, 
+                                "PIXEL_STD":[57.375, 57.120, 58.395], 
+                                "BACKBONE.NAME":"build_resnet_fpn_backbone",
+                                "FPN.IN_FEATURES":["res2", "res3", "res4", "res5"],
+                                "ANCHOR_GENERATOR.SIZES":[[32], [64], [128], [256], [512]],
+                                "RPN.IN_FEATURES":["p2", "p3", "p4", "p5", "p6"],
+                                "RPN.PRE_NMS_TOPK_TRAIN":2000,
+                                "RPN.PRE_NMS_TOPK_TEST":1000,
+                                "RPN.POST_NMS_TOPK_TRAIN":1000,
+                                "POST_NMS_TOPK_TEST":1000,
+                                "ROI_HEADS.NAME":"StandardROIHeads",
+                                "ROI_HEADS.NUM_CLASSES":5,
+                                "ROI_HEADS.IN_FEATURES":["p2", "p3", "p4", "p5"],
+                                "ROI_BOX_HEAD.NAME":"FastRCNNConvFCHead",
+                                "ROI_BOX_HEAD.NUM_FC":2,
+                                "ROI_BOX_HEAD.POOLER_RESOLUTION":14,
+                                "ROI_MASK_HEAD.NAME":"MaskRCNNConvUpsampleHead",
+                                "ROI_MASK_HEAD.NUM_CONV":4,
+                                "ROI_MASK_HEAD.POOLER_RESOLUTION":7,
+                                "RESNETS.DEPTH":101,
+                                "RESNETS.SIZES":[[32], [64], [128], [256], [512]],
+                                "RESNETS.ASPECT_RATIOS":[[0.5, 1.0, 2.0]],
+                                "RESNETS.OUT_FEATURES":["res2", "res3", "res4", "res5"],
+                                "RESNETS.NUM_GROUPS":32,
+                                "RESNETS.WIDTH_PER_GROUP":8,
+                                "RESNETS.STRIDE_IN_1X1":False,
+                                },
         **kwargs
     ):
         super().__init__(
@@ -167,3 +196,4 @@ class LayoutLMv2Config(PretrainedConfig):
         self.has_relative_attention_bias = has_relative_attention_bias
         self.has_spatial_attention_bias = has_spatial_attention_bias
         self.has_visual_segment_embedding = has_visual_segment_embedding
+        self.detectron2_config_args = detectron2_config_args
