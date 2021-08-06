@@ -446,7 +446,7 @@ class GPTJBlock(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
         n_ctx = config.n_ctx
-        inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * embed_dim
+        inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(n_ctx, eps=config.layer_norm_epsilon)
         self.attn = GPTJAttention(config, layer_id)
         self.jax = config.jax
