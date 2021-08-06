@@ -465,11 +465,11 @@ class GPTJBlock(nn.Module):
         super().__init__()
         n_ctx = config.n_ctx
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * n_ctx
-        self.ln_1 = nn.LayerNorm(n_ctx, eps=config.layer_norm_eps)
+        self.ln_1 = nn.LayerNorm(n_ctx, eps=config.layer_norm_epsilon)
         self.attn = GPTJAttention(config, layer_id)
         self.jax = config.jax
         if not self.jax:
-            self.ln_2 = nn.LayerNorm(n_ctx, eps=config.layer_norm_eps)
+            self.ln_2 = nn.LayerNorm(n_ctx, eps=config.layer_norm_epsilon)
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
@@ -623,7 +623,7 @@ class GPTJModel(GPTJPreTrainedModel):
             self.wpe = nn.Embedding(config.n_positions, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTJBlock(config, layer_id=i) for i in range(config.n_layer)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
         self.rotary = None
         if config.rotary:
             rotary_dim = config.n_ctx // config.num_attention_heads
