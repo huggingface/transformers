@@ -309,11 +309,6 @@ class FlaxGPT2Block(nn.Module):
             )
             self.ln_cross_attn = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
 
-            project_encoder = getattr(self.config, "project_encoder", None)
-            if project_encoder:
-                self.encoder_projection_ln = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
-                self.encoder_projection_mlp = FlaxGPT2MLP(self.config, self.config.hidden_size, dtype=self.dtype)
-
         self.mlp = FlaxGPT2MLP(self.config, inner_dim, dtype=self.dtype)
 
     def __call__(
@@ -349,16 +344,6 @@ class FlaxGPT2Block(nn.Module):
                     f"If `encoder_hidden_states` are passed, {self} has to be instantiated with "
                     "cross-attention layers by setting `config.add_cross_attention=True`"
                 )
-
-            project_encoder = getattr(self.config, "project_encoder", None)
-            if project_encoder:
-                encoder_hidden_states = self.encoder_projection_ln(encoder_hidden_states)
-                feed_forward_hidden_states = self.encoder_projection_mlp(
-                    encoder_hidden_states, deterministic=deterministic
-                )
-                # residual connection
-                encoder_hidden_states = feed_forward_hidden_states
-
             residual = hidden_states
             hidden_states = self.ln_cross_attn(hidden_states)
             cross_attn_outputs = self.crossattention(
