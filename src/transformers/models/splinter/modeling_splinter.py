@@ -821,16 +821,10 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         super().__init__(config)
 
         self.splinter = SplinterModel(config)
-        self.initialize_new_qass = config.initialize_new_qass
-        self.splinter_qass = QuestionAwareSpanSelectionHead(config) if not self.initialize_new_qass else None
-        self.new_splinter_qass = QuestionAwareSpanSelectionHead(config) if self.initialize_new_qass else None
+        self.splinter_qass = QuestionAwareSpanSelectionHead(config)
         self.question_token_id = config.question_token_id
 
         self.init_weights()
-
-    def _get_qass(self):
-        """Controls whether we use the pretrained QASS layer's parameters, or randomly initialized ones"""
-        return self.splinter_qass if not self.initialize_new_qass else self.new_splinter_qass
 
     @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -897,8 +891,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        cls = self._get_qass()
-        start_logits, end_logits = cls(sequence_output, question_positions)
+        start_logits, end_logits = self.splinter_qass(sequence_output, question_positions)
 
         if question_positions_were_none:
             start_logits, end_logits = start_logits.squeeze(1), end_logits.squeeze(1)

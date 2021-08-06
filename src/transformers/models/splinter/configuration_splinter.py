@@ -108,7 +108,6 @@ class SplinterConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         use_cache=True,
         pad_token_id=0,
-        initialize_new_qass=True,
         question_token_id=104,
         **kwargs
     ):
@@ -127,5 +126,4 @@ class SplinterConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.initialize_new_qass = initialize_new_qass
         self.question_token_id = question_token_id
