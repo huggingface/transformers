@@ -429,7 +429,7 @@ class GPTJAttention(nn.Module):
 class GPTJMLP(nn.Module):
     def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * n_ctx
         super().__init__()
-        embed_dim = config.n_ctx
+        embed_dim = config.n_embd
         self.c_fc = nn.Linear(embed_dim, intermediate_size)
         self.c_proj = nn.Linear(intermediate_size, embed_dim)
         self.act = ACT2FN[config.activation_function]
