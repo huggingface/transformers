@@ -16,11 +16,8 @@ GPT J
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The GPT J model was released in the `kingoflolz/mesh-transformer-jax <https://github.com/kingoflolz/mesh-transformer-jax>`__ repository by Ben Wang and Aran Komatsuzaki. It is a GPT2 like causal language model trained on the
+The GPT J model was released in the `kingoflolz/mesh-transformer-jax <https://github.com/kingoflolz/mesh-transformer-jax>`__ repository by Ben Wang and Aran Komatsuzaki. It is a GPT2-like causal language model trained on the
 `Pile <https://pile.eleuther.ai/>`__ dataset.
-
-The architecture is similar to GPT2 except that GPT J uses local attention in every other layer with a window size of
-256 tokens.
 
 This model was contributed by `Stella Biderman <https://huggingface.co/stellaathena>`__.
 
