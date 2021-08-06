@@ -306,7 +306,7 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
         self.attn_pdrop = nn.Dropout(config.attn_pdrop)
         self.resid_pdrop = nn.Dropout(config.resid_pdrop)
 
-        self.embed_dim = config.embd_dim
+        self.embed_dim = config.n_embd
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_attention_heads
         if config.jax:
