@@ -35,7 +35,7 @@ class GPTJConfig(PretrainedConfig):
     <https://huggingface.co/EleutherAI/gptj-6B>`__ architecture.
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
- Args:
+    Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the GPTJ model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.GPTJModel` or
