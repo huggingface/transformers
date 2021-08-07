@@ -501,7 +501,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=True,  # set to True as we need them to create token_boxes and labels
+                return_offsets_mapping=return_offsets_mapping, 
                 return_length=return_length,
                 verbose=verbose,
             )
