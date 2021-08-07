@@ -1077,7 +1077,7 @@ class TFDebertaModel(TFDebertaPreTrainedModel):
     def __init__(self, config: DebertaConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.deberta = TFDebertaMainLayer(config, name="DeBERTa")
+        self.deberta = TFDebertaMainLayer(config, name="deberta")
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1145,7 +1145,7 @@ class TFDebertaForMaskedLM(TFDebertaPreTrainedModel, TFMaskedLanguageModelingLos
                 "bi-directional self-attention."
             )
 
-        self.deberta = TFDebertaMainLayer(config, name="DeBERTa")
+        self.deberta = TFDebertaMainLayer(config, name="deberta")
         self.mlm = TFDebertaOnlyMLMHead(config, input_embeddings=self.deberta.embeddings, name="mlm__cls")
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
@@ -1344,7 +1344,7 @@ class TFDebertaForTokenClassification(TFDebertaPreTrainedModel, TFTokenClassific
 
         self.num_labels = config.num_labels
 
-        self.deberta = TFDebertaMainLayer(config, name="DeBERTa")
+        self.deberta = TFDebertaMainLayer(config, name="deberta")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1438,7 +1438,7 @@ class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnswerin
 
         self.num_labels = config.num_labels
 
-        self.deberta = TFDebertaMainLayer(config, name="DeBERTa")
+        self.deberta = TFDebertaMainLayer(config, name="deberta")
         self.qa_outputs = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
