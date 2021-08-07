@@ -810,7 +810,7 @@ class TFDebertaEmbeddings(tf.keras.layers.Layer):
             if len(shape_list(mask)) != len(shape_list(final_embeddings)):
                 if len(shape_list(mask)) == 4:
                     mask = tf.squeeze(tf.squeeze(mask, axis=1), axis=1)
-                mask = tf.cast(tf.expand_dims(mask, axis=2),tf.float32)
+                mask = tf.cast(tf.expand_dims(mask, axis=2), tf.float32)
 
             final_embeddings = final_embeddings * mask
 
