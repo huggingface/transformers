@@ -20,7 +20,6 @@ from typing import Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
-import tensorflow.experimental.numpy as tnp
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
@@ -47,8 +46,6 @@ from .configuration_deberta import DebertaConfig
 
 
 logger = logging.get_logger(__name__)
-
-tnp.experimental_enable_numpy_behavior()
 
 
 _CONFIG_FOR_DOC = "DebertaConfig"
@@ -443,7 +440,27 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
 
 
 def torch_gather(x, indices, gather_axis):
-    return tnp.take_along_axis(x, indices, axis=gather_axis)
+    if gather_axis < 0:
+        gather_axis = tf.rank(x) + gather_axis
+
+    if gather_axis != tf.rank(x) - 1:
+        pre_roll = tf.rank(x) - 1 - gather_axis
+        permutation = tf.roll(tf.range(tf.rank(x)), pre_roll, axis=0)
+        x = tf.transpose(x, perm=permutation)
+        indices = tf.transpose(indices, perm=permutation)
+    else:
+        pre_roll = 0
+
+    flat_x = tf.reshape(x, (-1, tf.shape(x)[-1]))
+    flat_indices = tf.reshape(indices, (-1, tf.shape(indices)[-1]))
+    gathered = tf.gather(flat_x, flat_indices, batch_dims=1)
+    gathered = tf.reshape(gathered, tf.shape(indices))
+
+    if pre_roll != 0:
+        permutation = tf.roll(tf.range(tf.rank(x)), -pre_roll, axis=0)
+        gathered = tf.transpose(gathered, perm=permutation)
+
+    return gathered
 
 
 class DisentangledSelfAttention(tf.keras.layers.Layer):
@@ -793,7 +810,7 @@ class TFDebertaEmbeddings(tf.keras.layers.Layer):
             if len(shape_list(mask)) != len(shape_list(final_embeddings)):
                 if len(shape_list(mask)) == 4:
                     mask = tf.squeeze(tf.squeeze(mask, axis=1), axis=1)
-                mask = tf.expand_dims(mask, axis=2)
+                mask = tf.cast(tf.expand_dims(mask, axis=2),tf.float32)
 
             final_embeddings = final_embeddings * mask
 
