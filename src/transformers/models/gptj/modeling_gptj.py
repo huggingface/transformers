@@ -165,8 +165,6 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_attention_heads
         self.register_buffer("scale_attn", torch.sqrt(torch.tensor(self.head_dim)))
-        else:
-            self.scale_attn = None
         if self.head_dim * self.num_attention_heads != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and `num_attention_heads`: {self.num_attention_heads})."
