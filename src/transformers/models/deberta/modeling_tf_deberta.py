@@ -61,8 +61,8 @@ TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class ContextPooler(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(config.pooler_hidden_size, name="deberta_pooler_dense")
-        self.dropout = StableDropout(config.pooler_dropout, name="deberta_pooler_dropout")
+        self.dense = tf.keras.layers.Dense(config.pooler_hidden_size, name="dense")
+        self.dropout = StableDropout(config.pooler_dropout, name="dropout")
         self.config = config
 
     def call(self, hidden_states, training: bool = False):
@@ -1241,7 +1241,7 @@ class TFDebertaForSequenceClassification(TFDebertaPreTrainedModel, TFSequenceCla
 
         self.num_labels = config.num_labels
 
-        self.deberta = TFDebertaMainLayer(config, name="Deberta")
+        self.deberta = TFDebertaMainLayer(config, name="deberta")
         self.pooler = ContextPooler(config, name="pooler")
 
         drop_out = getattr(config, "cls_dropout", None)
