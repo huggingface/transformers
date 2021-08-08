@@ -2099,7 +2099,7 @@ if TYPE_CHECKING:
             GPTJLayer,
             GPTJModel,
             GPTJPreTrainedModel,
-\        )
+        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
