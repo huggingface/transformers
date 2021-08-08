@@ -193,7 +193,7 @@ It is recommended to pre-train Wav2Vec2 with Trainer + Deepspeed (please refer t
 Here is an example of how you can use DeepSpeed ZeRO-2 to pretrain a small Wav2Vec2 model:
 
 ```
-PYTHONPATH=../../../src deepspeed --num_gpus 2 run_pretrain.py \
+PYTHONPATH=../../../src deepspeed --num_gpus 4 run_pretrain.py \
 --output_dir="./wav2vec2-base-libri-100h" \
 --num_train_epochs="3" \
 --per_device_train_batch_size="32" \
