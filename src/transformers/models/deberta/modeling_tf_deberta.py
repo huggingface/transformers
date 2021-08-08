@@ -178,8 +178,8 @@ class DebertaSelfOutput(tf.keras.layers.Layer):
 class TFDebertaAttention(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
-        self.self = DisentangledSelfAttention(config, name="disentangled_self_attention")
-        self.dense_output = DebertaSelfOutput(config, name="deberta_self_output")
+        self.self = DisentangledSelfAttention(config, name="self")
+        self.dense_output = DebertaSelfOutput(config, name="output")
         self.config = config
 
     def call(
@@ -302,7 +302,7 @@ class TFDebertaEncoder(tf.keras.layers.Layer):
     def build(self, input_shape):
         if self.relative_attention:
             self.rel_embeddings = self.add_weight(
-                name="rel_embeddings",
+                name="rel_embeddings.weight",
                 shape=[self.max_relative_positions * 2, self.config.hidden_size],
                 initializer=get_initializer(self.config.initializer_range),
             )
