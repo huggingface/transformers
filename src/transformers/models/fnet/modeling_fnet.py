@@ -99,8 +99,7 @@ class FNetEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        # TODO: Check if this is needed
-        # self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
                 "token_type_ids",
@@ -137,9 +136,9 @@ class FNetEmbeddings(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
