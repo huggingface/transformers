@@ -155,7 +155,7 @@ class FNetBasicFourierTransform(nn.Module):
         self,
         hidden_states,
     ):
-        return (self.fourier_transform(hidden_states), )
+        return (self.fourier_transform(hidden_states).real, )
 
 class FNetBasicOutput(nn.Module):
     def __init__(self, config):
@@ -217,7 +217,7 @@ class FNetLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         # TODO: Check if chunk_size_feed_forward is needed
-        # self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.fourier = FNetFourierTransform(config)
         self.intermediate = FNetIntermediate(config)
@@ -566,7 +566,7 @@ class FNetModel(FNetPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooler_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output,pooled_output)
