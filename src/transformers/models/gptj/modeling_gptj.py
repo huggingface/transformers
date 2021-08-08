@@ -343,7 +343,6 @@ class GPTJPreTrainedModel(PreTrainedModel):
     """
 
     config_class = GPTJConfig
-    load_tf_weights = load_tf_weights_in_gptj
     base_model_prefix = "transformer"
 
     def __init__(self, *inputs, **kwargs):
