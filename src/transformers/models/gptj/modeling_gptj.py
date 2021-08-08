@@ -164,8 +164,7 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
         self.embed_dim = config.n_embd
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_attention_heads
-        if config.jax:
-            self.register_buffer("scale_attn", torch.sqrt(torch.tensor(self.head_dim)))
+        self.register_buffer("scale_attn", torch.sqrt(torch.tensor(self.head_dim)))
         else:
             self.scale_attn = None
         if self.head_dim * self.num_attention_heads != self.embed_dim:
@@ -304,9 +303,6 @@ class GPTJBlock(nn.Module):
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
         self.attn = GPTJAttention(config, layer_id)
-        self.jax = config.jax
-        if not self.jax:
-            self.ln_2 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
@@ -331,18 +327,8 @@ class GPTJBlock(nn.Module):
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
         
-        if self.jax:
-            feed_forward_hidden_states = self.mlp(hidden_states)
-            hidden_states = attn_output + feed_forward_hidden_states + residual
-        else:
-            # residual connection
-            hidden_states = attn_output + residual
-
-            residual = hidden_states
-            hidden_states = self.ln_2(hidden_states)
-            feed_forward_hidden_states = self.mlp(hidden_states)
-            # residual connection
-            hidden_states = residual + feed_forward_hidden_states
+        feed_forward_hidden_states = self.mlp(hidden_states)
+        hidden_states = attn_output + feed_forward_hidden_states + residual
 
         if use_cache:
             outputs = (hidden_states,) + outputs
@@ -453,7 +439,6 @@ class GPTJModel(GPTJPreTrainedModel):
         super().__init__(config)
 
         self.embed_dim = config.n_embd
-        self.jax = config.jax
         self.vocab_size = config.vocab_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         if not config.rotary:
@@ -557,7 +542,6 @@ class GPTJModel(GPTJPreTrainedModel):
 
         # Local causal attention mask
         batch_size, seq_length = input_shape
-        full_seq_length = seq_length + past_length
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -656,14 +640,11 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.transformer = GPTJModel(config)
-        self.jax = config.jax
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=self.jax)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
         self.init_weights()
 
     def get_output_embeddings(self):
-        if self.jax:
-            return None
-        return self.lm_head
+        return None
 
     def set_output_embeddings(self, new_embeddings):
         return
