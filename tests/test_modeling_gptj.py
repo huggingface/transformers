@@ -447,8 +447,8 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
-            "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
-            "Today, I'm going to be doing a lot of research on this. I",
+            "Hello, my dog is a little over a year old and has been diagnosed with a heart murmur",
+            "Today, I’m going to talk about the most important thing in the world: the future",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
@@ -472,25 +472,25 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
             expected_output_ids = [
                 464,
                 3290,
-                373,
-                1043,
-                287,
-                257,
-                2214,
-                1474,
-                262,
-                16246,
+                1528,
                 286,
-                2688,
+                3931,
+                389,
+                2402,
+                514,
+                11,
                 290,
-                2688,
-                27262,
-                13,
-                198,
-                198,
-                464,
-                3290,
-            ]  # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
+                326,
+                1724,
+                340,
+                447,
+                247,
+                82,
+                640,
+                284,
+                923,
+                3612
+            ]  # The dog days of summer are upon us, and that means it’s time to start thinking
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
@@ -515,7 +515,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
         EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and if you don't know anything about the state of play during your holiday"
+            "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
         )
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
@@ -524,8 +524,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gptj_sample_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gptj")
-        model = GPTJForCausalLM.from_pretrained("gptj")
+        tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
         model.to(torch_device)
 
         torch.manual_seed(0)
