@@ -82,7 +82,7 @@ class FNetConfig(PretrainedConfig):
     model_type = "fnet"
     def __init__(
         self,
-        vocab_size=3200,
+        vocab_size=32000,
         hidden_size=768,
         num_hidden_layers=12,
         intermediate_size=3072,
@@ -92,9 +92,8 @@ class FNetConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        # TODO: Check if the next three lines are needed.
-        pad_token_id=1,
-        bos_token_id=0,
+        pad_token_id=3,
+        bos_token_id=1,
         eos_token_id=2,
         **kwargs
     ):
