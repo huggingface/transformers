@@ -52,7 +52,6 @@ class FNetConfig(PretrainedConfig):
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
             If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
-        # TODO: Check if dropout prob is correct.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
@@ -61,7 +60,6 @@ class FNetConfig(PretrainedConfig):
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.FNetModel` or
             :class:`~transformers.TFFNetModel`.
-        # TODO: Check if Initializer Range is correct.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -89,11 +87,9 @@ class FNetConfig(PretrainedConfig):
         num_hidden_layers=12,
         intermediate_size=3072,
         hidden_act="gelu",
-        # TODO: Check if hidden_dropout_prob is correct.
         hidden_dropout_prob=0.1,
         max_position_embeddings=512,
         type_vocab_size=2,
-        # TODO: Check if initializer_range is correct.
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         # TODO: Check if the next three lines are needed.
