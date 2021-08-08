@@ -165,7 +165,7 @@ class DebertaSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(config.hidden_size, name="dense")
-        self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = StableDropout(config.hidden_dropout_prob, name="dropout")
 
     def call(self, hidden_states, input_tensor, training: bool = False):
@@ -239,7 +239,7 @@ class TFDebertaOutput(tf.keras.layers.Layer):
         self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = StableDropout(config.hidden_dropout_prob, name="dropout")
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -731,7 +731,7 @@ class TFDebertaEmbeddings(tf.keras.layers.Layer):
         self.embeddings_sum = tf.keras.layers.Add()
         if self.embedding_size != config.hidden_size:
             self.embed_proj = tf.keras.layers.Dense(config.hidden_size, bias=False)
-        self.LayerNorm = DebertaLayerNorm(size=config.hidden_size, eps=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = StableDropout(config.hidden_dropout_prob, name="dropout")
 
     def build(self, input_shape: tf.TensorShape):
@@ -833,7 +833,7 @@ class TFDebertaPredictionHeadTransform(tf.keras.layers.Layer):
             self.transform_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
