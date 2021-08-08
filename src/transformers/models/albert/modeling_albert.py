@@ -249,10 +249,14 @@ class AlbertEmbeddings(nn.Module):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
+
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
         embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
@@ -710,6 +714,10 @@ class AlbertModel(AlbertPreTrainedModel):
                 token_type_ids = buffered_token_type_ids_expanded
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility

@@ -15,6 +15,7 @@
 """ PyTorch DeBERTa model. """
 
 import math
+import os
 from collections.abc import Sequence
 
 import torch
@@ -715,6 +716,9 @@ class DebertaEmbeddings(nn.Module):
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)

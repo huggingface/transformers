@@ -177,6 +177,9 @@ class MegatronBertEmbeddings(nn.Module):
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -940,6 +943,9 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.

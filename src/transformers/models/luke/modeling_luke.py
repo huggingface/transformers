@@ -15,6 +15,7 @@
 """PyTorch LUKE model. """
 
 import math
+import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -246,6 +247,9 @@ class LukeEmbeddings(nn.Module):
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -296,6 +300,9 @@ class LukeEntityEmbeddings(nn.Module):
     ):
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(entity_ids)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         entity_embeddings = self.entity_embeddings(entity_ids)
         if self.config.entity_emb_size != self.config.hidden_size:
@@ -900,6 +907,10 @@ class LukeModel(LukePreTrainedModel):
             attention_mask = torch.ones((batch_size, seq_length), device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
+
         if entity_ids is not None:
             entity_seq_length = entity_ids.size(1)
             if entity_attention_mask is None:

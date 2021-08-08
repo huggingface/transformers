@@ -16,6 +16,7 @@
 
 
 import math
+import os
 
 import torch
 import torch.utils.checkpoint
@@ -96,6 +97,9 @@ class LayoutLMEmbeddings(nn.Module):
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -790,6 +794,9 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
             attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         if bbox is None:
             bbox = torch.zeros(tuple(list(input_shape) + [4]), dtype=torch.long, device=device)

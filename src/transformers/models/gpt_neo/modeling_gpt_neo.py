@@ -756,8 +756,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
         if position_ids is not None:

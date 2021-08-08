@@ -314,6 +314,9 @@ class TapasEmbeddings(nn.Module):
             token_type_ids = torch.zeros(
                 (input_shape + self.number_of_token_type_embeddings), dtype=torch.long, device=device
             )
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -880,6 +883,9 @@ class TapasModel(TapasPreTrainedModel):
             token_type_ids = torch.zeros(
                 (*input_shape, len(self.config.type_vocab_sizes)), dtype=torch.long, device=device
             )
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1173,6 +1179,9 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             token_type_ids = torch.zeros(
                 (*input_shape, len(self.config.type_vocab_sizes)), dtype=torch.long, device=device
             )
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         token_types = [
             "segment_ids",

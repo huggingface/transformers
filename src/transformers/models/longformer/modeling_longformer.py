@@ -577,9 +577,6 @@ class LongformerSelfAttention(nn.Module):
         value_vectors = self.value(hidden_states)
 
         seq_len, batch_size, embed_dim = hidden_states.size()
-        assert (
-            embed_dim == self.embed_dim
-        ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
 
         # normalize query
         query_vectors /= math.sqrt(self.head_dim)
@@ -678,7 +675,7 @@ class LongformerSelfAttention(nn.Module):
             )
 
         assert attn_output.size() == (batch_size, seq_len, self.num_heads, self.head_dim), "Unexpected size"
-        attn_output = attn_output.transpose(0, 1).reshape(seq_len, batch_size, embed_dim).contiguous()
+        attn_output = attn_output.transpose(0, 1).reshape(seq_len, batch_size, self.embed_dim).contiguous()
 
         # compute value for global attention and overwrite to attention output
         # TODO: remove the redundant computation

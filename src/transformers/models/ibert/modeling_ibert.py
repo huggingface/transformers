@@ -18,6 +18,7 @@
 """PyTorch I-BERT model. """
 
 import math
+import os
 
 import torch
 import torch.utils.checkpoint
@@ -128,11 +129,15 @@ class IBertEmbeddings(nn.Module):
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         if inputs_embeds is None:
             inputs_embeds, inputs_embeds_scaling_factor = self.word_embeddings(input_ids)
         else:
             inputs_embeds_scaling_factor = None
+
         token_type_embeddings, token_type_embeddings_scaling_factor = self.token_type_embeddings(token_type_ids)
 
         embeddings, embeddings_scaling_factor = self.embeddings_act1(

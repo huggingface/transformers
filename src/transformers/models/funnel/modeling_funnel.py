@@ -948,6 +948,9 @@ class FunnelBaseModel(FunnelPreTrainedModel):
             attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         # TODO: deal with head_mask
         if inputs_embeds is None:

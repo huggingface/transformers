@@ -279,6 +279,9 @@ class CanineEmbeddings(nn.Module):
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         if inputs_embeds is None:
             inputs_embeds = self._embed_hash_buckets(
@@ -286,7 +289,6 @@ class CanineEmbeddings(nn.Module):
             )
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
 
         if self.position_embedding_type == "absolute":

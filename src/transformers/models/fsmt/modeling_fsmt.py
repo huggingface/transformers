@@ -854,8 +854,6 @@ class Attention(nn.Module):
         """Input shape: Time(SeqLen) x Batch x Channel"""
         static_kv: bool = self.encoder_decoder_attention
         tgt_len, bsz, embed_dim = query.size()
-        assert embed_dim == self.embed_dim
-        assert list(query.size()) == [tgt_len, bsz, embed_dim]
         # get here for encoder decoder cause of static_kv
         if layer_state is not None:  # reuse k,v and encoder_padding_mask
             saved_state = layer_state.get(self.cache_key, {})
@@ -941,7 +939,7 @@ class Attention(nn.Module):
         assert v is not None
         attn_output = torch.bmm(attn_probs, v)
         assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
+        attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, self.embed_dim)
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights_reshaped

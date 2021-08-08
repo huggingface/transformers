@@ -762,7 +762,7 @@ class ProphetNetAttention(nn.Module):
         attn_output = (
             attn_output.view(batch_size, self.num_attn_heads, tgt_len, self.head_dim)
             .transpose(1, 2)
-            .reshape(batch_size, tgt_len, hidden_size)
+            .reshape(batch_size, tgt_len, self.hidden_size)
         )
 
         attn_output = self.out_proj(attn_output)

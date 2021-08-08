@@ -16,6 +16,7 @@
 
 
 import math
+import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -124,6 +125,9 @@ class VisualBertEmbeddings(nn.Module):
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.input_embeds.device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 

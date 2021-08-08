@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch MMBT model. """
-
+import os
 
 import torch
 from torch import nn
@@ -67,6 +67,9 @@ class ModalEmbeddings(nn.Module):
             token_type_ids = torch.zeros(
                 (input_modal.size(0), seq_length), dtype=torch.long, device=input_modal.device
             )
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)

@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch DPR model for Open Domain Question Answering."""
-
-
+import os
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -495,6 +494,9 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
             )
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         outputs = self.ctx_encoder(
             input_ids=input_ids,
@@ -572,6 +574,9 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
             )
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
 
         outputs = self.question_encoder(
             input_ids=input_ids,

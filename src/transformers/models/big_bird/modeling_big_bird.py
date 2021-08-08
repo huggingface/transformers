@@ -293,6 +293,10 @@ class BigBirdEmbeddings(nn.Module):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
+            local_rank = os.getenv("LOCAL_RANK")
+            if local_rank is not None:
+                token_type_ids = token_type_ids.to(local_rank)
+
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
@@ -300,9 +304,7 @@ class BigBirdEmbeddings(nn.Module):
             inputs_embeds = inputs_embeds * (self.hidden_size ** 0.5)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
-
         position_embeddings = self.position_embeddings(position_ids)
         embeddings += position_embeddings
 
