@@ -19,7 +19,8 @@
 
 import math
 import os
-
+from dataclasses import dataclass
+from typing import Optional, Tuple
 import torch
 import torch.utils.checkpoint
 from packaging import version
@@ -118,7 +119,7 @@ class FNetEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length]
+            position_ids = self.position_ids[:, seq_length]
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
@@ -390,7 +391,6 @@ class FNetPreTrainedModel(PreTrainedModel):
     """
 
     config_class = FNetConfig
-    load_tf_weights = load_tf_weights_in_fnet
     base_model_prefix = "fnet"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
