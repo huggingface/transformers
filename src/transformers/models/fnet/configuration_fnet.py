@@ -57,7 +57,7 @@ class FNetConfig(PretrainedConfig):
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (:obj:`int`, `optional`, defaults to 2):
+        type_vocab_size (:obj:`int`, `optional`, defaults to 4):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.FNetModel` or
             :class:`~transformers.TFFNetModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
@@ -89,7 +89,7 @@ class FNetConfig(PretrainedConfig):
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         max_position_embeddings=512,
-        type_vocab_size=2,
+        type_vocab_size=4,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=3,
