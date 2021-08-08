@@ -84,8 +84,8 @@ class TFDebertaXSoftmax(tf.keras.layers.Layer):
     Masked Softmax which is optimized for saving memory
 
     Args:
-        input (:obj:`torch.tensor`): The input tensor that will apply softmax.
-        mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
+        input (:obj:`tf.Tensor`): The input tensor that will apply softmax.
+        mask (:obj:`tf.Tensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
         dim (int): The dimension that will apply softmax
     """
 
@@ -403,7 +403,7 @@ def build_relative_position(query_size, key_size):
         key_size (int): the length of key
 
     Return:
-        :obj:`torch.LongTensor`: A tensor with shape [1, query_size, key_size]
+        :obj:`tf.Tensor`: A tensor with shape [1, query_size, key_size]
 
     """
     q_ids = tf.range(query_size, dtype=tf.int32)
@@ -561,11 +561,11 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
         Call the module
 
         Args:
-            hidden_states (:obj:`torch.FloatTensor`):
+            hidden_states (:obj:`tf.Tensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 `Attention(Q,K,V)`
 
-            attention_mask (:obj:`torch.ByteTensor`):
+            attention_mask (:obj:`tf.Tensor`):
                 An attention mask matrix of shape [`B`, `N`, `N`] where `B` is the batch size, `N` is the maximum
                 sequence length in which element [i,j] = `1` means the `i` th token in the input can attend to the `j`
                 th token.
@@ -573,14 +573,14 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
             return_att (:obj:`bool`, optional):
                 Whether return the attention matrix.
 
-            query_states (:obj:`torch.FloatTensor`, optional):
+            query_states (:obj:`tf.Tensor`, optional):
                 The `Q` state in `Attention(Q,K,V)`.
 
-            relative_pos (:obj:`torch.LongTensor`):
+            relative_pos (:obj:`tf.Tensor`):
                 The relative position encoding between the tokens in the sequence. It's of shape [`B`, `N`, `N`] with
                 values ranging in [`-max_relative_positions`, `max_relative_positions`].
 
-            rel_embeddings (:obj:`torch.FloatTensor`):
+            rel_embeddings (:obj:`tf.Tensor`):
                 The embedding of relative distances. It's a tensor of shape [:math:`2 \\times
                 \\text{max_relative_positions}`, `hidden_size`].
 
@@ -1012,9 +1012,29 @@ DEBERTA_START_DOCSTRING = r"""
     BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
     improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pretraining data.
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.```
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
+
+    .. note::
+
+        TF 2.0 models accepts two formats as inputs:
+
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
+
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
+        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
 
 
     Parameters:
