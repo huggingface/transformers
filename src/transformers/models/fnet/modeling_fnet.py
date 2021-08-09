@@ -309,7 +309,6 @@ class FNetEncoder(nn.Module):
                 if v is not None
             )
 
-        # TODO: Check if a Dense pooler is needed like the original implementation.
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -574,7 +573,7 @@ class FNetModel(FNetPreTrainedModel):
         pooler_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output,pooled_output)
+            return (sequence_output,pooler_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -662,7 +661,7 @@ class FNetForPreTraining(FNetPreTrainedModel):
             total_loss = masked_lm_loss + next_sentence_loss
 
         if not return_dict:
-            output = (prediction_scores, seq_relationship_score)
+            output = (prediction_scores, seq_relationship_score) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return FNetForPreTrainingOutput(
@@ -732,7 +731,7 @@ class FNetForMaskedLM(FNetPreTrainedModel):
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
+            output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
@@ -765,10 +764,8 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.fnet = FNetModel(config)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
+
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -824,7 +821,7 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -904,7 +901,7 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
-            output = (reshaped_logits,)
+            output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
@@ -925,10 +922,8 @@ class FNetForTokenClassification(FNetPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.fnet = FNetModel(config)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
+
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
