@@ -24,6 +24,7 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
     pipeline_task = "zero-shot-classification"
     small_models = ["sgugger/tiny-distilbert-classification"]  # Models tested without the @slow decorator
     large_models = ["roberta-large-mnli", "t5-large"]  # Models tested with the @slow decorator
+
     valid_inputs = [
         {"sequences": "Who are you voting for in 2020?", "candidate_labels": "politics"},
         {"sequences": "Who are you voting for in 2020?", "candidate_labels": ["politics"]},

@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.9.0.dev0"
+__version__ = "4.10.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -147,6 +147,7 @@ _import_structure = {
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
+    "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BasicTokenizer",
@@ -157,7 +158,7 @@ _import_structure = {
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
-    "models.big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig", "BigBirdTokenizer"],
+    "models.big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig"],
     "models.bigbird_pegasus": [
         "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BigBirdPegasusConfig",
@@ -212,6 +213,7 @@ _import_structure = {
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
     "models.marian": ["MarianConfig"],
     "models.mbart": ["MBartConfig"],
+    "models.mbart50": [],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
@@ -223,6 +225,7 @@ _import_structure = {
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
+    "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
@@ -307,15 +310,17 @@ if is_sentencepiece_available():
     _import_structure["models.albert"].append("AlbertTokenizer")
     _import_structure["models.barthez"].append("BarthezTokenizer")
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
+    _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
-    _import_structure["models.mbart"].append("MBart50Tokenizer")
+    _import_structure["models.mbart50"].append("MBart50Tokenizer")
     _import_structure["models.mt5"].append("MT5Tokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
+    _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
@@ -354,13 +359,14 @@ if is_tokenizers_available():
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
     _import_structure["models.mbart"].append("MBartTokenizerFast")
-    _import_structure["models.mbart"].append("MBart50TokenizerFast")
+    _import_structure["models.mbart50"].append("MBart50TokenizerFast")
     _import_structure["models.mobilebert"].append("MobileBertTokenizerFast")
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
+    _import_structure["models.rembert"].append("RemBertTokenizerFast")
     _import_structure["models.retribert"].append("RetriBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
@@ -408,6 +414,7 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
@@ -537,7 +544,6 @@ if is_torch_available():
             "AutoModelWithLMHead",
         ]
     )
-
     _import_structure["models.bart"].extend(
         [
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -548,6 +554,15 @@ if is_torch_available():
             "BartModel",
             "BartPretrainedModel",
             "PretrainedBartModel",
+        ]
+    )
+    _import_structure["models.beit"].extend(
+        [
+            "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BeitForImageClassification",
+            "BeitForMaskedImageModeling",
+            "BeitModel",
+            "BeitPreTrainedModel",
         ]
     )
     _import_structure["models.bert"].extend(
@@ -975,6 +990,21 @@ if is_torch_available():
             "ReformerModel",
             "ReformerModelWithLMHead",
             "ReformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.rembert"].extend(
+        [
+            "REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RemBertForCausalLM",
+            "RemBertForMaskedLM",
+            "RemBertForMultipleChoice",
+            "RemBertForQuestionAnswering",
+            "RemBertForSequenceClassification",
+            "RemBertForTokenClassification",
+            "RemBertLayer",
+            "RemBertModel",
+            "RemBertPreTrainedModel",
+            "load_tf_weights_in_rembert",
         ]
     )
     _import_structure["models.retribert"].extend(
@@ -1441,6 +1471,20 @@ if is_tf_available():
             "TFRagTokenForGeneration",
         ]
     )
+    _import_structure["models.rembert"].extend(
+        [
+            "TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRemBertForCausalLM",
+            "TFRemBertForMaskedLM",
+            "TFRemBertForMultipleChoice",
+            "TFRemBertForQuestionAnswering",
+            "TFRemBertForSequenceClassification",
+            "TFRemBertForTokenClassification",
+            "TFRemBertLayer",
+            "TFRemBertModel",
+            "TFRemBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.roberta"].extend(
         [
             "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1657,6 +1701,7 @@ if is_flax_available():
             "FlaxMBartPreTrainedModel",
         ]
     )
+    _import_structure["models.mt5"].extend(["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForMaskedLM",
@@ -1779,6 +1824,7 @@ if TYPE_CHECKING:
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
+    from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BasicTokenizer,
@@ -1789,7 +1835,7 @@ if TYPE_CHECKING:
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
-    from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig, BigBirdTokenizer
+    from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
     from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
@@ -1852,6 +1898,7 @@ if TYPE_CHECKING:
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+    from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
@@ -1937,6 +1984,7 @@ if TYPE_CHECKING:
         from .models.albert import AlbertTokenizer
         from .models.barthez import BarthezTokenizer
         from .models.bert_generation import BertGenerationTokenizer
+        from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.m2m_100 import M2M100Tokenizer
@@ -1945,6 +1993,7 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5Tokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.reformer import ReformerTokenizer
+        from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.t5 import T5Tokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
@@ -1973,13 +2022,15 @@ if TYPE_CHECKING:
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
-        from .models.mbart import MBart50TokenizerFast, MBartTokenizerFast
+        from .models.mbart import MBartTokenizerFast
+        from .models.mbart50 import MBart50TokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.reformer import ReformerTokenizerFast
+        from .models.rembert import RemBertTokenizerFast
         from .models.retribert import RetriBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
         from .models.roformer import RoFormerTokenizerFast
@@ -2010,6 +2061,7 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
@@ -2131,6 +2183,13 @@ if TYPE_CHECKING:
             BartModel,
             BartPretrainedModel,
             PretrainedBartModel,
+        )
+        from .models.beit import (
+            BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BeitForImageClassification,
+            BeitForMaskedImageModeling,
+            BeitModel,
+            BeitPreTrainedModel,
         )
         from .models.bert import (
             BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2487,6 +2546,19 @@ if TYPE_CHECKING:
             ReformerModel,
             ReformerModelWithLMHead,
             ReformerPreTrainedModel,
+        )
+        from .models.rembert import (
+            REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RemBertForCausalLM,
+            RemBertForMaskedLM,
+            RemBertForMultipleChoice,
+            RemBertForQuestionAnswering,
+            RemBertForSequenceClassification,
+            RemBertForTokenClassification,
+            RemBertLayer,
+            RemBertModel,
+            RemBertPreTrainedModel,
+            load_tf_weights_in_rembert,
         )
         from .models.retribert import RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST, RetriBertModel, RetriBertPreTrainedModel
         from .models.roberta import (
@@ -2876,6 +2948,18 @@ if TYPE_CHECKING:
         )
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
+        from .models.rembert import (
+            TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRemBertForCausalLM,
+            TFRemBertForMaskedLM,
+            TFRemBertForMultipleChoice,
+            TFRemBertForQuestionAnswering,
+            TFRemBertForSequenceClassification,
+            TFRemBertForTokenClassification,
+            TFRemBertLayer,
+            TFRemBertModel,
+            TFRemBertPreTrainedModel,
+        )
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRobertaForMaskedLM,
@@ -3057,6 +3141,7 @@ if TYPE_CHECKING:
             FlaxMBartModel,
             FlaxMBartPreTrainedModel,
         )
+        from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
         from .models.roberta import (
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,

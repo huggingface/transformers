@@ -100,8 +100,8 @@ _deps = [
     "flake8>=3.8.3",
     "flax>=0.3.4",
     "fugashi>=1.0",
-    "GitPython",
-    "huggingface-hub==0.0.12",
+    "GitPython<3.1.19",
+    "huggingface-hub>=0.0.12",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -142,6 +142,7 @@ _deps = [
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
     "sphinx==3.2.1",
     "sphinxext-opengraph==0.4.1",
+    "sphinx-intl",
     "starlette",
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
@@ -289,6 +290,7 @@ extras["docs_specific"] = deps_list(
     "sphinx-rtd-theme",
     "sphinx-copybutton",
     "sphinxext-opengraph",
+    "sphinx-intl",
 )
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
@@ -337,7 +339,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.9.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.10.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
