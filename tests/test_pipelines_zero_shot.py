@@ -102,7 +102,7 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
         ]
         self.assertIsNotNone(zero_shot_classifier)
 
-        if not "t5" in zero_shot_classifier.model.name_or_path:
+        if "t5" not in zero_shot_classifier.model.name_or_path:
             self._test_entailment_id(zero_shot_classifier)
 
         for mono_input in valid_mono_inputs:
