@@ -443,10 +443,14 @@ if __name__ == "__main__":
         sanity_check()
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
+
+        diff_with_last_commit=args.diff_with_last_commit
+        if not repo.head.is_detached and repo.head.ref == repo.refs.master:
+            print("Master branch detected, fetching tests against last commit.")
+            diff_with_last_commit = True
+
         try:
-            infer_tests_to_run(
-                args.output_file, diff_with_last_commit=args.diff_with_last_commit, filters=args.filters
-            )
+            infer_tests_to_run(args.output_file, diff_with_last_commit=diff_with_last_commit, filters=args.filters)
         except Exception as e:
             print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
             with open(args.output_file, "w", encoding="utf-8") as f:
