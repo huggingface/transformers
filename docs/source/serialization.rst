@@ -99,6 +99,30 @@ It will be exported under ``onnx/bert-base-cased``. You should see similar logs:
                     -[✓] all values close (atol: 0.0001)
     All good, model saved at: onnx/bert-base-cased/model.onnx
 
+This export can now be used in the ONNX inference runtime:
+
+.. code-block::
+
+    import onnxruntime as ort
+
+    from transformers import BertTokenizerFast
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
+
+    ort_session = ort.InferenceSession('onnx/bert-base-cased/model.onnx')
+
+    inputs = tokenizer("Using BERT in ONNX!", return_tensors="np")
+    outputs = ort_session.run(["last_hidden_state", "pooler_output"], dict(inputs))
+
+The outputs used (:obj:`["last_hidden_state", "pooler_output"]`) can be obtained by taking a look at the ONNX
+configuration of each model. For example, for BERT:
+
+.. code-block::
+
+    from transformers.models.bert import BertOnnxConfig, BertConfig
+
+    config = BertConfig()
+    onnx_config = BertOnnxConfig(config)
+    output_keys = list(onnx_config.outputs.keys())
 
 Implementing a custom configuration for an unsupported architecture
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
