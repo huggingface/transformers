@@ -32,8 +32,8 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         FNetForMaskedLM,
-        FNetForPreTraining,
         FNetForMultipleChoice,
+        FNetForPreTraining,
         FNetForQuestionAnswering,
         FNetForSequenceClassification,
         FNetForTokenClassification,
@@ -260,6 +260,7 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
         return inputs_dict
+
     # Overriden Tests
     def test_attention_outputs(self):
         pass

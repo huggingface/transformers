@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    fnet,
     albert,
     auto,
     bart,
@@ -47,6 +46,7 @@ from . import (
     electra,
     encoder_decoder,
     flaubert,
+    fnet,
     fsmt,
     funnel,
     gpt2,

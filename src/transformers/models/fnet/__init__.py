@@ -16,7 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import TYPE_CHECKING
-from ...file_utils import _LazyModule, is_torch_available, is_tokenizers_available
+
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+
+
 _import_structure = {
     "configuration_fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
     "tokenization_fnet": ["FNetTokenizer"],
@@ -29,8 +32,8 @@ if is_torch_available():
     _import_structure["modeling_fnet"] = [
         "FNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FNetForMaskedLM",
-        "FNetForPreTraining",
         "FNetForMultipleChoice",
+        "FNetForPreTraining",
         "FNetForQuestionAnswering",
         "FNetForSequenceClassification",
         "FNetForTokenClassification",
@@ -39,8 +42,6 @@ if is_torch_available():
         "FNetPreTrainedModel",
         "load_tf_weights_in_fnet",
     ]
-
-
 
 
 if TYPE_CHECKING:
@@ -54,8 +55,8 @@ if TYPE_CHECKING:
         from .modeling_fnet import (
             FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             FNetForMaskedLM,
-            FNetForPreTraining,
             FNetForMultipleChoice,
+            FNetForPreTraining,
             FNetForQuestionAnswering,
             FNetForSequenceClassification,
             FNetForTokenClassification,

@@ -37,7 +37,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "gchhablani/fnet-base": "https://huggingface.co/gchhablani/fnet-base/resolve/main/spiece.model",
         "gchhablani/fnet-large": "https://huggingface.co/gchhablani/fnet-large/resolve/main/spiece.model",
-
     },
     "tokenizer_file": {
         "gchhablani/fnet-base": "https://huggingface.co/gchhablani/fnet-base/resolve/main/tokenizer.json",
@@ -55,10 +54,12 @@ SPIECE_UNDERLINE = "▁"
 
 class FNetTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" FNetTokenizer (backed by HuggingFace's `tokenizers` library). Adapted from :class:`~transformers.AlbertTokenizerFast`. 
-    Based on `Unigram <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__. This tokenizer
+    Construct a "fast" FNetTokenizer (backed by HuggingFace's `tokenizers` library). Adapted from
+    :class:`~transformers.AlbertTokenizerFast`. Based on `Unigram
+    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__. This tokenizer
     inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods
+
     Args:
         vocab_file (:obj:`str`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
@@ -71,9 +72,8 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to keep accents when tokenizing.
         bos_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-            .. note::
-               When building a sequence using special tokens, this is not the token that is used for the beginning of
-               sequence. The token used is the :obj:`cls_token`.
+            .. note:: When building a sequence using special tokens, this is not the token that is used for the
+            beginning of sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
             The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
             that is used for the end of sequence. The token used is the :obj:`sep_token`.
@@ -145,13 +145,16 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An ALBERT sequence has the following format:
+
         - single sequence: ``[CLS] X [SEP]``
         - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
@@ -166,16 +169,15 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
     ) -> List[int]:
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An ALBERT
-        sequence pair mask has the following format:
-        ::
-            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-            | first sequence    | second sequence |
-        if token_ids_1 is None, only returns the first portion of the mask (0s).
+        sequence pair mask has the following format: :: 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 | first sequence |
+        second sequence | if token_ids_1 is None, only returns the first portion of the mask (0s).
+
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
             sequence(s).

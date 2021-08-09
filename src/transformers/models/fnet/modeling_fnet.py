@@ -14,13 +14,9 @@
 # limitations under the License.
 """ PyTorch FNet model. """
 
-
-
-
-import math
-import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
+
 import torch
 import torch.utils.checkpoint
 from packaging import version
@@ -37,20 +33,14 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    ModelOutput,
     MaskedLMOutput,
+    ModelOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    SequenceSummary,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...utils import logging
 from .configuration_fnet import FNetConfig
 
@@ -66,21 +56,6 @@ FNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all FNet models at https://huggingface.co/models?filter=fnet
 ]
 
-
-# def fftn(x):
-#     """
-#     Applies n-dimensional Fast Fourier Transform (FFT) to input array.
-
-#     Args:
-#         x: Input n-dimensional array.
-
-#     Returns:
-#         n-dimensional Fourier transform of input n-dimensional array.
-#     """
-#     out = x
-#     for axis in reversed(range(x.ndim)):
-#         out = torch.fft.fft(out, axis=axis)
-#     return out
 
 class FNetEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -109,9 +84,7 @@ class FNetEmbeddings(nn.Module):
                 persistent=False,
             )
 
-    def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None
-    ):
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -132,7 +105,7 @@ class FNetEmbeddings(nn.Module):
                 token_type_ids = buffered_token_type_ids_expanded
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
-                
+
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
@@ -158,7 +131,8 @@ class FNetBasicFourierTransform(nn.Module):
         self,
         hidden_states,
     ):
-        return (self.fourier_transform(hidden_states).real, )
+        return (self.fourier_transform(hidden_states).real,)
+
 
 class FNetBasicOutput(nn.Module):
     def __init__(self, config):
@@ -167,8 +141,9 @@ class FNetBasicOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, input_tensor):
-        hidden_states = self.LayerNorm(input_tensor + hidden_states) # NOTE: Order has been changed.
+        hidden_states = self.LayerNorm(input_tensor + hidden_states)  # NOTE: Order has been changed.
         return hidden_states
+
 
 class FNetFourierTransform(nn.Module):
     def __init__(self, config):
@@ -186,6 +161,7 @@ class FNetFourierTransform(nn.Module):
         fourier_output = self.output(self_outputs[0], hidden_states)
         outputs = (fourier_output,)
         return outputs
+
 
 class FNetIntermediate(nn.Module):
     def __init__(self, config):
@@ -236,10 +212,9 @@ class FNetLayer(nn.Module):
         )
         fourier_output = self_fourier_outputs[0]
 
-
         # # TODO: Check if this should be here.
         layer_output = apply_chunking_to_forward(
-           self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, fourier_output
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, fourier_output
         )
 
         outputs = (layer_output,)
@@ -271,13 +246,6 @@ class FNetEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -314,6 +282,7 @@ class FNetEncoder(nn.Module):
             hidden_states=all_hidden_states,
         )
 
+
 class FNetPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -327,6 +296,7 @@ class FNetPooler(nn.Module):
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
+
 
 class FNetPredictionHeadTransform(nn.Module):
     def __init__(self, config):
@@ -375,6 +345,7 @@ class FNetOnlyMLMHead(nn.Module):
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
+
 class FNetPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -389,8 +360,8 @@ class FNetPreTrainingHeads(nn.Module):
 
 class FNetPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = FNetConfig
@@ -398,7 +369,7 @@ class FNetPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -419,6 +390,7 @@ class FNetPreTrainedModel(PreTrainedModel):
 class FNetForPreTrainingOutput(ModelOutput):
     """
     Output type of :class:`~transformers.FNetForPreTraining`.
+
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
@@ -430,8 +402,8 @@ class FNetForPreTrainingOutput(ModelOutput):
             before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+            each layer plus the initial embedding outputs.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -439,15 +411,17 @@ class FNetForPreTrainingOutput(ModelOutput):
     seq_relationship_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
+
 FNET_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.FNetConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 FNET_INPUTS_DOCSTRING = r"""
@@ -455,9 +429,9 @@ FNET_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.FNetTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.FNetTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
@@ -469,8 +443,8 @@ FNET_INPUTS_DOCSTRING = r"""
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
 
@@ -492,9 +466,10 @@ FNET_INPUTS_DOCSTRING = r"""
 )
 class FNetModel(FNetPreTrainedModel):
     """
-    
-    The model can behave as an encoder, following the architecture described in `FNet: Mixing Tokens with Fourier Transforms <https://arxiv.org/abs/2105.03824>`__ by James Lee-Thorp,
-    Joshua Ainslie, Ilya Eckstein, Santiago Ontanon.
+
+    The model can behave as an encoder, following the architecture described in `FNet: Mixing Tokens with Fourier
+    Transforms <https://arxiv.org/abs/2105.03824>`__ by James Lee-Thorp, Joshua Ainslie, Ilya Eckstein, Santiago
+    Ontanon.
 
     """
 
@@ -573,13 +548,14 @@ class FNetModel(FNetPreTrainedModel):
         pooler_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output,pooler_output) + encoder_outputs[1:]
+            return (sequence_output, pooler_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
         )
+
 
 @add_start_docstrings(
     """
@@ -624,11 +600,14 @@ class FNetForPreTraining(FNetPreTrainedModel):
         next_sentence_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
             (see :obj:`input_ids` docstring) Indices should be in ``[0, 1]``:
+
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
         kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
+
         Returns:
+
         Example::
             >>> from transformers import FNetTokenizer, FNetForPreTraining
             >>> import torch
@@ -671,6 +650,7 @@ class FNetForPreTraining(FNetPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+
 @add_start_docstrings("""FNet Model with a `language modeling` head on top. """, FNET_START_DOCSTRING)
 class FNetForMaskedLM(FNetPreTrainedModel):
     def __init__(self, config):
@@ -706,10 +686,9 @@ class FNetForMaskedLM(FNetPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``.
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -755,8 +734,10 @@ class FNetForMaskedLM(FNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """FNet Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    FNet Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """,
     FNET_START_DOCSTRING,
 )
 class FNetForSequenceClassification(FNetPreTrainedModel):
@@ -778,20 +759,19 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            token_type_ids=None,
-            position_ids=None,
-            inputs_embeds=None,
-            labels=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        labels=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -830,9 +810,12 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+
 @add_start_docstrings(
-    """FNet Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    FNet Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     FNET_START_DOCSTRING,
 )
 class FNetForMultipleChoice(FNetPreTrainedModel):
@@ -853,20 +836,20 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            token_type_ids=None,
-            position_ids=None,
-            inputs_embeds=None,
-            labels=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        labels=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -894,7 +877,7 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
-        
+
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
@@ -912,8 +895,10 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """FNet Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    FNet Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     FNET_START_DOCSTRING,
 )
 class FNetForTokenClassification(FNetPreTrainedModel):
@@ -947,8 +932,8 @@ class FNetForTokenClassification(FNetPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -984,8 +969,10 @@ class FNetForTokenClassification(FNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """FNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    FNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     FNET_START_DOCSTRING,
 )
 class FNetForQuestionAnswering(FNetPreTrainedModel):
@@ -1022,12 +1009,12 @@ class FNetForQuestionAnswering(FNetPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
