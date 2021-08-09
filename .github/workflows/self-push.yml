@@ -50,6 +50,8 @@ jobs:
       - name: Fetch the tests to run
         run: |
           python utils/tests_fetcher.py | tee test_preparation.txt
+
+      - name: Report fetched tests
         uses: actions/upload-artifact@v2
         with:
           name: test_fetched
@@ -99,6 +101,8 @@ jobs:
 #      - name: Fetch the tests to run
 #        run: |
 #          python utils/tests_fetcher.py | tee test_preparation.txt
+#
+#      - name: Report fetched tests
 #        uses: actions/upload-artifact@v2
 #        with:
 #          name: test_fetched
@@ -154,6 +158,8 @@ jobs:
       - name: Fetch the tests to run
         run: |
           python utils/tests_fetcher.py | tee test_preparation.txt
+
+      - name: Report fetched tests
         uses: actions/upload-artifact@v2
         with:
           name: test_fetched
@@ -205,6 +211,8 @@ jobs:
 #      - name: Fetch the tests to run
 #        run: |
 #          python utils/tests_fetcher.py | tee test_preparation.txt
+#
+#      - name: Report fetched tests
 #        uses: actions/upload-artifact@v2
 #        with:
 #          name: test_fetched
@@ -259,6 +267,8 @@ jobs:
       - name: Fetch the tests to run
         run: |
           python utils/tests_fetcher.py --filters tests/deepspeed tests/extended | tee test_preparation.txt
+      
+      - name: Report fetched tests
         uses: actions/upload-artifact@v2
         with:
           name: test_fetched
@@ -310,6 +320,8 @@ jobs:
       - name: Fetch the tests to run
         run: |
           python utils/tests_fetcher.py --filters tests/deepspeed tests/extended | tee test_preparation.txt
+
+      - name: Report fetched tests
         uses: actions/upload-artifact@v2
         with:
           name: test_fetched
