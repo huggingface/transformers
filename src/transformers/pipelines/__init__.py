@@ -54,11 +54,7 @@ from .token_classification import (
     TokenClassificationArgumentHandler,
     TokenClassificationPipeline,
 )
-from .zero_shot_classification import (
-    ZeroShotClassificationArgumentHandler,
-    ZeroShotClassificationPipeline,
-    ZeroShotClassificationWithT5Pipeline,
-)
+from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 
 
 if is_tf_available():
@@ -216,16 +212,6 @@ SUPPORTED_TASKS = {
             "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
         },
     },
-    "zero-shot-classification-t5": {
-        "impl": ZeroShotClassificationWithT5Pipeline,
-        "tf": (TFT5ForConditionalGeneration,) if is_tf_available() else (),
-        "pt": (T5ForConditionalGeneration,) if is_torch_available() else (),
-        "default": {
-            "model": {"pt": "t5-large", "tf": "t5-large"},
-            "config": {"pt": "t5-large", "tf": "t5-large"},
-            "tokenizer": {"pt": "t5-large", "tf": "t5-large"},
-        },
-    },
     "conversational": {
         "impl": ConversationalPipeline,
         "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
@@ -327,8 +313,6 @@ def pipeline(
             - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`.
             - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`.
             - :obj:`"zero-shot-classification:`: will return a :class:`~transformers.ZeroShotClassificationPipeline`.
-            - :obj:`"zero-shot-classification-t5:`: will return a
-              :class:`~transformers.ZeroShotClassificationWithT5Pipeline`.
             - :obj:`"conversational"`: will return a :class:`~transformers.ConversationalPipeline`.
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
