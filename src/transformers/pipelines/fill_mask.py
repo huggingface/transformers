@@ -117,7 +117,7 @@ class FillMaskPipeline(Pipeline):
     def ensure_exactly_one_mask_token(self, model_inputs: GenericTensor):
         if isinstance(model_inputs, list):
             for model_input in model_inputs:
-                self._ensure_exactly_one_mask_token(model_input["input_ids"])
+                self._ensure_exactly_one_mask_token(model_input["input_ids"][0])
         else:
             for input_ids in model_inputs["input_ids"]:
                 self._ensure_exactly_one_mask_token(input_ids)
@@ -161,15 +161,17 @@ class FillMaskPipeline(Pipeline):
             for model_input in model_inputs:
                 output = self._forward(model_input, return_tensors=True)
                 outputs.append(output)
+
+            batch_size = len(model_inputs)
         else:
             outputs = self._forward(model_inputs, return_tensors=True)
+            batch_size = outputs.shape[0] if self.framework == "tf" else outputs.size(0)
 
         # top_k must be defined
         if top_k is None:
             top_k = self.top_k
 
         results = []
-        batch_size = outputs.shape[0] if self.framework == "tf" else outputs.size(0)
 
         if targets is None and self.targets is not None:
             targets = self.targets
@@ -218,7 +220,10 @@ class FillMaskPipeline(Pipeline):
                 top_k = target_ids.shape[0]
 
         for i in range(batch_size):
-            input_ids = model_inputs["input_ids"][i]
+            if isinstance(model_inputs, list):
+                input_ids = model_inputs[i]["input_ids"][0]
+            else:
+                input_ids = model_inputs["input_ids"][i]
             result = []
 
             if self.framework == "tf":
@@ -226,7 +231,10 @@ class FillMaskPipeline(Pipeline):
 
                 # Fill mask pipeline supports only one ${mask_token} per sample
 
-                logits = outputs[i, masked_index.item(), :]
+                if isinstance(outputs, list):
+                    logits = outputs[i][0, masked_index.item(), :]
+                else:
+                    logits = outputs[i, masked_index.item(), :]
                 probs = tf.nn.softmax(logits)
                 if targets is not None:
                     probs = tf.gather_nd(probs, tf.reshape(target_ids, (-1, 1)))
@@ -237,7 +245,10 @@ class FillMaskPipeline(Pipeline):
                 masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
                 # Fill mask pipeline supports only one ${mask_token} per sample
 
-                logits = outputs[i, masked_index.item(), :]
+                if isinstance(outputs, list):
+                    logits = outputs[i][0, masked_index.item(), :]
+                else:
+                    logits = outputs[i, masked_index.item(), :]
                 probs = logits.softmax(dim=0)
                 if targets is not None:
                     probs = probs[..., target_ids]

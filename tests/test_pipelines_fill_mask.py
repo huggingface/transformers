@@ -16,11 +16,12 @@ import unittest
 
 from transformers import MODEL_FOR_MASKED_LM_MAPPING, TF_MODEL_FOR_MASKED_LM_MAPPING, FillMaskPipeline, pipeline
 from transformers.pipelines import PipelineException
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
+@is_pipeline_test
 class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_MASKED_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_MASKED_LM_MAPPING
@@ -152,6 +153,20 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
                 {"sequence": "My name is Te", "score": 0.000, "token": 2941, "token_str": " Te"},
             ],
         )
+
+    @require_torch
+    def test_model_no_pad_pt(self):
+        unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", framework="pt")
+        unmasker.tokenizer.pad_token_id = None
+        unmasker.tokenizer.pad_token = None
+        self.run_pipeline_test(unmasker.model, unmasker.tokenizer)
+
+    @require_tf
+    def test_model_no_pad_tf(self):
+        unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", framework="pt")
+        unmasker.tokenizer.pad_token_id = None
+        unmasker.tokenizer.pad_token = None
+        self.run_pipeline_test(unmasker.model, unmasker.tokenizer)
 
     def run_pipeline_test(self, model, tokenizer):
         if tokenizer.mask_token_id is None:
