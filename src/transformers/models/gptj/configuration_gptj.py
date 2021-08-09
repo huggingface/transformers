@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GPTJ model configuration """
+""" GPT-J model configuration """
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -30,16 +30,15 @@ GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class GPTJConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.GPTJModel`. It is used to
-    instantiate a GPTJ model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPTJ `gpt-j-6B
-    <https://huggingface.co/EleutherAI/gptj-6B>`__ architecture.
+    instantiate a GPT-J model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the GPT-J `gpt-j-6B
+    <https://huggingface.co/EleutherAI/gpt-j-6B>`__ architecture.
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50400):
-            Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.GPT2Model` or
-            :class:`~transformers.TFGPT2Model`.
+            Vocabulary size of the GPT-J model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.GPTJModel`.
         n_positions (:obj:`int`, `optional`, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -52,7 +51,7 @@ class GPTJConfig(PretrainedConfig):
         n_head (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         rotary_dim (:obj:`int`, `optional`, defaults to 64):
-            Number of dimensions in the embedding that rotary positional encodings are applied to.
+            Number of dimensions in the embedding that Rotary Position Embedding is applied to.
         n_inner (:obj:`int`, `optional`, defaults to None):
             Dimensionality of the inner feed-forward layers. :obj:`None` will set it to 4 times n_embd
         activation_function (:obj:`str`, `optional`, defaults to :obj:`"gelu_new"`):
@@ -64,7 +63,7 @@ class GPTJConfig(PretrainedConfig):
         attn_pdrop (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention.
         layer_norm_epsilon (:obj:`float`, `optional`, defaults to 1e-5):
-            The epsilon to use in the layer normalization layers
+            The epsilon to use in the layer normalization layers.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         summary_type (:obj:`string`, `optional`, defaults to :obj:`"cls_index"`):
@@ -99,15 +98,18 @@ class GPTJConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
-        Example::
+    Example::
         
-            >>> from transformers import GPTJModel, GPTJConfig
-            >>> # Initializing a GPTJ EleutherAI/gptj-6B style configuration
-            >>> configuration = GPTJConfig()
-            >>> # Initializing a model from the EleutherAI/gptj-6B style configuration
-            >>> model = GPTJModel(configuration)
-            >>> # Accessing the model configuration
-            >>> configuration = model.config
+        >>> from transformers import GPTJModel, GPTJConfig
+        
+        >>> # Initializing a GPT-J 6B configuration
+        >>> configuration = GPTJConfig()
+        
+        >>> # Initializing a model from the configuration
+        >>> model = GPTJModel(configuration)
+        
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
     """
     model_type = "gptj"
 
