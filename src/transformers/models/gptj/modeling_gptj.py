@@ -567,7 +567,6 @@ class GPTJModel(GPTJPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-            attn_mask = global_attention_mask
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -592,14 +591,14 @@ class GPTJModel(GPTJPreTrainedModel):
                     create_custom_forward(block),
                     hidden_states,
                     None,
-                    attn_mask,
+                    attention_mask,
                     head_mask[i],
                 )
             else:
                 outputs = block(
                     hidden_states,
                     layer_past=layer_past,
-                    attention_mask=attn_mask,
+                    attention_mask= attention_mask,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
