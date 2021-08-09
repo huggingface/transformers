@@ -32,8 +32,8 @@ def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, fnet_config_file, s
     print(f"Building PyTorch model from configuration: {config}")
     model = FNetForPreTraining(config)
 
-    checkpoint_dict = checkpoints.restore_checkpoint(flax_checkpoint_path, None)
-    pretrained_params = checkpoint_dict
+    checkpoint_dict = restore_checkpoint(flax_checkpoint_path, None)
+    pretrained_model_params = checkpoint_dict['target']
 
     fnet_pretraining_model = FNetForPreTraining(config)
 
@@ -56,22 +56,22 @@ def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, fnet_config_file, s
 
 
     # Encoder Layers
-    for layer in range(fnet_config.num_hidden_layers):
-        new_state_dict[f'fnet.encoder.layer.{layer}.fourier.output.LayerNorm.weight'] = torch.tensor(np.array(pretrained_model_params['encoder'][f'encoder_{layer}']['mixing_layer_norm']['scale']))
-        new_state_dict[f'fnet.encoder.layer.{layer}.fourier.output.LayerNorm.bias'] = torch.tensor(np.array(pretrained_model_params['encoder'][f'encoder_{layer}']['mixing_layer_norm']['bias']))
+    for layer in range(config.num_hidden_layers):
+        new_state_dict[f'fnet.encoder.layer.{layer}.fourier.output.LayerNorm.weight'] = torch.tensor(pretrained_model_params['encoder'][f'encoder_{layer}']['mixing_layer_norm']['scale'])
+        new_state_dict[f'fnet.encoder.layer.{layer}.fourier.output.LayerNorm.bias'] = torch.tensor(pretrained_model_params['encoder'][f'encoder_{layer}']['mixing_layer_norm']['bias'])
 
-        new_state_dict[f'fnet.encoder.layer.{layer}.intermediate.dense.weight'] = torch.tensor(np.array(pretrained_model_params['encoder'][f'feed_forward_{layer}']['intermediate']['kernel'])).T
-        new_state_dict[f'fnet.encoder.layer.{layer}.intermediate.dense.bias'] = torch.tensor(np.array(pretrained_model_params['encoder'][f'feed_forward_{layer}']['intermediate']['bias']))
+        new_state_dict[f'fnet.encoder.layer.{layer}.intermediate.dense.weight'] = torch.tensor(pretrained_model_params['encoder'][f'feed_forward_{layer}']['intermediate']['kernel']).T
+        new_state_dict[f'fnet.encoder.layer.{layer}.intermediate.dense.bias'] = torch.tensor(pretrained_model_params['encoder'][f'feed_forward_{layer}']['intermediate']['bias'])
 
-        new_state_dict[f'fnet.encoder.layer.{layer}.output.dense.weight'] = torch.tensor(np.array(pretrained_model_params['encoder'][f'feed_forward_{layer}']['output']['kernel'])).T
-        new_state_dict[f'fnet.encoder.layer.{layer}.output.dense.bias'] = torch.tensor(np.array(pretrained_model_params['encoder'][f'feed_forward_{layer}']['output']['bias']))
+        new_state_dict[f'fnet.encoder.layer.{layer}.output.dense.weight'] = torch.tensor(pretrained_model_params['encoder'][f'feed_forward_{layer}']['output']['kernel']).T
+        new_state_dict[f'fnet.encoder.layer.{layer}.output.dense.bias'] = torch.tensor(pretrained_model_params['encoder'][f'feed_forward_{layer}']['output']['bias'])
 
-        new_state_dict[f'fnet.encoder.layer.{layer}.output.LayerNorm.weight'] = torch.tensor(np.array(pretrained_model_params['encoder'][f'encoder_{layer}']['output_layer_norm']['scale']))
-        new_state_dict[f'fnet.encoder.layer.{layer}.output.LayerNorm.bias'] = torch.tensor(np.array(pretrained_model_params['encoder'][f'encoder_{layer}']['output_layer_norm']['bias']))
+        new_state_dict[f'fnet.encoder.layer.{layer}.output.LayerNorm.weight'] = torch.tensor(pretrained_model_params['encoder'][f'encoder_{layer}']['output_layer_norm']['scale'])
+        new_state_dict[f'fnet.encoder.layer.{layer}.output.LayerNorm.bias'] = torch.tensor(pretrained_model_params['encoder'][f'encoder_{layer}']['output_layer_norm']['bias'])
     
     # Pooler Layers
-    new_state_dict['fnet.pooler.dense.weight'] = torch.tensor(np.array(pretrained_model_params['encoder']['pooler']['kernel'])).T
-    new_state_dict['fnet.pooler.dense.bias'] = torch.tensor(np.array(pretrained_model_params['encoder']['pooler']['bias']))
+    new_state_dict['fnet.pooler.dense.weight'] = torch.tensor(pretrained_model_params['encoder']['pooler']['kernel']).T
+    new_state_dict['fnet.pooler.dense.bias'] = torch.tensor(pretrained_model_params['encoder']['pooler']['bias'])
 
     # Masked LM Layers
     new_state_dict['cls.predictions.transform.dense.weight'] = torch.tensor(pretrained_model_params['predictions_dense']['kernel']).T
