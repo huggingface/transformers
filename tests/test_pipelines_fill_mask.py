@@ -163,7 +163,7 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
 
     @require_tf
     def test_model_no_pad_tf(self):
-        unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", framework="pt")
+        unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", framework="tf")
         unmasker.tokenizer.pad_token_id = None
         unmasker.tokenizer.pad_token = None
         self.run_pipeline_test(unmasker.model, unmasker.tokenizer)
