@@ -47,8 +47,8 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ZeroShotClassificationPipeline(Pipeline):
     """
-    NLI-based zero-shot classification pipeline using a :obj:`ModelForSequenceClassification` trained on NLI (natural
-    language inference) tasks.
+    NLI-based zero-shot classification pipeline using a :obj:`ModelForSequenceClassification` or a
+    :obj:`T5ForConditionalGeneration` trained on NLI (natural language inference) tasks.
 
     Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
     pair and passed to the pretrained model. Then, the logit for `entailment` is taken as the logit for the candidate
