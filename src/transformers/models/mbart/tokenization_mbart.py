@@ -101,7 +101,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, additional_special_tokens=None, **kwargs
     ):
         additional_special_tokens = additional_special_tokens if additional_special_tokens is not None else []
-        additional_special_tokens += [code for code in FAIRSEQ_LANGUAGE_CODES]
+        additional_special_tokens += [code for code in FAIRSEQ_LANGUAGE_CODES if code not in additional_special_tokens]
 
         super().__init__(
             *args,
