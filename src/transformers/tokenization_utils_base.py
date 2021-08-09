@@ -1864,7 +1864,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             for key, value in special_tokens_map.items():
                 if key in kwargs and kwargs[key]:
                     # this value has already been redefined by the kwargs
-                    break
+                    continue
 
                 if isinstance(value, dict):
                     value = AddedToken(**value)
