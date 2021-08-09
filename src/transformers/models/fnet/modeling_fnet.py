@@ -95,6 +95,8 @@ class FNetEmbeddings(nn.Module):
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # NOTE: This is the project layer and will be needed. The original code allows for different embedding and different model dimensions.
+        self.projection = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -140,6 +142,7 @@ class FNetEmbeddings(nn.Module):
         position_embeddings = self.position_embeddings(position_ids)
         embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
+        embeddings = self.projection(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
