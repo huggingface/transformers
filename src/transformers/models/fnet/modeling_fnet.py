@@ -212,7 +212,7 @@ class FNetOutput(nn.Module):
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.LayerNorm(input_tensor + hidden_states)
         return hidden_states
 
 
@@ -237,12 +237,13 @@ class FNetLayer(nn.Module):
         fourier_output = self_fourier_outputs[0]
 
 
-        # TODO: Check if this should be here.
+        # # TODO: Check if this should be here.
         layer_output = apply_chunking_to_forward(
            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, fourier_output
         )
 
         outputs = (layer_output,)
+
         return outputs
 
     def feed_forward_chunk(self, fourier_output):
