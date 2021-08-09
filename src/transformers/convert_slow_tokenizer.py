@@ -520,7 +520,6 @@ class CamembertConverter(SpmConverter):
             ],
         )
 
-
 class MBartConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
@@ -807,6 +806,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "DPRQuestionEncoderTokenizer": BertConverter,
     "DPRContextEncoderTokenizer": BertConverter,
     "ElectraTokenizer": BertConverter,
+    "FNetTokenizer": AlbertConverter,
     "FunnelTokenizer": FunnelConverter,
     "GPT2Tokenizer": GPT2Converter,
     "HerbertTokenizer": HerbertConverter,
