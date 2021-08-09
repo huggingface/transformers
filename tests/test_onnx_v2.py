@@ -156,7 +156,8 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
                 )
 
                 self.assertTrue(
-                    OnnxConfigWithPast.with_past(config()).use_past, "OnnxConfigWithPast.default() should use_past"
+                    OnnxConfigWithPast.with_past(config()).use_past,
+                    "OnnxConfigWithPast.from_model_config() should use_past",
                 )
 
     @patch.multiple(OnnxConfigWithPast, __abstractmethods__=set())
@@ -230,11 +231,11 @@ class OnnxExportTestCaseV2(TestCase):
 
         for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_DEFAULT_MODELS:
             with self.subTest(name):
-                self.assertTrue(hasattr(onnx_config_class, "default"))
+                self.assertTrue(hasattr(onnx_config_class, "from_model_config"))
 
                 tokenizer = AutoTokenizer.from_pretrained(model)
                 model = model_class(config_class.from_pretrained(model))
-                onnx_config = onnx_config_class.default(model.config)
+                onnx_config = onnx_config_class.from_model_config(model.config)
 
                 with NamedTemporaryFile("w") as output:
                     onnx_inputs, onnx_outputs = export(
