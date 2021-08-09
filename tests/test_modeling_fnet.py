@@ -16,32 +16,31 @@
 
 
 import unittest
+from typing import Dict, List, Tuple
 
-from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import FNetConfig, is_torch_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from transformers import FNetConfig
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 
-from typing import List, Tuple, Dict
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        FNetForPreTraining,
+        MODEL_FOR_PRETRAINING_MAPPING,
         FNetForMaskedLM,
+        FNetForPreTraining,
         FNetForMultipleChoice,
         FNetForQuestionAnswering,
         FNetForSequenceClassification,
         FNetForTokenClassification,
         FNetModel,
     )
-    from transformers.models.fnet.modeling_fnet import (
-        FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers.models.fnet.modeling_fnet import FNET_PRETRAINED_MODEL_ARCHIVE_LIST
+
 
 # Override ConfigTester
 class FNetConfigTester(ConfigTester):
@@ -55,26 +54,26 @@ class FNetConfigTester(ConfigTester):
 
 class FNetModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None, # TODO: Check if scope is needed.
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,  # TODO: Check if scope is needed.
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -90,7 +89,7 @@ class FNetModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size # TODO: Check what is type_sequence_label_size
+        self.type_sequence_label_size = type_sequence_label_size  # TODO: Check what is type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
@@ -128,9 +127,7 @@ class FNetModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(
-            self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_model(self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels):
         model = FNetModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -138,8 +135,23 @@ class FNetModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_for_pretraining(
+        self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
+    ):
+        model = FNetForPreTraining(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            next_sentence_label=sequence_labels,
+        )
+        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
+
     def create_and_check_for_masked_lm(
-            self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
     ):
         model = FNetForMaskedLM(config=config)
         model.to(torch_device)
@@ -148,7 +160,7 @@ class FNetModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_question_answering(
-            self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
     ):
         model = FNetForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -163,7 +175,7 @@ class FNetModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_sequence_classification(
-            self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = FNetForSequenceClassification(config)
@@ -173,7 +185,7 @@ class FNetModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = FNetForTokenClassification(config=config)
@@ -183,7 +195,7 @@ class FNetModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_multiple_choice(
-            self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
         model = FNetForMultipleChoice(config=config)
@@ -218,6 +230,7 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FNetModel,
+            FNetForPreTraining,
             FNetForMaskedLM,
             FNetForMultipleChoice,
             FNetForQuestionAnswering,
@@ -233,7 +246,20 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_head_masking = False
     test_pruning = False
-    
+
+    # special case for ForPreTraining model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["next_sentence_label"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
     # Overriden Tests
     def test_attention_outputs(self):
         pass
@@ -307,7 +333,7 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
         outputs = model(**inputs)
 
         output = outputs[0]
-        
+
         hidden_states = outputs.hidden_states[0]
 
         hidden_states.retain_grad()
@@ -326,6 +352,10 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -367,10 +397,8 @@ class FNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor([[[-1.7533, -7.7820, -7.5424],
-         [-3.2497, -8.2926, -7.5661],
-         [-3.4102, -8.6046, -8.0170]]])
+        expected_slice = torch.tensor(
+            [[[-1.7533, -7.7820, -7.5424], [-3.2497, -8.2926, -7.5661], [-3.4102, -8.6046, -8.0170]]]
+        )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
-
