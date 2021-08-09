@@ -28,7 +28,7 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_mbart": ["MBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "MBartConfig"],
+    "configuration_mbart": ["MBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "MBartConfig", "MBartOnnxConfig"],
 }
 
 if is_sentencepiece_available():
@@ -66,7 +66,7 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
+    from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig, MBartOnnxConfig
 
     if is_sentencepiece_available():
         from .tokenization_mbart import MBartTokenizer
