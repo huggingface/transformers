@@ -16,19 +16,27 @@ FNet
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The FNet model was proposed in `<INSERT PAPER NAME HERE> <<INSERT PAPER LINK HERE>>`__ by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The FNet model was proposed in `FNet: Mixing Tokens with Fourier Transforms <https://arxiv.org/abs/2105.03824>`__ by
+James Lee-Thorp, Joshua Ainslie, Ilya Eckstein, Santiago Ontanon. The model replaces the self-attention layer in a BERT
+model with a fourier transform which returns only the real parts of the transform. The model is significantly faster
+than the BERT model because it has less parameters and is more memory efficient. The model achieves abour 92-97%
+accuracy of BERT counterparts on GLUE benchmark, and trains must faster than the BERT model. The abstract from the
+paper is the following:
 
-The abstract from the paper is the following:
+*We show that Transformer encoder architectures can be massively sped up, with limited accuracy costs, by replacing the
+self-attention sublayers with simple linear transformations that "mix" input tokens. These linear transformations,
+along with standard nonlinearities in feed-forward layers, prove competent at modeling semantic relationships in
+several text classification tasks. Most surprisingly, we find that replacing the self-attention sublayer in a
+Transformer encoder with a standard, unparameterized Fourier Transform achieves 92-97% of the accuracy of BERT
+counterparts on the GLUE benchmark, but trains nearly seven times faster on GPUs and twice as fast on TPUs. The
+resulting model, FNet, also scales very efficiently to long inputs. Specifically, when compared to the "efficient"
+Transformers on the Long Range Arena benchmark, FNet matches the accuracy of the most accurate models, but is faster
+than the fastest models across all sequence lengths on GPUs (and across relatively shorter lengths on TPUs). Finally,
+FNet has a light memory footprint and is particularly efficient at smaller model sizes: for a fixed speed and accuracy
+budget, small FNet models outperform Transformer counterparts.*
 
-*<INSERT PAPER ABSTRACT HERE>*
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by `<INSERT YOUR HF USERNAME HERE> <https://huggingface.co/<INSERT YOUR HF USERNAME
-HERE>>`__. The original code can be found `here <<INSERT LINK TO GITHUB REPO HERE>>`__.
+This model was contributed by `gchhablani <https://huggingface.co/gchhablani>`__. The original code can be found `here
+<https://github.com/google-research/google-research/tree/master/f_net>`__.
 
 FNetConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
