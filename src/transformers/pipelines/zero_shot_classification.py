@@ -132,7 +132,8 @@ class ZeroShotClassificationPipeline(Pipeline):
             truncation=truncation,
         )
 
-        inputs["decoder_input_ids"] = None if self.model.config.model_type != "t5" else decoder_inputs.input_ids
+        if self.model.config.model_type == "t5":
+            inputs["decoder_input_ids"] = decoder_inputs.input_ids
 
         return inputs
 
@@ -147,169 +148,6 @@ class ZeroShotClassificationPipeline(Pipeline):
     ):
         """
         Classify the sequence(s) given as inputs. See the :obj:`~transformers.ZeroShotClassificationPipeline`
-        documentation for more information.
-
-        Args:
-            sequences (:obj:`str` or :obj:`List[str]`):
-                The sequence(s) to classify, will be truncated if the model input is too large.
-            candidate_labels (:obj:`str` or :obj:`List[str]`):
-                The set of possible class labels to classify each sequence into. Can be a single label, a string of
-                comma-separated labels, or a list of labels.
-            hypothesis_template (:obj:`str`, `optional`, defaults to :obj:`"This example is {}."`):
-                The template used to turn each label into an NLI-style hypothesis. This template must include a {} or
-                similar syntax for the candidate label to be inserted into the template. For example, the default
-                template is :obj:`"This example is {}."` With the candidate label :obj:`"sports"`, this would be fed
-                into the model like :obj:`"<cls> sequence to classify <sep> This example is sports . <sep>"`. The
-                default template works well in many cases, but it may be worthwhile to experiment with different
-                templates depending on the task setting.
-            multi_label (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not multiple candidate labels can be true. If :obj:`False`, the scores are normalized such
-                that the sum of the label likelihoods for each sequence is 1. If :obj:`True`, the labels are considered
-                independent and probabilities are normalized for each candidate by doing a softmax of the entailment
-                score vs. the contradiction score.
-
-        Return:
-            A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
-
-            - **sequence** (:obj:`str`) -- The sequence for which this is the output.
-            - **labels** (:obj:`List[str]`) -- The labels sorted by order of likelihood.
-            - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
-        """
-        if "multi_class" in kwargs and kwargs["multi_class"] is not None:
-            multi_label = kwargs.pop("multi_class")
-            logger.warning(
-                "The `multi_class` argument has been deprecated and renamed to `multi_label`. "
-                "`multi_class` will be removed in a future version of Transformers."
-            )
-
-        if sequences and isinstance(sequences, str):
-            sequences = [sequences]
-
-        outputs = super().__call__(sequences, candidate_labels, hypothesis_template, prefix)
-        if self.model.config.model_type == "t5":
-            outputs = self._vocab_to_class_logits(outputs)
-
-        num_sequences = len(sequences)
-        candidate_labels = self._args_parser._parse_labels(candidate_labels)
-        reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))
-
-        if len(candidate_labels) == 1:
-            multi_label = True
-
-        if not multi_label:
-            # softmax the "entailment" logits over all candidate labels
-            entail_logits = reshaped_outputs[..., self.entailment_id]
-            scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
-        else:
-            # softmax over the entailment vs. contradiction dim for each label independently
-            entailment_id = self.entailment_id
-            contradiction_id = -1 if entailment_id == 0 else 0
-            entail_contr_logits = reshaped_outputs[..., [contradiction_id, entailment_id]]
-            scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
-            scores = scores[..., 1]
-
-        result = []
-        for iseq in range(num_sequences):
-            top_inds = list(reversed(scores[iseq].argsort()))
-            result.append(
-                {
-                    "sequence": sequences if isinstance(sequences, str) else sequences[iseq],
-                    "labels": [candidate_labels[i] for i in top_inds],
-                    "scores": scores[iseq][top_inds].tolist(),
-                }
-            )
-
-        if len(result) == 1:
-            return result[0]
-        return result
-
-
-@add_end_docstrings(PIPELINE_INIT_ARGS)
-class ZeroShotClassificationWithT5Pipeline(Pipeline):
-    """
-    NLI-based zero-shot classification pipeline using a :obj:`T5ForConditionalGeneration` trained on NLI (natural
-    language inference) tasks.
-
-    Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
-    pair and passed to the pretrained model. Then, the logit for `entailment` is taken as the logit for the candidate
-    label being valid. This implementation is designed to work explicitly with a T5 style model trained on NLI.
-
-    This NLI pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task identifier:
-    :obj:`"zero-shot-classification-t5"`.
-
-    The models that this pipeline can use are the T5 models that have been fine-tuned on an NLI task. See the
-    up-to-date list of available models on `huggingface.co/models <https://huggingface.co/models?search=t5>`__.
-    """
-
-    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._args_parser = args_parser
-        self._get_entailment_neutral_contradiction_token_id()
-        self.entailment_id = 0
-
-    def _get_entailment_neutral_contradiction_token_id(self):
-        class_ids = self.tokenizer(["entailment", "neutral", "contradiction"]).input_ids
-        self.entailment_token_id, self.neutral_token_id, self.contradiction_token_id = [ids[0] for ids in class_ids]
-        assert (
-            (self.entailment_token_id != self.neutral_token_id)
-            and (self.entailment_token_id != self.contradiction_token_id)
-            and (self.neutral_token_id != self.contradiction_token_id)
-        )
-
-    def _vocab_to_class_logits(self, outputs):
-        class_logits = outputs[:, 0, [self.entailment_token_id, self.neutral_token_id, self.contradiction_token_id]]
-        return class_logits
-
-    def _parse_and_tokenize(
-        self,
-        sequences,
-        candidate_labels,
-        hypothesis_template,
-        prefix,
-        padding=True,
-        add_special_tokens=True,
-        truncation=TruncationStrategy.ONLY_FIRST,
-        **kwargs
-    ):
-        """
-        Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
-        """
-        sequence_pairs = self._args_parser(sequences, candidate_labels, hypothesis_template)
-        input_sentences = [
-            prefix.format(premise=premise, hypothesis=hypothesis) for premise, hypothesis in sequence_pairs
-        ]
-        encoder_inputs = self.tokenizer(
-            input_sentences,
-            add_special_tokens=add_special_tokens,
-            return_tensors=self.framework,
-            padding=padding,
-            truncation=truncation,
-        )
-
-        decoder_inputs = self.tokenizer(
-            ["<pad>"] * len(sequence_pairs),
-            add_special_tokens=add_special_tokens,
-            return_tensors=self.framework,
-            padding=padding,
-            truncation=truncation,
-        )
-
-        inputs = encoder_inputs  # {**encoder_inputs, "decoder_input_ids": decoder_inputs.input_ids}
-        inputs["decoder_input_ids"] = decoder_inputs.input_ids
-
-        return inputs
-
-    def __call__(
-        self,
-        sequences: Union[str, List[str]],
-        candidate_labels,
-        hypothesis_template="This example is {}.",
-        prefix="mnli hypothesis: {hypothesis} premise: {premise}",
-        multi_label=False,
-        **kwargs,
-    ):
-        """
-        Classify the sequence(s) given as inputs. See the :obj:`~transformers.ZeroShotClassificationWithT5Pipeline`
         documentation for more information.
 
         Args:
@@ -356,7 +194,9 @@ class ZeroShotClassificationWithT5Pipeline(Pipeline):
             sequences = [sequences]
 
         outputs = super().__call__(sequences, candidate_labels, hypothesis_template, prefix)
-        outputs = self._vocab_to_class_logits(outputs)
+        if self.model.config.model_type == "t5":
+            outputs = self._vocab_to_class_logits(outputs)
+
         num_sequences = len(sequences)
         candidate_labels = self._args_parser._parse_labels(candidate_labels)
         reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))
