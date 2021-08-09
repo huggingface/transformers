@@ -57,12 +57,12 @@ from .configuration_fnet import FNetConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "fnet-base"
+_CHECKPOINT_FOR_DOC = "gchhablani/fnet-base"
 _CONFIG_FOR_DOC = "FNetConfig"
 _TOKENIZER_FOR_DOC = "FNetTokenizer"
 
 FNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "fnet-base",
+    "gchhablani/fnet-base",
     # See all FNet models at https://huggingface.co/models?filter=fnet
 ]
 
@@ -633,8 +633,8 @@ class FNetForPreTraining(FNetPreTrainedModel):
         Example::
             >>> from transformers import FNetTokenizer, FNetForPreTraining
             >>> import torch
-            >>> tokenizer = FNetTokenizer.from_pretrained('fnet-base')
-            >>> model = FNetForPreTraining.from_pretrained('fnet-base')
+            >>> tokenizer = FNetTokenizer.from_pretrained('gchhablani/fnet-base')
+            >>> model = FNetForPreTraining.from_pretrained('gchhablani/fnet-base')
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> prediction_logits = outputs.prediction_logits
