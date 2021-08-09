@@ -9,6 +9,7 @@ from ..models.distilbert import DistilBertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.longformer import LongformerOnnxConfig
+from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
@@ -58,6 +59,7 @@ class FeaturesManager:
     _SUPPORTED_MODEL_KIND = {
         "albert": supported_features_mapping("default", onnx_config_cls=AlbertOnnxConfig),
         "bart": supported_features_mapping("default", onnx_config_cls=BartOnnxConfig),
+        "mbart": supported_features_mapping("default", onnx_config_cls=MBartOnnxConfig),
         "bert": supported_features_mapping("default", onnx_config_cls=BertOnnxConfig),
         "distilbert": supported_features_mapping("default", onnx_config_cls=DistilBertOnnxConfig),
         "gpt2": supported_features_mapping("default", onnx_config_cls=GPT2OnnxConfig),
