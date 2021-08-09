@@ -70,11 +70,11 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
         keep_accents (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to keep accents when tokenizing.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`""`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
             .. note:: When building a sequence using special tokens, this is not the token that is used for the
             beginning of sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"`):
             The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
             that is used for the end of sequence. The token used is the :obj:`sep_token`.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
@@ -106,8 +106,8 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
         do_lower_case=True,
         remove_space=True,
         keep_accents=False,
-        bos_token="[CLS]",
-        eos_token="[SEP]",
+        bos_token="",
+        eos_token="",
         unk_token="<unk>",
         sep_token="[SEP]",
         pad_token="<pad>",
