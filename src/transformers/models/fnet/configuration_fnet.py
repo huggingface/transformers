@@ -67,18 +67,18 @@ class FNetConfig(PretrainedConfig):
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
 
-        Example::
+    Example::
 
-        >>> from transformers import FNetModel, FNetConfig
+    >>> from transformers import FNetModel, FNetConfig
 
-        >>> # Initializing a FNet fnet-base style configuration
-        >>> configuration = FNetConfig()
+    >>> # Initializing a FNet fnet-base style configuration
+    >>> configuration = FNetConfig()
 
-        >>> # Initializing a model from the fnet-base style configuration
-        >>> model = FNetModel(configuration)
+    >>> # Initializing a model from the fnet-base style configuration
+    >>> model = FNetModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     """
     model_type = "fnet"
 
