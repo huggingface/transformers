@@ -55,7 +55,7 @@ class GPTJConfig(PretrainedConfig):
             Number of dimensions in the embedding that rotary positional encodings are applied to.
         n_inner (:obj:`int`, `optional`, defaults to None):
             Dimensionality of the inner feed-forward layers. :obj:`None` will set it to 4 times n_embd
-        activation_function (:obj:`str`, `optional`, defaults to :obj:`"gelu"`):
+        activation_function (:obj:`str`, `optional`, defaults to :obj:`"gelu_new"`):
             Activation function, to be selected in the list :obj:`["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
@@ -121,7 +121,7 @@ class GPTJConfig(PretrainedConfig):
         n_head=16,
         rotary_dim=64,
         n_inner=None,
-        activation_function="gelu",
+        activation_function="gelu_new",
         resid_pdrop=0.0,
         embd_pdrop=0.0,
         attn_pdrop=0.0,
