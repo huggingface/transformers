@@ -141,7 +141,9 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
 
         self.vocab_file = vocab_file
 
-        self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
+        self.add_special_tokens(
+            {"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES + kwargs.get("additional_special_tokens", [])}
+        )
         self.lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }

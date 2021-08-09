@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
 import shutil
 import tempfile
 import unittest
-import os
-import json
 
-from transformers import BatchEncoding, ByT5Tokenizer, AddedToken
+from transformers import AddedToken, BatchEncoding, ByT5Tokenizer
 from transformers.file_utils import cached_property, is_tf_available, is_torch_available
 
 from .test_tokenization_common import TokenizerTesterMixin
