@@ -166,6 +166,12 @@ An important fact to notice is the use of `OrderedDict` in both inputs and outpu
 as inputs are matched against their relative position within the `PreTrainedModel.forward()` prototype and outputs are
 match against there position in the returned `BaseModelOutputX` instance.
 
+An example of such an addition is visible here, for the MBart model: `Making MBART ONNX-convertible
+<https://github.com/huggingface/transformers/pull/13049/commits/d097adcebd89a520f04352eb215a85916934204f>`__
+
+If you would like to contribute your addition to the library, we recommend you implement tests. An example of such
+tests is visible here: `Adding tests to the MBART ONNX conversion
+<https://github.com/huggingface/transformers/pull/13049/commits/5d642f65abf45ceeb72bd855ca7bfe2506a58e6a>`__
 
 Graph conversion
 -----------------------------------------------------------------------------------------------------------------------
