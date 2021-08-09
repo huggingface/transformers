@@ -3213,7 +3213,6 @@ class TokenizerTesterMixin:
                 )
 
                 self.assertIn("a_new_additional_special_token", tokenizer.additional_special_tokens)
-                # self.assertIn("a_new_additional_special_token",tokenizer.get_vocab()) # ByT5Tokenization no vocab
                 self.assertEqual(
                     ["a_new_additional_special_token"],
                     tokenizer.convert_ids_to_tokens(
