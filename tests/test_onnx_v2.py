@@ -10,6 +10,7 @@ from transformers import (  # LongformerConfig,; T5Config,
     DistilBertConfig,
     GPT2Config,
     GPTNeoConfig,
+    MBartConfig,
     RobertaConfig,
     XLMRobertaConfig,
     is_torch_available,
@@ -22,6 +23,7 @@ from transformers.models.distilbert import DistilBertOnnxConfig
 # from transformers.models.longformer import LongformerOnnxConfig
 from transformers.models.gpt2 import GPT2OnnxConfig
 from transformers.models.gpt_neo import GPTNeoOnnxConfig
+from transformers.models.mbart import MBartOnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
 
 # from transformers.models.t5 import T5OnnxConfig
@@ -190,6 +192,7 @@ if is_torch_available():
         DistilBertModel,
         GPT2Model,
         GPTNeoModel,
+        MBartModel,
         RobertaModel,
         XLMRobertaModel,
     )
@@ -204,6 +207,7 @@ if is_torch_available():
         # ("LongFormer", "longformer-base-4096", LongformerModel, LongformerConfig, LongformerOnnxConfig),
         ("Roberta", "roberta-base", RobertaModel, RobertaConfig, RobertaOnnxConfig),
         ("XLM-Roberta", "roberta-base", XLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
+        ("MBart", "sshleifer/tiny-mbart", MBartModel, MBartConfig, MBartOnnxConfig),
         # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig),
     }
 
