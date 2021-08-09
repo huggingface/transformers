@@ -121,13 +121,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        # self._additional_special_tokens = list(self.lang_code_to_id.keys())
-
-        # if additional_special_tokens is not None:
-        #     # Only add those special tokens if they are not already there.
-        #     self._additional_special_tokens.extend(
-        #         [t for t in additional_special_tokens if t not in self._additional_special_tokens]
-        #     )
 
         self._src_lang = src_lang if src_lang is not None else "en_XX"
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
