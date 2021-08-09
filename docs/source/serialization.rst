@@ -108,7 +108,7 @@ This export can now be used in the ONNX inference runtime:
     from transformers import BertTokenizerFast
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
 
-    ort_session = ort.InferenceSession('onnx/bert-base-cased/model.onnx')
+    ort_session = ort.InferenceSession("onnx/bert-base-cased/model.onnx")
 
     inputs = tokenizer("Using BERT in ONNX!", return_tensors="np")
     outputs = ort_session.run(["last_hidden_state", "pooler_output"], dict(inputs))
