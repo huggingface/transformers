@@ -216,7 +216,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
             NEW_TOKEN = 0xE007
             new_token_2 = chr(NEW_TOKEN)
-            # Now we test that we can change the value of additional_special_tokens in the init
+            # Now we test that we can change the value of additional_special_tokens in the from_pretrained
             new_added_tokens = [AddedToken(new_token_2, lstrip=True)]
             tokenizer = self.tokenizer_class.from_pretrained(
                 tmp_dir, additional_special_tokens=new_added_tokens, extra_ids=0
