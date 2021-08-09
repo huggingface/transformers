@@ -65,7 +65,9 @@ class ZeroShotClassificationPipeline(Pipeline):
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._args_parser = args_parser
-        if self.entailment_id == -1:
+        if self.model.config.model_type == "t5":
+            self._get_entailment_neutral_contradiction_token_id()
+        elif self.entailment_id == -1:
             logger.warning(
                 "Failed to determine 'entailment' label id from the label2id mapping in the model config. Setting to "
                 "-1. Define a descriptive label2id mapping in the model config to ensure correct outputs."
@@ -73,16 +75,32 @@ class ZeroShotClassificationPipeline(Pipeline):
 
     @property
     def entailment_id(self):
+        if self.model.config.model_type == "t5":
+            return -1
         for label, ind in self.model.config.label2id.items():
             if label.lower().startswith("entail"):
                 return ind
         return -1
+
+    def _get_entailment_neutral_contradiction_token_id(self):
+        class_ids = self.tokenizer(["entailment", "neutral", "contradiction"]).input_ids
+        self.entailment_token_id, self.neutral_token_id, self.contradiction_token_id = [ids[0] for ids in class_ids]
+        assert (
+            (self.entailment_token_id != self.neutral_token_id)
+            and (self.entailment_token_id != self.contradiction_token_id)
+            and (self.neutral_token_id != self.contradiction_token_id)
+        ), "The first token ids for 'Entailment', 'Neutral' and 'Contradiction' must be different."
+
+    def _vocab_to_class_logits(self, outputs):
+        class_logits = outputs[:, 0, [self.contradiction_token_id, self.neutral_token_id, self.entailment_token_id]]
+        return class_logits
 
     def _parse_and_tokenize(
         self,
         sequences,
         candidate_labels,
         hypothesis_template,
+        prefix=None,
         padding=True,
         add_special_tokens=True,
         truncation=TruncationStrategy.ONLY_FIRST,
@@ -92,6 +110,20 @@ class ZeroShotClassificationPipeline(Pipeline):
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
         sequence_pairs = self._args_parser(sequences, candidate_labels, hypothesis_template)
+
+        if self.model.config.model_type == "t5":
+            sequence_pairs = [
+                prefix.format(premise=premise, hypothesis=hypothesis) for premise, hypothesis in sequence_pairs
+            ]
+
+            decoder_inputs = self.tokenizer(
+                ["<pad>"] * len(sequence_pairs),
+                add_special_tokens=add_special_tokens,
+                return_tensors=self.framework,
+                padding=padding,
+                truncation=truncation,
+            )
+
         inputs = self.tokenizer(
             sequence_pairs,
             add_special_tokens=add_special_tokens,
@@ -100,6 +132,8 @@ class ZeroShotClassificationPipeline(Pipeline):
             truncation=truncation,
         )
 
+        inputs["decoder_input_ids"] = None if self.model.config.model_type != "t5" else decoder_inputs.input_ids
+
         return inputs
 
     def __call__(
@@ -107,6 +141,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         sequences: Union[str, List[str]],
         candidate_labels,
         hypothesis_template="This example is {}.",
+        prefix="mnli hypothesis: {hypothesis} premise: {premise}",
         multi_label=False,
         **kwargs,
     ):
@@ -150,7 +185,10 @@ class ZeroShotClassificationPipeline(Pipeline):
         if sequences and isinstance(sequences, str):
             sequences = [sequences]
 
-        outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
+        outputs = super().__call__(sequences, candidate_labels, hypothesis_template, prefix)
+        if self.model.config.model_type == "t5":
+            outputs = self._vocab_to_class_logits(outputs)
+
         num_sequences = len(sequences)
         candidate_labels = self._args_parser._parse_labels(candidate_labels)
         reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))

@@ -208,8 +208,8 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-classification": {
         "impl": ZeroShotClassificationPipeline,
-        "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
-        "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
+        "tf": (TFAutoModelForSequenceClassification, TFT5ForConditionalGeneration) if is_tf_available() else (),
+        "pt": (AutoModelForSequenceClassification, T5ForConditionalGeneration) if is_torch_available() else (),
         "default": {
             "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
             "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
