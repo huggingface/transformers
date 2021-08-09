@@ -16,7 +16,7 @@
 import os
 import unittest
 
-from transformers import FNetTokenizer, FNetTokenizerFast
+from transformers import FNetTokenizer
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -30,8 +30,8 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = FNetTokenizer
-    rust_tokenizer_class = FNetTokenizerFast
-    test_rust_tokenizer = True
+    # rust_tokenizer_class = FNetTokenizerFast
+    test_rust_tokenizer = False
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 

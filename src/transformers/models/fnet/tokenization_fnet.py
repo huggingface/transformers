@@ -69,14 +69,14 @@ class FNetTokenizer(PreTrainedTokenizer):
         eos_token (:obj:`str`, `optional`, defaults to :obj:`""`):
             The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
             that is used for the end of sequence. The token used is the :obj:`sep_token`.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`""`):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`""`):
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
         cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
@@ -115,9 +115,9 @@ class FNetTokenizer(PreTrainedTokenizer):
         keep_accents=False,
         bos_token="",
         eos_token="",
-        unk_token="",
+        unk_token="<unk>",
         sep_token="[SEP]",
-        pad_token="",
+        pad_token="<pad>",
         cls_token="[CLS]",
         mask_token="[MASK]",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
