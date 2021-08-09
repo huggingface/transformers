@@ -444,7 +444,7 @@ if __name__ == "__main__":
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
 
-        diff_with_last_commit=args.diff_with_last_commit
+        diff_with_last_commit = args.diff_with_last_commit
         if not repo.head.is_detached and repo.head.ref == repo.refs.master:
             print("Master branch detected, fetching tests against last commit.")
             diff_with_last_commit = True
