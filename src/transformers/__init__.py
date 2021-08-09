@@ -790,7 +790,6 @@ if is_torch_available():
             "FNetLayer",
             "FNetModel",
             "FNetPreTrainedModel",
-            "load_tf_weights_in_fnet",
         ]
     )
     _import_structure["models.fsmt"].extend(["FSMTForConditionalGeneration", "FSMTModel", "PretrainedFSMTModel"])
@@ -2397,7 +2396,6 @@ if TYPE_CHECKING:
             FNetLayer,
             FNetModel,
             FNetPreTrainedModel,
-            load_tf_weights_in_fnet,
         )
         from .models.fsmt import FSMTForConditionalGeneration, FSMTModel, PretrainedFSMTModel
         from .models.funnel import (

@@ -40,7 +40,6 @@ if is_torch_available():
         "FNetLayer",
         "FNetModel",
         "FNetPreTrainedModel",
-        "load_tf_weights_in_fnet",
     ]
 
 
@@ -63,7 +62,6 @@ if TYPE_CHECKING:
             FNetLayer,
             FNetModel,
             FNetPreTrainedModel,
-            load_tf_weights_in_fnet,
         )
 
 

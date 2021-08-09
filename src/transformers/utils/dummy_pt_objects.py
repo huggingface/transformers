@@ -1725,10 +1725,6 @@ class FNetPreTrainedModel:
         requires_backends(cls, ["torch"])
 
 
-def load_tf_weights_in_fnet(*args, **kwargs):
-    requires_backends(load_tf_weights_in_fnet, ["torch"])
-
-
 class FSMTForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
