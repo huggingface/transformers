@@ -22,7 +22,15 @@ import os
 from typing import Any, Dict, Tuple, Union
 
 from . import __version__
-from .file_utils import CONFIG_NAME, PushToHubMixin, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
+from .file_utils import (
+    CONFIG_NAME,
+    PushToHubMixin,
+    cached_path,
+    copy_func,
+    hf_bucket_url,
+    is_offline_mode,
+    is_remote_url,
+)
 from .utils import logging
 
 
@@ -280,7 +288,7 @@ class PretrainedConfig(PushToHubMixin):
         allowed_problem_types = ("regression", "single_label_classification", "multi_label_classification")
         if self.problem_type is not None and self.problem_type not in allowed_problem_types:
             raise ValueError(
-                f"The config parameter `problem_type` wasnot understood: received {self.problem_type}"
+                f"The config parameter `problem_type` was not understood: received {self.problem_type}"
                 "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
             )
 
@@ -729,3 +737,9 @@ class PretrainedConfig(PushToHubMixin):
                 )
 
             setattr(self, k, v)
+
+
+PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)
+PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
+    object="config", object_class="AutoConfig", object_files="configuration file"
+)

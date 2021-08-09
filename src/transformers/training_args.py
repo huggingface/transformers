@@ -14,6 +14,7 @@
 
 import contextlib
 import json
+import math
 import os
 import warnings
 from dataclasses import asdict, dataclass, field
@@ -172,8 +173,7 @@ class TrainingArguments:
         logging_steps (:obj:`int`, `optional`, defaults to 500):
             Number of update steps between two logs if :obj:`logging_strategy="steps"`.
         save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"steps"`):
-            The checkpoint save strategy to adopt during training (Note that when :obj:`load_best_model_at_end=True`,
-            this parameter is ignored and the model is saved after each evaluation). Possible values are:
+            The checkpoint save strategy to adopt during training. Possible values are:
 
                 * :obj:`"no"`: No save is done during training.
                 * :obj:`"epoch"`: Save is done at the end of each epoch.
@@ -247,8 +247,9 @@ class TrainingArguments:
 
             .. note::
 
-                When set to :obj:`True`, the parameters :obj:`save_strategy` and :obj:`save_steps` will be ignored and
-                the model will be saved after each evaluation.
+                When set to :obj:`True`, the parameters :obj:`save_strategy` needs to be the same as
+                :obj:`eval_strategy`, and in the case it is "steps", :obj:`save_steps` must be a round multiple of
+                :obj:`eval_steps`.
         metric_for_best_model (:obj:`str`, `optional`):
             Use in conjunction with :obj:`load_best_model_at_end` to specify the metric to use to compare two different
             models. Must be the name of a metric returned by the evaluation with or without the prefix :obj:`"eval_"`.
@@ -663,8 +664,33 @@ class TrainingArguments:
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.evaluation_strategy != IntervalStrategy.NO:
             self.do_eval = True
-        if self.eval_steps is None:
-            self.eval_steps = self.logging_steps
+
+        # eval_steps has to be defined and non-zero, fallbacks to logging_steps if the latter is non-zero
+        if self.evaluation_strategy == IntervalStrategy.STEPS and (self.eval_steps is None or self.eval_steps == 0):
+            if self.logging_steps > 0:
+                logger.info(f"using `logging_steps` to initialize `eval_steps` to {self.logging_steps}")
+                self.eval_steps = self.logging_steps
+            else:
+                raise ValueError(
+                    f"evaluation strategy {self.evaluation_strategy} requires either non-zero --eval_steps or --logging_steps"
+                )
+
+        # logging_steps must be non-zero for logging_strategy that is other than 'no'
+        if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps == 0:
+            raise ValueError(f"logging strategy {self.logging_strategy} requires non-zero --logging_steps")
+
+        # Sanity checks for load_best_model_at_end: we require save and eval strategies to be compatible.
+        if self.load_best_model_at_end:
+            if self.evaluation_strategy != self.save_strategy:
+                raise ValueError(
+                    "--load_best_model_at_end requires the save and eval strategy to match, but found\n- Evaluation "
+                    f"strategy: {self.evaluation_strategy}\n- Save strategy: {self.save_strategy}"
+                )
+            if self.evaluation_strategy == IntervalStrategy.STEPS and self.save_steps % self.eval_steps != 0:
+                raise ValueError(
+                    "--load_best_model_at_end requires the saving steps to be a round multiple of the evaluation "
+                    f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
+                )
 
         if self.load_best_model_at_end and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
@@ -1026,6 +1052,8 @@ class TrainingArguments:
                     logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
+                    elif is_sagemaker_dp_enabled():
+                        sm_dist.Barrier()
                     else:
                         torch.distributed.barrier()
                 yield
@@ -1035,10 +1063,21 @@ class TrainingArguments:
                     logger.debug(f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas")
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
+                    elif is_sagemaker_dp_enabled():
+                        sm_dist.Barrier()
                     else:
                         torch.distributed.barrier()
         else:
             yield
+
+    def get_warmup_steps(self, num_training_steps: int):
+        """
+        Get number of steps used for a linear warmup.
+        """
+        warmup_steps = (
+            self.warmup_steps if self.warmup_steps > 0 else math.ceil(num_training_steps * self.warmup_ratio)
+        )
+        return warmup_steps
 
     def to_dict(self):
         """

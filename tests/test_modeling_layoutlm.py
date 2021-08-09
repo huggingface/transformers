@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import LayoutLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -27,7 +27,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        LayoutLMConfig,
         LayoutLMForMaskedLM,
         LayoutLMForSequenceClassification,
         LayoutLMForTokenClassification,
@@ -120,7 +119,12 @@ class LayoutLMModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = LayoutLMConfig(
+        config = self.get_config()
+
+        return config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        return LayoutLMConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -133,8 +137,6 @@ class LayoutLMModelTester:
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
         )
-
-        return config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def create_and_check_model(
         self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels

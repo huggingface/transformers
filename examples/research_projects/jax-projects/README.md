@@ -1259,6 +1259,8 @@ More to come!
 
 ## Project evaluation
 
+For your project to be evaluated, please fill out [this google form](https://forms.gle/jQaMkj3JJdD4Xcwn9).
+Please make sure that your submitted project includes a demo as well as information about the model, data, training methods, etc.
 
 ### Criteria
 
@@ -1272,14 +1274,15 @@ More to come!
 * [Niki Parmar](https://research.google/people/NikiParmar/): Staff Research Scientist at Google.
 * [Ross Wightman](https://www.linkedin.com/in/wightmanr/): Angel Investor.
 * [Thomas Wolf](https://www.linkedin.com/in/thomas-wolf-a056857/): Co-founder and CSO at Hugging Face.
+* [Ashish Vaswani](https://research.google/people/AshishVaswani/): Staff Research Scientist at Google Brain.
 
 ### Process
 
 * **July 17, 12h00 CEST**: TPU VM access closes.
 * **July 19, 12h00 CEST**: Project completition ends (including demo).
-* **July 19-20** A group of event organizers (Suraj, Patrick, Suzana, and Omar) will do an initial filter to find the top 15 projects.
-* **July 21-25** The jury will go over the 15 projects and pick the top three projects out of them.
-* **July 26.** Winner projects are announced
+* **July 19-21** A group of event organizers (Suraj, Patrick, Suzana, and Omar) will do an initial filter to find the top 15 projects.
+* **July 22-26** The jury will go over the 15 projects and pick the top three projects out of them.
+* **July 27.** Winner projects are announced
 
 
 ## General tips and tricks

@@ -38,6 +38,7 @@ from .file_utils import (
     ModelOutput,
     PushToHubMixin,
     cached_path,
+    copy_func,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
@@ -592,6 +593,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hasattr(self, self.base_model_prefix):
                 self = getattr(self, self.base_model_prefix)
             self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
+
+        for module in self.modules():
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
 
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
@@ -1408,6 +1413,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         add_prefix = has_prefix_module and not expects_prefix_module
 
         if remove_prefix:
+            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
             expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
         elif add_prefix:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
@@ -1489,6 +1495,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             start_prefix = cls.base_model_prefix + "."
         if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
             model_to_load = getattr(model, cls.base_model_prefix)
+            if any(key in expected_keys_not_prefixed for key in loaded_keys):
+                raise ValueError(
+                    "The state dictionary of the model you are training to load is corrupted. Are you sure it was "
+                    "properly saved?"
+                )
 
         load(model_to_load, prefix=start_prefix)
 
@@ -1553,6 +1564,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 retrieved_modules.append(module)
 
         return retrieved_modules
+
+
+# To update the docstring, we need to copy the method, otherwise we change the original docstring.
+PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
+PreTrainedModel.push_to_hub.__doc__ = PreTrainedModel.push_to_hub.__doc__.format(
+    object="model", object_class="AutoModel", object_files="model checkpoint"
+)
 
 
 class Conv1D(nn.Module):

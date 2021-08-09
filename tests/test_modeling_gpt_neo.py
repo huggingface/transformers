@@ -17,7 +17,7 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import GPTNeoConfig, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -32,7 +32,6 @@ if is_torch_available():
     from transformers import (
         GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2Tokenizer,
-        GPTNeoConfig,
         GPTNeoForCausalLM,
         GPTNeoForSequenceClassification,
         GPTNeoModel,
@@ -123,20 +122,7 @@ class GPTNeoModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = GPTNeoConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_layers=self.num_hidden_layers,
-            num_heads=self.num_attention_heads,
-            max_position_embeddings=self.max_position_embeddings,
-            use_cache=not gradient_checkpointing,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
-            gradient_checkpointing=gradient_checkpointing,
-            window_size=self.window_size,
-            attention_types=self.attention_types,
-        )
+        config = self.get_config(gradient_checkpointing=False)
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
 
@@ -150,6 +136,22 @@ class GPTNeoModelTester:
             sequence_labels,
             token_labels,
             choice_labels,
+        )
+
+    def get_config(self, gradient_checkpointing=False):
+        return GPTNeoConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            num_layers=self.num_hidden_layers,
+            num_heads=self.num_attention_heads,
+            max_position_embeddings=self.max_position_embeddings,
+            use_cache=not gradient_checkpointing,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            gradient_checkpointing=gradient_checkpointing,
+            window_size=self.window_size,
+            attention_types=self.attention_types,
         )
 
     def prepare_config_and_inputs_for_decoder(self):

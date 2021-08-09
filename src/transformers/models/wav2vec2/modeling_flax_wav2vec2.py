@@ -29,7 +29,12 @@ from jax import lax
 
 from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
+from ...modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
+)
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
@@ -174,7 +179,7 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _sample_negative_indices(features_shape: Tuple, num_negatives: int):
+def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attention_mask: Optional[np.ndarray] = None):
     """
     Sample `num_negatives` vectors from feature vectors.
     """
@@ -186,11 +191,13 @@ def _sample_negative_indices(features_shape: Tuple, num_negatives: int):
         )
 
     # get `num_negatives` random vector indices from the same utterance
-    sampled_negative_indices = np.random.randint(
-        low=0,
-        high=sequence_length - 1,
-        size=(batch_size, num_negatives * sequence_length),
-    )
+    sampled_negative_indices = []
+    for batch_idx in range(batch_size):
+        high = attention_mask[batch_idx].sum() - 1 if attention_mask is not None else sequence_length - 1
+        sampled_indices_slice = np.random.randint(0, high, size=(num_negatives * sequence_length,))
+        sampled_negative_indices.append(sampled_indices_slice)
+
+    sampled_negative_indices = np.asarray(sampled_negative_indices, dtype=np.int32)
 
     # generate indices of the positive vectors themselves, repeat them `num_negatives` times
     feature_indices = np.broadcast_to(np.arange(sequence_length)[:, None], (sequence_length, num_negatives)).flatten()
@@ -851,31 +858,6 @@ class FlaxWav2Vec2Module(nn.Module):
         output_hidden_states=None,
         return_dict=None,
     ):
-        """
-
-        Returns:
-
-        Example::
-
-            >>> from transformers import Wav2Vec2Processor, FlaxWav2Vec2Model
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            >>> model = FlaxWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
-
-            >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
-
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = processor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
-            >>> hidden_states = model(input_values).last_hidden_state
-
-        """
         extract_features = self.feature_extractor(input_values)
 
         # make sure that no loss is computed on padded inputs
@@ -945,6 +927,39 @@ class FlaxWav2Vec2Model(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2Module
 
 
+FLAX_WAV2VEC2_MODEL_DOCSTRING = """
+    Returns:
+
+    Example::
+
+        >>> from transformers import Wav2Vec2Processor, FlaxWav2Vec2Model
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
+
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-lv60")
+        >>> model = FlaxWav2Vec2Model.from_pretrained("facebook/wav2vec2-large-lv60")
+
+        >>> def map_to_array(batch):
+        >>>     speech, _ = sf.read(batch["file"])
+        >>>     batch["speech"] = speech
+        >>>     return batch
+
+        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
+
+        >>> input_values = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="np").input_values  # Batch size 1
+        >>> hidden_states = model(input_values).last_hidden_state
+"""
+
+overwrite_call_docstring(
+    FlaxWav2Vec2Model,
+    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_MODEL_DOCSTRING,
+)
+append_replace_return_docstrings(
+    FlaxWav2Vec2Model, output_type=FlaxWav2Vec2BaseModelOutput, config_class=Wav2Vec2Config
+)
+
+
 class FlaxWav2Vec2ForCTCModule(nn.Module):
     config: Wav2Vec2Config
     dtype: jnp.dtype = jnp.float32
@@ -968,36 +983,6 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        Returns:
-
-        Example::
-
-            >>> import jax.numpy as jnp
-            >>> from transformers import Wav2Vec2Processor, FlaxWav2Vec2ForCTC
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            >>> model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
-
-            >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
-
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = processor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
-            >>> logits = model(input_values).logits
-            >>> predicted_ids = jnp.argmax(logits, axis=-1)
-
-            >>> transcription = processor.decode(predicted_ids[0])
-            >>> # should give:  "A MAN SAID TO THE UNIVERSE SIR I EXIST"
-
-        """
-
         outputs = self.wav2vec2(
             input_values,
             attention_mask=attention_mask,
@@ -1042,6 +1027,46 @@ class FlaxWav2Vec2ForCTC(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2ForCTCModule
 
 
+FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
+    Returns:
+
+    Example::
+
+        >>> import jax.numpy as jnp
+        >>> from transformers import Wav2Vec2Processor, FlaxWav2Vec2ForCTC
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
+
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
+        >>> model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60")
+
+        >>> def map_to_array(batch):
+        >>>     speech, _ = sf.read(batch["file"])
+        >>>     batch["speech"] = speech
+        >>>     return batch
+
+        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
+
+        >>> input_values = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="np").input_values  # Batch size 1
+        >>> logits = model(input_values).logits
+        >>> predicted_ids = jnp.argmax(logits, axis=-1)
+
+        >>> transcription = processor.decode(predicted_ids[0])
+        >>> # should give:  "A MAN SAID TO THE UNIVERSE SIR I EXIST"
+"""
+
+overwrite_call_docstring(
+    FlaxWav2Vec2ForCTC,
+    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_CTC_DOCSTRING,
+)
+append_replace_return_docstrings(FlaxWav2Vec2ForCTC, output_type=FlaxCausalLMOutput, config_class=Wav2Vec2Config)
+
+
+class FlaxWav2Vec2ForCTCModule(nn.Module):
+    config: Wav2Vec2Config
+
+
 class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
     config: Wav2Vec2Config
     dtype: jnp.dtype = jnp.float32
@@ -1078,43 +1103,6 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
 
         Example::
 
-            >>> import optax
-            >>> import numpy as np
-            >>> import jax.numpy as jnp
-            >>> from transformers import Wav2Vec2FeatureExtractor, FlaxWav2Vec2ForPreTraining
-            >>> from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base")
-            >>> model = FlaxWav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base")
-
-
-            >>> def map_to_array(batch):
-            ...     speech, _ = sf.read(batch["file"])
-            ...     batch["speech"] = speech
-            ...     return batch
-
-
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = feature_extractor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
-
-            >>> # compute masked indices
-            >>> batch_size, raw_sequence_length = input_values.shape
-            >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
-            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
-
-            >>> outputs = model(input_values, mask_time_indices=mask_time_indices)
-
-            >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
-            >>> cosine_sim = optax.cosine_similarity(
-            ...     outputs.projected_states, outputs.projected_quantized_states, axis=-1
-            ... )
-
-            >>> # show that cosine similarity is much higher than random
-            >>> assert np.asarray(cosine_sim)[mask_time_indices].mean() > 0.5
 
         """
 
@@ -1220,3 +1208,60 @@ class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
             return_dict,
             rngs=rngs,
         )
+
+
+FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
+    Returns:
+
+    Example::
+
+        >>> import optax
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> from transformers import Wav2Vec2FeatureExtractor, FlaxWav2Vec2ForPreTraining
+        >>> from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_indices
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
+
+        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-large-lv60")
+        >>> model = FlaxWav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-lv60")
+
+
+        >>> def map_to_array(batch):
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
+
+
+        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
+
+        >>> input_values = feature_extractor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
+
+        >>> # compute masked indices
+        >>> batch_size, raw_sequence_length = input_values.shape
+        >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
+        >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
+
+        >>> outputs = model(input_values, mask_time_indices=mask_time_indices)
+
+        >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
+        >>> cosine_sim = optax.cosine_similarity(
+        ...     outputs.projected_states, outputs.projected_quantized_states
+        ... )
+
+        >>> # show that cosine similarity is much higher than random
+        >>> assert np.asarray(cosine_sim)[mask_time_indices].mean() > 0.5
+"""
+
+overwrite_call_docstring(
+    FlaxWav2Vec2ForPreTraining,
+    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING,
+)
+append_replace_return_docstrings(
+    FlaxWav2Vec2ForPreTraining, output_type=FlaxWav2Vec2ForPreTrainingOutput, config_class=Wav2Vec2Config
+)
+
+
+class FlaxWav2Vec2ForCTCModule(nn.Module):
+    config: Wav2Vec2Config

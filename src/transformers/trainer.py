@@ -74,6 +74,7 @@ from .file_utils import (
 )
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
+from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 from .optimization import Adafactor, AdamW, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -125,7 +126,6 @@ from .trainer_utils import (
 )
 from .training_args import ParallelMode, TrainingArguments
 from .utils import logging
-from .utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
 
 _is_torch_generator_available = False
@@ -364,7 +364,7 @@ class Trainer:
         self.tokenizer = tokenizer
 
         if self.place_model_on_device:
-            model = model.to(args.device)
+            self._move_model_to_device(model, args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
         if self.is_model_parallel:
@@ -504,6 +504,12 @@ class Trainer:
                In the first case, will remove the first member of that class found in the list of callbacks.
         """
         self.callback_handler.remove_callback(callback)
+
+    def _move_model_to_device(self, model, device):
+        model = model.to(device)
+        # Moving a model to an XLA device disconnects the tied weights, so we have to retie them.
+        if self.args.parallel_mode == ParallelMode.TPU and hasattr(model, "tie_weights"):
+            model.tie_weights()
 
     def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
@@ -822,16 +828,10 @@ class Trainer:
             num_training_steps (int): The number of training steps to do.
         """
         if self.lr_scheduler is None:
-            warmup_steps = (
-                self.args.warmup_steps
-                if self.args.warmup_steps > 0
-                else math.ceil(num_training_steps * self.args.warmup_ratio)
-            )
-
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
                 self.optimizer,
-                num_warmup_steps=warmup_steps,
+                num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
             )
 
@@ -857,9 +857,10 @@ class Trainer:
 
         for key, value in params.items():
             if not hasattr(self.args, key):
-                raise AttributeError(
+                logger.warn(
                     f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
                 )
+                continue
             old_attr = getattr(self.args, key, None)
             # Casting value to the proper type
             if old_attr is not None:
@@ -1010,6 +1011,7 @@ class Trainer:
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
+        resume_from_checkpoint = None if not resume_from_checkpoint else resume_from_checkpoint
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -1021,7 +1023,7 @@ class Trainer:
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
         if args.fp16_full_eval and not args.do_train:
-            self.model = self.model.to(args.device)
+            self._move_model_to_device(self.model, args.device)
 
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
@@ -1082,7 +1084,7 @@ class Trainer:
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
             if self.place_model_on_device:
-                self.model = self.model.to(args.device)
+                self._move_model_to_device(self.model, args.device)
             self.model_wrapped = self.model
 
         # Keeping track whether we can can len() on the dataset or not
@@ -1120,7 +1122,14 @@ class Trainer:
             num_train_samples = args.max_steps * total_train_batch_size
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
-            debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
+            if self.args.n_gpu > 1:
+                # nn.DataParallel(model) replicates the model, creating new variables and module
+                # references registered here no longer work on other gpus, breaking the module
+                raise ValueError(
+                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP (torch.distributed.launch)."
+                )
+            else:
+                debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if args.deepspeed:
@@ -1332,6 +1341,8 @@ class Trainer:
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
                     self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
+                else:
+                    self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
@@ -2513,10 +2524,11 @@ class Trainer:
         Returns:
             The url of the commit of your model in the given repository.
         """
-        if not self.args.should_save:
-            return
 
-        self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
+        if self.args.should_save:
+            self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
+        # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
+        # self.args.should_save.
         self.save_model()
 
         # Only push from one node.
