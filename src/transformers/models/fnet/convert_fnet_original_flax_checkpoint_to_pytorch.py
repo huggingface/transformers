@@ -112,4 +112,4 @@ if __name__ == "__main__":
         "--save_path", default=None, type=str, required=True, help="Path to the output model."
     )
     args = parser.parse_args()
-    convert_flax_checkpoint_to_pytorch(args.tf_checkpoint_path, args.fnet_config_file, args.save_path)
+    convert_flax_checkpoint_to_pytorch(args.flax_checkpoint_path, args.fnet_config_file, args.save_path)
