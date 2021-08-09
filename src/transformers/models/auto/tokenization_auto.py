@@ -46,6 +46,7 @@ logger = logging.get_logger(__name__)
 
 TOKENIZER_MAPPING_NAMES = OrderedDict(
     [
+        ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
         ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
         ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
         (
