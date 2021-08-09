@@ -520,6 +520,7 @@ class CamembertConverter(SpmConverter):
             ],
         )
 
+
 class MBartConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
