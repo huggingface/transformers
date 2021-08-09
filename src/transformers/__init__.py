@@ -506,7 +506,7 @@ if is_torch_available():
         [
             "FNET_PRETRAINED_MODEL_ARCHIVE_LIST",
             "FNetForMaskedLM",
-            "FNetForCausalLM",
+            "FNetForPreTraining",
             "FNetForMultipleChoice",
             "FNetForQuestionAnswering",
             "FNetForSequenceClassification",
@@ -2106,7 +2106,7 @@ if TYPE_CHECKING:
         from .models.fnet import (
             FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             FNetForMaskedLM,
-            FNetForCausalLM,
+            FNetForPreTraining,
             FNetForMultipleChoice,
             FNetForQuestionAnswering,
             FNetForSequenceClassification,

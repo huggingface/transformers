@@ -357,6 +357,7 @@ class FNetLMPredictionHead(nn.Module):
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
+        # TODO: Check if this is needed
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 

@@ -95,6 +95,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
+        ("fnet", "FNetForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("layoutlm", "LayoutLMForMaskedLM"),
         ("retribert", "RetriBertModel"),
@@ -183,7 +184,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
-        ("fnet", "FNetForCausalLM"),
         ("rembert", "RemBertForCausalLM"),
         ("roformer", "RoFormerForCausalLM"),
         ("bigbird_pegasus", "BigBirdPegasusForCausalLM"),

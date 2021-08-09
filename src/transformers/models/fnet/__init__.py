@@ -29,7 +29,7 @@ if is_torch_available():
     _import_structure["modeling_fnet"] = [
         "FNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FNetForMaskedLM",
-        "FNetForCausalLM",
+        "FNetForPreTraining",
         "FNetForMultipleChoice",
         "FNetForQuestionAnswering",
         "FNetForSequenceClassification",
@@ -54,7 +54,7 @@ if TYPE_CHECKING:
         from .modeling_fnet import (
             FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             FNetForMaskedLM,
-            FNetForCausalLM,
+            FNetForPreTraining,
             FNetForMultipleChoice,
             FNetForQuestionAnswering,
             FNetForSequenceClassification,

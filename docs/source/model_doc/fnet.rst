@@ -60,10 +60,10 @@ FNetModel
     :members: forward
 
 
-FNetForCausalLM
+FNetForPreTraining
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.FNetForCausalLM
+.. autoclass:: transformers.FNetForPreTraining
     :members: forward
 
 
