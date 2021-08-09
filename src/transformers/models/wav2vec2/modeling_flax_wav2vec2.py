@@ -828,7 +828,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
             rngs=rngs,
         )
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[np.ndarray, int]):
         return self.module._get_feat_extract_output_lengths(input_lengths)
 
 
