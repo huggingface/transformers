@@ -177,9 +177,10 @@ jobs:
         env:
           MKL_SERVICE_FORCE_INTEL: 1
         run: |
-          if [ -f test_list.txt ]; then
-            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_multi_gpu $(cat test_list.txt)
-          fi
+          python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_multi_gpu tests
+#          if [ -f test_list.txt ]; then
+#            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_multi_gpu $(cat test_list.txt)
+#          fi
 
       - name: Failure short reports
         if: ${{ always() }}
