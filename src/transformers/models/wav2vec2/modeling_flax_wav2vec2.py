@@ -730,13 +730,21 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
         if not deterministic:
             # sample code vector probs via gumbel in differentiateable way
             gumbel_rng = self.make_rng("gumbel")
+            # sample x~Gumbel[0, 1]
             gumbels = jax.random.gumbel(gumbel_rng, hidden_states.shape)
+            # approximate argmax
             codevector_probs = nn.softmax((hidden_states + gumbels) / temperature)
+
+            # straight-through estimator trick
+            codevector_idx = codevector_probs.argmax(axis=-1)
+            codevector_probs_hard = jax.nn.one_hot(codevector_idx, codevector_probs.shape[-1]) * 1.0
+            codevector_probs = codevector_probs + jax.lax.stop_gradient(codevector_probs_hard - codevector_probs)
 
             # compute perplexity
             codevector_soft_dist = nn.softmax(
                 hidden_states.reshape(batch_size * sequence_length, self.num_groups, -1), axis=-1
             )
+
             perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
         else:
             # take argmax in non-differentiable way
