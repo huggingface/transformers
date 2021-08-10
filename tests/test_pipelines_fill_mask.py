@@ -318,3 +318,5 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         # The target list contains duplicates, so we can't output more
         # than them
         self.assertEqual(len(outputs), 3)
+        # Checking tests are alright.
+        self.assertTrue(False)
