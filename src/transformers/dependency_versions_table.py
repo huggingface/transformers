@@ -48,7 +48,7 @@ deps = {
     "regex": "regex!=2019.12.17",
     "requests": "requests",
     "rouge-score": "rouge-score",
-    "sacrebleu": "sacrebleu>=1.4.12",
+    "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
     "sagemaker": "sagemaker>=2.31.0",
     "scikit-learn": "scikit-learn",
