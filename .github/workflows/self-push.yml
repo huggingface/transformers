@@ -11,6 +11,7 @@ on:
       - "tests/**"
       - ".github/**"
       - "templates/**"
+      - "utils/**"
   repository_dispatch:
 
 env:
@@ -29,6 +30,8 @@ jobs:
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
 
       - name: NVIDIA-SMI
         run: |
@@ -46,10 +49,23 @@ jobs:
           python -c "import torch; print('Cuda version:', torch.version.cuda)"
           python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
-
+      
+#      - name: Fetch the tests to run
+#        run: |
+#          python utils/tests_fetcher.py | tee test_preparation.txt
+#
+#      - name: Report fetched tests
+#        uses: actions/upload-artifact@v2
+#        with:
+#          name: test_fetched
+#          path: test_preparation.txt
+#
       - name: Run all non-slow tests on GPU
         run: |
-          python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_gpu tests
+           python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_gpu tests
+#          if [ -f test_list.txt ]; then
+#            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_gpu $(cat test_list.txt)
+#          fi
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -71,6 +87,8 @@ jobs:
 #    steps:
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
+#        with:
+#          fetch-depth: 2
 #
 #      - name: NVIDIA-SMI
 #        run: |
@@ -86,12 +104,24 @@ jobs:
 #          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
 #          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 #
+#      - name: Fetch the tests to run
+#        run: |
+#          python utils/tests_fetcher.py | tee test_preparation.txt
+#
+#      - name: Report fetched tests
+#        uses: actions/upload-artifact@v2
+#        with:
+#          name: test_fetched
+#          path: test_preparation.txt
+#
 #      - name: Run all non-slow tests on GPU
 #        env:
 #          TF_NUM_INTRAOP_THREADS: 8
 #          TF_NUM_INTEROP_THREADS: 1
 #        run: |
-#          python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_gpu tests
+#          if [ -f test_list.txt ]; then
+#            python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_gpu $(cat test_list.txt)
+#          fi
 #
 #      - name: Failure short reports
 #        if: ${{ always() }}
@@ -113,6 +143,8 @@ jobs:
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
 
       - name: NVIDIA-SMI
         run: |
@@ -131,11 +163,24 @@ jobs:
           python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
+#      - name: Fetch the tests to run
+#        run: |
+#          python utils/tests_fetcher.py | tee test_preparation.txt
+#
+#      - name: Report fetched tests
+#        uses: actions/upload-artifact@v2
+#        with:
+#          name: test_fetched
+#          path: test_preparation.txt
+
       - name: Run all non-slow tests on GPU
         env:
           MKL_SERVICE_FORCE_INTEL: 1
         run: |
           python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_multi_gpu tests
+#          if [ -f test_list.txt ]; then
+#            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_multi_gpu $(cat test_list.txt)
+#          fi
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -157,6 +202,8 @@ jobs:
 #    steps:
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
+#        with:
+#          fetch-depth: 2
 #
 #      - name: NVIDIA-SMI
 #        run: |
@@ -172,12 +219,24 @@ jobs:
 #          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
 #          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 #
+#      - name: Fetch the tests to run
+#        run: |
+#          python utils/tests_fetcher.py | tee test_preparation.txt
+#
+#      - name: Report fetched tests
+#        uses: actions/upload-artifact@v2
+#        with:
+#          name: test_fetched
+#          path: test_preparation.txt
+#
 #      - name: Run all non-slow tests on GPU
 #        env:
 #          TF_NUM_INTRAOP_THREADS: 8
 #          TF_NUM_INTEROP_THREADS: 1
 #        run: |
-#          python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_multi_gpu tests
+#          if [ -f test_list.txt ]; then
+#            python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_multi_gpu $(cat test_list.txt)
+#          fi
 #
 #      - name: Failure short reports
 #        if: ${{ always() }}
@@ -198,6 +257,8 @@ jobs:
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
 
       - name: NVIDIA-SMI
         run: |
@@ -215,10 +276,23 @@ jobs:
           python -c "import torch; print('Cuda version:', torch.version.cuda)"
           python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+      
+#      - name: Fetch the tests to run
+#        run: |
+#          python utils/tests_fetcher.py --filters tests/deepspeed tests/extended | tee test_preparation.txt
+#      
+#      - name: Report fetched tests
+#        uses: actions/upload-artifact@v2
+#        with:
+#          name: test_fetched
+#          path: test_preparation.txt
 
       - name: Run all tests on GPU
         run: |
           python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+#          if [ -f test_list.txt ]; then
+#            python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_gpu $(cat test_list.txt)
+#          fi
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -239,6 +313,8 @@ jobs:
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
 
       - name: NVIDIA-SMI
         run: |
@@ -257,9 +333,22 @@ jobs:
           python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
+#      - name: Fetch the tests to run
+#        run: |
+#          python utils/tests_fetcher.py --filters tests/deepspeed tests/extended | tee test_preparation.txt
+#
+#      - name: Report fetched tests
+#        uses: actions/upload-artifact@v2
+#        with:
+#          name: test_fetched
+#          path: test_preparation.txt
+
       - name: Run all tests on GPU
         run: |
           python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended
+#          if [ -f test_list.txt ]; then
+#            python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_multi_gpu $(cat test_list.txt)
+#          fi
 
       - name: Failure short reports
         if: ${{ always() }}
