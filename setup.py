@@ -131,7 +131,7 @@ _deps = [
     "regex!=2019.12.17",
     "requests",
     "rouge-score",
-    "sacrebleu>=1.4.12",
+    "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "sagemaker>=2.31.0",
     "scikit-learn",
