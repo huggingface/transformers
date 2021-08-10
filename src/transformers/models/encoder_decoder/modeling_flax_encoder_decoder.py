@@ -420,7 +420,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
             >>> from transformers import BertTokenizer, FlaxEncoderDecoderModel
 
             >>> # initialize a bert2gpt2 from pretrained BERT/GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
+            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
@@ -496,7 +496,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
             >>> from transformers import BertTokenizer, FlaxEncoderDecoderModel
 
             >>> # initialize a bert2gpt2 from pretrained BERT/GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
+            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
@@ -620,7 +620,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
             >>> # save and load from pretrained
             >>> model.save_pretrained("bert2gpt2")
-            >>> model = EncoderDecoderModel.from_pretrained("bert2gpt2")
+            >>> model = FlaxEncoderDecoderModel.from_pretrained("bert2gpt2")
 
             >>> # generation (use GPT2's `bos_token_id` to start the generation.)
             >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.bos_token_id)
@@ -763,11 +763,11 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
             >>> from transformers import FlaxEncoderDecoderModel
             >>> # initialize a bert2gpt2 from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
+            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
             >>> # saving model after fine-tuning
             >>> model.save_pretrained("./bert2gpt2")
             >>> # load fine-tuned model
-            >>> model = EncoderDecoderModel.from_pretrained("./bert2gpt2")
+            >>> model = FlaxEncoderDecoderModel.from_pretrained("./bert2gpt2")
 
         """
 
