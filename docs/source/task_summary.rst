@@ -197,11 +197,11 @@ positions of the extracted answer in the text.
 
     >>> result = question_answerer(question="What is extractive question answering?", context=context)
     >>> print(f"Answer: '{result['answer']}', score: {round(result['score'], 4)}, start: {result['start']}, end: {result['end']}")
-    Answer: 'the task of extracting an answer from a text given a question.', score: 0.6226, start: 34, end: 96
+    Answer: 'the task of extracting an answer from a text given a question', score: 0.6177, start: 34, end: 95
 
     >>> result = question_answerer(question="What is a good example of a question answering dataset?", context=context)
     >>> print(f"Answer: '{result['answer']}', score: {round(result['score'], 4)}, start: {result['start']}, end: {result['end']}")
-    Answer: 'SQuAD dataset,', score: 0.5053, start: 147, end: 161
+    Answer: 'SQuAD dataset', score: 0.5152, start: 147, end: 160
 
 
 Here is an example of question answering using a model and a tokenizer. The process is the following:
@@ -261,7 +261,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
     Question: What does 🤗 Transformers provide?
     Answer: general - purpose architectures
     Question: 🤗 Transformers provides interoperability between which frameworks?
-    Answer: tensorflow 2 . 0 and pytorch
+    Answer: tensorflow 2. 0 and pytorch
     >>> ## TENSORFLOW CODE
     >>> from transformers import AutoTokenizer, TFAutoModelForQuestionAnswering
     >>> import tensorflow as tf
@@ -305,7 +305,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
     Question: What does 🤗 Transformers provide?
     Answer: general - purpose architectures
     Question: 🤗 Transformers provides interoperability between which frameworks?
-    Answer: tensorflow 2 . 0 and pytorch
+    Answer: tensorflow 2. 0 and pytorch
 
 
 
@@ -344,31 +344,31 @@ This outputs the sequences with the mask filled, the confidence score, and the t
 
     >>> from pprint import pprint
     >>> pprint(unmasker(f"HuggingFace is creating a {unmasker.tokenizer.mask_token} that the community uses to solve NLP tasks."))
-    [{'score': 0.1792745739221573,
-      'sequence': '<s>HuggingFace is creating a tool that the community uses to '
-                  'solve NLP tasks.</s>',
+    [{'score': 0.179275,
+      'sequence': 'HuggingFace is creating a tool that the community uses to solve '
+                  'NLP tasks.',
       'token': 3944,
-      'token_str': 'Ġtool'},
-     {'score': 0.11349421739578247,
-      'sequence': '<s>HuggingFace is creating a framework that the community uses '
-                  'to solve NLP tasks.</s>',
+      'token_str': ' tool'},
+     {'score': 0.113494,
+      'sequence': 'HuggingFace is creating a framework that the community uses to '
+                  'solve NLP tasks.',
       'token': 7208,
-      'token_str': 'Ġframework'},
-     {'score': 0.05243554711341858,
-      'sequence': '<s>HuggingFace is creating a library that the community uses to '
-                  'solve NLP tasks.</s>',
+      'token_str': ' framework'},
+     {'score': 0.0524355,
+      'sequence': 'HuggingFace is creating a library that the community uses to '
+                  'solve NLP tasks.',
       'token': 5560,
-      'token_str': 'Ġlibrary'},
-     {'score': 0.03493533283472061,
-      'sequence': '<s>HuggingFace is creating a database that the community uses '
-                  'to solve NLP tasks.</s>',
+      'token_str': ' library'},
+     {'score': 0.0349353,
+      'sequence': 'HuggingFace is creating a database that the community uses to '
+                  'solve NLP tasks.',
       'token': 8503,
-      'token_str': 'Ġdatabase'},
-     {'score': 0.02860250137746334,
-      'sequence': '<s>HuggingFace is creating a prototype that the community uses '
-                  'to solve NLP tasks.</s>',
+      'token_str': ' database'},
+     {'score': 0.0286025,
+      'sequence': 'HuggingFace is creating a prototype that the community uses to '
+                  'solve NLP tasks.',
       'token': 17715,
-      'token_str': 'Ġprototype'}]
+      'token_str': ' prototype'}]
 
 Here is an example of doing masked language modeling using a model and a tokenizer. The process is the following:
 
