@@ -219,7 +219,7 @@ class CellEmbeddings(ElectraEmbeddings):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.position_embedding_type = None
 
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.forward
