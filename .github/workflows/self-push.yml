@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
 
       - name: NVIDIA-SMI
         run: |
@@ -71,6 +73,8 @@ jobs:
 #    steps:
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
+#        with:
+#          fetch-depth: 2
 #
 #      - name: NVIDIA-SMI
 #        run: |
@@ -113,6 +117,8 @@ jobs:
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
 
       - name: NVIDIA-SMI
         run: |
@@ -157,6 +163,8 @@ jobs:
 #    steps:
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
+#        with:
+#          fetch-depth: 2
 #
 #      - name: NVIDIA-SMI
 #        run: |
@@ -198,6 +206,8 @@ jobs:
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
 
       - name: NVIDIA-SMI
         run: |
@@ -239,6 +249,8 @@ jobs:
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
 
       - name: NVIDIA-SMI
         run: |
