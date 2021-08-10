@@ -101,7 +101,7 @@ _deps = [
     "flax>=0.3.4",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "huggingface-hub==0.0.12",
+    "huggingface-hub>=0.0.12",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -131,7 +131,7 @@ _deps = [
     "regex!=2019.12.17",
     "requests",
     "rouge-score",
-    "sacrebleu>=1.4.12",
+    "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "sagemaker>=2.31.0",
     "scikit-learn",
@@ -142,6 +142,7 @@ _deps = [
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
     "sphinx==3.2.1",
     "sphinxext-opengraph==0.4.1",
+    "sphinx-intl",
     "starlette",
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
@@ -289,6 +290,7 @@ extras["docs_specific"] = deps_list(
     "sphinx-rtd-theme",
     "sphinx-copybutton",
     "sphinxext-opengraph",
+    "sphinx-intl",
 )
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]

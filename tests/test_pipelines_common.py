@@ -29,7 +29,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_checkpoint_from_architecture(architecture):
-    module = importlib.import_module(architecture.__module__)
+    try:
+        module = importlib.import_module(architecture.__module__)
+    except ImportError:
+        logger.error(f"Ignoring architecture {architecture}")
+        return
 
     if hasattr(module, "_CHECKPOINT_FOR_DOC"):
         return module._CHECKPOINT_FOR_DOC
@@ -46,8 +50,12 @@ def get_tiny_config_from_class(configuration_class):
     model_type = configuration_class.model_type
     camel_case_model_name = configuration_class.__name__.split("Config")[0]
 
-    module = importlib.import_module(f".test_modeling_{model_type.replace('-', '_')}", package="tests")
-    model_tester_class = getattr(module, f"{camel_case_model_name}ModelTester", None)
+    try:
+        module = importlib.import_module(f".test_modeling_{model_type.replace('-', '_')}", package="tests")
+        model_tester_class = getattr(module, f"{camel_case_model_name}ModelTester", None)
+    except (ImportError, AttributeError):
+        logger.error(f"No model tester class for {configuration_class.__name__}")
+        return
 
     if model_tester_class is None:
         logger.warning(f"No model tester class for {configuration_class.__name__}")
@@ -95,7 +103,8 @@ class PipelineTestCaseMeta(type):
                     model = model.eval()
                 try:
                     tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
-                    tokenizer.model_max_length = model.config.max_position_embeddings
+                    if hasattr(model.config, "max_position_embeddings"):
+                        tokenizer.model_max_length = model.config.max_position_embeddings
                 # Rust Panic exception are NOT Exception subclass
                 # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
                 # provide some default tokenizer and hope for the best.
@@ -107,27 +116,21 @@ class PipelineTestCaseMeta(type):
 
             return test
 
-        mapping = dct.get("model_mapping", {})
-        if mapping:
-            for configuration, model_architecture in mapping.items():
-                checkpoint = get_checkpoint_from_architecture(model_architecture)
-                tiny_config = get_tiny_config_from_class(configuration)
-                tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
-                for tokenizer_class in tokenizer_classes:
-                    if tokenizer_class is not None and tokenizer_class.__name__.endswith("Fast"):
-                        test_name = f"test_pt_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_class.__name__}"
-                        dct[test_name] = gen_test(model_architecture, checkpoint, tiny_config, tokenizer_class)
+        for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping")]:
+            mapping = dct.get(key, {})
+            if mapping:
+                for configuration, model_architectures in mapping.items():
+                    if not isinstance(model_architectures, tuple):
+                        model_architectures = (model_architectures,)
 
-        tf_mapping = dct.get("tf_model_mapping", {})
-        if tf_mapping:
-            for configuration, model_architecture in tf_mapping.items():
-                checkpoint = get_checkpoint_from_architecture(model_architecture)
-                tiny_config = get_tiny_config_from_class(configuration)
-                tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
-                for tokenizer_class in tokenizer_classes:
-                    if tokenizer_class is not None and tokenizer_class.__name__.endswith("Fast"):
-                        test_name = f"test_tf_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_class.__name__}"
-                        dct[test_name] = gen_test(model_architecture, checkpoint, tiny_config, tokenizer_class)
+                    for model_architecture in model_architectures:
+                        checkpoint = get_checkpoint_from_architecture(model_architecture)
+                        tiny_config = get_tiny_config_from_class(configuration)
+                        tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
+                        for tokenizer_class in tokenizer_classes:
+                            if tokenizer_class is not None and tokenizer_class.__name__.endswith("Fast"):
+                                test_name = f"test_{prefix}_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_class.__name__}"
+                                dct[test_name] = gen_test(model_architecture, checkpoint, tiny_config, tokenizer_class)
 
         return type.__new__(mcs, name, bases, dct)
 
