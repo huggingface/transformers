@@ -185,7 +185,6 @@ CONFIG_MAPPING = OrderedDict(
         ("electra", ElectraConfig),
         ("encoder-decoder", EncoderDecoderConfig),
         ("flaubert", FlaubertConfig),
-        ("fsmt", FSMTConfig),
         ("funnel", FunnelConfig),
         ("gpt2", GPT2Config),
         ("gptj", GPTJConfig),
