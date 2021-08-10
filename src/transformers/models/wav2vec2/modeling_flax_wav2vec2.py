@@ -720,7 +720,7 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
         perplexity = jnp.exp(-jnp.sum(marginal_probs * jnp.log(marginal_probs + 1e-7), axis=-1)).sum()
         return perplexity
 
-    def __call__(self, hidden_states, mask_time_indices=None, deterministic=True, temperature=1):
+    def __call__(self, hidden_states, attention_mask=None, deterministic=True, temperature=1):
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
         # project to codevector dim
@@ -745,15 +745,14 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
                 hidden_states.reshape(batch_size * sequence_length, self.num_groups, -1), axis=-1
             )
 
-            import ipdb; ipdb.set_trace()
-            perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
+            perplexity = self._compute_perplexity(codevector_soft_dist, attention_mask)
         else:
             # take argmax in non-differentiable way
             # comptute hard codevector distribution (one hot)
             codevector_idx = hidden_states.argmax(axis=-1)
             codevector_probs = jax.nn.one_hot(codevector_idx, hidden_states.shape[-1]) * 1.0
             codevector_probs = codevector_probs.reshape(batch_size * sequence_length, self.num_groups, -1)
-            perplexity = self._compute_perplexity(codevector_probs, mask_time_indices)
+            perplexity = self._compute_perplexity(codevector_probs, attention_mask)
 
         codevector_probs = codevector_probs.reshape(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
@@ -1127,13 +1126,25 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
             return_dict=return_dict,
         )
 
+        if attention_mask is not None:
+            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1).astype("i4"))
+
+            attention_mask = jnp.zeros(outputs[0].shape[:2], dtype=self.dtype)
+
+            # these two operations makes sure that all values
+            # before the output lengths indices are attended to
+            attention_mask = jax.ops.index_update(
+                attention_mask, jax.ops.index[jnp.arange(attention_mask.shape[0]), output_lengths - 1], 1
+            )
+            attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
+
         # project all transformed features (including masked) to final vq dim
         transformer_features = self.project_hid(outputs[0])
 
         # quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1], deterministic=deterministic)
         quantized_features, codevector_perplexity = self.quantizer(
-            extract_features, mask_time_indices, deterministic=deterministic, temperature=gumbel_temperature
+            extract_features, attention_mask, deterministic=deterministic, temperature=gumbel_temperature
         )
         quantized_features = self.project_q(quantized_features)
 
