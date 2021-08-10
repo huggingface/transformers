@@ -15,7 +15,8 @@
 """ Classes to support Encoder-Decoder architectures """
 
 
-from typing import Optional, Tuple
+import os
+from typing import Optional, Tuple, Union
 
 import numpy as np
 
@@ -26,9 +27,8 @@ from flax.core.frozen_dict import FrozenDict, unfreeze
 from jax import lax
 from jax.random import PRNGKey
 
-from ...models.auto.modeling_flax_auto import FLAX_MODEL_MAPPING
+from ...models.auto.modeling_flax_auto import FLAX_MODEL_MAPPING, FLAX_MODEL_FOR_CAUSAL_LM_MAPPING
 
-from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
@@ -63,12 +63,12 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a Flax Linen `flax.nn.Module
+    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
+    Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.EncoderDecoderConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the model
             weights.
@@ -76,90 +76,137 @@ ENCODER_DECODER_START_DOCSTRING = r"""
 
 ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
+        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
 
             Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
+            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
 
-            If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
-            :obj:`past_key_values`).
-
-            Provide for sequence to sequence training to the decoder. Indices can be obtained using
-            :class:`~transformers.PreTrainedTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            For sequence to sequence training, :obj:`decoder_input_ids` should be provided. If no
+            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
+            the right for denoising pre-training.
+        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
-        encoder_outputs (:obj:`tuple(torch.FloatTensor)`, `optional`):
-            This tuple must consist of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
-            :obj:`attentions`) :obj:`last_hidden_state` (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,
-            sequence_length, hidden_size)`) is a tensor of hidden-states at the output of the last layer of the
-            encoder. Used in the cross-attention of the decoder.
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
-        decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
-            representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`
-            indices into associated vectors than the model's internal embedding lookup matrix.
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss for the decoder. Indices should be in ``[-100, 0,
-            ..., config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
-        use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`).
+        position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.encoder.max_position_embeddings - 1]``.            
+        decoder_position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
+            range ``[0, config.decoder.max_position_embeddings - 1]``.                        
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail.            
         return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.FlaxSeq2SeqLMOutput` instead of a
-            plain tuple.
-        kwargs: (`optional`) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
-
-            - Without a prefix which will be input as ``**encoder_kwargs`` for the encoder forward function.
-            - With a `decoder_` prefix which will be input as ``**decoder_kwargs`` for the decoder forward function.
+            plain tuple.         
 """
 
 ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
-    TODO
+    Args:
+        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.encoder.max_position_embeddings - 1]``.                                  
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.            
+        return_dict (:obj:`bool`, `optional`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.FlaxBaseModelOutput` instead of a
+            plain tuple.     
 """
 
 ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
-    TODO
+    Args:
+        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
+
+            If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
+
+            For sequence to sequence training, :obj:`decoder_input_ids` should be provided. If no
+            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
+            the right for denoising pre-training.
+        encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`):
+            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
+            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
+            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
+            cross-attention of the decoder.
+        encoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
+            also be used by default.         
+        decoder_position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
+            range ``[0, config.decoder.max_position_embeddings - 1]``.    
+        past_key_values (:obj:`Dict[str, np.ndarray]`, `optional`, returned by ``init_cache`` or when passing previous ``past_key_values``):
+            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
+            auto-regressive decoding. Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.               
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.            
+        return_dict (:obj:`bool`, `optional`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.FlaxCausalLMOutputWithCrossAttentions` instead of a
+            plain tuple.   
 """
 
-# copied from `modeling_flax_bart.py`.
-# Q: could we use this np version in flax code?
+
+# Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
 def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
     """
     Shift input ids one token to the right.
@@ -180,11 +227,9 @@ class FlaxEncoderDecoderModule(nn.Module):
         encoder_config = self.config.encoder
         decoder_config = self.config.decoder
 
-        # copied from `modeling_hybrid_clip.py`.
-        # Q: how we ensure the correct types of the encoder/decoder? For example, to ensure the decoder should be a
-        #    causal LM model (as what have been done in `modeling_encoder_decoder.py` by using `AutoModelForCausalLM`).
+        # Copied from `modeling_hybrid_clip.py` with modifications.
         encoder_module = FLAX_MODEL_MAPPING[encoder_config.__class__].module_class
-        decoder_module = FLAX_MODEL_MAPPING[decoder_config.__class__].module_class
+        decoder_module = FLAX_MODEL_FOR_CAUSAL_LM_MAPPING[decoder_config.__class__].module_class
 
         self.encoder = encoder_module(encoder_config, dtype=self.dtype)
         self.decoder = decoder_module(decoder_config, dtype=self.dtype)
@@ -248,9 +293,9 @@ class FlaxEncoderDecoderModule(nn.Module):
 class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
     r"""
     :class:`~transformers.FlaxEncoderDecoderModel` is a generic model class that will be instantiated as a transformer
-    architecture with one of the base model classes of the library as encoder and another one as decoder when created
-    with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
-    :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
+    architecture with the module (flax.nn.Module) of one of the base model classes of the library as encoder module and another one as decoder module when created
+    with the :meth`~transformers.FlaxAutoModel.from_pretrained` class method for the encoder and
+    :meth`~transformers.FlaxAutoModelForCausalLM.from_pretrained` class method for the decoder.
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
@@ -264,21 +309,21 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         **kwargs
     ):
+        # Q: unlike in `modeling_flax_bart.FlaxBartPreTrainedModel.__init__`, here we use a more general shape
+        # (keep vision models' argument `pixel_values` as a next step).
         if input_shape is None:
             input_shape = ((1, 1), (1, 1))
 
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
-        # Q: should we have this check, because we don't have `get_output_embeddings` in Flax models, unlike
-        #    in PyTorch models.
+        # Copied from modeling.encoder_decoder.EncoderDecoderModel
+        # Q: should we keep this (modified) check - because we don't have `get_output_embeddings` as in PyTorch models.
         assert (
             not hasattr(self.module._get_encoder_module(), 'lm_head')
         ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
-
-        # Q: unlike in `modeling_flax_bart.py`, here we use a more general shape (keep pixel values as a next step).
         encoder_input_shape, decoder_input_shape = input_shape
 
         # init input tensors
@@ -291,7 +336,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
 
         decoder_batch_size, decoder_sequence_length = decoder_input_ids.shape
-        # Q: keep this sanity check?
+        # Q: Is it ok to keep this sanity check?
         assert (
             decoder_batch_size == batch_size
         ), f"The inputs of encoder and decoder should have the same batch size, but got {batch_size} for encoder and {decoder_batch_size} for decoder."
@@ -346,7 +391,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
             decoder_attention_mask=decoder_attention_mask,
             decoder_position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_outputs[0],
-            # Q: are we sure all accepted decoder module have the `init_cache` argument?
+            # Q: are we sure all accepted decoder modules have the `init_cache` argument?
             init_cache=True,
             method=_decoder_forward,  # we only need to call the decoder to init the cache
         )
@@ -372,10 +417,12 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
         Example::
 
-            >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
+            >>> from transformers import BertTokenizer, FlaxEncoderDecoderModel
 
-            >>> model = FlaxBartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
-            >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
+            >>> # initialize a bert2gpt2 from pretrained BERT/GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
+
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
             >>> text = "My friends are cool but they eat too many carbs."
             >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
@@ -421,7 +468,6 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
                 hidden_states=outputs.hidden_states,
                 attentions=outputs.attentions
             )
-        # Q: how could we make sure the tuple has the desired 3 elements?
 
         return outputs
 
@@ -447,10 +493,12 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
         Example::
 
-            >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
+            >>> from transformers import BertTokenizer, FlaxEncoderDecoderModel
 
-            >>> model = FlaxBartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
-            >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
+            >>> # initialize a bert2gpt2 from pretrained BERT/GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
+
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
             >>> text = "My friends are cool but they eat too many carbs."
             >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
@@ -460,7 +508,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
             >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
             >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> last_decoder_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -554,6 +602,30 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
+        r"""
+        Returns:
+
+        Examples::
+
+            >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer, GPT2Tokenizer
+
+            >>> bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> gpt2_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2') # initialize Bert2GPT2 from pre-trained checkpoints
+
+            >>> # forward
+            >>> input_ids = bert_tokenizer.encode("Hello, my dog is cute", add_special_tokens=True, return_tensors='jax')  # Batch size 1
+            >>> decoder_input_ids = gpt2_tokenizer.encode("Hello, my dog is cute", add_special_tokens=True, return_tensors='jax')  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+
+            >>> # save and load from pretrained
+            >>> model.save_pretrained("bert2gpt2")
+            >>> model = EncoderDecoderModel.from_pretrained("bert2gpt2")
+
+            >>> # generation (use GPT2's `bos_token_id` to start the generation.)
+            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.bos_token_id)
+
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -610,8 +682,11 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         **kwargs
     ):
 
-        # Q: There is no decoder model, but just the decoder module. Should we change this?
-        # TODO: remove this - decoder_inputs = self.decoder.prepare_inputs_for_generation(decoder_input_ids, ...)
+        # Q: In `modeling_encoder_deocer.EncoderDecoder.prepare_inputs_for_generation()`, we use the decoder model's
+        #    `prepare_inputs_for_generation()`. However, in Flax's version, we only have the decode module, not the
+        #    decoder model. Is the implementation here OK?
+        # original version in `modeling_encoder_deocer.EncoderDecoder`
+        # decoder_inputs = self.decoder.prepare_inputs_for_generation(decoder_input_ids, ...)
 
         # initializing the cache
         batch_size, seq_length = decoder_input_ids.shape
@@ -639,3 +714,137 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
         model_kwargs["decoder_position_ids"] = model_kwargs["decoder_position_ids"][:, -1:] + 1
         return model_kwargs
+
+    @classmethod
+    def from_encoder_decoder_pretrained(
+        cls,
+        encoder_pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        decoder_pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        *model_args,
+        **kwargs
+    ) -> FlaxPreTrainedModel:
+        r"""
+        Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model
+        checkpoints.
+
+        Params:
+            encoder_pretrained_model_name_or_path (:obj: `Union[str, os.PathLike]`, `optional`):
+                Information necessary to initiate the encoder. Can be either:
+
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
+                    - A path to a `directory` containing model weights saved using
+                      :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+
+            decoder_pretrained_model_name_or_path (:obj: `Union[str, os.PathLike]`, `optional`, defaults to `None`):
+                Information necessary to initiate the decoder. Can be either:
+
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
+                    - A path to a `directory` containing model weights saved using
+                      :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+
+            model_args (remaining positional arguments, `optional`):
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+
+            kwargs (remaining dictionary of keyword arguments, `optional`):
+                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
+                :obj:`output_attentions=True`).
+
+                - To update the encoder configuration, use the prefix `encoder_` for each configuration parameter.
+                - To update the decoder configuration, use the prefix `decoder_` for each configuration parameter.
+                - To update the parent model configuration, do not use a prefix for each configuration parameter.
+
+                Behaves differently depending on whether a :obj:`config` is provided or automatically loaded.
+
+        Example::
+
+            >>> from transformers import FlaxEncoderDecoderModel
+            >>> # initialize a bert2gpt2 from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
+            >>> # saving model after fine-tuning
+            >>> model.save_pretrained("./bert2gpt2")
+            >>> # load fine-tuned model
+            >>> model = EncoderDecoderModel.from_pretrained("./bert2gpt2")
+
+        """
+
+        kwargs_encoder = {
+            argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
+        }
+
+        kwargs_decoder = {
+            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+        }
+
+        # remove encoder, decoder kwargs from kwargs
+        for key in kwargs_encoder.keys():
+            del kwargs["encoder_" + key]
+        for key in kwargs_decoder.keys():
+            del kwargs["decoder_" + key]
+
+        # Load and initialize the encoder and decoder
+        # The distinction between encoder and decoder at the model level is made
+        # by the value of the flag `is_decoder` that we need to set correctly.
+        encoder = kwargs_encoder.pop("model", None)
+        if encoder is None:
+            assert (
+                encoder_pretrained_model_name_or_path is not None
+            ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+            from ..auto.modeling_flax_auto import FlaxAutoModel
+
+            if "config" not in kwargs_encoder:
+                from ..auto.configuration_auto import AutoConfig
+
+                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
+                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+
+                    logger.info(
+                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model from a decoder model. Cross-attention and casual mask are disabled."
+                    )
+                    encoder_config.is_decoder = False
+                    encoder_config.add_cross_attention = False
+
+                kwargs_encoder["config"] = encoder_config
+
+            encoder = FlaxAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
+
+        decoder = kwargs_decoder.pop("model", None)
+        if decoder is None:
+            assert (
+                decoder_pretrained_model_name_or_path is not None
+            ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+            from ..auto.modeling_flax_auto import FlaxAutoModelForCausalLM
+
+            if "config" not in kwargs_decoder:
+                from ..auto.configuration_auto import AutoConfig
+
+                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+                if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
+                    logger.info(
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                    )
+                    decoder_config.is_decoder = True
+                    decoder_config.add_cross_attention = True
+
+                kwargs_decoder["config"] = decoder_config
+
+            if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
+                logger.warning(
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                )
+
+            decoder = FlaxAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+
+        # instantiate config with corresponding kwargs
+        dtype = kwargs.pop("dtype", jnp.float32)
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+
+        # init model
+        model = cls(config, dtype=dtype, **kwargs)
+        model.params["encoder"] = encoder.params
+        model.params["decoder"] = decoder.params
+
+        return model
