@@ -483,7 +483,7 @@ of tokens.
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
     >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
 
-    >>> sequence = f"Hugging Face is based in DUMBO, New York City, and "
+    >>> sequence = f"Hugging Face is based in DUMBO, New York City, and"
 
     >>> input_ids = tokenizer.encode(sequence, return_tensors="tf")
 
@@ -504,12 +504,12 @@ of tokens.
     >>> resulting_string = tokenizer.decode(generated.numpy().tolist()[0])
 
 
-This outputs a (hopefully) coherent next token following the original sequence, which in our case is the word *is*:
+This outputs a (hopefully) coherent next token following the original sequence, which in our case is the word *features*:
 
 .. code-block::
 
     >>> print(resulting_string)
-    Hugging Face is based in DUMBO, New York City, and is
+    Hugging Face is based in DUMBO, New York City, and features
 
 In the next section, we show how :func:`~transformers.generation_utils.GenerationMixin.generate` can be used to
 generate multiple tokens up to a specified length instead of one token at a time.
