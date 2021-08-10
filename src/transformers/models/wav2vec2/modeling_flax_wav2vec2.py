@@ -745,6 +745,7 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
                 hidden_states.reshape(batch_size * sequence_length, self.num_groups, -1), axis=-1
             )
 
+            import ipdb; ipdb.set_trace()
             perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
         else:
             # take argmax in non-differentiable way
