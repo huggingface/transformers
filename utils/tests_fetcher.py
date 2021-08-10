@@ -454,4 +454,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
             with open(args.output_file, "w", encoding="utf-8") as f:
-                f.write("./tests/")
+                if args.filters is None:
+                    f.write("./tests/")
+                else:
+                    f.write(" ".join(args.filters))
