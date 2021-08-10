@@ -386,7 +386,7 @@ class ElectraSelfAttention(nn.Module):
 # Copied from Electra, but removed positional embedding and removes self attention layer
 class CellSelfAttention(ElectraSelfAttention):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.position_embedding_type = None
 
     def transpose_for_scores(self, x):
