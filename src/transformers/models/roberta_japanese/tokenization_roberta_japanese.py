@@ -26,41 +26,17 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "cl-tohoku/bert-base-japanese": "https://huggingface.co/cl-tohoku/bert-base-japanese/resolve/main/vocab.txt",
-        "cl-tohoku/bert-base-japanese-whole-word-masking": "https://huggingface.co/cl-tohoku/bert-base-japanese-whole-word-masking/resolve/main/vocab.txt",
-        "cl-tohoku/bert-base-japanese-char": "https://huggingface.co/cl-tohoku/bert-base-japanese-char/resolve/main/vocab.txt",
-        "cl-tohoku/bert-base-japanese-char-whole-word-masking": "https://huggingface.co/cl-tohoku/bert-base-japanese-char-whole-word-masking/resolve/main/vocab.txt",
+        # TODO: add vocab files once files are uploaded to huggingface hub
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "cl-tohoku/bert-base-japanese": 512,
-    "cl-tohoku/bert-base-japanese-whole-word-masking": 512,
-    "cl-tohoku/bert-base-japanese-char": 512,
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking": 512,
+    # "cl-tohoku/bert-base-japanese": 512,
+    # TODO: add Embedding sizes
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "cl-tohoku/bert-base-japanese": {
-        "do_lower_case": False,
-        "word_tokenizer_type": "mecab",
-        "subword_tokenizer_type": "wordpiece",
-    },
-    "cl-tohoku/bert-base-japanese-whole-word-masking": {
-        "do_lower_case": False,
-        "word_tokenizer_type": "mecab",
-        "subword_tokenizer_type": "wordpiece",
-    },
-    "cl-tohoku/bert-base-japanese-char": {
-        "do_lower_case": False,
-        "word_tokenizer_type": "mecab",
-        "subword_tokenizer_type": "character",
-    },
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking": {
-        "do_lower_case": False,
-        "word_tokenizer_type": "mecab",
-        "subword_tokenizer_type": "character",
-    },
+    # TODO: add config
 }
 
 
@@ -148,14 +124,12 @@ class RobertaJapaneseTokenizer(XLMRobertaTokenizer):
     def do_lower_case(self):
         return self.lower_case
 
-    # TODO: (kiyono) No idea how to deal with this
     def __getstate__(self):
         state = dict(self.__dict__)
         if self.word_tokenizer_type == "mecab":
             del state["word_tokenizer"]
         return state
 
-    # TODO: (kiyono) No idea how to deal with this
     def __setstate__(self, state):
         self.__dict__ = state
         if self.word_tokenizer_type == "mecab":
