@@ -241,7 +241,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("deit", "DeiT"),
         ("luke", "LUKE"),
         ("detr", "DETR"),
-        ("gptj", "GPTJ"),
+        ("gptj", "GPT-J"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),

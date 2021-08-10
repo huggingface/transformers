@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GPTJ model. """
+""" PyTorch GPT-J model. """
 
 import math
 import os
@@ -86,7 +86,7 @@ def apply_rotary_pos_emb(x, sincos, offset=0):
 
 class GPTJAttentionMixin:
     """
-    A few attention related utilities for attention modules in GPT J, to be used as a mixin.
+    A few attention related utilities for attention modules in GPT-J, to be used as a mixin.
     """
 
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):

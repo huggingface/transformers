@@ -10,21 +10,21 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-GPT J
+GPT-J
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The GPT J model was released in the `kingoflolz/mesh-transformer-jax <https://github.com/kingoflolz/mesh-transformer-jax>`__ repository by Ben Wang and Aran Komatsuzaki. It is a GPT2-like causal language model trained on the
-`Pile <https://pile.eleuther.ai/>`__ dataset.
+The GPT-J model was released in the `kingoflolz/mesh-transformer-jax <https://github.com/kingoflolz/mesh-transformer-jax>`__ repository by Ben Wang and Aran Komatsuzaki. It is a GPT-2-like causal language model trained on `the
+Pile <https://pile.eleuther.ai/>`__ dataset.
 
 This model was contributed by `Stella Biderman <https://huggingface.co/stellaathena>`__.
 
 Generation
 _______________________________________________________________________________________________________________________
 
-The :obj:`generate()` method can be used to generate text using GPT J model.
+The :obj:`generate()` method can be used to generate text using GPT-J model.
 
 .. code-block::
 
