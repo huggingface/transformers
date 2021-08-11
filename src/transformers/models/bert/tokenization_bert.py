@@ -555,7 +555,7 @@ class WordpieceTokenizer(object):
         return output_tokens
 
 
-class CellBertTokenizer(BertTokenizer):
+class CellBertTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
