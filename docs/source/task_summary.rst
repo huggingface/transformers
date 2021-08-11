@@ -515,7 +515,8 @@ of tokens.
     >>> resulting_string = tokenizer.decode(generated.numpy().tolist()[0])
 
 
-This outputs a (hopefully) coherent next token following the original sequence, which in our case is the word *features*:
+This outputs a (hopefully) coherent next token following the original sequence, which in our case is the word
+*features*:
 
 .. code-block::
 
