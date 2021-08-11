@@ -486,6 +486,8 @@ of tokens.
     >>> generated = torch.cat([input_ids, next_token], dim=-1)
 
     >>> resulting_string = tokenizer.decode(generated.tolist()[0])
+    >>> print(resulting_string)
+    Hugging Face is based in DUMBO, New York City, and is
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelForCausalLM, AutoTokenizer, set_seed, tf_top_k_top_p_filtering
     >>> import tensorflow as tf
@@ -513,15 +515,11 @@ of tokens.
     >>> generated = tf.concat([input_ids, next_token], axis=1)
 
     >>> resulting_string = tokenizer.decode(generated.numpy().tolist()[0])
-
-
-This outputs a (hopefully) coherent next token following the original sequence, which in our case is the word
-*features*:
-
-.. code-block::
-
     >>> print(resulting_string)
     Hugging Face is based in DUMBO, New York City, and features
+
+This outputs a (hopefully) coherent next token following the original sequence, which in our case is the word *is* or
+*features*.
 
 In the next section, we show how :func:`~transformers.generation_utils.GenerationMixin.generate` can be used to
 generate multiple tokens up to a specified length instead of one token at a time.
