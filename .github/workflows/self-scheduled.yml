@@ -208,6 +208,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y git
           pip install --upgrade pip
           pip install .[sklearn,testing,onnx,sentencepiece]
 
