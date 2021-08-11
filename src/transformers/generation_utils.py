@@ -2464,6 +2464,7 @@ class GenerationMixin:
                     next_indices,
                     pad_token_id=pad_token_id,
                     eos_token_id=eos_token_id,
+                    beam_group_idx=beam_group_idx
                 )
                 beam_scores[batch_group_indices] = beam_outputs["next_beam_scores"]
                 beam_next_tokens = beam_outputs["next_beam_tokens"]
@@ -2526,7 +2527,7 @@ class GenerationMixin:
 
         if return_dict_in_generate:
             if not output_scores:
-                sequence_outputs["sequence_scores"] = None
+                return sequence_outputs["sequence_scores"] = None
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],

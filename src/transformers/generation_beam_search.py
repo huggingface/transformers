@@ -172,13 +172,15 @@ class BeamSearchScorer(BeamScorer):
 
         self._is_init = False
         self._beam_hyps = [
-            BeamHypotheses(
-                num_beams=self.num_beams,
-                length_penalty=self.length_penalty,
-                early_stopping=self.do_early_stopping,
-            )
+            [
+                BeamHypotheses(
+                    num_beams=self.num_beams,
+                    length_penalty=self.length_penalty,
+                    early_stopping=self.do_early_stopping,
+                ) for _ in range(num_beam_groups)
+            ]
             for _ in range(batch_size)
-        ]
+        ] # individual beam hypothesis for each group and each input
         self._done = torch.tensor([False for _ in range(batch_size)], dtype=torch.bool, device=self.device)
 
         if not isinstance(num_beams, int) or num_beams <= 1:
@@ -209,6 +211,7 @@ class BeamSearchScorer(BeamScorer):
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
+        beam_group_idx: int = 0,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
     ) -> Tuple[torch.Tensor]:
@@ -221,11 +224,13 @@ class BeamSearchScorer(BeamScorer):
         next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
 
-        for batch_idx, beam_hyp in enumerate(self._beam_hyps):
-            if self._done[batch_idx]:
+        for batch_idx, beam_hyps in enumerate(self._beam_hyps):
+            beam_hyp = beam_hyps[beam_group_idx]
+
+            if self._done[batch_idx][beam_group_idx]:
                 assert (
-                    len(beam_hyp) >= self.num_beams
-                ), f"Batch can only be done if at least {self.num_beams} beams have been generated"
+                    len(beam_hyp) >= self.group_size
+                ), f"Beam Group can only be done if at least {self.group_size} beams have been generated"
                 assert (
                     eos_token_id is not None and pad_token_id is not None
                 ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
@@ -268,7 +273,7 @@ class BeamSearchScorer(BeamScorer):
                 )
 
             # Check if we are done so that we can save a pad step if all(done)
-            self._done[batch_idx] = self._done[batch_idx] or beam_hyp.is_done(
+            self._done[batch_idx][beam_group_idx] = self._done[batch_idx][beam_group_idx] or beam_hyp.is_done(
                 next_scores[batch_idx].max().item(), cur_len
             )
 
@@ -293,17 +298,18 @@ class BeamSearchScorer(BeamScorer):
         batch_size = len(self._beam_hyps)
 
         # finalize all open beam hypotheses and add to generated hypotheses
-        for batch_idx, beam_hyp in enumerate(self._beam_hyps):
-            if self._done[batch_idx]:
-                continue
+        for batch_idx, beam_hyps in enumerate(self._beam_hyps):
+            for beam_group_idx, beam_hyp in enumerate(beam_hyps):
+                if self._done[batch_idx][beam_group_idx]:
+                    continue
 
-            # all open beam hypotheses are added to the beam hypothesis
-            # beam hypothesis class automatically keeps the best beams
-            for beam_id in range(self.num_beams):
-                batch_beam_idx = batch_idx * self.num_beams + beam_id
-                final_score = final_beam_scores[batch_beam_idx].item()
-                final_tokens = input_ids[batch_beam_idx]
-                beam_hyp.add(final_tokens, final_score)
+                # all open beam hypotheses are added to the beam hypothesis
+                # beam hypothesis class automatically keeps the best beams
+                for beam_id in range(self.group_size):
+                    batch_beam_idx = batch_idx * self.num_beams + beam_group_idx * self.group_size + beam_id
+                    final_score = final_beam_scores[batch_beam_idx].item()
+                    final_tokens = input_ids[batch_beam_idx]
+                    beam_hyp.add(final_tokens, final_score)
 
         # select the best hypotheses
         sent_lengths = input_ids.new(batch_size * self.num_beam_hyps_to_keep)
@@ -311,17 +317,20 @@ class BeamSearchScorer(BeamScorer):
         best_scores = torch.zeros(batch_size * self.num_beam_hyps_to_keep, device=self.device, dtype=torch.float32)
 
         # retrieve best hypotheses
-        for i, beam_hyp in enumerate(self._beam_hyps):
-            sorted_hyps = sorted(beam_hyp.beams, key=lambda x: x[0])
-            for j in range(self.num_beam_hyps_to_keep):
-                best_hyp_tuple = sorted_hyps.pop()
-                best_score = best_hyp_tuple[0]
-                best_hyp = best_hyp_tuple[1]
-                sent_lengths[self.num_beam_hyps_to_keep * i + j] = len(best_hyp)
+        for batch_idx, beam_hyps in enumerate(self._beam_hyps):
+            for beam_group_idx, beam_hyp in enumerate(beam_hyps):
+                sorted_hyps = sorted(beam_hyp.beams, key=lambda x: x[0])
+                for j in range(self.num_beam_hyps_to_keep_per_group):
+                    best_hyp_tuple = sorted_hyps.pop()
+                    best_score = best_hyp_tuple[0]
+                    best_hyp = best_hyp_tuple[1]
 
-                # append to lists
-                best.append(best_hyp)
-                best_scores[i * self.num_beam_hyps_to_keep + j] = best_score
+                    batch_beam_idx = self.num_beam_hyps_to_keep * batch_idx + self.num_beam_hyps_to_keep_per_group * beam_group_idx + j
+                    sent_lengths[batch_beam_idx] = len(best_hyp)
+
+                    # append to lists
+                    best.append(best_hyp)
+                    best_scores[batch_beam_idx] = best_score
 
         # prepare for adding eos
         sent_max_len = min(sent_lengths.max().item() + 1, max_length)
