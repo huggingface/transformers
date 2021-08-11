@@ -608,6 +608,7 @@ class CellBertTokenizer(PreTrainedTokenizer):
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
     
     def _tokenize(self, text):
+        print('__tokenize', text.split())
         return text.split()
 
 
