@@ -798,12 +798,7 @@ class DataCollatorForNetutralCellModeling():
         neutral_indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
         inputs[neutral_indices_replaced] = neutral_tokens[neutral_indices_replaced]
 
-        for index, (label, input, indices, n) in enumerate(zip(org, inputs, neutral_indices_replaced, neutral_tokens)):
-            # print('input', input)
-            print('inputs', self.tokenizer.decode(input, skip_special_tokens=False))
-            print('indices', indices)
-            print('neutral', self.tokenizer.decode(n, skip_special_tokens=False))
-            print('label', self.tokenizer.decode(label, skip_special_tokens=False))
+      
 
 
 
@@ -811,6 +806,13 @@ class DataCollatorForNetutralCellModeling():
         postive_negative_tokens = self.postive_negative_tokens_ids(input)
         indices_replaced = torch.bernoulli(torch.full(labels.shape, 1.0)).bool() & masked_indices & ~neutral_indices_replaced
         inputs[indices_replaced] = postive_negative_tokens[indices_replaced]
+
+        for index, (label, input, indices, n) in enumerate(zip(org, inputs, indices_replaced, neutral_tokens)):
+            # print('input', input)
+            print('inputs', self.tokenizer.decode(input, skip_special_tokens=False))
+            print('indices', indices)
+            print('neutral', self.tokenizer.decode(n, skip_special_tokens=False))
+            print('label', self.tokenizer.decode(label, skip_special_tokens=False))
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
