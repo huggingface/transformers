@@ -571,6 +571,20 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
     @require_torch
+    def test_no_offset_tokenizer(self):
+        model_name = "Narsil/small2"
+        tokenizer = AutoTokenizer.from_pretrained("Narsil/small2", use_fast=False)
+        token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer, framework="pt")
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": None, "end": None},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": None, "end": None},
+            ],
+        )
+
+    @require_torch
     def test_small_model_pt(self):
         model_name = "Narsil/small2"
         token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")

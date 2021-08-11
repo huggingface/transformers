@@ -25,12 +25,14 @@ from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..file_utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
-from ..tokenization_utils import PreTrainedTokenizer, TruncationStrategy
+from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
 
+
+GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
 
 if is_tf_available():
     import tensorflow as tf
@@ -39,8 +41,11 @@ if is_tf_available():
 
 if is_torch_available():
     import torch
+    from torch.utils.data import DataLoader, Dataset, IterableDataset
 
     from ..models.auto.modeling_auto import AutoModel
+else:
+    Dataset = None
 
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -48,6 +53,12 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+
+def collate_fn(items):
+    if len(items) != 1:
+        raise ValueError("This collate_fn is meant to be used with batch_size=1")
+    return items[0]
 
 
 def infer_framework_load_model(
@@ -585,6 +596,49 @@ PIPELINE_INIT_ARGS = r"""
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
 
+if is_torch_available():
+
+    class PipelineDataset(Dataset):
+        def __init__(self, dataset, process):
+            self.dataset = dataset
+            self.process = process
+
+        def __len__(self):
+            return len(self.dataset)
+
+        def __getitem__(self, i):
+            item = self.dataset[i]
+            processed = self.process(item)
+            return processed
+
+    class PipelineIterator(IterableDataset):
+        def __init__(self, loader, infer):
+            self.loader = loader
+            self.infer = infer
+
+        def __len__(self):
+            return len(self.loader)
+
+        def __iter__(self):
+            self.iterator = iter(self.loader)
+            return self
+
+        def __next__(self):
+            item = next(self.iterator)
+            processed = self.infer(item)
+            return processed
+
+    class KeyDataset(Dataset):
+        def __init__(self, dataset: Dataset, key: str):
+            self.dataset = dataset
+            self.key = key
+
+        def __len__(self):
+            return len(self.dataset)
+
+        def __getitem__(self, i):
+            return self.dataset[i][self.key]
+
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class Pipeline(_ScikitCompat):
@@ -618,6 +672,7 @@ class Pipeline(_ScikitCompat):
         args_parser: ArgumentHandler = None,
         device: int = -1,
         binary_output: bool = False,
+        **kwargs,
     ):
 
         if framework is None:
@@ -640,6 +695,9 @@ class Pipeline(_ScikitCompat):
         task_specific_params = self.model.config.task_specific_params
         if task_specific_params is not None and task in task_specific_params:
             self.model.config.update(task_specific_params.get(task))
+
+        self.call_count = 0
+        self.set_parameters(**kwargs)
 
     def save_pretrained(self, save_directory: str):
         """
@@ -739,65 +797,68 @@ class Pipeline(_ScikitCompat):
                 f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}."
             )
 
-    def _parse_and_tokenize(
-        self, inputs, padding=True, add_special_tokens=True, truncation=TruncationStrategy.DO_NOT_TRUNCATE, **kwargs
-    ):
-        """
-        Parse arguments and tokenize
-        """
-        # Parse arguments
-        if getattr(self.tokenizer, "pad_token", None) is None:
-            padding = False
-        inputs = self.tokenizer(
-            inputs,
-            add_special_tokens=add_special_tokens,
-            return_tensors=self.framework,
-            padding=padding,
-            truncation=truncation,
-        )
-        return inputs
+    @abstractmethod
+    def set_parameters(self, **pipeline_parameters):
+        raise NotImplementedError("set_parameters not implemented")
 
-    def __call__(self, inputs, *args, **kwargs):
-        try:
-            model_inputs = self._parse_and_tokenize(inputs, *args, **kwargs)
-            outputs = self._forward(model_inputs)
-            return outputs
-        except ValueError:
-            # XXX: Some tokenizer do NOT have a pad token, hence we cannot run the inference
-            # in a batch, instead we run everything sequentially
-            if isinstance(inputs, list):
-                values = []
-                for input_ in inputs:
-                    model_input = self._parse_and_tokenize(input_, padding=False, *args, **kwargs)
-                    value = self._forward(model_input)
-                    values.append(value.squeeze(0))
-            else:
-                model_input = self._parse_and_tokenize(inputs, padding=False, *args, **kwargs)
-                values = self._forward(model_input)
-            return values
+    @abstractmethod
+    def preprocess(self, input_: Any, **preprocess_parameters) -> Dict[str, GenericTensor]:
+        raise NotImplementedError("preprocess not implemented")
 
-    def _forward(self, inputs, return_tensors=False):
-        """
-        Internal framework specific forward dispatching
+    @abstractmethod
+    def postprocess(self, model_outputs: ModelOutput, **postprocess_parameters) -> Any:
+        raise NotImplementedError("postprocess not implemented")
 
-        Args:
-            inputs: dict holding all the keyword arguments for required by the model forward method.
-            return_tensors: Whether to return native framework (pt/tf) tensors rather than numpy array
+    @abstractmethod
+    def forward(self, input_tensors: Dict[str, GenericTensor], **forward_parameters) -> ModelOutput:
+        raise NotImplementedError("postprocess not implemented")
 
-        Returns:
-            Numpy array
-        """
-        # Encode for forward
+    def infer_forward(self, model_inputs, *args, **kwargs):
         with self.device_placement():
             if self.framework == "tf":
-                # TODO trace model
-                predictions = self.model(inputs.data, training=False)[0]
-            else:
+                model_inputs["training"] = False
+                model_outputs = self.forward(model_inputs)
+            elif self.framework == "pt":
                 with torch.no_grad():
-                    inputs = self.ensure_tensor_on_device(**inputs)
-                    predictions = self.model(**inputs)[0].cpu()
+                    model_inputs = self.ensure_tensor_on_device(**model_inputs)
+                    model_outputs = self.forward(model_inputs)
+            else:
+                raise ValueError(f"Framework {self.framework} is not supported")
+        return model_outputs
 
-        if return_tensors:
-            return predictions
+    def get_iterator(self, inputs, num_workers: int):
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        dataset = PipelineDataset(inputs, self.preprocess)
+        dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=1, collate_fn=collate_fn)
+        model_iterator = PipelineIterator(dataloader, self.infer_forward)
+        final_iterator = PipelineIterator(model_iterator, self.postprocess)
+        return final_iterator
+
+    def __call__(self, inputs, *args, num_workers=8, **kwargs):
+        self.set_parameters(**kwargs)
+        self.call_count += 1
+        if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
+            warnings.warn(
+                "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a dataset",
+                UserWarning,
+            )
+        if isinstance(inputs, list):
+            if self.framework == "pt":
+                final_iterator = self.get_iterator(inputs, num_workers)
+                outputs = [output for output in final_iterator]
+                return outputs
+            else:
+                return self.run_multi(inputs)
+        elif Dataset and isinstance(inputs, Dataset):
+            return self.get_iterator(inputs, num_workers)
         else:
-            return predictions.numpy()
+            return self.run_single(inputs)
+
+    def run_multi(self, inputs):
+        return [self.run_single(item) for item in inputs]
+
+    def run_single(self, inputs):
+        model_inputs = self.preprocess(inputs)
+        model_outputs = self.infer_forward(model_inputs)
+        outputs = self.postprocess(model_outputs)
+        return outputs

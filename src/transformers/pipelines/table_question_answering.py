@@ -17,7 +17,7 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
     Handles arguments for the TableQuestionAnsweringPipeline
     """
 
-    def __call__(self, table=None, query=None, sequential=False, padding=True, truncation=True):
+    def __call__(self, table=None, query=None, **kwargs):
         # Returns tqa_pipeline_inputs of shape:
         # [
         #   {"table": pd.DataFrame, "query": List[str]},
@@ -60,7 +60,7 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
 
                 tqa_pipeline_input["table"] = pd.DataFrame(tqa_pipeline_input["table"])
 
-        return tqa_pipeline_inputs, sequential, padding, truncation
+        return tqa_pipeline_inputs
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
@@ -78,6 +78,9 @@ class TableQuestionAnsweringPipeline(Pipeline):
     """
 
     default_input_names = "table,query"
+    sequential = False
+    padding = True
+    truncation = True
 
     def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -235,52 +238,76 @@ class TableQuestionAnsweringPipeline(Pipeline):
             - **cells** (:obj:`List[str]`) -- List of strings made up of the answer cell values.
             - **aggregator** (:obj:`str`) -- If the model has an aggregator, this returns the aggregator.
         """
-        pipeline_inputs, sequential, padding, truncation = self._args_parser(*args, **kwargs)
-        batched_answers = []
-        for pipeline_input in pipeline_inputs:
-            table, query = pipeline_input["table"], pipeline_input["query"]
-            if table.empty:
-                raise ValueError("table is empty")
-            if not query:
-                raise ValueError("query is empty")
-            inputs = self.tokenizer(
-                table, query, return_tensors=self.framework, truncation="drop_rows_to_fit", padding=padding
-            )
+        pipeline_inputs = self._args_parser(*args, **kwargs)
 
-            outputs = self.sequential_inference(**inputs) if sequential else self.batch_inference(**inputs)
+        results = super().__call__(pipeline_inputs, **kwargs)
+        if len(results) == 1:
+            return results[0]
+        return results
 
-            if self.aggregate:
-                logits, logits_agg = outputs[:2]
-                predictions = self.tokenizer.convert_logits_to_predictions(inputs, logits.detach(), logits_agg)
-                answer_coordinates_batch, agg_predictions = predictions
-                aggregators = {i: self.model.config.aggregation_labels[pred] for i, pred in enumerate(agg_predictions)}
+    def set_parameters(self, sequential=None, padding=None, truncation=None, **kwargs):
+        if sequential is not None:
+            self.sequential = sequential
+        if padding is not None:
+            self.padding = padding
+        if truncation is not None:
+            self.truncation = truncation
 
-                no_agg_label_index = self.model.config.no_aggregation_label_index
-                aggregators_prefix = {
-                    i: aggregators[i] + " > " for i, pred in enumerate(agg_predictions) if pred != no_agg_label_index
-                }
-            else:
-                logits = outputs[0]
-                predictions = self.tokenizer.convert_logits_to_predictions(inputs, logits.detach())
-                answer_coordinates_batch = predictions[0]
-                aggregators = {}
-                aggregators_prefix = {}
+    def preprocess(self, pipeline_input):
+        table, query = pipeline_input["table"], pipeline_input["query"]
+        if table.empty:
+            raise ValueError("table is empty")
+        if not query:
+            raise ValueError("query is empty")
+        inputs = self.tokenizer(
+            table, query, return_tensors=self.framework, truncation="drop_rows_to_fit", padding=self.padding
+        )
+        inputs["table"] = table
+        return inputs
 
-            answers = []
-            for index, coordinates in enumerate(answer_coordinates_batch):
-                cells = [table.iat[coordinate] for coordinate in coordinates]
-                aggregator = aggregators.get(index, "")
-                aggregator_prefix = aggregators_prefix.get(index, "")
-                answer = {
-                    "answer": aggregator_prefix + ", ".join(cells),
-                    "coordinates": coordinates,
-                    "cells": [table.iat[coordinate] for coordinate in coordinates],
-                }
-                if aggregator:
-                    answer["aggregator"] = aggregator
+    def forward(self, model_inputs):
+        table = model_inputs.pop("table")
+        outputs = (
+            self.sequential_inference(**model_inputs) if self.sequential else self.batch_inference(**model_inputs)
+        )
+        model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}
+        return model_outputs
 
-                answers.append(answer)
-            if len(answer) == 0:
-                raise PipelineException("Empty answer")
-            batched_answers.append(answers if len(answers) > 1 else answers[0])
-        return batched_answers if len(batched_answers) > 1 else batched_answers[0]
+    def postprocess(self, model_outputs):
+        inputs = model_outputs["model_inputs"]
+        table = model_outputs["table"]
+        outputs = model_outputs["outputs"]
+        if self.aggregate:
+            logits, logits_agg = outputs[:2]
+            predictions = self.tokenizer.convert_logits_to_predictions(inputs, logits.detach(), logits_agg)
+            answer_coordinates_batch, agg_predictions = predictions
+            aggregators = {i: self.model.config.aggregation_labels[pred] for i, pred in enumerate(agg_predictions)}
+
+            no_agg_label_index = self.model.config.no_aggregation_label_index
+            aggregators_prefix = {
+                i: aggregators[i] + " > " for i, pred in enumerate(agg_predictions) if pred != no_agg_label_index
+            }
+        else:
+            logits = outputs[0]
+            predictions = self.tokenizer.convert_logits_to_predictions(inputs, logits.detach())
+            answer_coordinates_batch = predictions[0]
+            aggregators = {}
+            aggregators_prefix = {}
+
+        answers = []
+        for index, coordinates in enumerate(answer_coordinates_batch):
+            cells = [table.iat[coordinate] for coordinate in coordinates]
+            aggregator = aggregators.get(index, "")
+            aggregator_prefix = aggregators_prefix.get(index, "")
+            answer = {
+                "answer": aggregator_prefix + ", ".join(cells),
+                "coordinates": coordinates,
+                "cells": [table.iat[coordinate] for coordinate in coordinates],
+            }
+            if aggregator:
+                answer["aggregator"] = aggregator
+
+            answers.append(answer)
+        if len(answer) == 0:
+            raise PipelineException("Empty answer")
+        return answers if len(answers) > 1 else answers[0]
