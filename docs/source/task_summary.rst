@@ -107,7 +107,8 @@ each other. The process is the following:
     >>> sequence_1 = "Apples are especially bad for your health"
     >>> sequence_2 = "HuggingFace's headquarters are situated in Manhattan"
 
-    >>> # The tokekenizer will automatically add any model specific separators (i.e. <CLS> and <SEP>) and tokens to the sequence, as well as compute the attention masks.
+    >>> # The tokenizer will automatically add any model specific separators (i.e. <CLS> and <SEP>) and tokens to
+    >>> # the sequence, as well as compute the attention masks.
     >>> paraphrase = tokenizer(sequence_0, sequence_2, return_tensors="pt")
     >>> not_paraphrase = tokenizer(sequence_0, sequence_1, return_tensors="pt")
 
@@ -141,7 +142,8 @@ each other. The process is the following:
     >>> sequence_1 = "Apples are especially bad for your health"
     >>> sequence_2 = "HuggingFace's headquarters are situated in Manhattan"
 
-    >>> # The tokekenizer will automatically add any model specific separators (i.e. <CLS> and <SEP>) and tokens to the sequence, as well as compute the attention masks.
+    >>> # The tokenizer will automatically add any model specific separators (i.e. <CLS> and <SEP>) and tokens to
+    >>> # the sequence, as well as compute the attention masks.
     >>> paraphrase = tokenizer(sequence_0, sequence_2, return_tensors="tf")
     >>> not_paraphrase = tokenizer(sequence_0, sequence_1, return_tensors="tf")
 
@@ -390,7 +392,8 @@ Here is an example of doing masked language modeling using a model and a tokeniz
     >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
     >>> model = AutoModelForMaskedLM.from_pretrained("distilbert-base-cased")
 
-    >>> sequence = f"Distilled models are smaller than the models they mimic. Using them instead of the large versions would help {tokenizer.mask_token} our carbon footprint."
+    >>> sequence = "Distilled models are smaller than the models they mimic. Using them instead of the large " \
+    ...     f"versions would help {tokenizer.mask_token} our carbon footprint."
 
     >>> inputs = tokenizer(sequence, return_tensors="pt")
     >>> mask_token_index = torch.where(inputs["input_ids"] == tokenizer.mask_token_id)[1]
@@ -399,6 +402,14 @@ Here is an example of doing masked language modeling using a model and a tokeniz
     >>> mask_token_logits = token_logits[0, mask_token_index, :]
 
     >>> top_5_tokens = torch.topk(mask_token_logits, 5, dim=1).indices[0].tolist()
+
+    >>> for token in top_5_tokens:
+    ...     print(sequence.replace(tokenizer.mask_token, tokenizer.decode([token])))
+    Distilled models are smaller than the models they mimic. Using them instead of the large versions would help reduce our carbon footprint.
+    Distilled models are smaller than the models they mimic. Using them instead of the large versions would help increase our carbon footprint.
+    Distilled models are smaller than the models they mimic. Using them instead of the large versions would help decrease our carbon footprint.
+    Distilled models are smaller than the models they mimic. Using them instead of the large versions would help offset our carbon footprint.
+    Distilled models are smaller than the models they mimic. Using them instead of the large versions would help improve our carbon footprint.
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelForMaskedLM, AutoTokenizer
     >>> import tensorflow as tf
@@ -406,7 +417,8 @@ Here is an example of doing masked language modeling using a model and a tokeniz
     >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
     >>> model = TFAutoModelForMaskedLM.from_pretrained("distilbert-base-cased")
 
-    >>> sequence = f"Distilled models are smaller than the models they mimic. Using them instead of the large versions would help {tokenizer.mask_token} our carbon footprint."
+    >>> sequence = "Distilled models are smaller than the models they mimic. Using them instead of the large " \
+    ...     f"versions would help {tokenizer.mask_token} our carbon footprint."
 
     >>> inputs = tokenizer(sequence, return_tensors="tf")
     >>> mask_token_index = tf.where(inputs["input_ids"] == tokenizer.mask_token_id)[0, 1]
@@ -416,11 +428,6 @@ Here is an example of doing masked language modeling using a model and a tokeniz
 
     >>> top_5_tokens = tf.math.top_k(mask_token_logits, 5).indices.numpy()
 
-
-This prints five sequences, with the top 5 tokens predicted by the model:
-
-.. code-block::
-
     >>> for token in top_5_tokens:
     ...     print(sequence.replace(tokenizer.mask_token, tokenizer.decode([token])))
     Distilled models are smaller than the models they mimic. Using them instead of the large versions would help reduce our carbon footprint.
@@ -428,6 +435,9 @@ This prints five sequences, with the top 5 tokens predicted by the model:
     Distilled models are smaller than the models they mimic. Using them instead of the large versions would help decrease our carbon footprint.
     Distilled models are smaller than the models they mimic. Using them instead of the large versions would help offset our carbon footprint.
     Distilled models are smaller than the models they mimic. Using them instead of the large versions would help improve our carbon footprint.
+
+
+This prints five sequences, with the top 5 tokens predicted by the model.
 
 
 Causal Language Modeling
@@ -529,7 +539,8 @@ As a default all models apply *Top-K* sampling when used in pipelines, as config
 
     >>> text_generator = pipeline("text-generation")
     >>> print(text_generator("As far as I am concerned, I will", max_length=50, do_sample=False))
-    [{'generated_text': 'As far as I am concerned, I will be the first to admit that I am not a fan of the idea of a "free market." I think that the idea of a free market is a bit of a stretch. I think that the idea'}]
+    [{'generated_text': 'As far as I am concerned, I will be the first to admit that I am not a fan of the idea of a
+    "free market." I think that the idea of a free market is a bit of a stretch. I think that the idea'}]
 
 
 
@@ -569,6 +580,11 @@ Below is an example of text generation using ``XLNet`` and its tokenizer, which 
     >>> set_seed(42)
     >>> generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
 
+    >>> print(generated)
+    Today the weather is really nice and I am planning on anning on going to a nearby restaurant on Monday. It is very
+    cool with the clouds and the wind. A nice afternoon is on the way out of there, when I get my phone in the sun.
+    Sounds like its a good day in my house, but on that "good"" thing. There is a group of people who'd want to be out
+    and
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelForCausalLM, AutoTokenizer
 
@@ -596,10 +612,11 @@ Below is an example of text generation using ``XLNet`` and its tokenizer, which 
     >>> outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
     >>> generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
 
-.. code-block::
-
     >>> print(generated)
-    Today the weather is really nice and I am planning on anning on riding a "" over to the coast. It is also an ideal day to fly to Bali and see more of the local "".<eop> “...The weather is great for travel and traveling as far as local "".”. When the weather is good, I will ride my "" over to the coast and see more of
+    Today the weather is really nice and I am planning on anning on riding a "" over to the coast. It is also an ideal
+    day to fly to Bali and see more of the local "".<eop> “...The weather is great for travel and traveling as far as
+    local "".”. When the weather is good, I will ride my "" over to the coast and see more of
+
 
 Text generation is currently possible with *GPT-2*, *OpenAi-GPT*, *CTRL*, *XLNet*, *Transfo-XL* and *Reformer* in
 PyTorch and for most models in Tensorflow as well. As can be seen in the example above *XLNet* and *Transfo-XL* often
@@ -689,26 +706,13 @@ Here is an example of doing named entity recognition, using a model and a tokeni
     >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
-    >>> label_list = [
-    ...     "O",       # Outside of a named entity
-    ...     "B-MISC",  # Beginning of a miscellaneous entity right after another miscellaneous entity
-    ...     "I-MISC",  # Miscellaneous entity
-    ...     "B-PER",   # Beginning of a person's name right after another person's name
-    ...     "I-PER",   # Person's name
-    ...     "B-ORG",   # Beginning of an organisation right after another organisation
-    ...     "I-ORG",   # Organisation
-    ...     "B-LOC",   # Beginning of a location right after another location
-    ...     "I-LOC"    # Location
-    ... ]
+    >>> sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, " \
+    ...            "therefore very close to the Manhattan Bridge."
 
-    >>> sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very" \
-    ...            "close to the Manhattan Bridge."
+    >>> inputs = tokenizer(sequence, return_tensors="pt")
+    >>> tokens = inputs.tokens()
 
-    >>> # Bit of a hack to get the tokens with the special tokens
-    >>> tokens = tokenizer.tokenize(tokenizer.decode(tokenizer.encode(sequence)))
-    >>> inputs = tokenizer.encode(sequence, return_tensors="pt")
-
-    >>> outputs = model(inputs).logits
+    >>> outputs = model(**inputs).logits
     >>> predictions = torch.argmax(outputs, dim=2)
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelForTokenClassification, AutoTokenizer
@@ -717,14 +721,13 @@ Here is an example of doing named entity recognition, using a model and a tokeni
     >>> model = TFAutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
-    >>> sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very" \
-    ...            "close to the Manhattan Bridge."
+    >>> sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, " \
+    ...            "therefore very close to the Manhattan Bridge."
 
-    >>> # Bit of a hack to get the tokens with the special tokens
-    >>> tokens = tokenizer.tokenize(tokenizer.decode(tokenizer.encode(sequence)))
-    >>> inputs = tokenizer.encode(sequence, return_tensors="tf")
+    >>> inputs = tokenizer(sequence, return_tensors="tf")
+    >>> tokens = inputs.tokens()
 
-    >>> outputs = model(inputs)[0]
+    >>> outputs = model(**inputs)[0]
     >>> predictions = tf.argmax(outputs, axis=2)
 
 
@@ -765,14 +768,14 @@ illustrated below:
     (',', 'O')
     ('therefore', 'O')
     ('very', 'O')
-    ('##c', 'O')
-    ('##lose', 'O')
+    ('close', 'O')
     ('to', 'O')
     ('the', 'O')
     ('Manhattan', 'I-LOC')
     ('Bridge', 'I-LOC')
     ('.', 'O')
     ('[SEP]', 'O')
+
 
 Summarization
 -----------------------------------------------------------------------------------------------------------------------
@@ -821,7 +824,9 @@ below. This outputs the following summary:
 .. code-block::
 
     >>> print(summarizer(ARTICLE, max_length=130, min_length=30, do_sample=False))
-    [{'summary_text': ' Liana Barrientos, 39, is charged with two counts of "offering a false instrument for filing in the first degree" In total, she has been married 10 times, with nine of her marriages occurring between 1999 and 2002 . At one time, she was married to eight men at once, prosecutors say .'}]
+    [{'summary_text': ' Liana Barrientos, 39, is charged with two counts of "offering a false instrument for filing in
+    the first degree" In total, she has been married 10 times, with nine of her marriages occurring between 1999 and
+    2002 . At one time, she was married to eight men at once, prosecutors say .'}]
 
 Here is an example of doing summarization using a model and a tokenizer. The process is the following:
 
@@ -843,8 +848,15 @@ CNN / Daily Mail), it yields very good results.
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.
-    >>> inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="pt", max_length=512, truncation=True)
-    >>> outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
+    >>> inputs = tokenizer("summarize: " + ARTICLE, return_tensors="pt", max_length=512, truncation=True)
+    >>> outputs = model.generate(
+    ...     inputs["input_ids"], max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True
+    ... )
+
+    >>> print(tokenizer.decode(outputs[0]))
+    <pad> prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal
+    counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them
+    between 1999 and 2002.</s>
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelForSeq2SeqLM, AutoTokenizer
 
@@ -852,13 +864,15 @@ CNN / Daily Mail), it yields very good results.
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.
-    >>> inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="tf", max_length=512)
-    >>> outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
-
-.. code-block::
+    >>> inputs = tokenizer("summarize: " + ARTICLE, return_tensors="tf", max_length=512)
+    >>> outputs = model.generate(
+    ...     inputs["input_ids"], max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True
+    ... )
 
     >>> print(tokenizer.decode(outputs[0]))
-    <pad> prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them between 1999 and 2002.</s>
+    <pad> prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal
+    counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them
+    between 1999 and 2002.
 
 
 Translation
@@ -903,20 +917,27 @@ Here is an example of doing translation using a model and a tokenizer. The proce
     >>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
-    >>> inputs = tokenizer.encode("translate English to German: Hugging Face is a technology company based in New York and Paris", return_tensors="pt")
-    >>> outputs = model.generate(inputs, max_length=40, num_beams=4, early_stopping=True)
+    >>> inputs = tokenizer(
+    ...     "translate English to German: Hugging Face is a technology company based in New York and Paris",
+    ...     return_tensors="pt"
+    ... )
+    >>> outputs = model.generate(inputs["input_ids"], max_length=40, num_beams=4, early_stopping=True)
+
+    >>> print(tokenizer.decode(outputs[0]))
+    <pad> Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.</s>
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelForSeq2SeqLM, AutoTokenizer
 
     >>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-base")
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
-    >>> inputs = tokenizer.encode("translate English to German: Hugging Face is a technology company based in New York and Paris", return_tensors="tf")
-    >>> outputs = model.generate(inputs, max_length=40, num_beams=4, early_stopping=True)
-
-As with the pipeline example, we get the same translation:
-
-.. code-block::
+    >>> inputs = tokenizer(
+    ...     "translate English to German: Hugging Face is a technology company based in New York and Paris",
+    ...     return_tensors="tf"
+    ... )
+    >>> outputs = model.generate(inputs["input_ids"], max_length=40, num_beams=4, early_stopping=True)
 
     >>> print(tokenizer.decode(outputs[0]))
-    Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
+    <pad> Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
+
+We get the same translation as with the pipeline example.
