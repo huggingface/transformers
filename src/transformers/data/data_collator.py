@@ -803,7 +803,7 @@ class DataCollatorForNetutralCellModeling():
 
 
         # 10% of the time, we replace postive to negative
-        postive_negative_tokens = self.postive_negative_tokens_ids(input)
+        postive_negative_tokens = self.postive_negative_tokens_ids(inputs)
         indices_replaced = torch.bernoulli(torch.full(labels.shape, 1.0)).bool() & masked_indices & ~neutral_indices_replaced
         inputs[indices_replaced] = postive_negative_tokens[indices_replaced]
 
