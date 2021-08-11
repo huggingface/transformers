@@ -152,6 +152,7 @@ _import_structure = {
         "BasicTokenizer",
         "BertConfig",
         "BertTokenizer",
+        "CellBertTokenizer",
         "WordpieceTokenizer",
     ],
     "models.bert_generation": ["BertGenerationConfig"],
@@ -1757,6 +1758,7 @@ if TYPE_CHECKING:
         BasicTokenizer,
         BertConfig,
         BertTokenizer,
+        CellBertTokenizer,
         WordpieceTokenizer,
     )
     from .models.bert_generation import BertGenerationConfig

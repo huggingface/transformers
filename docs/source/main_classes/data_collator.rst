@@ -64,8 +64,3 @@ DataCollatorForWholeWordMask
     :members: mask_tokens
 
 
-DataCollatorForPermutationLanguageModeling
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.data.data_collator.DataCollatorForPermutationLanguageModeling
-    :members: mask_tokens
