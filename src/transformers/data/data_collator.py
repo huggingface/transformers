@@ -790,7 +790,7 @@ class DataCollatorForNetutralCellModeling():
 
 
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
-        print('inputs.shapes', inputs[0])
+        print('inputs[indices_replaced]', inputs[indices_replaced])
 
         # 10% of the time, we replace masked input tokens with random word
         indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
