@@ -786,6 +786,7 @@ class DataCollatorForNetutralCellModeling():
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
         indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+        print('inputs', inputs)
         print('inputs.shapes', inputs.shape)
         print('indices_replaced.shape', indices_replaced.shape)
         print('indices_replaced', indices_replaced)
