@@ -763,9 +763,8 @@ class DataCollatorForNetutralCellModeling():
             batch["labels"] = labels
         return batch
 
-    def neutral_tokens_ids(self, input):
-        decode = self.tokenizer.decode(input, skip_special_tokens=True)
-        decode = decode.replace('+', '').replace('-', '')
+    def neutral_tokens_ids(self, inputs):
+        decode = [self.tokenizer.decode(input, skip_special_tokens=True).rstrip('+').rstrip('-') for input in inputs]
         return self.tokenizer.encode(decode)
 
     def mask_tokens(
@@ -790,20 +789,16 @@ class DataCollatorForNetutralCellModeling():
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        neutral_tokens = self.neutral_tokens_ids(inputs)
         indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-        
-        for index, (input, indices_) in enumerate(zip(inputs, indices_replaced)):
-            # print('input', input)
-            print('inputs[index][indices_]', inputs[index][indices_])
-            print('input' , self.tokenizer.decode(input, skip_special_tokens=True))
-            print(indices_)
-            neutral_tokens = self.neutral_tokens_ids(input)
-            print('neutral_tokens ', self.tokenizer.decode(neutral_tokens, skip_special_tokens=True))
-            # print('convert_ids_to_tokens', self.tokenizer.convert_ids_to_tokens(input))
-            inputs[index][indices_] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
-            print('corrupted neural tokens ', self.tokenizer.decode(inputs[index], skip_special_tokens=True))
+        inputs[indices_replaced] = neutral_tokens[indices_replaced]
 
-        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
+        for index, (label, input, indices) in enumerate(zip(labels, inputs, indices_replaced)):
+            # print('input', input)
+            print('inputs', input)
+            print('indices', indices)
+            print('label', label)
+
 
 
         # 10% of the time, we replace masked input tokens with random word
