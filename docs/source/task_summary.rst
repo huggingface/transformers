@@ -345,27 +345,27 @@ This outputs the sequences with the mask filled, the confidence score, and the t
 
     >>> from pprint import pprint
     >>> pprint(unmasker(f"HuggingFace is creating a {unmasker.tokenizer.mask_token} that the community uses to solve NLP tasks."))
-    [{'score': 0.179275,
+    [{'score': 0.1793,
       'sequence': 'HuggingFace is creating a tool that the community uses to solve '
                   'NLP tasks.',
       'token': 3944,
       'token_str': ' tool'},
-     {'score': 0.113494,
+     {'score': 0.1135,
       'sequence': 'HuggingFace is creating a framework that the community uses to '
                   'solve NLP tasks.',
       'token': 7208,
       'token_str': ' framework'},
-     {'score': 0.0524355,
+     {'score': 0.0524,
       'sequence': 'HuggingFace is creating a library that the community uses to '
                   'solve NLP tasks.',
       'token': 5560,
       'token_str': ' library'},
-     {'score': 0.0349353,
+     {'score': 0.0349,
       'sequence': 'HuggingFace is creating a database that the community uses to '
                   'solve NLP tasks.',
       'token': 8503,
       'token_str': ' database'},
-     {'score': 0.0286025,
+     {'score': 0.0286,
       'sequence': 'HuggingFace is creating a prototype that the community uses to '
                   'solve NLP tasks.',
       'token': 17715,
@@ -669,18 +669,18 @@ Here are the expected results:
 
     >>> for entity in ner_pipe(sequence):
     ...     print(entity)
-    {'entity': 'I-ORG', 'score': 0.999579, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2}
-    {'entity': 'I-ORG', 'score': 0.990976, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7}
-    {'entity': 'I-ORG', 'score': 0.998223, 'index': 3, 'word': 'Face', 'start': 8, 'end': 12}
-    {'entity': 'I-ORG', 'score': 0.999488, 'index': 4, 'word': 'Inc', 'start': 13, 'end': 16}
-    {'entity': 'I-LOC', 'score': 0.999434, 'index': 11, 'word': 'New', 'start': 40, 'end': 43}
-    {'entity': 'I-LOC', 'score': 0.999320, 'index': 12, 'word': 'York', 'start': 44, 'end': 48}
-    {'entity': 'I-LOC', 'score': 0.999379, 'index': 13, 'word': 'City', 'start': 49, 'end': 53}
-    {'entity': 'I-LOC', 'score': 0.986258, 'index': 19, 'word': 'D', 'start': 79, 'end': 80}
-    {'entity': 'I-LOC', 'score': 0.951427, 'index': 20, 'word': '##UM', 'start': 80, 'end': 82}
-    {'entity': 'I-LOC', 'score': 0.933659, 'index': 21, 'word': '##BO', 'start': 82, 'end': 84}
-    {'entity': 'I-LOC', 'score': 0.976165, 'index': 28, 'word': 'Manhattan', 'start': 114, 'end': 123}
-    {'entity': 'I-LOC', 'score': 0.991463, 'index': 29, 'word': 'Bridge', 'start': 124, 'end': 130}
+    {'entity': 'I-ORG', 'score': 0.9996, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2}
+    {'entity': 'I-ORG', 'score': 0.9910, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7}
+    {'entity': 'I-ORG', 'score': 0.9982, 'index': 3, 'word': 'Face', 'start': 8, 'end': 12}
+    {'entity': 'I-ORG', 'score': 0.9995, 'index': 4, 'word': 'Inc', 'start': 13, 'end': 16}
+    {'entity': 'I-LOC', 'score': 0.9994, 'index': 11, 'word': 'New', 'start': 40, 'end': 43}
+    {'entity': 'I-LOC', 'score': 0.9993, 'index': 12, 'word': 'York', 'start': 44, 'end': 48}
+    {'entity': 'I-LOC', 'score': 0.9994, 'index': 13, 'word': 'City', 'start': 49, 'end': 53}
+    {'entity': 'I-LOC', 'score': 0.9863, 'index': 19, 'word': 'D', 'start': 79, 'end': 80}
+    {'entity': 'I-LOC', 'score': 0.9514, 'index': 20, 'word': '##UM', 'start': 80, 'end': 82}
+    {'entity': 'I-LOC', 'score': 0.9337, 'index': 21, 'word': '##BO', 'start': 82, 'end': 84}
+    {'entity': 'I-LOC', 'score': 0.9762, 'index': 28, 'word': 'Manhattan', 'start': 114, 'end': 123}
+    {'entity': 'I-LOC', 'score': 0.9915, 'index': 29, 'word': 'Bridge', 'start': 124, 'end': 130}
 
 Note how the tokens of the sequence "Hugging Face" have been identified as an organisation, and "New York City",
 "DUMBO" and "Manhattan Bridge" have been identified as locations.
