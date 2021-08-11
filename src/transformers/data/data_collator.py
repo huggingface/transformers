@@ -799,7 +799,7 @@ class DataCollatorForNetutralCellModeling():
             neutral_tokens = self.neutral_tokens_ids(input)
             print('neutral_tokens ', self.tokenizer.decode(neutral_tokens, skip_special_tokens=True))
             # print('convert_ids_to_tokens', self.tokenizer.convert_ids_to_tokens(input))
-            inputs[index][indices_] = neutral_tokens[indices_]
+            inputs[index][indices_] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
             print('corrupted neural tokens ', self.tokenizer.decode(inputs[index], skip_special_tokens=True))
 
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
