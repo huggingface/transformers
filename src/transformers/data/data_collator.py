@@ -775,6 +775,7 @@ class DataCollatorForNetutralCellModeling():
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
         labels = inputs.clone()
+        org = inputs.clone()
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
         probability_matrix = torch.full(labels.shape, self.mlm_probability)
         if special_tokens_mask is None:
@@ -797,11 +798,11 @@ class DataCollatorForNetutralCellModeling():
         print(indices_replaced)
         inputs[indices_replaced] = neutral_tokens[indices_replaced]
 
-        for index, (label, input, indices) in enumerate(zip(labels, inputs, indices_replaced)):
+        for index, (label, input, indices) in enumerate(zip(org, inputs, indices_replaced)):
             # print('input', input)
-            print('inputs', input)
+            print('inputs', self.tokenizer.decode(input, skip_special_tokens=False))
             print('indices', indices)
-            print('label', label)
+            print('label', self.tokenizer.decode(label, skip_special_tokens=False))
 
 
 
