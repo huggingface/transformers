@@ -458,7 +458,7 @@ of tokens.
 .. code-block::
 
     >>> ## PYTORCH CODE
-    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed, top_k_top_p_filtering
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, top_k_top_p_filtering
     >>> import torch
     >>> from torch import nn
 
@@ -476,9 +476,6 @@ of tokens.
     >>> # filter
     >>> filtered_next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=50, top_p=1.0)
 
-    >>> # set seed for reproducibility
-    >>> set_seed(42)
-
     >>> # sample
     >>> probs = nn.functional.softmax(filtered_next_token_logits, dim=-1)
     >>> next_token = torch.multinomial(probs, num_samples=1)
@@ -489,7 +486,7 @@ of tokens.
     >>> print(resulting_string)
     Hugging Face is based in DUMBO, New York City, and ...
     >>> ## TENSORFLOW CODE
-    >>> from transformers import TFAutoModelForCausalLM, AutoTokenizer, set_seed, tf_top_k_top_p_filtering
+    >>> from transformers import TFAutoModelForCausalLM, AutoTokenizer, tf_top_k_top_p_filtering
     >>> import tensorflow as tf
 
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -505,9 +502,6 @@ of tokens.
 
     >>> # filter
     >>> filtered_next_token_logits = tf_top_k_top_p_filtering(next_token_logits, top_k=50, top_p=1.0)
-
-    >>> # set seed for reproducibility
-    >>> set_seed(42)
 
     >>> # sample
     >>> next_token = tf.random.categorical(filtered_next_token_logits, dtype=tf.int32, num_samples=1)
@@ -553,7 +547,7 @@ Below is an example of text generation using ``XLNet`` and its tokenizer, which 
 .. code-block::
 
     >>> ## PYTORCH CODE
-    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
     >>> model = AutoModelForCausalLM.from_pretrained("xlnet-base-cased")
     >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
@@ -571,19 +565,14 @@ Below is an example of text generation using ``XLNet`` and its tokenizer, which 
     ... with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
     >>> prompt = "Today the weather is really nice and I am planning on "
-    >>> inputs = tokenizer.encode(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="pt")
+    >>> inputs = tokenizer(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="pt")["input_ids"]
 
-    >>> prompt_length = len(tokenizer.decode(inputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
+    >>> prompt_length = len(tokenizer.decode(inputs[0]))
     >>> outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
-    >>> # set seed for reproducibility
-    >>> set_seed(42)
-    >>> generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
+    >>> generated = prompt + tokenizer.decode(outputs[0])[prompt_length+1:]
 
     >>> print(generated)
-    Today the weather is really nice and I am planning on anning on going to a nearby restaurant on Monday. It is very
-    cool with the clouds and the wind. A nice afternoon is on the way out of there, when I get my phone in the sun.
-    Sounds like its a good day in my house, but on that "good"" thing. There is a group of people who'd want to be out
-    and
+    Today the weather is really nice and I am planning ...
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelForCausalLM, AutoTokenizer
 
@@ -603,18 +592,14 @@ Below is an example of text generation using ``XLNet`` and its tokenizer, which 
     ... with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
     >>> prompt = "Today the weather is really nice and I am planning on "
-    >>> inputs = tokenizer.encode(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="tf")
+    >>> inputs = tokenizer(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="tf")["input_ids"]
 
-    >>> prompt_length = len(tokenizer.decode(inputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
-    >>> # set seed for reproducibility
-    >>> set_seed(42)
+    >>> prompt_length = len(tokenizer.decode(inputs[0]))
     >>> outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
-    >>> generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
+    >>> generated = prompt + tokenizer.decode(outputs[0])[prompt_length+1:]
 
     >>> print(generated)
-    Today the weather is really nice and I am planning on anning on riding a "" over to the coast. It is also an ideal
-    day to fly to Bali and see more of the local "".<eop> “...The weather is great for travel and traveling as far as
-    local "".”. When the weather is good, I will ride my "" over to the coast and see more of
+    Today the weather is really nice and I am planning ...
 
 
 Text generation is currently possible with *GPT-2*, *OpenAi-GPT*, *CTRL*, *XLNet*, *Transfo-XL* and *Reformer* in
