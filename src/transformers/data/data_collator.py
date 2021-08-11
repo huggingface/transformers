@@ -763,6 +763,11 @@ class DataCollatorForNetutralCellModeling():
             batch["labels"] = labels
         return batch
 
+    def neutral_tokens_ids(self, inputs):
+        decode = self.tokenizer.decode(inputs, skip_special_tokens=True)
+        decode = decode.replace('+', '').replace('-', '')
+        return self.tokenizer.encode(decode)
+
     def mask_tokens(
         self, inputs: torch.Tensor, special_tokens_mask: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -786,20 +791,16 @@ class DataCollatorForNetutralCellModeling():
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
         indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-        print('inputs', inputs)
-        print('inputs.shapes', inputs.shape)
-        print('indices_replaced.shape', indices_replaced.shape)
-        print('indices_replaced', indices_replaced)
-
+        neutral_tokens = self.neutral_tokens_ids(inputs)
         
         for input, indices_ in zip (inputs, indices_replaced):
-            print(input)
+            print('input' , self.tokenizer.decode(input, skip_special_tokens=True))
             print(indices_)
-            print('convert_ids_to_tokens', self.tokenizer.convert_ids_to_tokens(input))
+            neutral_tokens = self.neutral_tokens_ids(input)
+            print('neutral_tokens ', self.tokenizer.decode(neutral_tokens, skip_special_tokens=True))
+            # print('convert_ids_to_tokens', self.tokenizer.convert_ids_to_tokens(input))
 
-        print('inputs[indices_replaced]', inputs[indices_replaced])
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
-        print('len(inputs[indices_replaced])', len(inputs[indices_replaced]))
 
 
         # 10% of the time, we replace masked input tokens with random word
