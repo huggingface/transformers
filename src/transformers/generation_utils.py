@@ -2527,7 +2527,7 @@ class GenerationMixin:
 
         if return_dict_in_generate:
             if not output_scores:
-                return sequence_outputs["sequence_scores"] = None
+                sequence_outputs["sequence_scores"] = None
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
