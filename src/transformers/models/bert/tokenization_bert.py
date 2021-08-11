@@ -607,7 +607,7 @@ class CellBertTokenizer(PreTrainedTokenizer):
             )
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
     
-    def tokenize(self, text: TextInput, **kwargs) -> List[str]:
+    def tokenize(self, text, **kwargs) -> List[str]:
         return text.split()
 
 
