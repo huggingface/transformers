@@ -731,7 +731,7 @@ class DataCollatorForNetutralCellModeling():
     """
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
-    mlm_probability: float = 0.15
+    mlm_probability: float = 0.20
     pad_to_multiple_of: Optional[int] = None
 
     def __post_init__(self):
