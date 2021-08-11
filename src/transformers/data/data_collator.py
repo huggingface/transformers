@@ -793,8 +793,8 @@ class DataCollatorForNetutralCellModeling():
 
         
         for input, indices_ in zip (inputs, indices_replaced):
-            print(input)
-            print(indices_)
+            print(input[indices_])
+            # print(indices_)
 
         print('inputs[indices_replaced]', inputs[indices_replaced])
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
