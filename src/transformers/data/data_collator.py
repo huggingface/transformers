@@ -765,7 +765,8 @@ class DataCollatorForNetutralCellModeling():
 
     def neutral_tokens_ids(self, inputs):
         decode = [self.tokenizer.decode(input, skip_special_tokens=True).rstrip('+').rstrip('-') for input in inputs]
-        return self.tokenizer.encode(decode)
+        return self.tokenizer(decode, return_tensors='pt').input_ids
+
 
     def mask_tokens(
         self, inputs: torch.Tensor, special_tokens_mask: Optional[torch.Tensor] = None
