@@ -763,8 +763,9 @@ class DataCollatorForNetutralCellModeling():
             batch["labels"] = labels
         return batch
 
-    def neutral_tokens_ids(self, inputs):
-        decode = self.tokenizer.decode(inputs, skip_special_tokens=True)
+    def neutral_tokens_ids(self, input):
+        print('input in neutral_tokens_ids', input)
+        decode = self.tokenizer.decode(input, skip_special_tokens=True)
         decode = decode.replace('+', '').replace('-', '')
         return self.tokenizer.encode(decode)
 
