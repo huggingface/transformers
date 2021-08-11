@@ -96,6 +96,7 @@ jobs:
 #
 #      - name: Install dependencies
 #        run: |
+#          apt -y update && apt install -y git
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,onnxruntime,sentencepiece]
 #
@@ -211,6 +212,7 @@ jobs:
 #
 #      - name: Install dependencies
 #        run: |
+#          apt -y update && apt install -y git
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,onnxruntime,sentencepiece]
 #
