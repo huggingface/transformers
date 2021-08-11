@@ -730,15 +730,15 @@ class DataCollatorForNetutralCellModeling():
     Data collator used for language modeling that corrupted cells and replace with neutral cells.
     """
     tokenizer: PreTrainedTokenizerBase
-    mlm: bool = True
-    mlm_probability: float = 0.20
+    ncm: bool = True
+    mlm_probability: float = 0.30
     pad_to_multiple_of: Optional[int] = None
 
     def __post_init__(self):
-        if self.mlm and self.tokenizer.mask_token is None:
+        if self.ncm and self.tokenizer.mask_token is None:
             raise ValueError(
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. "
-                "You should pass `mlm=False` to train on causal language modeling instead."
+                "You should pass `ncm=False` to train on causal language modeling instead."
             )
 
     def __call__(
@@ -752,7 +752,7 @@ class DataCollatorForNetutralCellModeling():
 
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)
-        if self.mlm:
+        if self.ncm:
             batch["input_ids"], batch["labels"] = self.mask_tokens(
                 batch["input_ids"], special_tokens_mask=special_tokens_mask
             )
@@ -767,6 +767,9 @@ class DataCollatorForNetutralCellModeling():
         decode = [self.tokenizer.decode(input, skip_special_tokens=False).replace('+', '').replace('-', '') for input in inputs]
         return self.tokenizer(decode, return_tensors='pt', add_special_tokens=False).input_ids
 
+    def postive_negative_tokens_ids(self,inputs):
+        decode = [self.tokenizer.decode(input, skip_special_tokens=False).replace('+', '*').replace('-', '+').replace('*', '-') for input in inputs]
+        return self.tokenizer(decode, return_tensors='pt', add_special_tokens=False).input_ids
 
     def mask_tokens(
         self, inputs: torch.Tensor, special_tokens_mask: Optional[torch.Tensor] = None
@@ -792,13 +795,10 @@ class DataCollatorForNetutralCellModeling():
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
         neutral_tokens = self.neutral_tokens_ids(inputs)
-        indices_replaced = torch.bernoulli(torch.full(labels.shape, 1.0)).bool() & masked_indices
-        print(inputs.shape)
-        print(neutral_tokens.shape)
-        print(indices_replaced)
-        inputs[indices_replaced] = neutral_tokens[indices_replaced]
+        neutral_indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+        inputs[neutral_indices_replaced] = neutral_tokens[neutral_indices_replaced]
 
-        for index, (label, input, indices, n) in enumerate(zip(org, inputs, indices_replaced, neutral_tokens)):
+        for index, (label, input, indices, n) in enumerate(zip(org, inputs, neutral_indices_replaced, neutral_tokens)):
             # print('input', input)
             print('inputs', self.tokenizer.decode(input, skip_special_tokens=False))
             print('indices', indices)
@@ -807,10 +807,10 @@ class DataCollatorForNetutralCellModeling():
 
 
 
-        # # 10% of the time, we replace masked input tokens with random word
-        # indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-        # random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long)
-        # inputs[indices_random] = random_words[indices_random]
+        # 10% of the time, we replace postive to negative
+        postive_negative_tokens = self.postive_negative_tokens_ids(input)
+        indices_replaced = torch.bernoulli(torch.full(labels.shape, 1.0)).bool() & masked_indices & ~neutral_indices_replaced
+        inputs[indices_replaced] = postive_negative_tokens[indices_replaced]
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
