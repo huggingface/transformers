@@ -195,7 +195,8 @@ sequence:
 .. code-block::
 
     >>> print(inputs)
-    {'input_ids': [101, 2057, 2024, 2200, 3407, 2000, 2265, 2017, 1996, 100, 19081, 3075, 1012, 102], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+    {'input_ids': [101, 2057, 2024, 2200, 3407, 2000, 2265, 2017, 1996, 100, 19081, 3075, 1012, 102],
+     'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
 You can pass a list of sentences directly to your tokenizer. If your goal is to send them through your model as a
 batch, you probably want to pad them all to the same length, truncate them to the maximum length the model can accept
