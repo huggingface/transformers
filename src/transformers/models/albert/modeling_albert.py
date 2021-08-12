@@ -262,6 +262,52 @@ class AlbertEmbeddings(nn.Module):
         return embeddings
 
 
+####Creating a new class to eliminate positional embeddding
+
+class CellEmbeddings(AlbertEmbeddings):
+    """
+    Construct the embeddings from word, position and token_type embeddings.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.position_embedding_type = None
+ 
+
+    def forward(
+        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+    ):
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+
+        # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
+        # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
+        # issue #5664
+        if token_type_ids is None:
+            if hasattr(self, "token_type_ids"):
+                buffered_token_type_ids = self.token_type_ids[:, :seq_length]
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
+                token_type_ids = buffered_token_type_ids_expanded
+            else:
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = inputs_embeds + token_type_embeddings
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
+
 class AlbertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -286,10 +332,7 @@ class AlbertAttention(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pruned_heads = set()
 
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+        self.position_embedding_type = None
 
     # Copied from transformers.models.bert.modeling_bert.BertSelfAttention.transpose_for_scores
     def transpose_for_scores(self, x):
@@ -332,21 +375,21 @@ class AlbertAttention(nn.Module):
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+        # if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        #     seq_length = hidden_states.size()[1]
+        #     position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+        #     position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+        #     distance = position_ids_l - position_ids_r
+        #     positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+        #     positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+        #     if self.position_embedding_type == "relative_key":
+        #         relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+        #         attention_scores = attention_scores + relative_position_scores
+        #     elif self.position_embedding_type == "relative_key_query":
+        #         relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+        #         relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+        #         attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -518,7 +561,6 @@ class AlbertPreTrainedModel(PreTrainedModel):
 class AlbertForPreTrainingOutput(ModelOutput):
     """
     Output type of :class:`~transformers.AlbertForPreTraining`.
-
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
@@ -531,12 +573,10 @@ class AlbertForPreTrainingOutput(ModelOutput):
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`.
-
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
@@ -549,15 +589,12 @@ class AlbertForPreTrainingOutput(ModelOutput):
 
 
 ALBERT_START_DOCSTRING = r"""
-
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
-
     This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
     general usage and behavior.
-
     Args:
         config (:class:`~transformers.AlbertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -569,38 +606,29 @@ ALBERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
-
             Indices can be obtained using :class:`~transformers.AlbertTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.__call__` and :meth:`transformers.PreTrainedTokenizer.encode` for
             details.
-
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
-
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
-
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
             config.max_position_embeddings - 1]``.
-
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
@@ -630,7 +658,7 @@ class AlbertModel(AlbertPreTrainedModel):
         super().__init__(config)
 
         self.config = config
-        self.embeddings = AlbertEmbeddings(config)
+        self.embeddings = CellEmbeddings(config)
         self.encoder = AlbertTransformer(config)
         if add_pooling_layer:
             self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
@@ -652,10 +680,8 @@ class AlbertModel(AlbertPreTrainedModel):
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} ALBERT has
         a different architecture in that its layers are shared across groups, which then has inner groups. If an ALBERT
         model has 12 hidden layers and 2 hidden groups, with two inner groups, there is a total of 4 different layers.
-
         These layers are flattened: the indices [0,1] correspond to the two inner groups of the first hidden layer,
         while [2,3] correspond to the two inner groups of the second hidden layer.
-
         Any layer with in index other than [0,1,2,3] will result in an error. See base class PreTrainedModel for more
         information about head pruning
         """
@@ -794,23 +820,16 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
             (see :obj:`input_ids` docstring) Indices should be in ``[0, 1]``. ``0`` indicates original order (sequence
             A, then sequence B), ``1`` indicates switched order (sequence B, then sequence A).
-
         Returns:
-
         Example::
-
             >>> from transformers import AlbertTokenizer, AlbertForPreTraining
             >>> import torch
-
             >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
             >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2')
-
             >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             >>> outputs = model(input_ids)
-
             >>> prediction_logits = outputs.prediction_logits
             >>> sop_logits = outputs.sop_logits
-
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
