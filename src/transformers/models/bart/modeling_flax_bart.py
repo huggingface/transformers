@@ -1335,7 +1335,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        deterministic: bool = True,
+        train: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -1427,7 +1427,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=deterministic,
+            deterministic=not train,
             rngs=rngs,
             mutable=mutable,
             method=_decoder_forward,
