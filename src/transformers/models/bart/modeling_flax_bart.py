@@ -702,7 +702,6 @@ class FlaxBartEncoder(nn.Module):
                 self.config.vocab_size,
                 embed_dim,
                 embedding_init=jax.nn.initializers.normal(self.config.init_std),
-                dtype=self.dtype,
             )
 
         # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
@@ -712,7 +711,6 @@ class FlaxBartEncoder(nn.Module):
             self.config.max_position_embeddings + self.offset,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            dtype=self.dtype,
         )
         self.layers = FlaxBartEncoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
@@ -775,7 +773,6 @@ class FlaxBartDecoder(nn.Module):
                 self.config.vocab_size,
                 embed_dim,
                 embedding_init=jax.nn.initializers.normal(self.config.init_std),
-                dtype=self.dtype,
             )
 
         # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
@@ -785,7 +782,6 @@ class FlaxBartDecoder(nn.Module):
             self.config.max_position_embeddings + self.offset,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            dtype=self.dtype,
         )
 
         self.layers = FlaxBartDecoderLayerCollection(self.config, self.dtype)
@@ -849,7 +845,6 @@ class FlaxBartModule(nn.Module):
             self.config.vocab_size,
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            dtype=self.dtype,
         )
 
         self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
