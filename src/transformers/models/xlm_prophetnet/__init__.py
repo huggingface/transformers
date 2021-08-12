@@ -22,8 +22,7 @@ from ...file_utils import _LazyModule, is_sentencepiece_available, is_torch_avai
 
 _import_structure = {
     "configuration_xlm_prophetnet": [
-        "XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "XLMProphetNetConfig",
+        "XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig",
     ],
 }
 
