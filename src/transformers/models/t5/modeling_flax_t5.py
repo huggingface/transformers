@@ -98,13 +98,13 @@ class FlaxT5DenseReluDense(nn.Module):
         self.wi = nn.Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
         )
         self.wo = nn.Dense(
             self.config.d_model,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wo_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wo_init_std),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -128,19 +128,19 @@ class FlaxT5DenseGatedGeluDense(nn.Module):
         self.wi_0 = nn.Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
         )
         self.wi_1 = nn.Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
         )
         self.wo = nn.Dense(
             self.config.d_model,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wo_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wo_init_std),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -200,25 +200,25 @@ class FlaxT5Attention(nn.Module):
         self.q = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(q_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(q_init_std),
             dtype=self.dtype,
         )
         self.k = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(kv_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(kv_init_std),
             dtype=self.dtype,
         )
         self.v = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(kv_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(kv_init_std),
             dtype=self.dtype,
         )
         self.o = nn.Dense(
             self.d_model,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(o_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(o_init_std),
             dtype=self.dtype,
         )
 
@@ -226,7 +226,7 @@ class FlaxT5Attention(nn.Module):
             self.relative_attention_bias = nn.Embed(
                 self.relative_attention_num_buckets,
                 self.n_heads,
-                embedding_init=jax.nn.initializers.normal(kv_init_std, self.dtype),
+                embedding_init=jax.nn.initializers.normal(kv_init_std),
                 dtype=self.dtype,
             )
 
@@ -714,7 +714,7 @@ class FlaxT5Stack(nn.Module):
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 self.config.d_model,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+                embedding_init=jax.nn.initializers.normal(self.config.init_std),
                 dtype=self.dtype,
             )
 
@@ -1246,7 +1246,7 @@ class FlaxT5Module(nn.Module):
         self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0, self.dtype),
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
             dtype=self.dtype,
         )
 
@@ -1358,7 +1358,7 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor, self.dtype),
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor),
         )
 
         encoder_config = copy.deepcopy(self.config)
@@ -1376,7 +1376,7 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         self.lm_head = nn.Dense(
             self.config.vocab_size,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_factor, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_factor),
             dtype=self.dtype,
         )
 

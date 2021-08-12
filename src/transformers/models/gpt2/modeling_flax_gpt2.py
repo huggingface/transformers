@@ -666,7 +666,7 @@ class FlaxGPT2LMHeadModule(nn.Module):
             self.config.vocab_size,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
 
     def __call__(

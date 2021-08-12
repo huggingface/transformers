@@ -262,18 +262,10 @@ class FlaxCLIPAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.dropout = self.config.attention_dropout
 
-        self.k_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
-        self.v_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
-        self.q_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
-        self.out_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
+        self.k_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.v_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.q_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.out_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
 
         self.causal = isinstance(self.config, CLIPTextConfig)
         if self.causal:
@@ -354,11 +346,9 @@ class FlaxCLIPMLP(nn.Module):
         self.fc1 = nn.Dense(
             self.config.intermediate_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.01),
         )
-        self.fc2 = nn.Dense(
-            self.config.hidden_size, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
+        self.fc2 = nn.Dense(self.config.hidden_size, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
 
     def __call__(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -1032,13 +1022,13 @@ class FlaxCLIPModule(nn.Module):
         self.visual_projection = nn.Dense(
             self.projection_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.02, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.02),
             use_bias=False,
         )
         self.text_projection = nn.Dense(
             self.projection_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.02, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.02),
             use_bias=False,
         )
 

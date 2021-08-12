@@ -119,7 +119,7 @@ class FlaxGPTNeoSelfAttention(nn.Module):
             nn.Dense,
             self.embed_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(use_bias=False), dense(use_bias=False), dense(use_bias=False)
@@ -270,7 +270,7 @@ class FlaxGPTNeoMLP(nn.Module):
 
     def setup(self):
         embed_dim = self.config.hidden_size
-        kernel_init = jax.nn.initializers.normal(self.config.initializer_range, self.dtype)
+        kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
         self.c_fc = nn.Dense(self.intermediate_size, dtype=self.dtype, kernel_init=kernel_init)
         self.c_proj = nn.Dense(embed_dim, dtype=self.dtype, kernel_init=kernel_init)
         self.act = ACT2FN[self.config.activation_function]
@@ -589,7 +589,7 @@ class FlaxGPTNeoForCausalLMModule(nn.Module):
             self.config.vocab_size,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
 
     def __call__(

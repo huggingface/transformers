@@ -289,7 +289,7 @@ class FlaxWav2Vec2LayerNormConvLayer(nn.Module):
             kernel_size=self.config.conv_kernel[self.layer_id],
             strides=(self.config.conv_stride[self.layer_id],),
             use_bias=self.config.conv_bias,
-            kernel_init=jax.nn.initializers.he_normal(dtype=self.dtype),
+            kernel_init=jax.nn.initializers.he_normal(),
             padding="VALID",
             dtype=self.dtype,
         )
@@ -311,7 +311,7 @@ class FlaxConvWithWeightNorm(nn.Module):
         self.conv = nn.Conv(
             features=self.config.hidden_size,
             kernel_size=self.config.num_conv_pos_embeddings,
-            kernel_init=jax.nn.initializers.he_normal(dtype=self.dtype),
+            kernel_init=jax.nn.initializers.he_normal(),
             padding="VALID",
             feature_group_count=self.config.num_conv_pos_embedding_groups,
             dtype=self.dtype,
@@ -321,7 +321,7 @@ class FlaxConvWithWeightNorm(nn.Module):
             self.conv.features // self.conv.feature_group_count,
             self.conv.kernel_size,
         )
-        self.weight_v = self.param("weight_v", jax.nn.initializers.he_normal(dtype=self.dtype), weight_shape)
+        self.weight_v = self.param("weight_v", jax.nn.initializers.he_normal(), weight_shape)
         self.weight_g = self.param("weight_g", lambda _: jnp.linalg.norm(self.weight_v, axis=(0, 1))[None, None, :])
         self.bias = self.param("bias", jax.nn.initializers.zeros, (self.conv.features,))
         self.prev_padding = self.conv.kernel_size // 2
@@ -407,7 +407,7 @@ class FlaxWav2Vec2FeatureProjection(nn.Module):
         self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.projection = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.feat_proj_dropout)
@@ -439,7 +439,7 @@ class FlaxWav2Vec2Attention(nn.Module):
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
@@ -518,7 +518,7 @@ class FlaxWav2Vec2FeedForward(nn.Module):
 
         self.intermediate_dense = nn.Dense(
             self.config.intermediate_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         if isinstance(self.config.hidden_act, str):
@@ -528,7 +528,7 @@ class FlaxWav2Vec2FeedForward(nn.Module):
 
         self.output_dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.output_dropout = nn.Dropout(rate=self.config.hidden_dropout)
@@ -704,7 +704,7 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
         )
         self.weight_proj = nn.Dense(
             self.num_groups * self.num_vars,
-            kernel_init=jax.nn.initializers.normal(1.0, self.dtype),
+            kernel_init=jax.nn.initializers.normal(1.0),
             dtype=self.dtype,
         )
 
@@ -969,7 +969,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
         self.dropout = nn.Dropout(rate=self.config.final_dropout)
         self.lm_head = nn.Dense(
             self.config.vocab_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
 
@@ -1078,12 +1078,12 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         self.quantizer = FlaxWav2Vec2GumbelVectorQuantizer(self.config, dtype=self.dtype)
         self.project_q = nn.Dense(
             self.config.proj_codevector_dim,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.project_hid = nn.Dense(
             self.config.proj_codevector_dim,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
 
