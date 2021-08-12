@@ -65,7 +65,7 @@ make them readable. For instance:
 .. code-block::
 
     >>> classifier('We are very happy to show you the 🤗 Transformers library.')
-    [{'label': 'POSITIVE', 'score': 0.99978}]
+    [{'label': 'POSITIVE', 'score': 0.9998}]
 
 That's encouraging! You can use it on a list of sentences, which will be preprocessed then fed to the model as a
 `batch`, returning a list of dictionaries like this one:
