@@ -23,6 +23,7 @@ import numpy as np
 
 import transformers
 from huggingface_hub import HfApi
+from jax._src.dtypes import dtype
 from requests.exceptions import HTTPError
 from transformers import BertConfig, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
@@ -603,6 +604,18 @@ class FlaxModelTesterMixin:
 
                     logits = new_model(**inputs_dict)["logits"]
                     self.assertEqual(logits.shape[1], 42)
+
+    def test_default_params_dtype(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # check if all params are still in float32 when dtype of computation is bfloat16
+            model = model_class(config, dtype=jnp.dtype("bfloat16"))
+            types = jax.tree_map(lambda x: x.dtype, model.params)
+            types = flatten_dict(types).values()
+
+            for type_ in types:
+                self.assertEquals(type_, jnp.float32)
 
 
 @require_flax
