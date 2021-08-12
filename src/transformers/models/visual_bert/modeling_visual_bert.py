@@ -743,7 +743,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
 
             >>> inputs = tokenizer("The capital of France is Paris.", return_tensors="pt")
             >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
-            >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
+            >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
             >>> inputs.update({{
@@ -923,7 +923,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
             >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
             >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
-            >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
+            >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
             >>> inputs.update({{
@@ -1069,11 +1069,11 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='pt', padding=True)
             >>> # batch size is 1
             >>> inputs_dict = {{k: v.unsqueeze(0) for k,v in encoding.items()}}
-            >>> inputs_dict.update({{
-            ... visual_embeds=visual_embeds,
-            ... visual_attention_mask=visual_attention_mask,
-            ... visual_token_type_ids=visual_token_type_ids,
-            ... labels=labels
+            >>> inputs.update({{
+            ...     "visual_embeds": visual_embeds,
+            ...     "visual_token_type_ids": visual_token_type_ids,
+            ...     "visual_attention_mask": visual_attention_mask,
+            ...     "labels": labels,
             ... }})
             >>> outputs = model(**inputs_dict)
 

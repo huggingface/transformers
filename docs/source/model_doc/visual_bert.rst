@@ -73,7 +73,14 @@ how to get the last hidden state using :class:`~transformers.VisualBertModel`:
         >>> inputs = tokenizer("What is the man eating?", return_tensors="pt")
         >>> # this is a custom function that returns the visual embeddings given the image path
         >>> visual_embeds = get_visual_embeddings(image_path)
+        >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
+        >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
+        >>> inputs.update({{
+        ...     "visual_embeds": visual_embeds,
+        ...     "visual_token_type_ids": visual_token_type_ids,
+        ...     "visual_attention_mask": visual_attention_mask
+        ... }})
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
 
