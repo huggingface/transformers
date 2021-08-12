@@ -1073,7 +1073,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             ...     "visual_embeds": visual_embeds,
             ...     "visual_token_type_ids": visual_token_type_ids,
             ...     "visual_attention_mask": visual_attention_mask,
-            ...     "labels": labels,
+            ...     "labels": labels
             ... }})
             >>> outputs = model(**inputs_dict)
 
