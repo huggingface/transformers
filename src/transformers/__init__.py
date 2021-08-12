@@ -1313,6 +1313,17 @@ if is_tf_available():
             "TFCTRLPreTrainedModel",
         ]
     )
+    _import_structure["models.deberta"].extend(
+        [
+            "TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFDebertaForMaskedLM",
+            "TFDebertaForQuestionAnswering",
+            "TFDebertaForSequenceClassification",
+            "TFDebertaForTokenClassification",
+            "TFDebertaModel",
+            "TFDebertaPreTrainedModel",
+        ]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2849,6 +2860,15 @@ if TYPE_CHECKING:
             TFCTRLLMHeadModel,
             TFCTRLModel,
             TFCTRLPreTrainedModel,
+        )
+        from .models.deberta import (
+            TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDebertaForMaskedLM,
+            TFDebertaForQuestionAnswering,
+            TFDebertaForSequenceClassification,
+            TFDebertaForTokenClassification,
+            TFDebertaModel,
+            TFDebertaPreTrainedModel,
         )
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
