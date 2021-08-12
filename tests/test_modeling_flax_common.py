@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     is_staging_test,
     require_flax,
-    slow,
 )
 from transformers.utils import logging
 
@@ -391,7 +390,6 @@ class FlaxModelTesterMixin:
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
-    @slow
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

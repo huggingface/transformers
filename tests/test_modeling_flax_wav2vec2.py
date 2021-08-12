@@ -187,7 +187,6 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["input_values", "attention_mask"]
             self.assertListEqual(arg_names[:2], expected_arg_names)
 
-    @slow
     # overwrite because of `input_values`
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
