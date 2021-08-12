@@ -682,7 +682,6 @@ class FlaxMarianEncoder(nn.Module):
                 self.config.vocab_size,
                 embed_dim,
                 embedding_init=jax.nn.initializers.normal(self.config.init_std),
-                dtype=self.dtype,
             )
 
         self.embed_positions = create_sinusoidal_positions(self.config.max_position_embeddings, embed_dim)
@@ -744,7 +743,6 @@ class FlaxMarianDecoder(nn.Module):
                 self.config.vocab_size,
                 embed_dim,
                 embedding_init=jax.nn.initializers.normal(self.config.init_std),
-                dtype=self.dtype,
             )
 
         self.embed_positions = create_sinusoidal_positions(self.config.max_position_embeddings, embed_dim)
@@ -807,7 +805,6 @@ class FlaxMarianModule(nn.Module):
             self.config.vocab_size,
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            dtype=self.dtype,
         )
 
         self.encoder = FlaxMarianEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)

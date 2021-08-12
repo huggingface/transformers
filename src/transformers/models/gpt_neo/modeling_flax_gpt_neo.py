@@ -505,13 +505,11 @@ class FlaxGPTNeoModule(nn.Module):
             self.config.vocab_size,
             self.embed_dim,
             embedding_init=embedding_init,
-            dtype=self.dtype,
         )
         self.wpe = nn.Embed(
             self.config.max_position_embeddings,
             self.embed_dim,
             embedding_init=embedding_init,
-            dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.embed_dropout)
         self.h = FlaxGPTNeoBlockCollection(self.config, dtype=self.dtype)
