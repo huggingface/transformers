@@ -168,6 +168,18 @@ class DataCollatorForTokenClassification:
     label_pad_token_id: int = -100
     return_tensors: str = 'pt'
 
+    def __post_init__(self):
+        try:
+            if self.return_tensors == 'pt':
+                import torch
+            elif self.return_tensors == 'tf':
+                import tensorflow
+            elif self.return_tensors == 'np':
+                import numpy
+        except ImportError:
+            raise ImportError(f"return_tensors is set to {self.return_tensors} "
+                              "but we were unable to load that framework!")
+
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
@@ -232,6 +244,31 @@ class DataCollatorForTokenClassification:
         batch = {k: tf.convert_to_tensor(v, dtype=tf.int64) for k, v in batch.items()}
         return batch
 
+    def numpy_call(self, features):
+        import numpy as np
+        label_name = "label" if "label" in features[0].keys() else "labels"
+        labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+        batch = self.tokenizer.pad(
+            features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            # Conversion to tensors will fail if we have labels as they are not of the same length yet.
+            return_tensors="np" if labels is None else None,
+        )
+
+        if labels is None:
+            return batch
+
+        sequence_length = np.array(batch["input_ids"]).shape[1]
+        padding_side = self.tokenizer.padding_side
+        if padding_side == "right":
+            batch["labels"] = [label + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels]
+        else:
+            batch["labels"] = [[self.label_pad_token_id] * (sequence_length - len(label)) + label for label in labels]
+
+        batch = {k: np.array(v, dtype=np.int64) for k, v in batch.items()}
+        return batch
 
 def _collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
