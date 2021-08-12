@@ -123,7 +123,7 @@ class VisualBertEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.input_embeds.device)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
