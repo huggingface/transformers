@@ -530,11 +530,11 @@ class FlaxGPT2Module(nn.Module):
         else:
             outputs = (hidden_states,) + outputs[1:]
         if not return_dict:
-            return  outputs
+            return outputs
 
         return FlaxBaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
+            hidden_states=outputs.all_hidden_states,
             attentions=outputs.attentions,
         )
 
