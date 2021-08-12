@@ -524,19 +524,13 @@ class FlaxGPT2Module(nn.Module):
         hidden_states = outputs[0]
         hidden_states = self.ln_f(hidden_states)
 
-        all_hidden_states = None
         if output_hidden_states:
-            if not return_dict:
-                all_hidden_states = outputs[1]
-            else:
-                all_hidden_states = outputs.hidden_states
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
+            all_hidden_states = outputs[1] + (hidden_states,)
+            outputs = (hidden_states, all_hidden_states) + outputs[2:]
+        else:
+            outputs = (hidden_states,) + outputs[1:]
         if not return_dict:
-            if all_hidden_states:
-                return (hidden_states, all_hidden_states) + outputs[2:]
-            else:
-                return (hidden_states,) + outputs[1:]
+            return  outputs
 
         return FlaxBaseModelOutput(
             last_hidden_state=hidden_states,
