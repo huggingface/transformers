@@ -187,6 +187,8 @@ class DataCollatorForTokenClassification:
             return self.torch_call(features)
         elif return_tensors == 'tf':
             return self.tf_call(features)
+        elif return_tensors == 'np':
+            return self.numpy_call(features)
 
     def torch_call(self, features):
         import torch
