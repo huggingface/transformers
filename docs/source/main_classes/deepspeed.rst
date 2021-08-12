@@ -73,8 +73,6 @@ or via ``transformers``' ``extras``:
 
     pip install transformers[deepspeed]
 
-(will become available starting from ``transformers==4.6.0``)
-
 or find more details on `the DeepSpeed's GitHub page <https://github.com/microsoft/deepspeed#installation>`__ and
 `advanced install <https://www.deepspeed.ai/tutorials/advanced-install/>`__.
 
@@ -90,20 +88,31 @@ To make a local build for DeepSpeed:
     git clone https://github.com/microsoft/DeepSpeed/
     cd DeepSpeed
     rm -rf build
-    TORCH_CUDA_ARCH_LIST="6.1;8.6" DS_BUILD_OPS=1 pip install . \
+    TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 pip install . \
     --global-option="build_ext" --global-option="-j8" --no-cache -v \
     --disable-pip-version-check 2>&1 | tee build.log
 
-Edit ``TORCH_CUDA_ARCH_LIST`` to insert the code for the architectures of the GPU cards you intend to use.
+If you intend to use NVMe offload you will need to also include ``DS_BUILD_AIO=1`` in the instructions above (and also
+install `libaio-dev` system-wide).
 
-Or if you need to use the same setup on multiple machines, make a binary wheel:
+Edit ``TORCH_CUDA_ARCH_LIST`` to insert the code for the architectures of the GPU cards you intend to use. Assuming all
+your cards are the same you can get the arch via:
+
+.. code-block:: bash
+
+    CUDA_VISIBLE_DEVICES=0 python -c "import torch; print(torch.cuda.get_device_capability())"
+
+So if you get ``8, 6``, then use ``TORCH_CUDA_ARCH_LIST="8.6"``. If you have multiple different cards, you can list all
+of them like so ``TORCH_CUDA_ARCH_LIST="6.1;8.6"``
+
+If you need to use the same setup on multiple machines, make a binary wheel:
 
 .. code-block:: bash
 
     git clone https://github.com/microsoft/DeepSpeed/
     cd DeepSpeed
     rm -rf build
-    TORCH_CUDA_ARCH_LIST="6.1;8.6" DS_BUILD_OPS=1 \
+    TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 \
     python setup.py build_ext -j8 bdist_wheel
 
 it will generate something like ``dist/deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl`` which now you can install
@@ -692,7 +701,17 @@ be ignored.
 
 - ``sub_group_size``: ``1e9``
 
-This one does impact GPU memory usage. But no docs at the moment on Deepspeed side to explain the tuning.
+``sub_group_size`` controls the granularity in which parameters are updated during optimizer steps. Parameters are
+grouped into buckets of ``sub_group_size`` and each buckets is updated one at a time. When used with NVMe offload in
+ZeRO-Infinity, ``sub_group_size`` therefore controls the granularity in which model states are moved in and out of CPU
+memory from NVMe during the optimizer step. This prevents running out of CPU memory for extremely large models.
+
+You can leave ``sub_group_size`` to its default value of `1e9` when not using NVMe offload. You may want to change its
+default value in the following cases:
+
+1. Running into OOM during optimizer step: Reduce ``sub_group_size`` to reduce memory utilization of temporary buffers
+2. Optimizer Step is taking a long time: Increase ``sub_group_size`` to improve bandwidth utilization as a result of
+   the increased data buffers.
 
 
 .. _deepspeed-nvme:
@@ -1042,7 +1061,8 @@ optimizers, with the exception of using the combination of HuggingFace scheduler
 | DS Optimizer | No           | Yes          |
 +--------------+--------------+--------------+
 
-If ``offload_optimizer`` is enabled you must use both DeepSpeed scheduler and DeepSpeed optimizer.
+It is possible to use a non-DeepSpeed optimizer when ``offload_optimizer`` is enabled, as long as it has both CPU and
+GPU implementation (except LAMB).
 
 
 
@@ -1136,8 +1156,8 @@ Here is where the schedulers overlap between 🤗 Transformers and DeepSpeed:
   therefore, if you don't configure the scheduler this is scheduler that will get configured by default.
 
 If you don't configure the ``scheduler`` entry in the configuration file, the :class:`~transformers.Trainer` will use
-the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` to configure a 🤗 Transformers version
-of it.
+the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` or ``--warmup_ratio`` to configure a
+🤗 Transformers version of it.
 
 Here is an example of the auto-configured ``scheduler`` entry for ``WarmupLR``:
 
@@ -1158,9 +1178,10 @@ Since `"auto"` is used the :class:`~transformers.Trainer` arguments will set the
 file. This is so that there is one definitive source of the values and to avoid hard to find errors when, for example,
 the learning rate is set to different values in different places. Command line rules. The values that get set are:
 
-- ``warmup_min_lr`` with the value of ``0``
-- ``warmup_max_lr`` with the value of ``--learning_rate``
-- ``warmup_num_steps`` with the value of ``--warmup_steps``
+- ``warmup_min_lr`` with the value of ``0``.
+- ``warmup_max_lr`` with the value of ``--learning_rate``.
+- ``warmup_num_steps`` with the value of ``--warmup_steps`` if provided. Otherwise will use ``--warmup_ratio``
+  multiplied by the number of training steps and rounded up.
 - ``total_num_steps`` with either the value of ``--max_steps`` or if it is not provided, derived automatically at run
   time based on the environment and the size of the dataset and other command line arguments (needed for
   ``WarmupDecayLR``).
@@ -1437,8 +1458,56 @@ won't be possible to load it back.
 
 While the fp16 weights are fine for resuming training, if you finished finetuning your model and want to upload it to
 the `models hub <https://huggingface.co/models>`__ or pass it to someone else you most likely will want to get the fp32
-weights. This cannot be done during training since this is a process that requires a lot of memory, and therefore this
-is performed offline.
+weights. This ideally shouldn't be done during training since this is a process that requires a lot of memory, and
+therefore best to be performed offline after the training is complete. But if desired and you have plenty of free CPU
+memory it can be done in the same training script. The following sections will discuss both approaches.
+
+
+**Live FP32 Weights Recovery:**
+
+This approach may not work if you model is large and you have little free CPU memory left, at the end of the training.
+
+If you have saved at least one checkpoint, and you want to use the latest one, you can do the following:
+
+.. code-block:: python
+
+    from transformers.trainer_utils import get_last_checkpoint
+    from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+    checkpoint_dir = get_last_checkpoint(trainer.args.output_dir)
+    fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
+
+If you're using the ``--load_best_model_at_end`` class:`~transformers.TrainingArguments` argument (to track the best
+checkpoint), then you can finish the training by first saving the final model explicitly and then do the same as above:
+
+.. code-block:: python
+
+    from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+    checkpoint_dir = os.path.join(trainer.args.output_dir, "checkpoint-final")
+    trainer.deepspeed.save_checkpoint(checkpoint_dir)
+    fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
+
+.. note::
+
+    Note, that once ``load_state_dict_from_zero_checkpoint`` was run, the ``model`` will no longer be useable in the
+    DeepSpeed context of the same application. i.e. you will need to re-initialize the deepspeed engine, since
+    ``model.load_state_dict(state_dict)`` will remove all the DeepSpeed magic from it. So do this only at the very end
+    of the training.
+
+Of course, you don't have to use class:`~transformers.Trainer` and you can adjust the examples above to your own
+trainer.
+
+If for some reason you want more refinement, you can also extract the fp32 ``state_dict`` of the weights and apply
+these yourself as is shown in the following example:
+
+.. code-block:: python
+
+    from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
+    state_dict = get_fp32_state_dict_from_zero_checkpoint(checkpoint_dir) # already on cpu
+    model = model.cpu()
+    model.load_state_dict(state_dict)
+
+
+**Offline FP32 Weights Recovery:**
 
 DeepSpeed creates a special conversion script ``zero_to_fp32.py`` which it places in the top-level of the checkpoint
 folder. Using this script you can extract the weights at any point. The script is standalone and you no longer need to
@@ -1467,15 +1536,16 @@ weights just run:
 
 .. code-block:: bash
 
-    python zero_to_fp32.py global_step1 pytorch_model.bin
+    python zero_to_fp32.py . pytorch_model.bin
 
-The script will automatically handle either ZeRO-2 or ZeRO-3 checkpoint.
+This is it. ``pytorch_model.bin`` will now contain the full fp32 model weights consolidated from multiple GPUs.
+
+The script will automatically be able to handle either a ZeRO-2 or ZeRO-3 checkpoint.
 
 ``python zero_to_fp32.py -h`` will give you usage details.
 
-If you have multiple DeepSpeed checkpoint sub-folders, pick the one you know to have the desired weights.
-
-This is it. ``pytorch_model.bin`` will now contain the full fp32 model weights consolidated from multiple GPUs.
+The script will auto-discover the deepspeed sub-folder using the contents of the file ``latest``, which in the current
+example will contain ``global_step1``.
 
 Note: currently the script requires 2x general RAM of the final fp32 model weights.
 
@@ -1530,6 +1600,8 @@ Note: If the fp16 weights of the model can't fit onto the memory of a single GPU
 For full details on this method and other related features please refer to `Constructing Massive Models
 <https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models>`__.
 
+Also when loading fp16-pretrained models, you will want to tell ``from_pretrained`` to use
+``torch_dtype=torch.float16``. For details, please, see :ref:`from_pretrained-torch-dtype`.
 
 
 Gathering Parameters
@@ -1553,6 +1625,56 @@ Also under ZeRO-3, if you write your own code and run into a model parameter wei
 
 stress on ``tensor([1.])``, or if you get an error where it says the parameter is of size ``1``, instead of some much
 larger multi-dimensional shape, this means that the parameter is partitioned and what you see is a ZeRO-3 placeholder.
+
+
+
+
+Filing Issues
+=======================================================================================================================
+
+Here is how to file an issue so that we could quickly get to the bottom of the issue and help you to unblock your work.
+
+In your report please always include:
+
+1. the full Deepspeed config file in the report
+
+2. either the command line arguments if you were using the :class:`~transformers.Trainer` or
+   :class:`~transformers.TrainingArguments` arguments if you were scripting the Trainer setup yourself. Please do not
+   dump the :class:`~transformers.TrainingArguments` as it has dozens of entries that are irrelevant.
+
+3. Output of:
+
+.. code-block:: bash
+
+    python -c 'import torch; print(f"torch: {torch.__version__}")'
+    python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
+    python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
+
+4. If possible include a link to a Google Colab notebook that we can reproduce the problem with. You can use this
+   `notebook <https://github.com/stas00/porting/blob/master/transformers/deepspeed/DeepSpeed_on_colab_CLI.ipynb>`__ as
+   a starting point.
+
+5. Unless it's impossible please always use a standard dataset that we can use and not something custom.
+
+6. If possible try to use one of the existing `examples
+   <https://github.com/huggingface/transformers/tree/master/examples/pytorch>`__ to reproduce the problem with.
+
+Things to consider:
+
+* Deepspeed is often not the cause of the problem.
+
+    Some of the filed issues proved to be Deepspeed-unrelated. That is once Deepspeed was removed from the setup, the
+    problem was still there.
+
+    Therefore, if it's not absolutely obvious it's a DeepSpeed-related problem, as in you can see that there is an
+    exception and you can see that DeepSpeed modules are involved, first re-test your setup without DeepSpeed in it.
+    And only if the problem persists then do mentioned Deepspeed and supply all the required details.
+
+* If it's clear to you that the issue is in the DeepSpeed core and not the integration part, please file the Issue
+  directly with `Deepspeed <https://github.com/microsoft/DeepSpeed/>`__. If you aren't sure, please do not worry,
+  either Issue tracker will do, we will figure it out once you posted it and redirect you to another Issue tracker if
+  need be.
+
 
 
 Troubleshooting

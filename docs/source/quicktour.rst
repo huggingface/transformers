@@ -28,8 +28,15 @@ will dig a little bit more and see how the library gives you access to those mod
 Getting started on a task with a pipeline
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The easiest way to use a pretrained model on a given task is to use :func:`~transformers.pipeline`. 🤗 Transformers
-provides the following tasks out of the box:
+The easiest way to use a pretrained model on a given task is to use :func:`~transformers.pipeline`.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/tiZFewofSLM" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
+🤗 Transformers provides the following tasks out of the box:
 
 - Sentiment analysis: is a text positive or negative?
 - Text generation (in English): provide a prompt and the model will generate what follows.
@@ -58,7 +65,7 @@ make them readable. For instance:
 .. code-block::
 
     >>> classifier('We are very happy to show you the 🤗 Transformers library.')
-    [{'label': 'POSITIVE', 'score': 0.9997795224189758}]
+    [{'label': 'POSITIVE', 'score': 0.9998}]
 
 That's encouraging! You can use it on a list of sentences, which will be preprocessed then fed to the model as a
 `batch`, returning a list of dictionaries like this one:
@@ -137,8 +144,15 @@ to share your fine-tuned model on the hub with the community, using :doc:`this t
 Under the hood: pretrained models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Let's now see what happens beneath the hood when using those pipelines. As we saw, the model and tokenizer are created
-using the :obj:`from_pretrained` method:
+Let's now see what happens beneath the hood when using those pipelines.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/AhChOFRegn4" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
+As we saw, the model and tokenizer are created using the :obj:`from_pretrained` method:
 
 .. code-block::
 
@@ -181,7 +195,8 @@ sequence:
 .. code-block::
 
     >>> print(inputs)
-    {'input_ids': [101, 2057, 2024, 2200, 3407, 2000, 2265, 2017, 1996, 100, 19081, 3075, 1012, 102], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+    {'input_ids': [101, 2057, 2024, 2200, 3407, 2000, 2265, 2017, 1996, 100, 19081, 3075, 1012, 102],
+     'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
 You can pass a list of sentences directly to your tokenizer. If your goal is to send them through your model as a
 batch, you probably want to pad them all to the same length, truncate them to the maximum length the model can accept
@@ -246,12 +261,12 @@ objects are described in greater detail :doc:`here <main_classes/output>`. For n
     >>> ## PYTORCH CODE
     >>> print(pt_outputs)
     SequenceClassifierOutput(loss=None, logits=tensor([[-4.0833,  4.3364],
-        [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
+            [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
     >>> ## TENSORFLOW CODE
     >>> print(tf_outputs)
     TFSequenceClassifierOutput(loss=None, logits=<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
-    array([[-4.0832963 ,  4.3364143 ],
-           [ 0.081807  , -0.04178282]], dtype=float32)>, hidden_states=None, attentions=None)
+    array([[-4.0833 ,  4.3364  ],
+           [ 0.0818, -0.0418]], dtype=float32)>, hidden_states=None, attentions=None)
 
 Notice how the output object has a ``logits`` attribute. You can use this to access the model's final activations.
 
@@ -265,11 +280,11 @@ Let's apply the SoftMax activation to get predictions.
 .. code-block::
 
     >>> ## PYTORCH CODE
-    >>> import torch.nn.functional as F
-    >>> pt_predictions = F.softmax(pt_outputs.logits, dim=-1)
+    >>> from torch import nn
+    >>> pt_predictions = nn.functional.softmax(pt_outputs.logits, dim=-1)
     >>> ## TENSORFLOW CODE
     >>> import tensorflow as tf
-    >>> tf.nn.softmax(tf_outputs.logits, axis=-1)
+    >>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
 
 We can see we get the numbers from before:
 
@@ -278,8 +293,8 @@ We can see we get the numbers from before:
     >>> ## TENSORFLOW CODE
     >>> print(tf_predictions)
     tf.Tensor(
-    [[2.2042994e-04 9.9977952e-01]
-     [5.3086340e-01 4.6913657e-01]], shape=(2, 2), dtype=float32)
+    [[2.2043e-04 9.9978e-01]
+     [5.3086e-01 4.6914e-01]], shape=(2, 2), dtype=float32)
     >>> ## PYTORCH CODE
     >>> print(pt_predictions)
     tensor([[2.2043e-04, 9.9978e-01],
@@ -295,14 +310,14 @@ attribute:
     >>> pt_outputs = pt_model(**pt_batch, labels = torch.tensor([1, 0]))
     >>> print(pt_outputs)
     SequenceClassifierOutput(loss=tensor(0.3167, grad_fn=<NllLossBackward>), logits=tensor([[-4.0833,  4.3364],
-    [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
+            [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
     >>> ## TENSORFLOW CODE
     >>> import tensorflow as tf
     >>> tf_outputs = tf_model(tf_batch, labels = tf.constant([1, 0]))
     >>> print(tf_outputs)
-    TFSequenceClassifierOutput(loss=<tf.Tensor: shape=(2,), dtype=float32, numpy=array([2.2051287e-04, 6.3326043e-01], dtype=float32)>, logits=<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
-    array([[-4.0832963 ,  4.3364143 ],
-           [ 0.081807  , -0.04178282]], dtype=float32)>, hidden_states=None, attentions=None)
+    TFSequenceClassifierOutput(loss=<tf.Tensor: shape=(2,), dtype=float32, numpy=array([2.2051e-04, 6.3326e-01], dtype=float32)>, logits=<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
+    array([[-4.0833 ,  4.3364  ],
+           [ 0.0818, -0.0418]], dtype=float32)>, hidden_states=None, attentions=None)
 
 Models are standard `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ or `tf.keras.Model
 <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ so you can use them in your usual training loop. 🤗

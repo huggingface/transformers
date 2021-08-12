@@ -19,7 +19,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import BigBirdPegasusConfig, is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -31,7 +31,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BigBirdPegasusConfig,
         BigBirdPegasusForCausalLM,
         BigBirdPegasusForConditionalGeneration,
         BigBirdPegasusForQuestionAnswering,
@@ -69,7 +68,6 @@ def prepare_bigbird_pegasus_inputs_dict(
     return input_dict
 
 
-@require_torch
 class BigBirdPegasusModelTester:
     def __init__(
         self,
@@ -129,7 +127,12 @@ class BigBirdPegasusModelTester:
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = BigBirdPegasusConfig(
+        config = self.get_config()
+        inputs_dict = prepare_bigbird_pegasus_inputs_dict(config, input_ids, decoder_input_ids)
+        return config, inputs_dict
+
+    def get_config(self):
+        return BigBirdPegasusConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -150,8 +153,6 @@ class BigBirdPegasusModelTester:
             num_random_blocks=self.num_random_blocks,
             scale_embedding=self.scale_embedding,
         )
-        inputs_dict = prepare_bigbird_pegasus_inputs_dict(config, input_ids, decoder_input_ids)
-        return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()

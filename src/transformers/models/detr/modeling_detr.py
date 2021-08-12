@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
@@ -53,6 +52,7 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DetrConfig"
+_CHECKPOINT_FOR_DOC = "facebook/detr-resnet-50"
 
 DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/detr-resnet-50",
@@ -99,9 +99,7 @@ class DetrModelOutput(Seq2SeqModelOutput):
 
     Args:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model. If
-            :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1,
-            hidden_size)` is output.
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
@@ -149,7 +147,7 @@ class DetrObjectDetectionOutput(ModelOutput):
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use :class:`~transformers.DetrForObjectDetection.post_process` to retrieve the
+            possible padding). You can use :meth:`~transformers.DetrFeatureExtractor.post_process` to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
             Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
@@ -157,9 +155,6 @@ class DetrObjectDetectionOutput(ModelOutput):
             and :obj:`pred_boxes`) for each decoder layer.
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
-
-            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size,
-            1, hidden_size)` is output.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
@@ -215,10 +210,10 @@ class DetrSegmentationOutput(ModelOutput):
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use :meth:`~transformers.DetrForObjectDetection.post_process` to retrieve the
+            possible padding). You can use :meth:`~transformers.DetrFeatureExtractor.post_process` to retrieve the
             unnormalized bounding boxes.
-        pred_masks (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, width, height)`):
-            Segmentation masks for all queries. See also
+        pred_masks (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, height/4, width/4)`):
+            Segmentation masks logits for all queries. See also
             :meth:`~transformers.DetrFeatureExtractor.post_process_segmentation` or
             :meth:`~transformers.DetrFeatureExtractor.post_process_panoptic` to evaluate instance and panoptic
             segmentation masks respectively.
@@ -228,9 +223,6 @@ class DetrSegmentationOutput(ModelOutput):
             and :obj:`pred_boxes`) for each decoder layer.
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
-
-            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size,
-            1, hidden_size)` is output.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
@@ -314,7 +306,7 @@ class DetrFrozenBatchNorm2d(nn.Module):
 def replace_batch_norm(m, name=""):
     for attr_str in dir(m):
         target_attr = getattr(m, attr_str)
-        if isinstance(target_attr, torch.nn.BatchNorm2d):
+        if isinstance(target_attr, nn.BatchNorm2d):
             frozen = DetrFrozenBatchNorm2d(target_attr.num_features)
             bn = getattr(m, attr_str)
             frozen.weight.data.copy_(bn.weight)
@@ -362,7 +354,7 @@ class DetrTimmConvEncoder(nn.Module):
         out = []
         for feature_map in features:
             # downsample pixel_mask to match shape of corresponding feature_map
-            mask = F.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
             out.append((feature_map, mask))
         return out
 
@@ -570,7 +562,7 @@ class DetrAttention(nn.Module):
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if output_attentions:
             # this operation is a bit awkward, but it's required to
@@ -582,7 +574,7 @@ class DetrAttention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -642,16 +634,16 @@ class DetrEncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
 
         hidden_states = self.fc2(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
@@ -731,7 +723,7 @@ class DetrDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
@@ -749,16 +741,16 @@ class DetrDecoderLayer(nn.Module):
                 output_attentions=output_attentions,
             )
 
-            hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -837,8 +829,8 @@ DETR_INPUTS_DOCSTRING = r"""
         pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using :class:`~transformers.DetrTokenizer`. See
-            :meth:`transformers.DetrTokenizer.__call__` for details.
+            Pixel values can be obtained using :class:`~transformers.DetrFeatureExtractor`. See
+            :meth:`transformers.DetrFeatureExtractor.__call__` for details.
 
         pixel_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, height, width)`, `optional`):
             Mask to avoid performing attention on padding pixel values. Mask values selected in ``[0, 1]``:
@@ -885,7 +877,6 @@ class DetrEncoder(DetrPreTrainedModel):
 
     Args:
         config: DetrConfig
-        embed_tokens (torch.nn.Embedding): output embedding
     """
 
     def __init__(self, config: DetrConfig):
@@ -894,14 +885,9 @@ class DetrEncoder(DetrPreTrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
 
-        embed_dim = config.d_model
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
-
         self.layers = nn.ModuleList([DetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-        # in the original DETR, no layernorm is used for the Encoder, as "normalize_before" is set to False by default there
+        # in the original DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
 
         self.init_weights()
 
@@ -946,7 +932,7 @@ class DetrEncoder(DetrPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = inputs_embeds
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
         if attention_mask is not None:
@@ -999,16 +985,12 @@ class DetrDecoder(DetrPreTrainedModel):
 
     Args:
         config: DetrConfig
-        embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: DetrConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: DetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = config.pad_token_id
-        self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.layers = nn.ModuleList([DetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         # in DETR, the decoder uses layernorm after the last decoder layer output
@@ -1372,11 +1354,11 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     ):
         r"""
         labels (:obj:`List[Dict]` of len :obj:`(batch_size,)`, `optional`):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing 2 keys:
-            'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch respectively). The
-            class labels themselves should be a :obj:`torch.LongTensor` of len :obj:`(number of bounding boxes in the
-            image,)` and the boxes a :obj:`torch.FloatTensor` of shape :obj:`(number of bounding boxes in the image,
-            4)`.
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a :obj:`torch.LongTensor` of len :obj:`(number of
+            bounding boxes in the image,)` and the boxes a :obj:`torch.FloatTensor` of shape :obj:`(number of bounding
+            boxes in the image, 4)`.
 
         Returns:
 
@@ -1525,12 +1507,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
     ):
         r"""
         labels (:obj:`List[Dict]` of len :obj:`(batch_size,)`, `optional`):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing 3 keys:
-            'class_labels', 'boxes' and 'masks' (the class labels, bounding boxes and segmentation masks of an image in
-            the batch respectively). The class labels themselves should be a :obj:`torch.LongTensor` of len
-            :obj:`(number of bounding boxes in the image,)`, the boxes a :obj:`torch.FloatTensor` of shape
-            :obj:`(number of bounding boxes in the image, 4)` and the masks a :obj:`torch.FloatTensor` of shape
-            :obj:`(number of bounding boxes in the image, 4)`.
+            Labels for computing the bipartite matching loss, DICE/F-1 loss and Focal loss. List of dicts, each
+            dictionary containing at least the following 3 keys: 'class_labels', 'boxes' and 'masks' (the class labels,
+            bounding boxes and segmentation masks of an image in the batch respectively). The class labels themselves
+            should be a :obj:`torch.LongTensor` of len :obj:`(number of bounding boxes in the image,)`, the boxes a
+            :obj:`torch.FloatTensor` of shape :obj:`(number of bounding boxes in the image, 4)` and the masks a
+            :obj:`torch.FloatTensor` of shape :obj:`(number of bounding boxes in the image, height, width)`.
 
         Returns:
 
@@ -1717,23 +1699,23 @@ class DetrMaskHeadSmallConv(nn.Module):
 
         inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
 
-        self.lay1 = torch.nn.Conv2d(dim, dim, 3, padding=1)
-        self.gn1 = torch.nn.GroupNorm(8, dim)
-        self.lay2 = torch.nn.Conv2d(dim, inter_dims[1], 3, padding=1)
-        self.gn2 = torch.nn.GroupNorm(8, inter_dims[1])
-        self.lay3 = torch.nn.Conv2d(inter_dims[1], inter_dims[2], 3, padding=1)
-        self.gn3 = torch.nn.GroupNorm(8, inter_dims[2])
-        self.lay4 = torch.nn.Conv2d(inter_dims[2], inter_dims[3], 3, padding=1)
-        self.gn4 = torch.nn.GroupNorm(8, inter_dims[3])
-        self.lay5 = torch.nn.Conv2d(inter_dims[3], inter_dims[4], 3, padding=1)
-        self.gn5 = torch.nn.GroupNorm(8, inter_dims[4])
-        self.out_lay = torch.nn.Conv2d(inter_dims[4], 1, 3, padding=1)
+        self.lay1 = nn.Conv2d(dim, dim, 3, padding=1)
+        self.gn1 = nn.GroupNorm(8, dim)
+        self.lay2 = nn.Conv2d(dim, inter_dims[1], 3, padding=1)
+        self.gn2 = nn.GroupNorm(8, inter_dims[1])
+        self.lay3 = nn.Conv2d(inter_dims[1], inter_dims[2], 3, padding=1)
+        self.gn3 = nn.GroupNorm(8, inter_dims[2])
+        self.lay4 = nn.Conv2d(inter_dims[2], inter_dims[3], 3, padding=1)
+        self.gn4 = nn.GroupNorm(8, inter_dims[3])
+        self.lay5 = nn.Conv2d(inter_dims[3], inter_dims[4], 3, padding=1)
+        self.gn5 = nn.GroupNorm(8, inter_dims[4])
+        self.out_lay = nn.Conv2d(inter_dims[4], 1, 3, padding=1)
 
         self.dim = dim
 
-        self.adapter1 = torch.nn.Conv2d(fpn_dims[0], inter_dims[1], 1)
-        self.adapter2 = torch.nn.Conv2d(fpn_dims[1], inter_dims[2], 1)
-        self.adapter3 = torch.nn.Conv2d(fpn_dims[2], inter_dims[3], 1)
+        self.adapter1 = nn.Conv2d(fpn_dims[0], inter_dims[1], 1)
+        self.adapter2 = nn.Conv2d(fpn_dims[1], inter_dims[2], 1)
+        self.adapter3 = nn.Conv2d(fpn_dims[2], inter_dims[3], 1)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -1748,34 +1730,34 @@ class DetrMaskHeadSmallConv(nn.Module):
 
         x = self.lay1(x)
         x = self.gn1(x)
-        x = F.relu(x)
+        x = nn.functional.relu(x)
         x = self.lay2(x)
         x = self.gn2(x)
-        x = F.relu(x)
+        x = nn.functional.relu(x)
 
         cur_fpn = self.adapter1(fpns[0])
         if cur_fpn.size(0) != x.size(0):
             cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + F.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
         x = self.lay3(x)
         x = self.gn3(x)
-        x = F.relu(x)
+        x = nn.functional.relu(x)
 
         cur_fpn = self.adapter2(fpns[1])
         if cur_fpn.size(0) != x.size(0):
             cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + F.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
         x = self.lay4(x)
         x = self.gn4(x)
-        x = F.relu(x)
+        x = nn.functional.relu(x)
 
         cur_fpn = self.adapter3(fpns[2])
         if cur_fpn.size(0) != x.size(0):
             cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + F.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
         x = self.lay5(x)
         x = self.gn5(x)
-        x = F.relu(x)
+        x = nn.functional.relu(x)
 
         x = self.out_lay(x)
         return x
@@ -1797,14 +1779,14 @@ class DetrMHAttentionMap(nn.Module):
 
     def forward(self, q, k, mask: Optional[Tensor] = None):
         q = self.q_linear(q)
-        k = F.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
+        k = nn.functional.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
         queries_per_head = q.view(q.shape[0], q.shape[1], self.num_heads, self.hidden_dim // self.num_heads)
         keys_per_head = k.view(k.shape[0], self.num_heads, self.hidden_dim // self.num_heads, k.shape[-2], k.shape[-1])
         weights = torch.einsum("bqnc,bnchw->bqnhw", queries_per_head * self.normalize_fact, keys_per_head)
 
         if mask is not None:
             weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), float("-inf"))
-        weights = F.softmax(weights.flatten(2), dim=-1).view(weights.size())
+        weights = nn.functional.softmax(weights.flatten(2), dim=-1).view(weights.size())
         weights = self.dropout(weights)
         return weights
 
@@ -1847,7 +1829,7 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
         Loss tensor
     """
     prob = inputs.sigmoid()
-    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    ce_loss = nn.functional.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
     p_t = prob * targets + (1 - prob) * (1 - targets)
     loss = ce_loss * ((1 - p_t) ** gamma)
 
@@ -1909,7 +1891,7 @@ class DetrLoss(nn.Module):
         )
         target_classes[idx] = target_classes_o
 
-        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        loss_ce = nn.functional.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {"loss_ce": loss_ce}
 
         return losses
@@ -1926,7 +1908,7 @@ class DetrLoss(nn.Module):
         tgt_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
         # Count the number of predictions that are NOT "no-object" (which is the last class)
         card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
-        card_err = F.l1_loss(card_pred.float(), tgt_lengths.float())
+        card_err = nn.functional.l1_loss(card_pred.float(), tgt_lengths.float())
         losses = {"cardinality_error": card_err}
         return losses
 
@@ -1942,7 +1924,7 @@ class DetrLoss(nn.Module):
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
-        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")
+        loss_bbox = nn.functional.l1_loss(src_boxes, target_boxes, reduction="none")
 
         losses = {}
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
@@ -1972,7 +1954,7 @@ class DetrLoss(nn.Module):
         target_masks = target_masks[tgt_idx]
 
         # upsample predictions to the target size
-        src_masks = F.interpolate(
+        src_masks = nn.functional.interpolate(
             src_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
         )
         src_masks = src_masks[:, 0].flatten(1)
@@ -2068,7 +2050,7 @@ class DetrMLPPredictionHead(nn.Module):
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
-            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
 
 

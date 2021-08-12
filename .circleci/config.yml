@@ -81,12 +81,49 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf ./tests/ -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+    
+    run_tests_torch_and_tf_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
+            RUN_PT_TF_CROSS_TESTS: yes
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-torch_and_tf-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,speech,vision]
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - save_cache:
+                key: v0.4-{{ checksum "setup.py" }}
+                paths:
+                    - '~/.cache/pip'
+            - run: |
+                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf tests -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -111,12 +148,49 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax ./tests/ -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+    
+    run_tests_torch_and_flax_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
+            RUN_PT_FLAX_CROSS_TESTS: yes
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-torch_and_flax-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,flax,torch,testing,sentencepiece,speech,vision]
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - save_cache:
+                key: v0.4-{{ checksum "setup.py" }}
+                paths:
+                    - '~/.cache/pip'
+            - run: |
+                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax tests -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -140,12 +214,48 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch ./tests/ | tee tests_output.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+    
+    run_tests_torch_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-torch-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,torch,testing,sentencepiece,speech,vision,timm]
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - save_cache:
+                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch tests | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -172,7 +282,41 @@ jobs:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf ./tests/ | tee tests_output.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_list.txt) | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+    
+    run_tests_tf_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-tf-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
+            - save_cache:
+                  key: v0.4-tf-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf tests | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -199,7 +343,41 @@ jobs:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax ./tests/ | tee tests_output.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_list.txt) | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+    
+    run_tests_flax_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - v0.4-flax-{{ checksum "setup.py" }}
+                    - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: sudo pip install .[flax,testing,sentencepiece]
+            - save_cache:
+                  key: v0.4-flax-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax tests | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -224,12 +402,49 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test ./tests/ | tee tests_output.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test $(cat test_list.txt) | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+    
+    run_tests_pipelines_torch_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            RUN_PIPELINE_TESTS: yes
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-torch-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,torch,testing,sentencepiece,speech,vision]
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
+            - save_cache:
+                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test tests | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -257,7 +472,42 @@ jobs:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf ./tests/ -m is_pipeline_test | tee tests_output.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_list.txt) -m is_pipeline_test | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_pipelines_tf_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            RUN_PIPELINE_TESTS: yes
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-tf-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
+            - save_cache:
+                  key: v0.4-tf-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_list.txt) -m tests | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -283,7 +533,10 @@ jobs:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -311,7 +564,13 @@ jobs:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee examples_output.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee examples_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
@@ -343,12 +602,117 @@ jobs:
                   key: v0.4-hub-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -sv ./tests/ -m is_staging_test
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -sv --make-reports=tests_hub $(cat test_list.txt) -m is_staging_test | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+    
+    run_tests_hub_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            HUGGINGFACE_CO_STAGING: yes
+            RUN_GIT_LFS_TESTS: yes
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-hub-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get install git-lfs
+            - run: |
+                git config --global user.email "ci@dummy.com"
+                git config --global user.name "ci"
+            - run: pip install --upgrade pip
+            - run: pip install .[torch,sentencepiece,testing]
+            - save_cache:
+                  key: v0.4-hub-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  python -m pytest -sv --make-reports=tests_hub tests -m is_staging_test | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_onnxruntime:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-torch-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime]
+            - save_cache:
+                  key: v0.4-onnx-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_onnx $(cat test_list.txt) -k onnx | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+    
+    run_tests_onnxruntime_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-torch-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime]
+            - save_cache:
+                  key: v0.4-onnx-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_onnx tests -k onnx | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
 
     build_doc:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.6
+        resource_class: large
         steps:
             - checkout
             - restore_cache:
@@ -370,6 +734,7 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.6
+        resource_class: large
         steps:
             - add_ssh_keys:
                 fingerprints:
@@ -392,7 +757,7 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.6
-        resource_class: medium
+        resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
         parallelism: 1
@@ -403,7 +768,7 @@ jobs:
                       - v0.4-code_quality-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install isort
+            - run: pip install isort GitPython
             - run: pip install .[all,quality]
             - save_cache:
                   key: v0.4-code_quality-{{ checksum "setup.py" }}
@@ -419,6 +784,8 @@ jobs:
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
+            - run: make deps_table_check_updated
+            - run: python utils/tests_fetcher.py --sanity_check
 
     check_repository_consistency:
         working_directory: ~/transformers
@@ -482,9 +849,29 @@ workflows:
             - run_tests_flax
             - run_tests_pipelines_torch
             - run_tests_pipelines_tf
+            - run_tests_onnxruntime
             - run_tests_hub
             - build_doc
             - deploy_doc: *workflow_filters
+    nightly:
+        triggers:
+            - schedule:
+                cron: "0 0 * * *"
+                filters:
+                    branches:
+                        only:
+                            - master
+        jobs:
+            - run_tests_torch_and_tf_all
+            - run_tests_torch_and_flax_all
+            - run_tests_torch_all
+            - run_tests_tf_all
+            - run_tests_flax_all
+            - run_tests_pipelines_torch_all
+            - run_tests_pipelines_tf_all
+            - run_tests_onnxruntime_all
+            - run_tests_hub_all
+
 #    tpu_testing_jobs:
 #        triggers:
 #            - schedule:

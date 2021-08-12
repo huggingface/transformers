@@ -22,6 +22,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ..file_utils import PaddingStrategy
 from ..modeling_utils import PreTrainedModel
+from ..models.bert import BertTokenizer, BertTokenizerFast
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
@@ -184,9 +185,13 @@ class DataCollatorForTokenClassification:
         sequence_length = torch.tensor(batch["input_ids"]).shape[1]
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
-            batch["labels"] = [label + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels]
+            batch[label_name] = [
+                label + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels
+            ]
         else:
-            batch["labels"] = [[self.label_pad_token_id] * (sequence_length - len(label)) + label for label in labels]
+            batch[label_name] = [
+                [self.label_pad_token_id] * (sequence_length - len(label)) + label for label in labels
+            ]
 
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
         return batch
@@ -395,10 +400,17 @@ class DataCollatorForLanguageModeling:
 @dataclass
 class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     """
-    Data collator used for language modeling.
+    Data collator used for language modeling that masks entire words.
 
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for masked language modeling
+
+    .. note::
+
+        This collator relies on details of the implementation of subword tokenization by
+        :class:`~transformers.BertTokenizer`, specifically that subword tokens are prefixed with `##`. For tokenizers
+        that do not adhere to this scheme, this collator will produce an output that is roughly equivalent to
+        :class:`.DataCollatorForLanguageModeling`.
     """
 
     def __call__(
@@ -410,7 +422,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             input_ids = examples
             examples = [{"input_ids": e} for e in examples]
 
-        batch_input = _collate_batch(input_ids, self.tokenizer)
+        batch_input = _collate_batch(input_ids, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
 
         mask_labels = []
         for e in examples:
@@ -427,7 +439,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
                     if i in ref_pos:
                         ref_tokens[i] = "##" + ref_tokens[i]
             mask_labels.append(self._whole_word_mask(ref_tokens))
-        batch_mask = _collate_batch(mask_labels, self.tokenizer)
+        batch_mask = _collate_batch(mask_labels, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
         inputs, labels = self.mask_tokens(batch_input, batch_mask)
         return {"input_ids": inputs, "labels": labels}
 
@@ -435,6 +447,11 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         """
         Get 0/1 labels for masked tokens with whole word mask proxy
         """
+        if not isinstance(self.tokenizer, (BertTokenizer, BertTokenizerFast)):
+            warnings.warn(
+                "DataCollatorForWholeWordMask is only suitable for BertTokenizer-like tokenizers."
+                "Please refer to the documentation for more information."
+            )
 
         cand_indexes = []
         for (i, token) in enumerate(input_tokens):

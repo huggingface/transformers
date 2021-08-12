@@ -25,6 +25,7 @@ from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 from typing import Iterator, Union
+from unittest import mock
 
 from transformers import logging as transformers_logging
 
@@ -33,8 +34,10 @@ from .file_utils import (
     is_datasets_available,
     is_faiss_available,
     is_flax_available,
+    is_keras2onnx_available,
     is_onnx_available,
     is_pandas_available,
+    is_rjieba_available,
     is_scatter_available,
     is_sentencepiece_available,
     is_soundfile_availble,
@@ -223,6 +226,23 @@ def require_git_lfs(test_case):
         return test_case
 
 
+def require_rjieba(test_case):
+    """
+    Decorator marking a test that requires rjieba. These tests are skipped when rjieba isn't installed.
+    """
+    if not is_rjieba_available():
+        return unittest.skip("test requires rjieba")(test_case)
+    else:
+        return test_case
+
+
+def require_keras2onnx(test_case):
+    if not is_keras2onnx_available():
+        return unittest.skip("test requires keras2onnx")(test_case)
+    else:
+        return test_case
+
+
 def require_onnx(test_case):
     if not is_onnx_available():
         return unittest.skip("test requires ONNX")(test_case)
@@ -379,6 +399,21 @@ def require_torch_non_multi_gpu(test_case):
 
     if torch.cuda.device_count() > 1:
         return unittest.skip("test requires 0 or 1 GPU")(test_case)
+    else:
+        return test_case
+
+
+def require_torch_up_to_2_gpus(test_case):
+    """
+    Decorator marking a test that requires 0 or 1 or 2 GPU setup (in PyTorch).
+    """
+    if not is_torch_available():
+        return unittest.skip("test requires PyTorch")(test_case)
+
+    import torch
+
+    if torch.cuda.device_count() > 2:
+        return unittest.skip("test requires 0 or 1 or 2 GPUs")(test_case)
     else:
         return test_case
 
@@ -973,7 +1008,7 @@ def mockenv(**kwargs):
         use_tf = os.getenv("USE_TF", False)
 
     """
-    return unittest.mock.patch.dict(os.environ, kwargs)
+    return mock.patch.dict(os.environ, kwargs)
 
 
 # from https://stackoverflow.com/a/34333710/9201239
@@ -1247,6 +1282,28 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
         raise RuntimeError(f"'{cmd_str}' produced no output.")
 
     return result
+
+
+def pytest_xdist_worker_id():
+    """
+    Returns an int value of worker's numerical id under ``pytest-xdist``'s concurrent workers ``pytest -n N`` regime,
+    or 0 if ``-n 1`` or ``pytest-xdist`` isn't being used.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    worker = re.sub(r"^gw", "", worker, 0, re.M)
+    return int(worker)
+
+
+def get_torch_dist_unique_port():
+    """
+    Returns a port number that can be fed to ``torch.distributed.launch``'s ``--master_port`` argument.
+
+    Under ``pytest-xdist`` it adds a delta number based on a worker id so that concurrent tests don't try to use the
+    same port at once.
+    """
+    port = 29500
+    uniq_delta = pytest_xdist_worker_id()
+    return port + uniq_delta
 
 
 def nested_simplify(obj, decimals=3):

@@ -27,7 +27,8 @@ author = "huggingface"
 # The short X.Y version
 version = ""
 # The full version, including alpha/beta/rc tags
-release = "4.5.0.dev0"
+release = u'4.7.0'
+
 
 
 # Prefix link to point to master, comment this during version release and uncomment below line
@@ -207,6 +208,9 @@ epub_title = project
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ["search.html"]
 
+# Localization
+locale_dirs = ['locale/']
+gettext_compact = False
 
 def setup(app):
     app.add_css_file("css/huggingface.css")

@@ -23,7 +23,6 @@ import math
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torch.nn import init
 
 from .binarizer import MagnitudeBinarizer, ThresholdBinarizer, TopKBinarizer
@@ -104,4 +103,4 @@ class MaskedLinear(nn.Linear):
         # Mask weights with computed mask
         weight_thresholded = mask * self.weight
         # Compute output (linear layer) with masked weights
-        return F.linear(input, weight_thresholded, self.bias)
+        return nn.functional.linear(input, weight_thresholded, self.bias)

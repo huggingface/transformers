@@ -21,6 +21,7 @@ import tempfile
 import unittest
 
 import requests
+from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
@@ -30,8 +31,9 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_te
 
 if is_torch_available():
     import torch
+    from torch import nn
 
-    from transformers import CLIPConfig, CLIPModel, CLIPTextConfig, CLIPTextModel, CLIPVisionConfig, CLIPVisionModel
+    from transformers import CLIPModel, CLIPTextModel, CLIPVisionModel
     from transformers.models.clip.modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -76,7 +78,12 @@ class CLIPVisionModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        config = CLIPVisionConfig(
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def get_config(self):
+        return CLIPVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -88,8 +95,6 @@ class CLIPVisionModelTester:
             attention_dropout=self.attention_dropout,
             initializer_range=self.initializer_range,
         )
-
-        return config, pixel_values
 
     def create_and_check_model(self, config, pixel_values):
         model = CLIPVisionModel(config=config)
@@ -140,9 +145,9 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Module))
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -322,7 +327,12 @@ class CLIPTextModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        config = CLIPTextConfig(
+        config = self.get_config()
+
+        return config, input_ids, input_mask
+
+    def get_config(self):
+        return CLIPTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -333,8 +343,6 @@ class CLIPTextModelTester:
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
         )
-
-        return config, input_ids, input_mask
 
     def create_and_check_model(self, config, input_ids, input_mask):
         model = CLIPTextModel(config=config)
@@ -408,9 +416,14 @@ class CLIPModelTester:
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
-        config = CLIPConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
+        config = self.get_config()
 
         return config, input_ids, attention_mask, pixel_values
+
+    def get_config(self):
+        return CLIPConfig.from_text_vision_configs(
+            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = CLIPModel(config).to(torch_device).eval()
@@ -544,7 +557,8 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # verify the logits
         self.assertEqual(
@@ -556,6 +570,6 @@ class CLIPModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[24.5056, 18.8076]], device=torch_device)
+        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))

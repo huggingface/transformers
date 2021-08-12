@@ -59,7 +59,7 @@ jobs:
       - name: Run style changes
         run: |
           git fetch origin master:master
-          make fixup
+          make style && make quality
 
       - name: Failure short reports
         if: ${{ always() }}

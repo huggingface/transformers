@@ -30,7 +30,7 @@ from ...utils import logging
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
+    from torch import nn
 
 logger = logging.get_logger(__name__)
 
@@ -143,7 +143,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             :obj:`do_resize` is set to :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
-        image_mean (:obj:`int`, `optional`, defaults to :obj:`[0.485, 0.456, 0.406]s`):
+        image_mean (:obj:`int`, `optional`, defaults to :obj:`[0.485, 0.456, 0.406]`):
             The sequence of means for each channel, to be used when normalizing images. Defaults to the ImageNet mean.
         image_std (:obj:`int`, `optional`, defaults to :obj:`[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
@@ -374,7 +374,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             # use PyTorch as current workaround
             # TODO replace by self.resize
             masks = torch.from_numpy(target["masks"][:, None]).float()
-            interpolated_masks = F.interpolate(masks, size=(h, w), mode="nearest")[:, 0] > 0.5
+            interpolated_masks = nn.functional.interpolate(masks, size=(h, w), mode="nearest")[:, 0] > 0.5
             target["masks"] = interpolated_masks.numpy()
 
         return rescaled_image, target
@@ -440,7 +440,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 annotations.
 
             return_segmentation_masks (:obj:`Dict`, :obj:`List[Dict]`, `optional`, defaults to :obj:`False`):
-                Whether to also return instance segmentation masks in case :obj:`format = "coco_detection"`.
+                Whether to also include instance segmentation masks as part of the labels in case :obj:`format =
+                "coco_detection"`.
 
             masks_path (:obj:`pathlib.Path`, `optional`):
                 Path to the directory containing the PNG files that store the class-agnostic image segmentations. Only
@@ -465,6 +466,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if
               `"pixel_mask"` is in :obj:`self.model_input_names`).
+            - **labels** -- Optional labels to be fed to a model (when :obj:`annotations` are provided)
         """
         # Input type checking for clearer error
 
@@ -613,7 +615,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 if not is_torch_available():
                     raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
 
-                encoded_inputs["target"] = [
+                encoded_inputs["labels"] = [
                     {k: torch.from_numpy(v) for k, v in target.items()} for target in annotations
                 ]
 
@@ -697,7 +699,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             target_sizes.shape[1] == 2
         ), "Each element of target_sizes must contain the size (h, w) of each image of the batch"
 
-        prob = F.softmax(out_logits, -1)
+        prob = nn.functional.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
 
         # convert to [x0, y0, x1, y1] format
@@ -742,13 +744,15 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         ), "Make sure to pass in as many orig_target_sizes as max_target_sizes"
         max_h, max_w = max_target_sizes.max(0)[0].tolist()
         outputs_masks = outputs.pred_masks.squeeze(2)
-        outputs_masks = F.interpolate(outputs_masks, size=(max_h, max_w), mode="bilinear", align_corners=False)
+        outputs_masks = nn.functional.interpolate(
+            outputs_masks, size=(max_h, max_w), mode="bilinear", align_corners=False
+        )
         outputs_masks = (outputs_masks.sigmoid() > threshold).cpu()
 
         for i, (cur_mask, t, tt) in enumerate(zip(outputs_masks, max_target_sizes, orig_target_sizes)):
             img_h, img_w = t[0], t[1]
             results[i]["masks"] = cur_mask[:, :img_h, :img_w].unsqueeze(1)
-            results[i]["masks"] = F.interpolate(
+            results[i]["masks"] = nn.functional.interpolate(
                 results[i]["masks"].float(), size=tuple(tt.tolist()), mode="nearest"
             ).byte()
 
@@ -810,7 +814,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             cur_scores = cur_scores[keep]
             cur_classes = cur_classes[keep]
             cur_masks = cur_masks[keep]
-            cur_masks = F.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
+            cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
             cur_boxes = center_to_corners_format(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]

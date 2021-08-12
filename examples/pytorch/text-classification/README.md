@@ -51,10 +51,10 @@ single Titan RTX was used):
 
 | Task  | Metric                       | Result      | Training time |
 |-------|------------------------------|-------------|---------------|
-| CoLA  | Matthew's corr               | 56.53       | 3:17          |
+| CoLA  | Matthews corr                | 56.53       | 3:17          |
 | SST-2 | Accuracy                     | 92.32       | 26:06         |
 | MRPC  | F1/Accuracy                  | 88.85/84.07 | 2:21          |
-| STS-B | Person/Spearman corr.        | 88.64/88.48 | 2:13          |
+| STS-B | Pearson/Spearman corr.       | 88.64/88.48 | 2:13          |
 | QQP   | Accuracy/F1                  | 90.71/87.49 | 2:22:26       |
 | MNLI  | Matched acc./Mismatched acc. | 83.91/84.10 | 2:35:23       |
 | QNLI  | Accuracy                     | 90.66       | 40:57         |
@@ -90,10 +90,10 @@ Using mixed precision training usually results in 2x-speedup for training with t
 
 | Task  | Metric                       | Result      | Training time | Result (FP16) | Training time (FP16) |
 |-------|------------------------------|-------------|---------------|---------------|----------------------|
-| CoLA  | Matthew's corr               | 56.53       | 3:17          | 56.78         | 1:41                 |
+| CoLA  | Matthews corr                | 56.53       | 3:17          | 56.78         | 1:41                 |
 | SST-2 | Accuracy                     | 92.32       | 26:06         | 91.74         | 13:11                |
 | MRPC  | F1/Accuracy                  | 88.85/84.07 | 2:21          | 88.12/83.58   | 1:10                 |
-| STS-B | Person/Spearman corr.        | 88.64/88.48 | 2:13          | 88.71/88.55   | 1:08                 |
+| STS-B | Pearson/Spearman corr.       | 88.64/88.48 | 2:13          | 88.71/88.55   | 1:08                 |
 | QQP   | Accuracy/F1                  | 90.71/87.49 | 2:22:26       | 90.67/87.43   | 1:11:54              |
 | MNLI  | Matched acc./Mismatched acc. | 83.91/84.10 | 2:35:23       | 84.04/84.06   | 1:17:06              |
 | QNLI  | Accuracy                     | 90.66       | 40:57         | 90.96         | 20:16                |

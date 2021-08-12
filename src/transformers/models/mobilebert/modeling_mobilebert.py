@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -141,10 +140,6 @@ def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):
     return model
 
 
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
 class NoNorm(nn.Module):
     def __init__(self, feat_size, eps=None):
         super().__init__()
@@ -155,7 +150,7 @@ class NoNorm(nn.Module):
         return input_tensor * self.weight + self.bias
 
 
-NORM2FN = {"layer_norm": torch.nn.LayerNorm, "no_norm": NoNorm}
+NORM2FN = {"layer_norm": nn.LayerNorm, "no_norm": NoNorm}
 
 
 class MobileBertEmbeddings(nn.Module):
@@ -207,9 +202,9 @@ class MobileBertEmbeddings(nn.Module):
             # dimensional output.
             inputs_embeds = torch.cat(
                 [
-                    F.pad(inputs_embeds[:, 1:], [0, 0, 0, 1, 0, 0], value=0),
+                    nn.functional.pad(inputs_embeds[:, 1:], [0, 0, 0, 1, 0, 0], value=0),
                     inputs_embeds,
-                    F.pad(inputs_embeds[:, :-1], [0, 0, 1, 0, 0, 0], value=0),
+                    nn.functional.pad(inputs_embeds[:, :-1], [0, 0, 1, 0, 0, 0], value=0),
                 ],
                 dim=2,
             )
@@ -920,7 +915,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddigs):
         self.cls.predictions.decoder = new_embeddigs
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         # resize dense output embedings at first
         self.cls.predictions.dense = self._get_resized_lm_head(
             self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
@@ -969,7 +964,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
             >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             >>> outputs = model(input_ids)
 
-            >>> prediction_logits = outptus.prediction_logits
+            >>> prediction_logits = outputs.prediction_logits
             >>> seq_relationship_logits = outputs.seq_relationship_logits
 
         """
@@ -1028,7 +1023,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddigs):
         self.cls.predictions.decoder = new_embeddigs
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         # resize dense output embedings at first
         self.cls.predictions.dense = self._get_resized_lm_head(
             self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
@@ -1217,7 +1212,10 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         self.config = config
 
         self.mobilebert = MobileBertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -1515,7 +1513,10 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()

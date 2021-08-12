@@ -532,8 +532,8 @@ def main(args=None, model=None) -> GenerativeQAModule:
             raise
 
         # Create Ray actors only for rank 0.
-        if ("LOCAL_RANK" not in os.environ or os.environ["LOCAL_RANK"] == 0) and (
-            "NODE_RANK" not in os.environ or os.environ["NODE_RANK"] == 0
+        if ("LOCAL_RANK" not in os.environ or int(os.environ["LOCAL_RANK"]) == 0) and (
+            "NODE_RANK" not in os.environ or int(os.environ["NODE_RANK"]) == 0
         ):
             remote_cls = ray.remote(RayRetriever)
             named_actors = [
