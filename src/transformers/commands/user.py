@@ -22,7 +22,7 @@ from typing import List, Union
 
 from requests.exceptions import HTTPError
 
-from ..hf_api import HfApi, HfFolder
+from huggingface_hub.hf_api import HfApi, HfFolder
 from . import BaseTransformersCLICommand
 
 
@@ -148,6 +148,12 @@ class BaseUserCommand:
 
 class LoginCommand(BaseUserCommand):
     def run(self):
+        print(
+            ANSI.red(
+                "WARNING! `transformers-cli login` is deprecated and will be removed in v5. Please use "
+                "`huggingface-cli login` instead."
+            )
+        )
         print(  # docstyle-ignore
             """
         _|    _|  _|    _|    _|_|_|    _|_|_|  _|_|_|  _|      _|    _|_|_|      _|_|_|_|    _|_|      _|_|_|  _|_|_|_|
@@ -175,6 +181,12 @@ class LoginCommand(BaseUserCommand):
 
 class WhoamiCommand(BaseUserCommand):
     def run(self):
+        print(
+            ANSI.red(
+                "WARNING! `transformers-cli whoami` is deprecated and will be removed in v5. Please use "
+                "`huggingface-cli whoami` instead."
+            )
+        )
         token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
@@ -192,6 +204,12 @@ class WhoamiCommand(BaseUserCommand):
 
 class LogoutCommand(BaseUserCommand):
     def run(self):
+        print(
+            ANSI.red(
+                "WARNING! `transformers-cli logout` is deprecated and will be removed in v5. Please use "
+                "`huggingface-cli logout` instead."
+            )
+        )
         token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
@@ -203,8 +221,11 @@ class LogoutCommand(BaseUserCommand):
 
 class ListObjsCommand(BaseUserCommand):
     def run(self):
-        warnings.warn(
-            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
+        print(
+            ANSI.red(
+                "WARNING! Managing repositories through transformers-cli is deprecated. "
+                "Please use `huggingface-cli` instead."
+            )
         )
         token = HfFolder.get_token()
         if token is None:
@@ -225,10 +246,12 @@ class ListObjsCommand(BaseUserCommand):
 
 class DeleteObjCommand(BaseUserCommand):
     def run(self):
-        warnings.warn(
-            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
-        )
-        token = HfFolder.get_token()
+        print(
+            ANSI.red(
+                "WARNING! Managing repositories through transformers-cli is deprecated. "
+                "Please use `huggingface-cli` instead."
+            )
+        )token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
             exit(1)
@@ -243,10 +266,12 @@ class DeleteObjCommand(BaseUserCommand):
 
 class ListReposObjsCommand(BaseUserCommand):
     def run(self):
-        warnings.warn(
-            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
-        )
-        token = HfFolder.get_token()
+        print(
+            ANSI.red(
+                "WARNING! Managing repositories through transformers-cli is deprecated. "
+                "Please use `huggingface-cli` instead."
+            )
+        )token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
             exit(1)
@@ -265,10 +290,12 @@ class ListReposObjsCommand(BaseUserCommand):
 
 class RepoCreateCommand(BaseUserCommand):
     def run(self):
-        warnings.warn(
-            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
-        )
-        token = HfFolder.get_token()
+        print(
+            ANSI.red(
+                "WARNING! Managing repositories through transformers-cli is deprecated. "
+                "Please use `huggingface-cli` instead."
+            )
+        )token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
             exit(1)
@@ -339,8 +366,11 @@ class UploadCommand(BaseUserCommand):
         return files
 
     def run(self):
-        warnings.warn(
-            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
+        print(
+            ANSI.red(
+                "WARNING! Managing repositories through transformers-cli is deprecated. "
+                "Please use `huggingface-cli` instead."
+            )
         )
         token = HfFolder.get_token()
         if token is None:

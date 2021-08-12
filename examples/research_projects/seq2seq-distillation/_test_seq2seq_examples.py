@@ -17,7 +17,7 @@ from finetune import SummarizationModule, main
 from parameterized import parameterized
 from run_eval import generate_summaries_or_translations
 from transformers import AutoConfig, AutoModelForSeq2SeqLM
-from transformers.hf_api import HfApi
+from huggingface_hub.hf_api import HfApi
 from transformers.testing_utils import CaptureStderr, CaptureStdout, TestCasePlus, require_torch_gpu, slow
 from utils import label_smoothed_nll_loss, lmap, load_json
 
@@ -130,7 +130,7 @@ class TestSummarizationDistiller(TestCasePlus):
     def test_hub_configs(self):
         """I put require_torch_gpu cause I only want this to run with self-scheduled."""
 
-        model_list = HfApi().model_list()
+        model_list = HfApi().list_models()
         org = "sshleifer"
         model_ids = [x.modelId for x in model_list if x.modelId.startswith(org)]
         allowed_to_be_broken = ["sshleifer/blenderbot-3B", "sshleifer/blenderbot-90M"]
