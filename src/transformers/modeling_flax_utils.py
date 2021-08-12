@@ -16,7 +16,7 @@
 import os
 from functools import partial
 from pickle import UnpicklingError
-from typing import Dict, Set, Tuple, Union
+from typing import Any, Dict, Set, Tuple, Union
 
 import flax.linen as nn
 import jax
@@ -146,6 +146,26 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 f"parameters {self.required_params - param_keys}"
             )
         self._params = params
+
+    def to_bf16(self, params: Union[Dict, FrozenDict], mask: Any = None):
+        if mask is None:
+            return jax.tree_map(lambda x: x.astype(jnp.bfloat16) if x.dtype == jnp.float32 else x, params)
+
+        flat_params = flatten_dict(params)
+        flat_mask, _ = jax.tree_flatten(mask)
+
+        for masked, key in zip(flat_mask, flat_params.keys()):
+            if masked:
+                param = flat_params[key]
+                flat_params[key] = param.astype(jnp.bfloat16) if param.dtype == jnp.float32 else param
+
+        return unflatten_dict(flat_params)
+
+    def to_fp32(self, params: Union[Dict, FrozenDict]):
+        return jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, params)
+
+    def to_fp16(self, params: Union[Dict, FrozenDict]):
+        return jax.tree_map(lambda x: x.astype(jnp.float16) if x.dtype == jnp.float32 else x, params)
 
     @classmethod
     def from_pretrained(
