@@ -18,7 +18,7 @@ import importlib
 import json
 import os
 from collections import OrderedDict
-from typing import Dict, Optional, Union, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import (
@@ -122,9 +122,15 @@ else:
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "dpr",
-                ("DPRQuestionEncoderTokenizer", "DPRQuestionEncoderTokenizerFast" if is_tokenizers_available() else None),
+                (
+                    "DPRQuestionEncoderTokenizer",
+                    "DPRQuestionEncoderTokenizerFast" if is_tokenizers_available() else None,
+                ),
             ),
-            ("squeezebert", ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "squeezebert",
+                ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
+            ),
             ("bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
