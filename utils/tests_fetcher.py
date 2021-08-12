@@ -412,6 +412,8 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
 
     # Remove duplicates
     test_files_to_run = sorted(list(set(test_files_to_run)))
+    # Make sure we did not end up with a test file that was removed
+    test_files_to_run = [f for f in test_files_to_run if os.path.isfile(f) or os.path.isdir(f)]
     if filters is not None:
         for filter in filters:
             test_files_to_run = [f for f in test_files_to_run if f.startswith(filter)]

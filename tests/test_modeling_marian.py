@@ -17,9 +17,9 @@
 import tempfile
 import unittest
 
+from huggingface_hub.hf_api import HfApi
 from transformers import MarianConfig, is_torch_available
 from transformers.file_utils import cached_property
-from transformers.hf_api import HfApi
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -296,7 +296,7 @@ class ModelManagementTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_names(self):
-        model_list = HfApi().model_list()
+        model_list = HfApi().list_models()
         model_ids = [x.modelId for x in model_list if x.modelId.startswith(ORG_NAME)]
         bad_model_ids = [mid for mid in model_ids if "+" in model_ids]
         self.assertListEqual([], bad_model_ids)
