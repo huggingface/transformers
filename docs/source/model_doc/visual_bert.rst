@@ -58,11 +58,17 @@ layer, and is expected to be bound by [CLS] and a [SEP] tokens, as in BERT. The 
 appropriately for the textual and visual parts.
 
 The :class:`~transformers.BertTokenizer` is used to encode the text. A custom detector/feature extractor must be used
-to get the visual embeddings. Refer to the `demo notebook
-<https://github.com/huggingface/transformers/tree/master/examples/research_projects/visual_bert>`__ for an example on
-VisualBERT VQA. For an example on how to generate visual embeddings, see the `colab notebook
-<https://colab.research.google.com/drive/1bLGxKdldwqnMVA5x4neY7-l_8fKGWQYI?usp=sharing>`__. The following example shows
-how to get the last hidden state using :class:`~transformers.VisualBertModel`:
+to get the visual embeddings. The following examples show how to use VisualBERT with Detectron-like models:
+
+* `VisualBERT VQA demo notebook
+  <https://github.com/huggingface/transformers/tree/master/examples/research_projects/visual_bert>`__ : This notebook
+  contains an example on VisualBERT VQA.
+
+* `Generate Embeddings for VisualBERT (Colab Notebook)
+  <https://colab.research.google.com/drive/1bLGxKdldwqnMVA5x4neY7-l_8fKGWQYI?usp=sharing>`__ : This notebook contains
+  an example on how to generate visual embeddings.
+
+The following example shows how to get the last hidden state using :class:`~transformers.VisualBertModel`:
 
 .. code-block::
 
