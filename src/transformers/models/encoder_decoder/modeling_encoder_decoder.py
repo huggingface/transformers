@@ -61,7 +61,7 @@ ENCODER_DECODER_START_DOCSTRING = r"""
 
 ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        inputs (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
@@ -106,16 +106,16 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            Optionally, instead of passing :obj:`inputs` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert :obj:`inputs` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
+        decoder_input_ids_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
             representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`
             indices into associated vectors than the model's internal embedding lookup matrix.
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss for the decoder. Indices should be in ``[-100, 0,
-            ..., config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            ..., config.vocab_size]`` (see ``inputs`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
@@ -197,14 +197,14 @@ class EncoderDecoderModel(PreTrainedModel):
         # tie encoder, decoder weights if config set accordingly
         self.tie_weights()
 
-    def tie_weights(self):
+#    def tie_weights(self):
         # tie encoder & decoder if needed
-        if self.config.tie_encoder_decoder:
+#        if self.config.tie_encoder_decoder:
             # tie encoder and decoder base model
-            decoder_base_model_prefix = self.decoder.base_model_prefix
-            self._tie_encoder_decoder_weights(
-                self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
-            )
+#            decoder_base_model_prefix = self.decoder.base_model_prefix
+#            self._tie_encoder_decoder_weights(
+#                self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
+#            )
 
     def get_encoder(self):
         return self.encoder
@@ -212,8 +212,8 @@ class EncoderDecoderModel(PreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def get_input_embeddings(self):
-        return self.encoder.get_input_embeddings()
+#    def get_input_embeddings(self):
+#        return self.encoder.get_input_embeddings()
 
     def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
@@ -371,14 +371,14 @@ class EncoderDecoderModel(PreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
         past_key_values=None,
         inputs_embeds=None,
-        decoder_inputs_embeds=None,
+        decoder_input_ids_embeds=None,
         labels=None,
         use_cache=None,
         output_attentions=None,
@@ -398,11 +398,11 @@ class EncoderDecoderModel(PreTrainedModel):
             >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
 
             >>> # forward
-            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+            >>> inputs = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> outputs = model(inputs=inputs, decoder_input_ids=inputs)
 
             >>> # training
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
+            >>> outputs = model(inputs=inputs, decoder_input_ids=inputs, labels=inputs)
             >>> loss, logits = outputs.loss, outputs.logits
 
             >>> # save and load from pretrained
@@ -410,7 +410,7 @@ class EncoderDecoderModel(PreTrainedModel):
             >>> model = EncoderDecoderModel.from_pretrained("bert2bert")
 
             >>> # generation
-            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
+            >>> generated = model.generate(inputs, decoder_start_token_id=model.config.decoder.pad_token_id)
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -423,7 +423,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids,
+                inputs,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
@@ -440,7 +440,7 @@ class EncoderDecoderModel(PreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
-            inputs_embeds=decoder_inputs_embeds,
+            inputs_embeds=decoder_input_ids_embeds,
             labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -466,16 +466,16 @@ class EncoderDecoderModel(PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self, inputs, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
-        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past=past)
-        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
+        decoder_input_ids = self.decoder.prepare_inputs_for_generation(inputs, past=past)
+        decoder_attention_mask = decoder_input_ids["attention_mask"] if "attention_mask" in decoder_input_ids else None
         input_dict = {
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
-            "decoder_input_ids": decoder_inputs["input_ids"],
+            "decoder_input_ids": decoder_input_ids["inputs"],
             "encoder_outputs": encoder_outputs,
-            "past_key_values": decoder_inputs["past_key_values"],
+            "past_key_values": decoder_input_ids["past_key_values"],
             "use_cache": use_cache,
         }
         return input_dict
