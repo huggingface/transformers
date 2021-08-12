@@ -17,8 +17,8 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
-import torch
-from torch.nn.utils.rnn import pad_sequence
+# import torch
+# from torch.nn.utils.rnn import pad_sequence
 
 from ..file_utils import PaddingStrategy
 from ..modeling_utils import PreTrainedModel
@@ -30,12 +30,12 @@ InputDataClass = NewType("InputDataClass", Any)
 
 """
 A DataCollator is a function that takes a list of samples from a Dataset and collate them into a batch, as a dictionary
-of Tensors.
+of torch/TF Tensors or numpy arrays.
 """
-DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, torch.Tensor]])
+DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, Any]])
 
 
-def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Tensor]:
+def default_data_collator(features: List[InputDataClass], return_tensors='pt') -> Dict[str, Any]:
     """
     Very simple data collator that simply collates batches of dict-like objects and performs special handling for
     potential keys named:
@@ -51,9 +51,20 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
     # have the same attributes.
     # So we will look at the first element as a proxy for what attributes exist
     # on the whole batch.
+
+    if return_tensors == 'pt':
+        return _torch_default_data_collator(features)
+    elif return_tensors == 'tf':
+        return _tf_default_data_collator(features)
+    elif return_tensors == 'np':
+        return _numpy_default_data_collator(features)
+
+
+def _torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+    import torch
+
     if not isinstance(features[0], (dict, BatchEncoding)):
         features = [vars(f) for f in features]
-
     first = features[0]
     batch = {}
 
@@ -79,6 +90,74 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
                 batch[k] = torch.stack([f[k] for f in features])
             else:
                 batch[k] = torch.tensor([f[k] for f in features])
+
+    return batch
+
+
+def _tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+    import tensorflow as tf
+
+    if not isinstance(features[0], (dict, BatchEncoding)):
+        features = [vars(f) for f in features]
+    first = features[0]
+    batch = {}
+
+    # Special handling for labels.
+    # Ensure that tensor is created with the correct type
+    # (it should be automatically the case, but let's make sure of it.)
+    if "label" in first and first["label"] is not None:
+        label = first["label"].item() if isinstance(first["label"], tf.Tensor) else first["label"]
+        dtype = tf.int64 if isinstance(label, int) else tf.float32
+        batch["labels"] = tf.convert_to_tensor([f["label"] for f in features], dtype=dtype)
+    elif "label_ids" in first and first["label_ids"] is not None:
+        if isinstance(first["label_ids"], tf.Tensor):
+            batch["labels"] = tf.stack([f["label_ids"] for f in features])
+        else:
+            dtype = tf.int64 if type(first["label_ids"][0]) is int else tf.float32
+            batch["labels"] = tf.convert_to_tensor([f["label_ids"] for f in features], dtype=dtype)
+
+    # Handling of all other possible keys.
+    # Again, we will use the first element to figure out which key/values are not None for this model.
+    for k, v in first.items():
+        if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+            if isinstance(v, tf.Tensor):
+                batch[k] = tf.stack([f[k] for f in features])
+            else:
+                batch[k] = tf.convert_to_tensor([f[k] for f in features])
+
+    return batch
+
+
+def _numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+    import numpy as np
+
+    if not isinstance(features[0], (dict, BatchEncoding)):
+        features = [vars(f) for f in features]
+    first = features[0]
+    batch = {}
+
+    # Special handling for labels.
+    # Ensure that tensor is created with the correct type
+    # (it should be automatically the case, but let's make sure of it.)
+    if "label" in first and first["label"] is not None:
+        label = first["label"].item() if isinstance(first["label"], np.ndarray) else first["label"]
+        dtype = np.int64 if isinstance(label, int) else np.float32
+        batch["labels"] = np.array([f["label"] for f in features], dtype=dtype)
+    elif "label_ids" in first and first["label_ids"] is not None:
+        if isinstance(first["label_ids"], np.ndarray):
+            batch["labels"] = np.stack([f["label_ids"] for f in features])
+        else:
+            dtype = np.int64 if type(first["label_ids"][0]) is int else np.float32
+            batch["labels"] = np.array([f["label_ids"] for f in features], dtype=dtype)
+
+    # Handling of all other possible keys.
+    # Again, we will use the first element to figure out which key/values are not None for this model.
+    for k, v in first.items():
+        if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+            if isinstance(v, np.ndarray):
+                batch[k] = np.stack([f[k] for f in features])
+            else:
+                batch[k] = np.array([f[k] for f in features])
 
     return batch
 
@@ -114,14 +193,29 @@ class DataCollatorWithPadding:
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
+    return_tensors: str = 'pt'
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __post_init__(self):
+        try:
+            if self.return_tensors == 'pt':
+                import torch
+            elif self.return_tensors == 'tf':
+                import tensorflow
+            elif self.return_tensors == 'np':
+                import numpy
+            else:
+                raise ValueError(f"Framework '{self.return_tensors}' not recognized!")
+        except ImportError:
+            raise ImportError(f"return_tensors is set to {self.return_tensors} "
+                              "but we were unable to load that framework!")
+
+    def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
         batch = self.tokenizer.pad(
             features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
+            return_tensors=self.return_tensors,
         )
         if "label" in batch:
             batch["labels"] = batch["label"]
@@ -176,6 +270,8 @@ class DataCollatorForTokenClassification:
                 import tensorflow
             elif self.return_tensors == 'np':
                 import numpy
+            else:
+                raise ValueError(f"Framework '{self.return_tensors}' not recognized!")
         except ImportError:
             raise ImportError(f"return_tensors is set to {self.return_tensors} "
                               "but we were unable to load that framework!")
@@ -189,6 +285,8 @@ class DataCollatorForTokenClassification:
             return self.tf_call(features)
         elif return_tensors == 'np':
             return self.numpy_call(features)
+        else:
+            raise ValueError(f"Framework '{return_tensors}' not recognized!")
 
     def torch_call(self, features):
         import torch
@@ -272,8 +370,9 @@ class DataCollatorForTokenClassification:
         batch = {k: np.array(v, dtype=np.int64) for k, v in batch.items()}
         return batch
 
-def _collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
+def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
+    import torch
     # Tensorize if necessary.
     if isinstance(examples[0], (list, tuple)):
         examples = [torch.tensor(e, dtype=torch.long) for e in examples]
@@ -304,8 +403,83 @@ def _collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None
     return result
 
 
-def tolist(x: Union[List[Any], torch.Tensor]):
-    return x.tolist() if isinstance(x, torch.Tensor) else x
+def _tf_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
+    import tensorflow as tf
+    import numpy as np
+    """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
+    # Tensorize if necessary.
+    if isinstance(examples[0], (list, tuple)):
+        examples = [tf.convert_to_tensor(e, dtype=tf.int64) for e in examples]
+
+    # Check if padding is necessary.
+    length_of_first = len(examples[0])
+    are_tensors_same_length = all(len(x) == length_of_first for x in examples)
+    if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
+        return tf.stack(examples, axis=0)
+
+    # If yes, check if we have a `pad_token`.
+    if tokenizer._pad_token is None:
+        raise ValueError(
+            "You are attempting to pad samples but the tokenizer you are using"
+            f" ({tokenizer.__class__.__name__}) does not have a pad token."
+        )
+
+    # Creating the full tensor and filling it with our data.
+    max_length = max(len(x) for x in examples)
+    if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+    # result = examples[0].new_full([len(examples), max_length], tokenizer.pad_token_id)
+    result = []
+    rank = tf.rank(examples[0])
+    paddings = np.zeros((rank, 2), dtype=np.int32)
+    for example in examples:
+        if tokenizer.padding_side == "right":
+            paddings[0, 1] = max_length - len(example)
+        else:
+            paddings[0, 0] = max_length - len(example)
+        result.append(tf.pad(example, paddings, constant_values=tokenizer.pad_token_id))
+    return tf.stack(result, axis=0)
+
+
+def _numpy_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
+    import numpy as np
+    """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
+    # Tensorize if necessary.
+    if isinstance(examples[0], (list, tuple)):
+        examples = [np.array(e, dtype=np.int64) for e in examples]
+
+    # Check if padding is necessary.
+    length_of_first = len(examples[0])
+    are_tensors_same_length = all(len(x) == length_of_first for x in examples)
+    if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
+        return np.stack(examples, axis=0)
+
+    # If yes, check if we have a `pad_token`.
+    if tokenizer._pad_token is None:
+        raise ValueError(
+            "You are attempting to pad samples but the tokenizer you are using"
+            f" ({tokenizer.__class__.__name__}) does not have a pad token."
+        )
+
+    # Creating the full tensor and filling it with our data.
+    max_length = max(len(x) for x in examples)
+    if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+    result = np.full(shape=(len(examples), max_length), fill_value=tokenizer.pad_token_id, dtype=examples[0].dtype)
+    for i, example in enumerate(examples):
+        if tokenizer.padding_side == "right":
+            result[i, : example.shape[0]] = example
+        else:
+            result[i, -example.shape[0] :] = example
+    return result
+
+
+def tolist(x):
+    if isinstance(x, list):
+        return x
+    elif hasattr(x, "numpy"):  # Checks for TF tensors without needing the import
+        x = x.numpy()
+    return x.tolist()
 
 
 @dataclass
@@ -348,6 +522,7 @@ class DataCollatorForSeq2Seq:
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     label_pad_token_id: int = -100
+    return_tensors: str = 'pt'
 
     def __call__(self, features):
         labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
