@@ -738,7 +738,7 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
             # straight-through estimator trick
             codevector_idx = codevector_probs.argmax(axis=-1)
             codevector_probs_hard = jax.nn.one_hot(codevector_idx, codevector_probs.shape[-1]) * 1.0
-            codevector_probs = codevector_probs + jax.lax.stop_gradient(codevector_probs_hard - codevector_probs)
+            codevector_probs = codevector_probs_hard - jax.lax.stop_gradient(codevector_probs) + codevector_probs
 
             # compute perplexity
             codevector_soft_dist = nn.softmax(
@@ -1141,8 +1141,9 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         # project all transformed features (including masked) to final vq dim
         transformer_features = self.project_hid(outputs[0])
 
-        # quantize all (unmasked) extracted features and project to final vq dim
+        # quantize all unmasked extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1], deterministic=deterministic)
+
         quantized_features, codevector_perplexity = self.quantizer(
             extract_features, attention_mask, deterministic=deterministic, temperature=gumbel_temperature
         )
