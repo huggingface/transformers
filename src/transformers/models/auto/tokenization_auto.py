@@ -18,7 +18,7 @@ import importlib
 import json
 import os
 from collections import OrderedDict
-from typing import Dict, Optional, Union, Tuple
+from typing import Dict, Optional, Union, Tuple, TYPE_CHECKING
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import (
