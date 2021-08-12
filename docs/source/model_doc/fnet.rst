@@ -1,5 +1,5 @@
 .. 
-    Copyright 2020 The HuggingFace Team. All rights reserved.
+    Copyright 2021 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
     the License. You may obtain a copy of the License at
@@ -19,8 +19,8 @@ Overview
 The FNet model was proposed in `FNet: Mixing Tokens with Fourier Transforms <https://arxiv.org/abs/2105.03824>`__ by
 James Lee-Thorp, Joshua Ainslie, Ilya Eckstein, Santiago Ontanon. The model replaces the self-attention layer in a BERT
 model with a fourier transform which returns only the real parts of the transform. The model is significantly faster
-than the BERT model because it has less parameters and is more memory efficient. The model achieves abour 92-97%
-accuracy of BERT counterparts on GLUE benchmark, and trains must faster than the BERT model. The abstract from the
+than the BERT model because it has fewer parameters and is more memory efficient. The model achieves about 92-97%
+accuracy of BERT counterparts on GLUE benchmark, and trains much faster than the BERT model. The abstract from the
 paper is the following:
 
 *We show that Transformer encoder architectures can be massively sped up, with limited accuracy costs, by replacing the

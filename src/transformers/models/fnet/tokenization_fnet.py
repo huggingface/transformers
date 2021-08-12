@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google Research and the HuggingFace Inc. team.
+# Copyright 2021 Google Research, Google AI, Google Brain and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -62,13 +62,20 @@ class FNetTokenizer(PreTrainedTokenizer):
             Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
         keep_accents (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to keep accents when tokenizing.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`""`):
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`None`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-            .. note:: When building a sequence using special tokens, this is not the token that is used for the
-            beginning of sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`""`):
-            The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
-            that is used for the end of sequence. The token used is the :obj:`sep_token`.
+
+            .. note::
+
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the :obj:`cls_token`.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The end of sequence token.
+
+            .. note::
+
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the :obj:`sep_token`.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -113,8 +120,8 @@ class FNetTokenizer(PreTrainedTokenizer):
         do_lower_case=True,
         remove_space=True,
         keep_accents=False,
-        bos_token="",
-        eos_token="",
+        bos_token=None,
+        eos_token=None,
         unk_token="<unk>",
         sep_token="[SEP]",
         pad_token="<pad>",
@@ -226,7 +233,7 @@ class FNetTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An ALBERT sequence has the following format:
+        adding special tokens. An FNet sequence has the following format:
 
         - single sequence: ``[CLS] X [SEP]``
         - pair of sequences: ``[CLS] A [SEP] B [SEP]``
@@ -278,10 +285,12 @@ class FNetTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. An ALBERT
-        sequence pair mask has the following format: :: 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 | first sequence |
-        second sequence | If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask
-        (0s).
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. An FNet sequence
+        pair mask has the following format: ::
+
+            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 | first sequence | second sequence |
+
+        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
 
         Args:
             token_ids_0 (:obj:`List[int]`):

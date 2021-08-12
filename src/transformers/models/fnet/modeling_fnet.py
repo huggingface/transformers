@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google Research The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Google Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -120,17 +120,13 @@ class FNetEmbeddings(nn.Module):
         return embeddings
 
 
-# TODO: Check if this naming is okay.
 class FNetBasicFourierTransform(nn.Module):
     # TODO: Check if _init_fourier_transform items are required here - specific to TPUs?
     def __init__(self, config):
         super().__init__()
         self.fourier_transform = torch.fft.fftn
 
-    def forward(
-        self,
-        hidden_states,
-    ):
+    def forward(self, hidden_states):
         return (self.fourier_transform(hidden_states).real,)
 
 
@@ -151,18 +147,14 @@ class FNetFourierTransform(nn.Module):
         self.self = FNetBasicFourierTransform(config)
         self.output = FNetBasicOutput(config)
 
-    def forward(
-        self,
-        hidden_states,
-    ):
-        self_outputs = self.self(
-            hidden_states,
-        )
+    def forward(self, hidden_states):
+        self_outputs = self.self(hidden_states)
         fourier_output = self.output(self_outputs[0], hidden_states)
         outputs = (fourier_output,)
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->FNet
 class FNetIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -178,6 +170,7 @@ class FNetIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->FNet
 class FNetOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -195,24 +188,16 @@ class FNetOutput(nn.Module):
 class FNetLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # TODO: Check if chunk_size_feed_forward is needed
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
+        self.seq_len_dim = 1  # The dimension which has the sequence length
         self.fourier = FNetFourierTransform(config)
         self.intermediate = FNetIntermediate(config)
         self.output = FNetOutput(config)
 
-    def forward(
-        self,
-        hidden_states,
-    ):
-
-        self_fourier_outputs = self.fourier(
-            hidden_states,
-        )
+    def forward(self, hidden_states):
+        self_fourier_outputs = self.fourier(hidden_states)
         fourier_output = self_fourier_outputs[0]
 
-        # # TODO: Check if this should be here.
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, fourier_output
         )
@@ -233,12 +218,7 @@ class FNetEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([FNetLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def forward(
-        self,
-        hidden_states,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+    def forward(self, hidden_states, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
@@ -253,14 +233,9 @@ class FNetEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                )
+                layer_outputs = torch.utils.checkpoint.checkpoint(create_custom_forward(layer_module), hidden_states)
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                )
+                layer_outputs = layer_module(hidden_states)
 
             hidden_states = layer_outputs[0]
 
@@ -268,21 +243,12 @@ class FNetEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                ]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->FNet
 class FNetPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -298,6 +264,7 @@ class FNetPooler(nn.Module):
         return pooled_output
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->FNet
 class FNetPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -322,18 +289,19 @@ class FNetLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # TODO: Check if this is needed
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states
+
+    def _tie_weights(self):
+        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+        self.bias = self.decoder.bias
 
 
 class FNetOnlyMLMHead(nn.Module):
@@ -713,11 +681,7 @@ class FNetForMaskedLM(FNetPreTrainedModel):
             output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
-        return MaskedLMOutput(
-            loss=masked_lm_loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-        )
+        return MaskedLMOutput(loss=masked_lm_loss, logits=prediction_scores, hidden_states=outputs.hidden_states)
 
     def prepare_inputs_for_generation(self, input_ids, **model_kwargs):
         input_shape = input_ids.shape
@@ -804,11 +768,7 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-        )
+        return SequenceClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
 
 @add_start_docstrings(
@@ -887,11 +847,7 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-        )
+        return MultipleChoiceModelOutput(loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states)
 
 
 @add_start_docstrings(
@@ -961,11 +917,7 @@ class FNetForTokenClassification(FNetPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-        )
+        return TokenClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
 
 @add_start_docstrings(
@@ -979,8 +931,6 @@ class FNetForQuestionAnswering(FNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        # TODO: Check if we can comment this
-        # config.num_labels = 2
         self.num_labels = config.num_labels
 
         self.fnet = FNetModel(config)
@@ -1056,8 +1006,5 @@ class FNetForQuestionAnswering(FNetPreTrainedModel):
             return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
-            loss=total_loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
-            hidden_states=outputs.hidden_states,
+            loss=total_loss, start_logits=start_logits, end_logits=end_logits, hidden_states=outputs.hidden_states
         )
