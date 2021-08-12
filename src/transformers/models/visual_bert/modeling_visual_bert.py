@@ -746,11 +746,11 @@ class VisualBertModel(VisualBertPreTrainedModel):
             >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
-            >>> inputs.update({{
+            >>> inputs.update({
             ...     "visual_embeds": visual_embeds,
             ...     "visual_token_type_ids": visual_token_type_ids,
             ...     "visual_attention_mask": visual_attention_mask
-            ... }})
+            ... })
 
             >>> outputs = model(**inputs)
 
@@ -926,11 +926,11 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
-            >>> inputs.update({{
+            >>> inputs.update({
             ...     "visual_embeds": visual_embeds,
             ...     "visual_token_type_ids": visual_token_type_ids,
             ...     "visual_attention_mask": visual_attention_mask
-            ... }})
+            ... })
             >>> max_length  = inputs["input_ids"].shape[-1]+visual_embeds.shape[-2]
             >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt", padding="max_length", max_length=max_length)["input_ids"]
             >>> sentence_image_labels = torch.tensor(1).unsqueeze(0) # Batch_size
@@ -1068,13 +1068,13 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
 
             >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='pt', padding=True)
             >>> # batch size is 1
-            >>> inputs_dict = {{k: v.unsqueeze(0) for k,v in encoding.items()}}
-            >>> inputs.update({{
+            >>> inputs_dict = k: v.unsqueeze(0) for k,v in encoding.items()}
+            >>> inputs.update({
             ...     "visual_embeds": visual_embeds,
             ...     "visual_token_type_ids": visual_token_type_ids,
             ...     "visual_attention_mask": visual_attention_mask,
             ...     "labels": labels
-            ... }})
+            ... })
             >>> outputs = model(**inputs_dict)
 
             >>> loss = outputs.loss
@@ -1207,11 +1207,11 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
             >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
-            >>> inputs.update({{
+            >>> inputs.update({
             ...     "visual_embeds": visual_embeds,
             ...     "visual_token_type_ids": visual_token_type_ids,
             ...     "visual_attention_mask": visual_attention_mask
-            ... }})
+            ... })
 
             >>> labels = torch.tensor([[0.0,1.0]]).unsqueeze(0)  # Batch size 1, Num labels 2
 
@@ -1329,11 +1329,11 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
             >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
-            >>> inputs.update({{
+            >>> inputs.update({
             ...     "visual_embeds": visual_embeds,
             ...     "visual_token_type_ids": visual_token_type_ids,
             ...     "visual_attention_mask": visual_attention_mask
-            ... }})
+            ... })
 
             >>> labels = torch.tensor(1).unsqueeze(0)  # Batch size 1, Num choices 2
 
@@ -1490,12 +1490,12 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
             >>> region_to_phrase_position = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2]))
 
-            >>> inputs.update({{
+            >>> inputs.update({
             ...     "region_to_phrase_position": region_to_phrase_position,
             ...     "visual_embeds": visual_embeds,
             ...     "visual_token_type_ids": visual_token_type_ids,
             ...     "visual_attention_mask": visual_attention_mask
-            ... }})
+            ... })
 
             >>> labels = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2], visual_embeds.shape[-2])) # Batch size 1
 
