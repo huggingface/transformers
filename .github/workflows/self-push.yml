@@ -28,6 +28,13 @@ jobs:
       image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+      - name: Install dependencies
+        run: |
+          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
+          apt install -y libsndfile1-dev
+          pip install --upgrade pip
+          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
+
       - name: Launcher docker
         uses: actions/checkout@v2
         with:
@@ -37,12 +44,6 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y libsndfile1-dev git
-          pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
-
       - name: Are GPUs recognized by our DL frameworks
         run: |
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
@@ -50,22 +51,21 @@ jobs:
           python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
       
-#      - name: Fetch the tests to run
-#        run: |
-#          python utils/tests_fetcher.py | tee test_preparation.txt
-#
-#      - name: Report fetched tests
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: test_fetched
-#          path: test_preparation.txt
-#
+      - name: Fetch the tests to run
+        run: |
+          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
+
+      - name: Report fetched tests
+        uses: actions/upload-artifact@v2
+        with:
+          name: test_fetched
+          path: test_preparation.txt
+
       - name: Run all non-slow tests on GPU
         run: |
-           python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_gpu tests
-#          if [ -f test_list.txt ]; then
-#            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_gpu $(cat test_list.txt)
-#          fi
+          if [ -f test_list.txt ]; then
+            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_gpu $(cat test_list.txt)
+          fi
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -85,6 +85,12 @@ jobs:
 #      image: tensorflow/tensorflow:2.4.1-gpu
 #      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 #    steps:
+#      - name: Install dependencies
+#        run: |
+#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
+#          pip install --upgrade pip
+#          pip install .[sklearn,testing,onnxruntime,sentencepiece]
+#
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
 #        with:
@@ -94,12 +100,6 @@ jobs:
 #        run: |
 #          nvidia-smi
 #
-#      - name: Install dependencies
-#        run: |
-#          apt -y update && apt install -y git
-#          pip install --upgrade pip
-#          pip install .[sklearn,testing,onnxruntime,sentencepiece]
-#
 #      - name: Are GPUs recognized by our DL frameworks
 #        run: |
 #          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
@@ -107,7 +107,7 @@ jobs:
 #
 #      - name: Fetch the tests to run
 #        run: |
-#          python utils/tests_fetcher.py | tee test_preparation.txt
+#          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
 #
 #      - name: Report fetched tests
 #        uses: actions/upload-artifact@v2
@@ -142,6 +142,13 @@ jobs:
       image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+      - name: Install dependencies
+        run: |
+          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
+          apt install -y libsndfile1-dev
+          pip install --upgrade pip
+          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
+      
       - name: Launcher docker
         uses: actions/checkout@v2
         with:
@@ -151,12 +158,6 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y libsndfile1-dev git
-          pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
-
       - name: Are GPUs recognized by our DL frameworks
         run: |
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
@@ -164,24 +165,23 @@ jobs:
           python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
-#      - name: Fetch the tests to run
-#        run: |
-#          python utils/tests_fetcher.py | tee test_preparation.txt
-#
-#      - name: Report fetched tests
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: test_fetched
-#          path: test_preparation.txt
+      - name: Fetch the tests to run
+        run: |
+          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
+
+      - name: Report fetched tests
+        uses: actions/upload-artifact@v2
+        with:
+          name: test_fetched
+          path: test_preparation.txt
 
       - name: Run all non-slow tests on GPU
         env:
           MKL_SERVICE_FORCE_INTEL: 1
         run: |
-          python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_multi_gpu tests
-#          if [ -f test_list.txt ]; then
-#            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_multi_gpu $(cat test_list.txt)
-#          fi
+          if [ -f test_list.txt ]; then
+            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_torch_multi_gpu $(cat test_list.txt)
+          fi
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -201,6 +201,12 @@ jobs:
 #      image: tensorflow/tensorflow:2.4.1-gpu
 #      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 #    steps:
+#      - name: Install dependencies
+#        run: |
+#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
+#          pip install --upgrade pip
+#          pip install .[sklearn,testing,onnxruntime,sentencepiece]
+#
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
 #        with:
@@ -210,12 +216,6 @@ jobs:
 #        run: |
 #          nvidia-smi
 #
-#      - name: Install dependencies
-#        run: |
-#          apt -y update && apt install -y git
-#          pip install --upgrade pip
-#          pip install .[sklearn,testing,onnxruntime,sentencepiece]
-#
 #      - name: Are GPUs recognized by our DL frameworks
 #        run: |
 #          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
@@ -223,7 +223,7 @@ jobs:
 #
 #      - name: Fetch the tests to run
 #        run: |
-#          python utils/tests_fetcher.py | tee test_preparation.txt
+#          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
 #
 #      - name: Report fetched tests
 #        uses: actions/upload-artifact@v2
@@ -279,22 +279,21 @@ jobs:
           python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
       
-#      - name: Fetch the tests to run
-#        run: |
-#          python utils/tests_fetcher.py --filters tests/deepspeed tests/extended | tee test_preparation.txt
-#      
-#      - name: Report fetched tests
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: test_fetched
-#          path: test_preparation.txt
+      - name: Fetch the tests to run
+        run: |
+          python utils/tests_fetcher.py --diff_with_last_commit --filters tests/deepspeed tests/extended | tee test_preparation.txt
+      
+      - name: Report fetched tests
+        uses: actions/upload-artifact@v2
+        with:
+          name: test_fetched
+          path: test_preparation.txt
 
       - name: Run all tests on GPU
         run: |
-          python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
-#          if [ -f test_list.txt ]; then
-#            python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_gpu $(cat test_list.txt)
-#          fi
+          if [ -f test_list.txt ]; then
+            python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_gpu $(cat test_list.txt)
+          fi
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -335,22 +334,21 @@ jobs:
           python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
-#      - name: Fetch the tests to run
-#        run: |
-#          python utils/tests_fetcher.py --filters tests/deepspeed tests/extended | tee test_preparation.txt
-#
-#      - name: Report fetched tests
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: test_fetched
-#          path: test_preparation.txt
+      - name: Fetch the tests to run
+        run: |
+          python utils/tests_fetcher.py --diff_with_last_commit --filters tests/deepspeed tests/extended | tee test_preparation.txt
+
+      - name: Report fetched tests
+        uses: actions/upload-artifact@v2
+        with:
+          name: test_fetched
+          path: test_preparation.txt
 
       - name: Run all tests on GPU
         run: |
-          python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended
-#          if [ -f test_list.txt ]; then
-#            python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_multi_gpu $(cat test_list.txt)
-#          fi
+          if [ -f test_list.txt ]; then
+            python -m pytest -n 1 --dist=loadfile -v --make-reports=tests_torch_cuda_extensions_multi_gpu $(cat test_list.txt)
+          fi
 
       - name: Failure short reports
         if: ${{ always() }}
