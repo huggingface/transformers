@@ -23,7 +23,6 @@ import numpy as np
 
 import transformers
 from huggingface_hub import HfApi
-from jax._src.dtypes import dtype
 from requests.exceptions import HTTPError
 from transformers import BertConfig, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
