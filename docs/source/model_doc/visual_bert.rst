@@ -58,7 +58,7 @@ layer, and is expected to be bound by [CLS] and a [SEP] tokens, as in BERT. The 
 appropriately for the textual and visual parts.
 
 The :class:`~transformers.BertTokenizer` is used to encode the text. A custom detector/feature extractor must be used
-to get the visual embeddings. The following examples show how to use VisualBERT with Detectron-like models:
+to get the visual embeddings. The following example notebooks show how to use VisualBERT with Detectron-like models:
 
 * `VisualBERT VQA demo notebook
   <https://github.com/huggingface/transformers/tree/master/examples/research_projects/visual_bert>`__ : This notebook
