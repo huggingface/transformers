@@ -156,12 +156,12 @@ class FillMaskPipeline(Pipeline):
                     values = tf.gather_nd(values, tf.reshape(sort_inds, (-1, 1))).numpy()
                     predictions = target_inds[sort_inds.numpy()]
             else:
-                masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
+                # masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
 
-                # Fill mask pipeline supports only one ${mask_token} per sample
-                self.ensure_exactly_one_mask_token(masked_index.numpy())
+                # # Fill mask pipeline supports only one ${mask_token} per sample
+                # self.ensure_exactly_one_mask_token(masked_index.numpy())
 
-                logits = outputs[i, masked_index.item(), :]
+                logits = outputs[i]
                 probs = logits.softmax(dim=0)
                 if targets is None:
                     values, predictions = probs.topk(top_k if top_k is not None else self.top_k)
@@ -173,15 +173,15 @@ class FillMaskPipeline(Pipeline):
 
             for v, p in zip(values.tolist(), predictions.tolist()):
                 tokens = input_ids.numpy()
-                tokens[masked_index] = p
+                # tokens[masked_index] = p
                 # Filter padding out:
                 tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
                 result.append(
                     {
-                        "sequence": self.tokenizer.decode(tokens, skip_special_tokens=True),
+                        # "sequence": self.tokenizer.decode(tokens, skip_special_tokens=True),
                         "score": v,
                         "token": p,
-                        "token_str": self.tokenizer.decode(p),
+                        "token_str": self.tokenizer.decode(p, skip_special_tokens=True),
                     }
                 )
 

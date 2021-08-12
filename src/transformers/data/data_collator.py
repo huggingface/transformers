@@ -793,7 +793,7 @@ class DataCollatorForNetutralCellModeling():
         masked_indices = torch.bernoulli(probability_matrix).bool()
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
-        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        # 80% of the time, we replace masked input tokens with neutral
         neutral_tokens = self.neutral_tokens_ids(inputs)
         neutral_indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
         inputs[neutral_indices_replaced] = neutral_tokens[neutral_indices_replaced]
@@ -802,7 +802,7 @@ class DataCollatorForNetutralCellModeling():
 
 
 
-        # 10% of the time, we replace postive to negative
+        # 10% of the time, we replace postive to negative or vice versa
         postive_negative_tokens = self.postive_negative_tokens_ids(inputs)
         indices_replaced = torch.bernoulli(torch.full(labels.shape, 1.0)).bool() & masked_indices & ~neutral_indices_replaced
         inputs[indices_replaced] = postive_negative_tokens[indices_replaced]
