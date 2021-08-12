@@ -183,9 +183,9 @@ Supported models
 27. :doc:`FlauBERT <model_doc/flaubert>` (from CNRS) released with the paper `FlauBERT: Unsupervised Language Model
     Pre-training for French <https://arxiv.org/abs/1912.05372>`__ by Hang Le, Loïc Vial, Jibril Frej, Vincent Segonne,
     Maximin Coavoux, Benjamin Lecouteux, Alexandre Allauzen, Benoît Crabbé, Laurent Besacier, Didier Schwab.
-28. :doc:`FNet <model_doc/fnet>` (from Google Research) released with the paper `FNet: Mixing Tokens with Fourier
-    Transforms <https://arxiv.org/abs/2105.03824>`__ by James Lee-Thorp, Joshua Ainslie, Ilya Eckstein, Santiago
-    Ontanon.
+28. `FNet <https://huggingface.co/transformers/master/model_doc/fnet.html>`__ (from Google Research) released with the
+    paper `FNet: Mixing Tokens with Fourier Transforms <https://arxiv.org/abs/2105.03824>`__ by James Lee-Thorp, Joshua
+    Ainslie, Ilya Eckstein, Santiago Ontanon.
 29. :doc:`Funnel Transformer <model_doc/funnel>` (from CMU/Google Brain) released with the paper `Funnel-Transformer:
     Filtering out Sequential Redundancy for Efficient Language Processing <https://arxiv.org/abs/2006.03236>`__ by
     Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
