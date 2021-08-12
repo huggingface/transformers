@@ -20,9 +20,9 @@ from argparse import ArgumentParser
 from getpass import getpass
 from typing import List, Union
 
+from huggingface_hub.hf_api import HfApi, HfFolder
 from requests.exceptions import HTTPError
 
-from huggingface_hub.hf_api import HfApi, HfFolder
 from . import BaseTransformersCLICommand
 
 
@@ -251,7 +251,8 @@ class DeleteObjCommand(BaseUserCommand):
                 "WARNING! Managing repositories through transformers-cli is deprecated. "
                 "Please use `huggingface-cli` instead."
             )
-        )token = HfFolder.get_token()
+        )
+        token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
             exit(1)
@@ -271,7 +272,8 @@ class ListReposObjsCommand(BaseUserCommand):
                 "WARNING! Managing repositories through transformers-cli is deprecated. "
                 "Please use `huggingface-cli` instead."
             )
-        )token = HfFolder.get_token()
+        )
+        token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
             exit(1)
@@ -295,7 +297,8 @@ class RepoCreateCommand(BaseUserCommand):
                 "WARNING! Managing repositories through transformers-cli is deprecated. "
                 "Please use `huggingface-cli` instead."
             )
-        )token = HfFolder.get_token()
+        )
+        token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
             exit(1)
