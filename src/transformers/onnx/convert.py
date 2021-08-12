@@ -24,7 +24,6 @@ from .. import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedMod
 from ..file_utils import is_torch_onnx_dict_inputs_support_available
 from ..utils import logging
 from .config import OnnxConfig
-from .utils import flatten_output_collection_property
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -163,7 +162,7 @@ def validate_model_outputs(
         if name == "past_key_values":
             name = "present"
         if isinstance(value, (list, tuple)):
-            value = flatten_output_collection_property(name, value)
+            value = config.flatten_output_collection_property(name, value)
             ref_outputs_dict.update(value)
         else:
             ref_outputs_dict[name] = value
@@ -172,7 +171,7 @@ def validate_model_outputs(
     onnx_inputs = {}
     for name, value in reference_model_inputs.items():
         if isinstance(value, (list, tuple)):
-            value = flatten_output_collection_property(name, value)
+            value = config.flatten_output_collection_property(name, value)
             onnx_inputs.update({tensor_name: pt_tensor.numpy() for tensor_name, pt_tensor in value.items()})
         else:
             onnx_inputs[name] = value.numpy()

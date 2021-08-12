@@ -306,17 +306,17 @@ def get_all_auto_configured_models():
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
     if is_torch_available():
         for attr_name in dir(transformers.models.auto.modeling_auto):
-            if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING"):
+            if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_auto, attr_name)))
     if is_tf_available():
         for attr_name in dir(transformers.models.auto.modeling_tf_auto):
-            if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING"):
+            if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_tf_auto, attr_name)))
     if is_flax_available():
         for attr_name in dir(transformers.models.auto.modeling_flax_auto):
-            if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING"):
+            if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_flax_auto, attr_name)))
-    return [cls.__name__ for cls in result]
+    return [cls for cls in result]
 
 
 def ignore_unautoclassed(model_name):
