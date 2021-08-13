@@ -74,10 +74,10 @@ def get_tiny_config_from_class(configuration_class):
 @lru_cache(maxsize=100)
 def get_tiny_tokenizer_from_checkpoint(checkpoint):
     tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-    logger.warning("Training new from iterator ...")
+    logger.info("Training new from iterator ...")
     vocabulary = string.ascii_letters + string.digits + " "
     tokenizer = tokenizer.train_new_from_iterator(vocabulary, vocab_size=len(vocabulary), show_progress=False)
-    logger.warning("Trained.")
+    logger.info("Trained.")
     return tokenizer
 
 
@@ -109,9 +109,7 @@ class PipelineTestCaseMeta(type):
                 # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
                 # provide some default tokenizer and hope for the best.
                 except:  # noqa: E722
-                    logger.warning(f"Tokenizer cannot be created from checkpoint {checkpoint}")
-                    tokenizer = get_tiny_tokenizer_from_checkpoint("gpt2")
-                    tokenizer.model_max_length = model.config.max_position_embeddings
+                    self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
                 self.run_pipeline_test(model, tokenizer)
 
             return test
