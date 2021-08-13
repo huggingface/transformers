@@ -85,7 +85,9 @@ class PretrainedConfig(PushToHubMixin):
         add_cross_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
             that can be used as decoder models within the `:class:~transformers.EncoderDecoderModel` class, which
-            consists of all models in ``AUTO_MODELS_FOR_CAUSAL_LM``.
+            consists of all models in ``AUTO_MODELS_FOR_CAUSAL_LM``, or within the
+            `:class:~transformers.FlaxEncoderDecoderModel` class, which consists of all models in
+            ``FLAX_AUTO_MODELS_FOR_CAUSAL_LM``.
         tie_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`)
             Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
             and decoder model to have the exact same parameter names.
