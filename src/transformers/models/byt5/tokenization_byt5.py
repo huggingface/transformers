@@ -107,7 +107,13 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         for i, token in enumerate(additional_special_tokens):
             self.special_tokens_encoder[token] = self.vocab_size + i - n - 1
         self.special_tokens_decoder: Dict[str, int] = {v: k for k, v in self.special_tokens_encoder.items()}
-        self.pattern = re.compile(f"({'|'.join(self.special_tokens_encoder.keys())}|.)")
+        self.patter = self.get_pattern()
+
+    def get_pattern(self):
+        tokens = list(self.special_tokens_encoder.keys()) + list(self.added_tokens_encoder.keys())
+        tokens = [t.replace("|", "\|") for t in tokens]
+        token_reg = "|".join(tokens)
+        return re.compile(fr"({token_reg}|.)")
 
     @property
     def vocab_size(self):
@@ -199,7 +205,12 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             token_ids_1 = self._add_eos_if_not_present(token_ids_1)
             return token_ids_0 + token_ids_1
 
-    def tokenize(self, text: str) -> List[str]:
+    def _add_tokens(self, *args, **kwargs):
+        result = super()._add_tokens(*args, **kwargs)
+        self.pattern = self.get_pattern()
+        return result
+
+    def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         tokens = list(self.pattern.findall(text))
         return tokens
@@ -208,9 +219,14 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         """Converts a token (str) in an id using the vocab."""
         if token in self.special_tokens_encoder:
             token_id = self.special_tokens_encoder[token]
-        elif len(token) > 1:
+        elif token in self.added_tokens_encoder:
+            token_id = self.added_tokens_encoder[token]
+        elif len(token) != 1:
             # token of length > 1 must be newly added tokens
-            raise Exception(f"Unhandled new added token {token}")
+            # import ipdb
+
+            # ipdb.set_trace()
+            # raise Exception(f"Unhandled new added token {token}")
             token_id = self.unk_token_id
         else:
             token_id = ord(token) + self._num_special_tokens
@@ -226,25 +242,15 @@ class ByT5Tokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-
-        def _convert_sub_string(sub_chars):
-            byte_string = bytes([ord(char) for char in sub_chars])
-            return byte_string.decode("utf-8", errors="ignore")
-
         string = ""
-        sub_chars = []
         for token in tokens:
-            # if is special token
-            if len(token) > 1:
-                string += _convert_sub_string(sub_chars)
-                string += token
-                sub_chars = []
+            if token in self.special_tokens_decoder:
+                tok_string = self.special_tokens_decoder[token]
+            elif token in self.added_tokens_decoder:
+                tok_string = self.added_tokens_decoder[token]
             else:
-                sub_chars.append(token)
-
-        # add remaining chars
-        string += _convert_sub_string(sub_chars)
-
+                tok_string = token
+            string += tok_string
         return string
 
     # ByT5Tokenizer has no vocab file
