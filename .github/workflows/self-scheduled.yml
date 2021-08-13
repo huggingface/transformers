@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev
+          apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
 
@@ -100,6 +100,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y git
           pip install --upgrade pip
           pip install .[sklearn,testing,onnx,sentencepiece]
 
@@ -154,7 +155,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev
+          apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
 
@@ -208,6 +209,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y git
           pip install --upgrade pip
           pip install .[sklearn,testing,onnx,sentencepiece]
 
