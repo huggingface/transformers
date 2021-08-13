@@ -609,6 +609,249 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 assert sequence_length == padded_sequence_right_length
                 assert encoded_sequence == padded_sequence_right
 
+    def test_padding(self, max_length=50):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
+                pad_token_id = tokenizer_p.pad_token_id
+
+                # Encode - Simple input
+                words, boxes = self.get_words_and_boxes()
+                input_r = tokenizer_r.encode(words, boxes=boxes, max_length=max_length, pad_to_max_length=True)
+                input_p = tokenizer_p.encode(words, boxes=boxes, max_length=max_length, pad_to_max_length=True)
+                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
+                input_r = tokenizer_r.encode(words, boxes=boxes, max_length=max_length, padding="max_length")
+                input_p = tokenizer_p.encode(words, boxes=boxes, max_length=max_length, padding="max_length")
+                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
+
+                input_r = tokenizer_r.encode(words, boxes=boxes, padding="longest")
+                input_p = tokenizer_p.encode(words, boxes=boxes, padding=True)
+                self.assert_padded_input_match(input_r, input_p, len(input_r), pad_token_id)
+
+                # Encode - Pair input
+                question, words, boxes = self.get_question_words_and_boxes()
+                input_r = tokenizer_r.encode(
+                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
+                )
+                input_p = tokenizer_p.encode(
+                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
+                )
+                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
+                input_r = tokenizer_r.encode(
+                    question, words, boxes=boxes, max_length=max_length, padding="max_length"
+                )
+                input_p = tokenizer_p.encode(
+                    question, words, boxes=boxes, max_length=max_length, padding="max_length"
+                )
+                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
+                input_r = tokenizer_r.encode(question, words, boxes=boxes, padding=True)
+                input_p = tokenizer_p.encode(question, words, boxes=boxes, padding="longest")
+                self.assert_padded_input_match(input_r, input_p, len(input_r), pad_token_id)
+
+                # Encode_plus - Simple input
+                words, boxes = self.get_words_and_boxes()
+                input_r = tokenizer_r.encode_plus(
+                    words, boxes=boxes, max_length=max_length, pad_to_max_length=True
+                )
+                input_p = tokenizer_p.encode_plus(
+                    words, boxes=boxes, max_length=max_length, pad_to_max_length=True
+                )
+                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
+                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
+                input_r = tokenizer_r.encode_plus(
+                    words, boxes=boxes, max_length=max_length, padding="max_length"
+                )
+                input_p = tokenizer_p.encode_plus(
+                    words, boxes=boxes, max_length=max_length, padding="max_length"
+                )
+                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
+                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
+
+                input_r = tokenizer_r.encode_plus(words, boxes=boxes, padding="longest")
+                input_p = tokenizer_p.encode_plus(words, boxes=boxes, padding=True)
+                self.assert_padded_input_match(
+                    input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]), pad_token_id
+                )
+
+                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
+
+                # Encode_plus - Pair input
+                question, words, boxes = self.get_question_words_and_boxes()
+                input_r = tokenizer_r.encode_plus(
+                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
+                )
+                input_p = tokenizer_p.encode_plus(
+                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
+                )
+                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
+                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
+                input_r = tokenizer_r.encode_plus(
+                    question, words, boxes=boxes, max_length=max_length, padding="max_length"
+                )
+                input_p = tokenizer_p.encode_plus(
+                    question, words, boxes=boxes, max_length=max_length, padding="max_length"
+                )
+                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
+                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
+                input_r = tokenizer_r.encode_plus(question, words, boxes=boxes, padding="longest")
+                input_p = tokenizer_p.encode_plus(question, words, boxes=boxes, padding=True)
+                self.assert_padded_input_match(
+                    input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]), pad_token_id
+                )
+                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
+
+                # Batch_encode_plus - Simple input
+                words, boxes = self.get_words_and_boxes_batch()
+
+                input_r = tokenizer_r.batch_encode_plus(
+                    words, 
+                    boxes=boxes,
+                    max_length=max_length,
+                    pad_to_max_length=True,
+                )
+                input_p = tokenizer_p.batch_encode_plus(
+                    words,
+                    boxes=boxes,
+                    max_length=max_length,
+                    pad_to_max_length=True,
+                )
+                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+
+                input_r = tokenizer_r.batch_encode_plus(
+                    words,
+                    boxes=boxes,
+                    max_length=max_length,
+                    padding="max_length",
+                )
+                input_p = tokenizer_p.batch_encode_plus(
+                    words,
+                    boxes=boxes,
+                    max_length=max_length,
+                    padding="max_length",
+                )
+                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+
+                input_r = tokenizer_r.batch_encode_plus(
+                    words,
+                    boxes=boxes,
+                    max_length=max_length,
+                    padding="longest",
+                )
+                input_p = tokenizer_p.batch_encode_plus(
+                    words,
+                    boxes=boxes,
+                    max_length=max_length,
+                    padding=True,
+                )
+                self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
+
+                input_r = tokenizer_r.batch_encode_plus(
+                    words,
+                    boxes=boxes, 
+                    padding="longest"
+                )
+                input_p = tokenizer_p.batch_encode_plus(
+                    words,
+                    boxes=boxes,
+                    padding=True
+                )
+                self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
+
+                # Batch_encode_plus - Pair input
+                questions, words, boxes = self.get_question_words_and_boxes_batch()
+
+                input_r = tokenizer_r.batch_encode_plus(
+                    list(zip(questions, words)),
+                    is_pair=True,
+                    boxes=boxes,
+                    max_length=max_length,
+                    truncation=True,
+                    padding="max_length",
+                )
+                input_p = tokenizer_p.batch_encode_plus(
+                    list(zip(questions, words)),
+                    is_pair=True,
+                    boxes=boxes,
+                    max_length=max_length,
+                    truncation=True,
+                    padding="max_length",
+                )
+                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+
+                input_r = tokenizer_r.batch_encode_plus(
+                    list(zip(questions, words)),
+                    is_pair=True,
+                    boxes=boxes,
+                    padding=True,
+                )
+                input_p = tokenizer_p.batch_encode_plus(
+                    list(zip(questions, words)),
+                    is_pair=True,
+                    boxes=boxes,
+                    padding="longest",
+                )
+                self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
+
+                # Using pad on single examples after tokenization
+                words, boxes = self.get_words_and_boxes()
+                input_r = tokenizer_r.encode_plus(words, boxes=boxes)
+                input_r = tokenizer_r.pad(input_r)
+
+                input_p = tokenizer_r.encode_plus(words, boxes=boxes)
+                input_p = tokenizer_r.pad(input_p)
+
+                self.assert_padded_input_match(
+                    input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]), pad_token_id
+                )
+
+                # Using pad on single examples after tokenization
+                input_r = tokenizer_r.encode_plus(words, boxes=boxes)
+                input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
+
+                input_p = tokenizer_r.encode_plus(words, boxes=boxes)
+                input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
+
+                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
+
+                # Using pad after tokenization
+                # words, boxes = self.get_words_and_boxes_batch()
+                # input_r = tokenizer_r.batch_encode_plus(
+                #     words,
+                #     boxes=boxes,
+                # )
+                # input_r = tokenizer_r.pad(input_r)
+
+                # input_p = tokenizer_r.batch_encode_plus(
+                #     words,
+                #     boxes=boxes,
+                # )
+                # input_p = tokenizer_r.pad(input_p)
+
+                # self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
+
+                # Using pad after tokenization
+                words, boxes = self.get_words_and_boxes_batch()
+                input_r = tokenizer_r.batch_encode_plus(
+                    words,
+                    boxes=boxes,
+                )
+                input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
+
+                input_p = tokenizer_r.batch_encode_plus(
+                    words,
+                    boxes=boxes,
+                )
+                input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
+
+                print("Inputs rust:", input_r)
+                print("Inputs python:", input_p)
+                
+                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+
+    
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -1265,18 +1508,22 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
+        self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 2: batched
         words, boxes = self.get_words_and_boxes_batch()
-        word_labels = [[1, 2, 3], [46, 17, 22, 3]]
+        word_labels = [[1, 2, 3], [2, 46, 17, 22, 3]]
 
         # fmt: off
-        expected_results = {'input_ids': [[101, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [101, 7592, 2026, 2171, 2003, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'labels': [[-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], [-100, 46, 17, 22, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E231
+        expected_results = {'input_ids': [[101, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [101, 7592, 2026, 2171, 2003, 3960, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'labels': [[-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], [-100, 2, 46, 17, 22, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E231
         # fmt: on
 
-        encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
-        self.assertDictEqual(dict(encoding), expected_results)
+        encoding_p = tokenizer_p(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
+        self.assertDictEqual(dict(encoding_p), expected_results)
+        self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 3: not batched
         question, words, boxes = self.get_question_words_and_boxes()
@@ -1285,8 +1532,10 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_results = {'input_ids': [101, 2054, 1005, 1055, 2010, 2171, 1029, 102, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0], 'bbox': [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
         # fmt: on
 
-        encoding = tokenizer_p(question, words, boxes, padding="max_length", max_length=20)
-        self.assertDictEqual(dict(encoding), expected_results)
+        encoding_p = tokenizer_p(question, words, boxes, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(question, words, boxes, padding="max_length", max_length=20)
+        self.assertDictEqual(dict(encoding_p), expected_results)
+        self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 3: batched
         questions, words, boxes = self.get_question_words_and_boxes_batch()
@@ -1295,8 +1544,10 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_results = {'input_ids': [[101, 2054, 1005, 1055, 2010, 2171, 1029, 102, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0], [101, 2129, 2003, 2002, 2170, 1029, 102, 2054, 1037, 21110, 2546, 3806, 2102, 2078, 102, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [336, 42, 353, 57], [34, 42, 66, 69], [34, 42, 66, 69], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]]}  # noqa: E231
         # fmt: on
 
-        encoding = tokenizer_p(questions, words, boxes, padding="max_length", max_length=20)
-        self.assertDictEqual(dict(encoding), expected_results)
+        encoding_p = tokenizer_p(questions, words, boxes, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(questions, words, boxes, padding="max_length", max_length=20)
+        self.assertDictEqual(dict(encoding_p), expected_results)
+        self.assertDictEqual(dict(encoding_r), expected_results)
 
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):

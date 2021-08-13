@@ -478,7 +478,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
         )
-        
+                
         if is_pair:
             batch_text_or_text_pairs = [(text.split(), text_pair) for text, text_pair in batch_text_or_text_pairs]
             
@@ -535,11 +535,15 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         token_boxes = []
         for batch_index in range(len(sanitized_tokens["input_ids"])):
             token_boxes_example = []
-            for id, word_id in zip(
-                sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].word_ids
+            for id, sequence_id, word_id in zip(
+                sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].sequence_ids,
+                sanitized_encodings[batch_index].word_ids
             ):
                 if word_id is not None:
-                    token_boxes_example.append(boxes[batch_index][word_id])
+                    if is_pair and sequence_id == 0:
+                        token_boxes_example.append(self.pad_token_box)
+                    else:
+                        token_boxes_example.append(boxes[batch_index][word_id])
                 else:
                     if id == self.cls_token_id:
                         token_boxes_example.append(self.cls_token_box)
@@ -561,13 +565,14 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 for id, word_id in zip(
                     sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].word_ids
                 ):
-                    if word_id is not None:
+                    # Use the real label id for the first token of the word, and padding ids for the remaining tokens
+                    if word_id is not None and not self.decode([id]).startswith('##'):
                         labels_example.append(word_labels[batch_index][word_id])
                     else:
                         labels_example.append(self.pad_token_label)
                 labels.append(labels_example)
 
-            sanitized_tokens["bbox"] = labels
+            sanitized_tokens["labels"] = labels
 
         return BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
 
