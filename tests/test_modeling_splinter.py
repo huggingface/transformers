@@ -17,8 +17,6 @@
 
 import unittest
 
-import torch
-
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -27,6 +25,8 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 
 if is_torch_available():
+    import torch
+
     from transformers import SplinterConfig, SplinterForQuestionAnswering, SplinterModel
     from transformers.models.splinter.modeling_splinter import SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -213,7 +213,7 @@ class SplinterModelIntegrationTest(unittest.TestCase):
 
         expected_shape = torch.Size((1, 16))
         self.assertEqual(output.start_logits.shape, expected_shape)
-        self.assertEqual(output.start_logits.shape, expected_shape)
+        self.assertEqual(output.end_logits.shape, expected_shape)
 
         self.assertEqual(torch.argmax(output.start_logits), 10)
         self.assertEqual(torch.argmax(output.end_logits), 12)
