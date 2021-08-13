@@ -507,7 +507,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_list.txt) -m tests | tee tests_output.txt
+                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf tests -m is_pipeline_test | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
