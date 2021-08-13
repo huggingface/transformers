@@ -17,9 +17,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
-# import torch
-# from torch.nn.utils.rnn import pad_sequence
-
 from ..file_utils import PaddingStrategy
 from ..modeling_utils import PreTrainedModel
 from ..models.bert import BertTokenizer, BertTokenizerFast
@@ -35,7 +32,7 @@ of PyTorch/TensorFlow tensors or NumPy arrays.
 DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, Any]])
 
 
-def default_data_collator(features: List[InputDataClass], return_tensors='pt') -> Dict[str, Any]:
+def default_data_collator(features: List[InputDataClass], return_tensors="pt") -> Dict[str, Any]:
     """
     Very simple data collator that simply collates batches of dict-like objects and performs special handling for
     potential keys named:
@@ -52,15 +49,45 @@ def default_data_collator(features: List[InputDataClass], return_tensors='pt') -
     # So we will look at the first element as a proxy for what attributes exist
     # on the whole batch.
 
-    if return_tensors == 'pt':
-        return _torch_default_data_collator(features)
-    elif return_tensors == 'tf':
-        return _tf_default_data_collator(features)
-    elif return_tensors == 'np':
-        return _numpy_default_data_collator(features)
+    if return_tensors == "pt":
+        return torch_default_data_collator(features)
+    elif return_tensors == "tf":
+        return tf_default_data_collator(features)
+    elif return_tensors == "np":
+        return numpy_default_data_collator(features)
 
 
-def _torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+@dataclass
+class DefaultDataCollator:
+    return_tensors: str = "pt"
+
+    def __post_init__(self):
+        try:
+            if self.return_tensors == "pt":
+                import torch
+            elif self.return_tensors == "tf":
+                import tensorflow
+            elif self.return_tensors == "np":
+                import numpy
+            else:
+                raise ValueError(f"Framework '{self.return_tensors}' not recognized!")
+        except ImportError:
+            raise ImportError(
+                f"return_tensors is set to {self.return_tensors} " "but we were unable to load that framework!"
+            )
+
+    def __call__(self, features, return_tensors=None):
+        if return_tensors is None:
+            return_tensors = self.return_tensors
+        if return_tensors == "tf":
+            return tf_default_data_collator(features)
+        elif return_tensors == "torch":
+            return torch_default_data_collator(features)
+        elif return_tensors == "np":
+            return numpy_default_data_collator(features)
+
+
+def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import torch
 
     if not isinstance(features[0], (dict, BatchEncoding)):
@@ -94,7 +121,7 @@ def _torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, An
     return batch
 
 
-def _tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import tensorflow as tf
 
     if not isinstance(features[0], (dict, BatchEncoding)):
@@ -128,7 +155,7 @@ def _tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     return batch
 
 
-def _numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+def numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import numpy as np
 
     if not isinstance(features[0], (dict, BatchEncoding)):
@@ -193,21 +220,22 @@ class DataCollatorWithPadding:
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
-    return_tensors: str = 'pt'
+    return_tensors: str = "pt"
 
     def __post_init__(self):
         try:
-            if self.return_tensors == 'pt':
+            if self.return_tensors == "pt":
                 import torch
-            elif self.return_tensors == 'tf':
+            elif self.return_tensors == "tf":
                 import tensorflow
-            elif self.return_tensors == 'np':
+            elif self.return_tensors == "np":
                 import numpy
             else:
                 raise ValueError(f"Framework '{self.return_tensors}' not recognized!")
         except ImportError:
-            raise ImportError(f"return_tensors is set to {self.return_tensors} "
-                              "but we were unable to load that framework!")
+            raise ImportError(
+                f"return_tensors is set to {self.return_tensors} " "but we were unable to load that framework!"
+            )
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
         batch = self.tokenizer.pad(
@@ -260,36 +288,38 @@ class DataCollatorForTokenClassification:
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     label_pad_token_id: int = -100
-    return_tensors: str = 'pt'
+    return_tensors: str = "pt"
 
     def __post_init__(self):
         try:
-            if self.return_tensors == 'pt':
+            if self.return_tensors == "pt":
                 import torch
-            elif self.return_tensors == 'tf':
+            elif self.return_tensors == "tf":
                 import tensorflow
-            elif self.return_tensors == 'np':
+            elif self.return_tensors == "np":
                 import numpy
             else:
                 raise ValueError(f"Framework '{self.return_tensors}' not recognized!")
         except ImportError:
-            raise ImportError(f"return_tensors is set to {self.return_tensors} "
-                              "but we were unable to load that framework!")
+            raise ImportError(
+                f"return_tensors is set to {self.return_tensors} " "but we were unable to load that framework!"
+            )
 
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
-        if return_tensors == 'pt':
+        if return_tensors == "pt":
             return self.torch_call(features)
-        elif return_tensors == 'tf':
+        elif return_tensors == "tf":
             return self.tf_call(features)
-        elif return_tensors == 'np':
+        elif return_tensors == "np":
             return self.numpy_call(features)
         else:
             raise ValueError(f"Framework '{return_tensors}' not recognized!")
 
     def torch_call(self, features):
         import torch
+
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
         batch = self.tokenizer.pad(
@@ -320,6 +350,7 @@ class DataCollatorForTokenClassification:
 
     def tf_call(self, features):
         import tensorflow as tf
+
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
         batch = self.tokenizer.pad(
@@ -346,6 +377,7 @@ class DataCollatorForTokenClassification:
 
     def numpy_call(self, features):
         import numpy as np
+
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
         batch = self.tokenizer.pad(
@@ -370,9 +402,11 @@ class DataCollatorForTokenClassification:
         batch = {k: np.array(v, dtype=np.int64) for k, v in batch.items()}
         return batch
 
+
 def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
     import torch
+
     # Tensorize if necessary.
     if isinstance(examples[0], (list, tuple)):
         examples = [torch.tensor(e, dtype=torch.long) for e in examples]
@@ -404,8 +438,9 @@ def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] 
 
 
 def _tf_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
+
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
     # Tensorize if necessary.
     if isinstance(examples[0], (list, tuple)):
@@ -443,6 +478,7 @@ def _tf_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = N
 
 def _numpy_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
     import numpy as np
+
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
     # Tensorize if necessary.
     if isinstance(examples[0], (list, tuple)):
@@ -522,9 +558,11 @@ class DataCollatorForSeq2Seq:
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     label_pad_token_id: int = -100
-    return_tensors: str = 'pt'
+    return_tensors: str = "pt"
 
-    def __call__(self, features):
+    def __call__(self, features, return_tensors=None):
+        if return_tensors is None:
+            return_tensors = self.return_tensors
         labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
         # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
         # same length to return tensors.
@@ -542,7 +580,7 @@ class DataCollatorForSeq2Seq:
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
+            return_tensors=return_tensors,
         )
 
         # prepare decoder_input_ids
