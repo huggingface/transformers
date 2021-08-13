@@ -20,7 +20,7 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import AddedToken, LayoutLMv2TokenizerFast
+from transformers import AddedToken, LayoutLMv2TokenizerFast, SpecialTokensMixin
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
@@ -1002,8 +1002,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     # empty_tokens = tokenizer([""], [[]], padding=True, pad_to_multiple_of=8)
                     normal_tokens = tokenizer(words, boxes=boxes, padding=True, pad_to_multiple_of=8)
-                    for key, value in normal_tokens.items():
-                        print(key, len(value))
                     # for key, value in empty_tokens.items():
                     #     self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
                     for key, value in normal_tokens.items():
@@ -1308,6 +1306,73 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     model(**encoded_sequence)
                     model(**batch_encoded_sequence)
 
+    def test_rust_and_python_full_tokenizers(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        if not self.test_slow_tokenizer:
+            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            return
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        words, boxes = self.get_words_and_boxes()
+
+        ids = tokenizer.encode(words, boxes=boxes, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(words, boxes=boxes, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        ids = tokenizer.encode(words, boxes=boxes, add_special_tokens=True)
+        rust_ids = rust_tokenizer.encode(words, boxes=boxes, add_special_tokens=True)
+        self.assertListEqual(ids, rust_ids)
+    
+    def test_tokenization_python_rust_equals(self):
+        if not self.test_slow_tokenizer:
+            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            return
+
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                words, boxes = self.get_words_and_boxes()
+                
+                # Ensure basic input match
+                input_p = tokenizer_p.encode_plus(words, boxes=boxes)
+                input_r = tokenizer_r.encode_plus(words, boxes=boxes)
+
+                for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "bbox"], input_p.keys()):
+                    self.assertSequenceEqual(input_p[key], input_r[key])
+
+                input_pairs_p = tokenizer_p.encode_plus(words, boxes=boxes)
+                input_pairs_r = tokenizer_r.encode_plus(words, boxes=boxes)
+
+                for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "bbox"], input_p.keys()):
+                    self.assertSequenceEqual(input_pairs_p[key], input_pairs_r[key])
+
+                words = ["hello" for _ in range(1000)]
+                boxes = [[1000, 1000, 1000, 1000] for _ in range(1000)]
+                
+                # Ensure truncation match
+                input_p = tokenizer_p.encode_plus(words, boxes=boxes, max_length=512, truncation=True)
+                input_r = tokenizer_r.encode_plus(words, boxes=boxes, max_length=512, truncation=True)
+
+                for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "bbox"], input_p.keys()):
+                    self.assertSequenceEqual(input_p[key], input_r[key])
+
+                # Ensure truncation with stride match
+                input_p = tokenizer_p.encode_plus(
+                    words, boxes=boxes, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
+                )
+                input_r = tokenizer_r.encode_plus(
+                    words, boxes=boxes, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
+                )
+
+                for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "bbox"], input_p.keys()):
+                    self.assertSequenceEqual(input_p[key], input_r[key][0])
+    
     @slow
     def test_layoutlmv2_truncation_integration_test(self):
         words, boxes = self.get_words_and_boxes()
@@ -1394,6 +1459,42 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 if tokenizer.num_special_tokens_to_add(pair=True):
                     self.assertIn(None, output.sequence_ids())
 
+    def test_special_tokens_initialization(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+
+                added_tokens = [AddedToken("<special>", lstrip=True)]
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                )
+                words = "Hey this is a <special> token".split()
+                boxes = [[1000,1000,1000,1000] for _ in range(len(words))]
+                r_output = tokenizer_r.encode(words, boxes=boxes)
+
+                special_token_id = tokenizer_r.encode(["<special>"], boxes=[1000,1000,1000,1000], add_special_tokens=False)[0]
+
+                self.assertTrue(special_token_id in r_output)
+
+                if self.test_slow_tokenizer:
+                    tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
+                    )
+                    tokenizer_p = self.tokenizer_class.from_pretrained(
+                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                    )
+
+                    words = "Hey this is a <special> token".split()
+                    boxes = [[1000,1000,1000,1000] for _ in range(len(words))]
+                    
+                    p_output = tokenizer_p.encode(words, boxes=boxes)
+                    cr_output = tokenizer_cr.encode(words, boxes=boxes)
+
+                    self.assertEqual(p_output, r_output)
+                    self.assertEqual(cr_output, r_output)
+                    self.assertTrue(special_token_id in p_output)
+                    self.assertTrue(special_token_id in cr_output)
+    
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
@@ -1407,7 +1508,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         boxes = [[[1,2,3,4], [5,6,7,8], [1,3,4,8]], [[5,6,7,8], [4,5,6,7], [3,9,2,7]]]
         inputs = new_tokenizer(text, boxes=boxes)
         self.assertEqual(len(inputs["input_ids"]), 2)
-        print(inputs["input_ids"])
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
         expected_result = "this is the"
 
@@ -1432,15 +1532,119 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
     
+    def test_training_new_tokenizer_with_special_tokens_change(self):
+        # This feature only exists for fast tokenizers
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_rust_tokenizer()
+        # Test with a special tokens map
+        class_signature = inspect.signature(tokenizer.__class__)
+        if "cls_token" in class_signature.parameters:
+            new_tokenizer = tokenizer.train_new_from_iterator(
+                SMALL_TRAINING_CORPUS, 100, special_tokens_map={tokenizer.cls_token: "<cls>"}
+            )
+            cls_id = new_tokenizer.get_vocab()["<cls>"]
+            self.assertEqual(new_tokenizer.cls_token, "<cls>")
+            self.assertEqual(new_tokenizer.cls_token_id, cls_id)
+
+        # Create a new mapping from the special tokens defined in the original tokenizer
+        special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
+        special_tokens_list.remove("additional_special_tokens")
+        special_tokens_map = {}
+        for token in special_tokens_list:
+            # Get the private one to avoid unnecessary warnings.
+            if getattr(tokenizer, f"_{token}") is not None:
+                special_token = getattr(tokenizer, token)
+                special_tokens_map[special_token] = f"{special_token}a"
+
+        # Train new tokenizer
+        new_tokenizer = tokenizer.train_new_from_iterator(
+            SMALL_TRAINING_CORPUS, 100, special_tokens_map=special_tokens_map
+        )
+
+        # Check the changes
+        for token in special_tokens_list:
+            # Get the private one to avoid unnecessary warnings.
+            if getattr(tokenizer, f"_{token}") is None:
+                continue
+            special_token = getattr(tokenizer, token)
+            if special_token in special_tokens_map:
+                new_special_token = getattr(new_tokenizer, token)
+                self.assertEqual(special_tokens_map[special_token], new_special_token)
+
+                new_id = new_tokenizer.get_vocab()[new_special_token]
+                self.assertEqual(getattr(new_tokenizer, f"{token}_id"), new_id)
+
+        # Check if the AddedToken / string format has been kept
+        for special_token in tokenizer.all_special_tokens_extended:
+            if isinstance(special_token, AddedToken) and special_token.content not in special_tokens_map:
+                # The special token must appear identically in the list of the new tokenizer.
+                self.assertTrue(
+                    special_token in new_tokenizer.all_special_tokens_extended,
+                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                )
+            elif isinstance(special_token, AddedToken):
+                # The special token must appear in the list of the new tokenizer as an object of type AddedToken with
+                # the same parameters as the old AddedToken except the content that the user has requested to change.
+                special_token_str = special_token.content
+                new_special_token_str = special_tokens_map[special_token_str]
+
+                find = False
+                for candidate in new_tokenizer.all_special_tokens_extended:
+                    if (
+                        isinstance(candidate, AddedToken)
+                        and candidate.content == new_special_token_str
+                        and candidate.lstrip == special_token.lstrip
+                        and candidate.rstrip == special_token.rstrip
+                        and candidate.normalized == special_token.normalized
+                        and candidate.single_word == special_token.single_word
+                    ):
+                        find = True
+                        break
+                self.assertTrue(
+                    find,
+                    (
+                        f"'{new_special_token_str}' doesn't appear in the list "
+                        f"'{new_tokenizer.all_special_tokens_extended}' as an AddedToken with the same parameters as "
+                        f"'{special_token}' in the list {tokenizer.all_special_tokens_extended}"
+                    ),
+                )
+            elif special_token not in special_tokens_map:
+                # The special token must appear identically in the list of the new tokenizer.
+                self.assertTrue(
+                    special_token in new_tokenizer.all_special_tokens_extended,
+                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                )
+
+            else:
+                # The special token must appear in the list of the new tokenizer as an object of type string.
+                self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens_extended)
+
+        # Test we can use the new tokenizer with something not seen during training
+        words = [["this", "is"], ["hello", "🤗"]]
+        boxes = [[[1,2,3,4], [5,6,7,8]], [[1,2,3,4],[5,6,7,8]]]
+        inputs = new_tokenizer(words, boxes=boxes)
+        self.assertEqual(len(inputs["input_ids"]), 2)
+        decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+        expected_result = "this is"
+
+        if tokenizer.backend_tokenizer.normalizer is not None:
+            expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
+        self.assertEqual(expected_result, decoded_input)
+    
     def test_prepare_for_model(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
+            # only test prepare_for_model for the slow tokenizer
+            if tokenizer.__class__.__name__ == "LayoutLMv2TokenizerFast":
+                continue
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 words, boxes = self.get_words_and_boxes()
                 prepared_input_dict = tokenizer.prepare_for_model(words, boxes=boxes, add_special_tokens=True)
                 
                 input_dict = tokenizer.encode_plus(words, boxes=boxes, add_special_tokens=True)
-
+                
                 self.assertEqual(input_dict, prepared_input_dict)
 
     @unittest.skip("LayoutLMv2 tokenizer requires boxes besides sequences.")

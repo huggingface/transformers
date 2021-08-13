@@ -535,6 +535,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         # create the token boxes 
         token_boxes = []
         for batch_index in range(len(sanitized_tokens["input_ids"])):
+            print("Batch index:", batch_index)
             token_boxes_example = []
             for id, sequence_id, word_id in zip(
                 sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].sequence_ids,
