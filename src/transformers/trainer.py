@@ -145,7 +145,7 @@ if is_apex_available():
 if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_torch_generator_available = True
     _is_native_amp_available = True
-    from torch.cuda.amp import autocast
+    from torch.autocast_mode import autocast
 
 if is_datasets_available():
     import datasets
@@ -344,15 +344,15 @@ class Trainer:
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
         # 1. MP - since we are trying to fit a much bigger than 1 gpu model
-        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
+        # 2. half-precision-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
         #    and we only use deepspeed for training at the moment
-        # 3. full fp16 eval - since the model needs to be half'ed first
+        # 3. full half precision eval - since the model needs to be half'ed first
         # 4. Sharded DDP - same as MP
         self.place_model_on_device = args.place_model_on_device
         if (
             self.is_model_parallel
             or args.deepspeed
-            or (args.fp16_full_eval and not args.do_train)
+            or (args.half_precision_full_eval and not args.do_train)
             or (self.sharded_ddp in [ShardedDDPOption.ZERO_DP_2, ShardedDDPOption.ZERO_DP_3])
         ):
             self.place_model_on_device = False
@@ -411,24 +411,34 @@ class Trainer:
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
-        self.fp16_backend = None
+        self.half_precision_backend = None
 
-        if args.fp16:
-            if args.fp16_backend == "auto":
-                self.fp16_backend = "amp" if _is_native_amp_available else "apex"
-            else:
-                self.fp16_backend = args.fp16_backend
-            logger.info(f"Using {self.fp16_backend} fp16 backend")
-
-        if args.fp16 and not args.deepspeed:  # deepspeed manages its own fp16
-            if self.fp16_backend == "amp":
-                self.use_amp = True
-                if is_sagemaker_mp_enabled():
-                    self.scaler = smp.amp.GradScaler()
-                elif self.sharded_ddp is not None:
-                    self.scaler = ShardedGradScaler()
+        if args.fp16 or args.bf16:
+            if args.half_precision_backend == "auto":
+                if _is_native_amp_available:
+                    self.half_precision_backend = "amp"
                 else:
-                    self.scaler = torch.cuda.amp.GradScaler()
+                    if args.bf16:
+                        raise ValueError("Tried to use `bf16` but native amp is not available")
+                    else:
+                        self.half_precision_backend = "apex"
+            else:
+                self.half_precision_backend = args.half_precision_backend
+            logger.info(f"Using {self.half_precision_backend} half precision backend")
+        
+        self.do_grad_scaling = False
+        if (args.fp16 or args.bf16) and not args.deepspeed:  # deepspeed manages its own half precision
+            if self.half_precision_backend == "amp":
+                self.use_amp = True
+                self.fast_dtype = torch.float16 if args.fp16 else torch.bfloat16
+                if args.fp16:  # bf16 does not scale gradients
+                    self.do_grad_scaling = True
+                    if is_sagemaker_mp_enabled():
+                        self.scaler = smp.amp.GradScaler()
+                    elif self.sharded_ddp is not None:
+                        self.scaler = ShardedGradScaler()
+                    else:
+                        self.scaler = torch.cuda.amp.GradScaler()
             else:
                 if not is_apex_available():
                     raise ImportError(
@@ -954,7 +964,7 @@ class Trainer:
             if self.sharded_ddp == ShardedDDPOption.SIMPLE:
                 model = ShardedDDP(model, self.optimizer)
             else:
-                mixed_precision = self.args.fp16
+                mixed_precision = self.args.fp16 or self.args.bf16
                 cpu_offload = ShardedDDPOption.OFFLOAD in self.args.sharded_ddp
                 zero_3 = self.sharded_ddp == ShardedDDPOption.ZERO_DP_3
                 # XXX: Breaking the self.model convention but I see no way around it for now.
@@ -1022,7 +1032,7 @@ class Trainer:
 
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
-        if args.fp16_full_eval and not args.do_train:
+        if args.half_precision_full_eval and not args.do_train:
             self._move_model_to_device(self.model, args.device)
 
         if "model_path" in kwargs:
@@ -1300,7 +1310,7 @@ class Trainer:
                     if args.max_grad_norm is not None and args.max_grad_norm > 0 and not self.deepspeed:
                         # deepspeed does its own clipping
 
-                        if self.use_amp:
+                        if self.do_grad_scaling:
                             # AMP: gradients need unscaling
                             self.scaler.unscale_(self.optimizer)
 
@@ -1323,7 +1333,7 @@ class Trainer:
                         pass  # called outside the loop
                     elif is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
-                    elif self.use_amp:
+                    elif self.do_grad_scaling:
                         scale_before = self.scaler.get_scale()
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
@@ -1533,7 +1543,7 @@ class Trainer:
                     with warnings.catch_warnings(record=True) as caught_warnings:
                         torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                     reissue_pt_warnings(caught_warnings)
-                    if self.use_amp:
+                    if self.do_grad_scaling:
                         torch.save(self.scaler.state_dict(), os.path.join(output_dir, "scaler.pt"))
         elif self.args.should_save and not self.deepspeed:
             # deepspeed.save_checkpoint above saves model/optim/sched
@@ -1541,7 +1551,7 @@ class Trainer:
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
             reissue_pt_warnings(caught_warnings)
-            if self.use_amp:
+            if self.do_grad_scaling:
                 torch.save(self.scaler.state_dict(), os.path.join(output_dir, "scaler.pt"))
 
         # Determine the new best metric / best model checkpoint
@@ -1626,7 +1636,7 @@ class Trainer:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
                 reissue_pt_warnings(caught_warnings)
-                if self.use_amp and os.path.isfile(os.path.join(checkpoint, "scaler.pt")):
+                if self.do_grad_scaling and os.path.isfile(os.path.join(checkpoint, "scaler.pt")):
                     self.scaler.load_state_dict(torch.load(os.path.join(checkpoint, "scaler.pt")))
 
     def hyperparameter_search(
@@ -1771,12 +1781,12 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
-            scaler = self.scaler if self.use_amp else None
+            scaler = self.scaler if self.do_grad_scaling else None
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         if self.use_amp:
-            with autocast():
+            with autocast(device_type=self.args.device, fast_dtype=self.fast_dtype):
                 loss = self.compute_loss(model, inputs)
         else:
             loss = self.compute_loss(model, inputs)
@@ -1788,7 +1798,7 @@ class Trainer:
             # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
             loss = loss / self.args.gradient_accumulation_steps
 
-        if self.use_amp:
+        if self.do_grad_scaling:
             self.scaler.scale(loss).backward()
         elif self.use_apex:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
@@ -2166,7 +2176,7 @@ class Trainer:
 
         # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
         # ``train`` is running, halve it first and then put on device
-        if not self.is_in_train and self.args.fp16_full_eval:
+        if not self.is_in_train and self.args.half_precision_full_eval:
             model = model.half().to(self.args.device)
 
         batch_size = dataloader.batch_size
@@ -2423,7 +2433,7 @@ class Trainer:
                 else:
                     loss = None
                     if self.use_amp:
-                        with autocast():
+                        with autocast(device_type=self.args.device, fast_dtype=self.fast_dtype):
                             outputs = model(**inputs)
                     else:
                         outputs = model(**inputs)
@@ -2579,7 +2589,7 @@ class Trainer:
 
         # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
         # ``train`` is running, halve it first and then put on device
-        if not self.is_in_train and self.args.fp16_full_eval:
+        if not self.is_in_train and self.args.half_precision_full_eval:
             model = model.half().to(self.args.device)
 
         batch_size = dataloader.batch_size
