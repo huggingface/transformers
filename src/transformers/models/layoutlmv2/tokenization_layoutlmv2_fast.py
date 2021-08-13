@@ -482,9 +482,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 
         if is_pair:
             batch_text_or_text_pairs = [(text.split(), text_pair) for text, text_pair in batch_text_or_text_pairs]
-            
-        print("Batch text or text pairs:", batch_text_or_text_pairs)
-        
+                    
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
@@ -533,11 +531,6 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         for input_ids in sanitized_tokens["input_ids"]:
             self._eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
-
-        print("Sanitized tokens:", sanitized_tokens)
-        print("Sanitized encodings:", sanitized_encodings)
-
-        print("Number of encoded examples:", len(sanitized_tokens["input_ids"]))
         
         # create the token boxes 
         token_boxes = []
