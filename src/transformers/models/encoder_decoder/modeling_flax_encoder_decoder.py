@@ -30,7 +30,6 @@ from jax.random import PRNGKey
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutputWithCrossAttentions, FlaxSeq2SeqLMOutput
 from ...modeling_flax_utils import FlaxPreTrainedModel
-from ...models.auto.modeling_flax_auto import FLAX_MODEL_FOR_CAUSAL_LM_MAPPING, FLAX_MODEL_MAPPING
 from ...utils import logging
 from .configuration_encoder_decoder import EncoderDecoderConfig
 
@@ -223,6 +222,8 @@ class FlaxEncoderDecoderModule(nn.Module):
         decoder_config = self.config.decoder
 
         # Copied from `modeling_hybrid_clip.py` with modifications.
+        from ...models.auto.modeling_flax_auto import FLAX_MODEL_FOR_CAUSAL_LM_MAPPING, FLAX_MODEL_MAPPING
+
         encoder_module = FLAX_MODEL_MAPPING[encoder_config.__class__].module_class
         decoder_module = FLAX_MODEL_FOR_CAUSAL_LM_MAPPING[decoder_config.__class__].module_class
 
