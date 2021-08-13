@@ -808,7 +808,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
             ).type_as(hidden_states)
 
 #            codevector_probs[mask_time_indices.reshape(-1).repeat_interleave(self.num_groups)] = code_vec_indices
-            codevector_probs = code_vec_indices
+#            codevector_probs = code_vec_indices
 
             # compute perplexity
             codevector_soft_dist = torch.softmax(

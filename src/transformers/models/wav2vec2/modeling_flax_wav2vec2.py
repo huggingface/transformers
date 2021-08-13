@@ -698,17 +698,17 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
 
     @staticmethod
     def _compute_perplexity(probs, mask=None):
-        if mask is not None:
-            mask_extended = jnp.broadcast_to(mask.flatten()[:, None, None], probs.shape)
-            probs = jnp.where(mask_extended, probs, jnp.zeros_like(probs))
-            marginal_probs = probs.sum(axis=0) / mask.sum()
-        else:
-            marginal_probs = probs.mean(axis=0)
+#        if mask is not None:
+#            mask_extended = jnp.broadcast_to(mask.flatten()[:, None, None], probs.shape)
+#            probs = jnp.where(mask_extended, probs, jnp.zeros_like(probs))
+#            marginal_probs = probs.sum(axis=0) / mask.sum()
+#        else:
+        marginal_probs = probs.mean(axis=0)
 
         perplexity = jnp.exp(-jnp.sum(marginal_probs * jnp.log(marginal_probs + 1e-7), axis=-1)).sum()
         return perplexity
 
-    def __call__(self, hidden_states, mask_time_indices=None, deterministic=True, temperature=1):
+    def __call__(self, hidden_states, attention_mask=None, deterministic=True, temperature=2, code_vec_indices=None):
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
         # project to codevector dim
@@ -718,21 +718,30 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
         if not deterministic:
             # sample code vector probs via gumbel in differentiateable way
             gumbel_rng = self.make_rng("gumbel")
+            # sample x~Gumbel[0, 1]
             gumbels = jax.random.gumbel(gumbel_rng, hidden_states.shape)
+            # approximate argmax
+            print("hidden", hidden_states.sum())
             codevector_probs = nn.softmax((hidden_states + gumbels) / temperature)
+
+            # straight-through estimator trick
+            codevector_idx = codevector_probs.argmax(axis=-1)
+            codevector_probs_hard = jax.nn.one_hot(codevector_idx, codevector_probs.shape[-1]) * 1.0
+            codevector_probs = codevector_probs_hard - jax.lax.stop_gradient(codevector_probs) + codevector_probs
 
             # compute perplexity
             codevector_soft_dist = nn.softmax(
                 hidden_states.reshape(batch_size * sequence_length, self.num_groups, -1), axis=-1
             )
-            perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
+            perplexity = self._compute_perplexity(codevector_soft_dist, attention_mask)
         else:
             # take argmax in non-differentiable way
             # comptute hard codevector distribution (one hot)
             codevector_idx = hidden_states.argmax(axis=-1)
             codevector_probs = jax.nn.one_hot(codevector_idx, hidden_states.shape[-1]) * 1.0
             codevector_probs = codevector_probs.reshape(batch_size * sequence_length, self.num_groups, -1)
-            perplexity = self._compute_perplexity(codevector_probs, mask_time_indices)
+            perplexity = self._compute_perplexity(codevector_probs, attention_mask)
+
 
         codevector_probs = codevector_probs.reshape(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
@@ -771,7 +780,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng, 2)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_values, attention_mask, return_dict=False)["params"]
+        return self.module.init(rngs, input_values, attention_mask, return_dict=False, code_vec_indices=None)["params"]
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     def __call__(
@@ -816,7 +825,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
             rngs=rngs,
         )
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[np.ndarray, int]):
         return self.module._get_feat_extract_output_lengths(input_lengths)
 
 
@@ -915,7 +924,7 @@ class FlaxWav2Vec2Module(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[np.ndarray, int]):
         """
         Computes the output length of the convolutional layers
         """
@@ -1012,7 +1021,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
 
         return FlaxCausalLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[np.ndarray, int]):
         """
         Computes the output length of the convolutional layers
         """
@@ -1066,6 +1075,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        code_vec_indices=None
     ):
         r"""
         Returns:
@@ -1124,13 +1134,25 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
             return_dict=return_dict,
         )
 
+        if attention_mask is not None:
+            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1).astype("i4"))
+
+            attention_mask = jnp.zeros(outputs[0].shape[:2], dtype=self.dtype)
+
+            # these two operations makes sure that all values
+            # before the output lengths indices are attended to
+            attention_mask = jax.ops.index_update(
+                attention_mask, jax.ops.index[jnp.arange(attention_mask.shape[0]), output_lengths - 1], 1
+            )
+            attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
+
         # project all transformed features (including masked) to final vq dim
         transformer_features = self.project_hid(outputs[0])
 
-        # quantize all (unmasked) extracted features and project to final vq dim
+        # quantize all unmasked extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1], deterministic=deterministic)
         quantized_features, codevector_perplexity = self.quantizer(
-            extract_features, mask_time_indices, deterministic=deterministic, temperature=gumbel_temperature
+            extract_features, attention_mask, deterministic=deterministic, temperature=gumbel_temperature, code_vec_indices=code_vec_indices
         )
         quantized_features = self.project_q(quantized_features)
 
@@ -1180,6 +1202,7 @@ class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        code_vec_indices=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1212,5 +1235,6 @@ class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
             output_attentions,
             output_hidden_states,
             return_dict,
+            code_vec_indices=code_vec_indices,
             rngs=rngs,
         )
