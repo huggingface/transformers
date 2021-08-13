@@ -59,6 +59,10 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         outputs = conversation_agent(Conversation("Hi there!"))
         self.assertEqual(outputs, Conversation(past_user_inputs=["Hi there!"], generated_responses=[ANY(str)]))
 
+        # Single list
+        outputs = conversation_agent([Conversation("Hi there!")])
+        self.assertEqual(outputs, Conversation(past_user_inputs=["Hi there!"], generated_responses=[ANY(str)]))
+
         # Batch
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
@@ -93,6 +97,10 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             conversation_agent("Hi there!")
         with self.assertRaises(ValueError):
             conversation_agent(Conversation())
+        # Conversation have been consumed and are not valid anymore
+        # Inactive conversations passed to the pipeline raise a ValueError
+        with self.assertRaises(ValueError):
+            conversation_agent(conversation_2)
 
     @require_torch
     @slow
