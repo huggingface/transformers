@@ -546,7 +546,7 @@ class Wav2Vec2EncoderLayer(nn.Module):
 
 
 class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, i):
         super().__init__()
         self.attention = Wav2Vec2Attention(
             embed_dim=config.hidden_size,
@@ -554,6 +554,7 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=False,
         )
+        self.i = i
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
@@ -561,6 +562,7 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         attn_residual = hidden_states
+
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.attention(
             hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
@@ -669,7 +671,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList(
-            [Wav2Vec2EncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
+            [Wav2Vec2EncoderLayerStableLayerNorm(config, i) for i in range(config.num_hidden_layers)]
         )
 
     def forward(
@@ -694,6 +696,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
+
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
@@ -778,28 +781,34 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
     @staticmethod
     def _compute_perplexity(probs, mask=None):
-        if mask is not None:
-            mask_extended = mask.flatten()[:, None, None].expand(probs.shape)
-            probs = torch.where(mask_extended, probs, torch.zeros_like(probs))
-            marginal_probs = probs.sum(dim=0) / mask.sum()
-        else:
-            marginal_probs = probs.mean(dim=0)
+#        if mask is not None:
+#            mask_extended = mask.flatten()[:, None, None].expand(probs.shape)
+#            probs = torch.where(mask_extended, probs, torch.zeros_like(probs))
+#            marginal_probs = probs.sum(dim=0) / mask.sum()
+#        else:
+        marginal_probs = probs.mean(dim=0)
 
         perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
 
-    def forward(self, hidden_states, mask_time_indices=None):
+    def forward(self, hidden_states, mask_time_indices=None, code_vec_indices=None):
         batch_size, sequence_length, hidden_size = hidden_states.shape
+        print("Hid 0", hidden_states.sum())
 
         # project to codevector dim
         hidden_states = self.weight_proj(hidden_states)
+#        print("Hid 0", torch.where(mask_time_indices[:, :, None].expand(hidden_states.shape), hidden_states, torch.zeros_like(hidden_states)).sum())
         hidden_states = hidden_states.view(batch_size * sequence_length * self.num_groups, -1)
 
         if self.training:
             # sample code vector probs via gumbel in differentiateable way
             codevector_probs = nn.functional.gumbel_softmax(
-                hidden_states.float(), tau=self.temperature, hard=True
+#                hidden_states.float(), tau=self.temperature, hard=True
+                hidden_states.float(), tau=2.0, hard=True
             ).type_as(hidden_states)
+
+#            codevector_probs[mask_time_indices.reshape(-1).repeat_interleave(self.num_groups)] = code_vec_indices
+            codevector_probs = code_vec_indices
 
             # compute perplexity
             codevector_soft_dist = torch.softmax(
@@ -826,6 +835,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
             .view(batch_size, sequence_length, -1)
         )
 
+        print("Codevectors sum", torch.where(mask_time_indices[:, :, None].expand(codevectors.shape), codevectors, torch.zeros_like(codevectors)).sum())
         return codevectors, perplexity
 
 
@@ -1062,11 +1072,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         hidden_states, extract_features = self.feature_projection(extract_features)
 
-        if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+        hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 
-        hidden_states = self._mask_hidden_states(hidden_states)
-
+        print("In HF", hidden_states.sum())
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
@@ -1076,6 +1084,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         )
 
         hidden_states = encoder_outputs[0]
+        print("Out HF", hidden_states.sum())
 
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
@@ -1164,6 +1173,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         negative_features: torch.FloatTensor,
         predicted_features: torch.FloatTensor,
         temperature: int = 1,
+        mask_time_indices=None,
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
@@ -1171,12 +1181,21 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
+        print(50 * "=")
+        print("pred", predicted_features.shape)
+        print("target", target_features.shape)
+
+        print("pred sum", torch.where(mask_time_indices[:, :, None].expand(predicted_features.shape), predicted_features, torch.zeros_like(predicted_features)).sum())
+        print("target sum", torch.where(mask_time_indices[None, :, :, None].expand(target_features.shape), target_features, torch.zeros_like( target_features)).sum())
+
         logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1).type_as(
             target_features
         )
 
         # apply temperature
         logits = logits / temperature
+
+        print("logits", logits.sum())
         return logits
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
@@ -1190,6 +1209,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         fsq_negs=None,
+        code_vec_indices=None,
     ):
         r"""
         mask_time_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1255,25 +1275,30 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             mask_time_indices=mask_time_indices,
             return_dict=return_dict,
         )
+        print("1", outputs[0].sum())
 
         # 1. project all transformed features (including masked) to final vq dim
+        print("pred features", torch.where(mask_time_indices[:, :, None].expand(outputs[0].shape), outputs[0], torch.zeros_like(outputs[0])).sum())
         transformer_features = self.project_hid(outputs[0])
 
         # 2. quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1])
-        quantized_features, codevector_perplexity = self.quantizer(extract_features, mask_time_indices)
+        quantized_features, codevector_perplexity = self.quantizer(extract_features, mask_time_indices, code_vec_indices)
+        print("Quant features", torch.where(mask_time_indices[:, :, None].expand(quantized_features.shape), quantized_features, torch.zeros_like(quantized_features)).sum())
         quantized_features = self.project_q(quantized_features)
+        print("Quant features 2", torch.where(mask_time_indices[:, :, None].expand(quantized_features.shape), quantized_features, torch.zeros_like(quantized_features)).sum())
 
         loss = None
-        if True or self.training:
+        if self.training:
             # for training, we sample negatives
             # 3. sample K negatives (distractors) quantized states for contrastive loss
             negative_quantized_features, sampled_negative_indices = self._sample_negatives(quantized_features, self.config.num_negatives)
 
             if fsq_negs is not None:
-                negative_quantized_features[
-                    mask_time_indices[None, :].broadcast_to(negative_quantized_features.shape[:-1])
-                ] = fsq_negs.reshape(-1, fsq_negs.shape[-1])
+                negative_quantized_features = fsq_negs
+#                negative_quantized_features[
+#                    mask_time_indices[None, :].broadcast_to(negative_quantized_features.shape[:-1])
+#                ] = fsq_negs.reshape(-1, fsq_negs.shape[-1])
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
             # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
@@ -1282,8 +1307,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
                 negative_quantized_features,
                 transformer_features,
                 self.config.contrastive_logits_temperature,
+                mask_time_indices,
             )
-            np.save("/home/patrick/debug_repo/flax_wav2vec2/logits.npy", logits.detach().numpy())
 
             # 5. if a negative vector is identical to the positive (i.e. when codebook utilization is low),
             # its cosine similarity will be masked
