@@ -30,7 +30,7 @@ InputDataClass = NewType("InputDataClass", Any)
 
 """
 A DataCollator is a function that takes a list of samples from a Dataset and collate them into a batch, as a dictionary
-of torch/TF Tensors or numpy arrays.
+of PyTorch/TensorFlow tensors or NumPy arrays.
 """
 DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, Any]])
 
