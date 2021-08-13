@@ -817,20 +817,20 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
 
                 # Using pad after tokenization
-                # words, boxes = self.get_words_and_boxes_batch()
-                # input_r = tokenizer_r.batch_encode_plus(
-                #     words,
-                #     boxes=boxes,
-                # )
-                # input_r = tokenizer_r.pad(input_r)
+                words, boxes = self.get_words_and_boxes_batch()
+                input_r = tokenizer_r.batch_encode_plus(
+                    words,
+                    boxes=boxes,
+                )
+                input_r = tokenizer_r.pad(input_r)
 
-                # input_p = tokenizer_r.batch_encode_plus(
-                #     words,
-                #     boxes=boxes,
-                # )
-                # input_p = tokenizer_r.pad(input_p)
+                input_p = tokenizer_r.batch_encode_plus(
+                    words,
+                    boxes=boxes,
+                )
+                input_p = tokenizer_r.pad(input_p)
 
-                # self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
+                self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
 
                 # Using pad after tokenization
                 words, boxes = self.get_words_and_boxes_batch()
@@ -839,18 +839,14 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     boxes=boxes,
                 )
                 input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
-
+                
                 input_p = tokenizer_r.batch_encode_plus(
                     words,
                     boxes=boxes,
                 )
                 input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
-
-                print("Inputs rust:", input_r)
-                print("Inputs python:", input_p)
                 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
-
     
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus

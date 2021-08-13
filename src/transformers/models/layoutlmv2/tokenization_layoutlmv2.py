@@ -1277,6 +1277,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         if needs_to_be_padded:
             difference = max_length - len(required_input)
             if self.padding_side == "right":
+                print("we are here")
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [1] * len(required_input) + [0] * difference
                 if "token_type_ids" in encoded_inputs:
