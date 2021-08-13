@@ -19,6 +19,8 @@ import random
 from functools import partial
 from typing import Callable, Optional, Tuple
 
+import numpy as np
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -28,7 +30,7 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, replace_return_docstrings
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -217,20 +219,19 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int) -> jnp.ndarray
     Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
     have a single `decoder_start_token_id` in contrast to other Bart-like models.
     """
-    prev_output_tokens = jnp.array(input_ids).clone()
+    prev_output_tokens = np.array(input_ids).copy()
 
     assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
 
     # replace possible -100 values in labels by `pad_token_id`
-    prev_output_tokens = jnp.where(prev_output_tokens == -100, pad_token_id, input_ids)
-    index_of_eos = (jnp.where(prev_output_tokens != pad_token_id, 1, 0).sum(axis=-1) - 1).reshape(-1, 1)
-    decoder_start_tokens = jnp.array(
-        [prev_output_tokens[i, eos_idx] for i, eos_idx in enumerate(index_of_eos)]
+    prev_output_tokens = np.where(prev_output_tokens == -100, pad_token_id, input_ids)
+    index_of_eos = (np.where(prev_output_tokens != pad_token_id, 1, 0).sum(axis=-1) - 1).reshape(-1, 1)
+    decoder_start_tokens = np.array(
+        [prev_output_tokens[i, eos_idx] for i, eos_idx in enumerate(index_of_eos)], dtype=np.int32
     ).squeeze()
-    # for loop basically does jax-compatible version of prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
-    for i in range(prev_output_tokens.shape[1], 0, -1):
-        prev_output_tokens = jax.ops.index_update(prev_output_tokens, (..., i), prev_output_tokens[:, i - 1])
-    prev_output_tokens = jax.ops.index_update(prev_output_tokens, (..., 0), decoder_start_tokens)
+
+    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].copy()
+    prev_output_tokens[:, 0] = decoder_start_tokens
 
     return prev_output_tokens
 
@@ -1191,6 +1192,7 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
+    @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -1357,7 +1359,7 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        deterministic: bool = True,
+        train: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -1449,7 +1451,7 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=deterministic,
+            deterministic=not train,
             rngs=rngs,
             mutable=mutable,
             method=_decoder_forward,
@@ -1516,36 +1518,37 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
         return model_kwargs
 
 
-FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = """
+FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = r"""
     Returns:
 
     Summarization example::
 
-        >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
+        >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration, MBartConfig
 
         >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
         >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='jax')
+        >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
 
         >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], decoder_start_token_id=tokenizer.lang_code_to_id[tgt_lang]).sequences
-        >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True).sequences
+        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
 
     Mask filling example::
 
         >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
         >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
-        >>> TXT = "My friends are <mask> but they eat too many carbs."
+        >>> # de_DE is the language symbol id <LID> for German
+        >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
 
         >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-        >>> input_ids = tokenizer([TXT], return_tensors='jax')['input_ids']
+        >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='np')['input_ids']
         >>> logits = model(input_ids).logits
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-        >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
-        >>> values, predictions = jax.lax.top_k(probs)
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero()[0].item()
+        >>> probs = logits[0, masked_index].softmax(dim=0)
+        >>> values, predictions = probs.topk(5)
 
         >>> tokenizer.decode(predictions).split()
 """

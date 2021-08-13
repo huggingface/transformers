@@ -36,6 +36,7 @@ from .file_utils import (
     ModelOutput,
     PushToHubMixin,
     cached_path,
+    copy_func,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
@@ -734,7 +735,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if self.get_lm_head() is not None:
             lm_head = self.get_lm_head()
 
-            return lm_head.get_output_embeddings()
+            try:
+                return lm_head.get_output_embeddings()
+            except AttributeError:
+                logger.info("Building the model")
+                self(self.dummy_inputs)
+
+                return lm_head().get_output_embeddings()
 
         return None  # Overwrite for models with output embeddings
 
@@ -1390,6 +1397,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return model, loading_info
 
         return model
+
+
+# To update the docstring, we need to copy the method, otherwise we change the original docstring.
+TFPreTrainedModel.push_to_hub = copy_func(TFPreTrainedModel.push_to_hub)
+TFPreTrainedModel.push_to_hub.__doc__ = TFPreTrainedModel.push_to_hub.__doc__.format(
+    object="model", object_class="TFAutoModel", object_files="model checkpoint"
+)
 
 
 class TFConv1D(tf.keras.layers.Layer):

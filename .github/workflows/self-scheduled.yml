@@ -14,7 +14,7 @@ env:
   RUN_SLOW: yes
   OMP_NUM_THREADS: 16
   MKL_NUM_THREADS: 16
-  PYTEST_TIMEOUT: 300
+  PYTEST_TIMEOUT: 600
 
 jobs:
   run_all_tests_torch_gpu:
@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev
+          apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
 
@@ -100,6 +100,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y git
           pip install --upgrade pip
           pip install .[sklearn,testing,onnx,sentencepiece]
 
@@ -154,7 +155,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev
+          apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
 
@@ -208,6 +209,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y git
           pip install --upgrade pip
           pip install .[sklearn,testing,onnx,sentencepiece]
 
