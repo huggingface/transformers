@@ -729,6 +729,8 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
             codevector_probs_hard = jax.nn.one_hot(codevector_idx, codevector_probs.shape[-1]) * 1.0
             codevector_probs = codevector_probs_hard - jax.lax.stop_gradient(codevector_probs) + codevector_probs
 
+            codevector_probs = code_vec_indices.detach().numpy()
+
             # compute perplexity
             codevector_soft_dist = nn.softmax(
                 hidden_states.reshape(batch_size * sequence_length, self.num_groups, -1), axis=-1
