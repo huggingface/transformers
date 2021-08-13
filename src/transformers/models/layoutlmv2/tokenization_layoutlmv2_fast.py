@@ -483,6 +483,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         if is_pair:
             batch_text_or_text_pairs = [(text.split(), text_pair) for text, text_pair in batch_text_or_text_pairs]
             
+        print("Batch text or text pairs:", batch_text_or_text_pairs)
+        
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
@@ -532,10 +534,18 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         for input_ids in sanitized_tokens["input_ids"]:
             self._eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
 
+        print("Sanitized tokens:", sanitized_tokens)
+        print("Sanitized encodings:", sanitized_encodings)
+
+        print("Number of encoded examples:", len(sanitized_tokens["input_ids"]))
+        
         # create the token boxes 
         token_boxes = []
         for batch_index in range(len(sanitized_tokens["input_ids"])):
-            print("Batch index:", batch_index)
+            if return_overflowing_tokens:
+                original_index = sanitized_tokens["overflow_to_sample_mapping"][batch_index]
+            else:
+                original_index = batch_index
             token_boxes_example = []
             for id, sequence_id, word_id in zip(
                 sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].sequence_ids,
@@ -545,7 +555,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                     if is_pair and sequence_id == 0:
                         token_boxes_example.append(self.pad_token_box)
                     else:
-                        token_boxes_example.append(boxes[batch_index][word_id])
+                        token_boxes_example.append(boxes[original_index][word_id])
                 else:
                     if id == self.cls_token_id:
                         token_boxes_example.append(self.cls_token_box)
@@ -563,13 +573,17 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         if word_labels is not None:
             labels = []
             for batch_index in range(len(sanitized_tokens["input_ids"])):
+                if return_overflowing_tokens:
+                    original_index = sanitized_tokens["overflow_to_sample_mapping"][batch_index]
+                else:
+                    original_index = batch_index
                 labels_example = []
                 for id, word_id in zip(
                     sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].word_ids
                 ):
                     # Use the real label id for the first token of the word, and padding ids for the remaining tokens
                     if word_id is not None and not self.decode([id]).startswith('##'):
-                        labels_example.append(word_labels[batch_index][word_id])
+                        labels_example.append(word_labels[original_index][word_id])
                     else:
                         labels_example.append(self.pad_token_label)
                 labels.append(labels_example)
@@ -691,7 +705,6 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         if needs_to_be_padded:
             difference = max_length - len(required_input)
             if self.padding_side == "right":
-                print("we are here")
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [1] * len(required_input) + [0] * difference
                 if "token_type_ids" in encoded_inputs:
