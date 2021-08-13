@@ -488,17 +488,10 @@ class FlaxGPTNeoBlockCollection(nn.Module):
             if output_attentions:
                 all_attentions += (layer_outputs[1],)
 
+        # this contains possible `None` values - `FlaxGPTNeoModule` will filter them out
         outputs = (hidden_states, all_hidden_states, all_attentions)
 
-        if not return_dict:
-            return tuple(v for v in outputs if v is not None)
-
-        return FlaxBaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=None,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-        )
+        return outputs
 
 
 class FlaxGPTNeoModule(nn.Module):
@@ -554,18 +547,22 @@ class FlaxGPTNeoModule(nn.Module):
         hidden_states = outputs[0]
         hidden_states = self.ln_f(hidden_states)
 
+        hidden_states = outputs[0]
+        hidden_states = self.ln_f(hidden_states)
+
         if output_hidden_states:
             all_hidden_states = outputs[1] + (hidden_states,)
             outputs = (hidden_states, all_hidden_states) + outputs[2:]
         else:
             outputs = (hidden_states,) + outputs[1:]
+
         if not return_dict:
-            return outputs
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=outputs.all_hidden_states,
-            attentions=outputs.attentions,
+            hidden_states=outputs[1],
+            attentions=outputs[-1],
         )
 
 
