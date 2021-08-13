@@ -14,44 +14,26 @@
 # limitations under the License.
 """ PyTorch GPT-J model. """
 
-import math
-import os
+from typing import Tuple
 
 import torch
 import torch.utils.checkpoint
-from typing import Optional, Tuple
-from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPast,
+    BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     CausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    SequenceSummary,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_gptj import GPTJConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -69,20 +51,23 @@ def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
     dim = x.shape[-1]
     if seq_len is None:
         seq_len = x.shape[seq_dim]
-    inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(seq_len), inv_freq).to(x.device).float()
+    inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
+    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(seq_len), inv_freq).to(x.device).float()
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
+
 
 def rotate_every_two(x):
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
     x = torch.stack((-x2, x1), axis=-1)
-    return x.flatten(-2) #in einsum notation: rearrange(x, '... d j -> ... (d j)')
+    return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
+
 
 def apply_rotary_pos_emb(x, sincos, offset=0):
-    sin, cos = map(lambda t: t[None, offset:x.shape[1]+offset, None, :].repeat_interleave(2, 3), sincos)
-    #einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
+    sin, cos = map(lambda t: t[None, offset : x.shape[1] + offset, None, :].repeat_interleave(2, 3), sincos)
+    # einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
     return (x * cos) + (rotate_every_two(x) * sin)
+
 
 class GPTJAttentionMixin:
     """
@@ -96,7 +81,7 @@ class GPTJAttentionMixin:
         new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
         tensor = tensor.view(*new_shape)
         if rotary:
-          return tensor
+            return tensor
         if len(tensor.shape) == 5:
             return tensor.permute(0, 1, 3, 2, 4)  # (batch, blocks, head, block_length, head_features)
         elif len(tensor.shape) == 4:
@@ -117,14 +102,25 @@ class GPTJAttentionMixin:
         new_shape = tensor.size()[:-2] + (num_attention_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def _attn(self, query, key, value, causal_mask, masked_bias, attn_pdrop, attention_mask=None, head_mask=None, scale_attn=None):
+    def _attn(
+        self,
+        query,
+        key,
+        value,
+        causal_mask,
+        masked_bias,
+        attn_pdrop,
+        attention_mask=None,
+        head_mask=None,
+        scale_attn=None,
+    ):
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
         key = key.to(torch.float32)
 
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
         attn_weights = torch.where(causal_mask, attn_weights, masked_bias.to(attn_weights.dtype))
-        
+
         if scale_attn is not None:
             attn_weights = attn_weights / scale_attn
 
@@ -144,17 +140,23 @@ class GPTJAttentionMixin:
 
         return attn_output, attn_weights
 
+
 class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
     def __init__(self, config):
         super().__init__()
 
         self.window_size = None
         max_positions = config.n_positions
-        bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
-            1, 1, max_positions, max_positions
-        ).bool()
+        bias = (
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8))
+            .view(1, 1, max_positions, max_positions)
+            .bool()
+        )
 
-        self.register_buffer("bias", bias,)
+        self.register_buffer(
+            "bias",
+            bias,
+        )
 
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
@@ -204,11 +206,11 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
                 offset = layer_past[0].shape[-2]
                 seq_len += offset
             if self.rotary_dim is not None:
-                k_rot = key[:, :, :, :self.rotary_dim]
-                k_pass = key[:, :, :, self.rotary_dim:]
+                k_rot = key[:, :, :, : self.rotary_dim]
+                k_pass = key[:, :, :, self.rotary_dim :]
 
-                q_rot = query[:, :, :, :self.rotary_dim]
-                q_pass = query[:, :, :, self.rotary_dim:]
+                q_rot = query[:, :, :, : self.rotary_dim]
+                q_pass = query[:, :, :, self.rotary_dim :]
 
                 sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
                 k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
@@ -238,7 +240,15 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
 
         attn_output, attn_weights = self._attn(
-            query, key, value, causal_mask, self.masked_bias, self.attn_pdrop, attention_mask, head_mask, self.scale_attn
+            query,
+            key,
+            value,
+            causal_mask,
+            self.masked_bias,
+            self.attn_pdrop,
+            attention_mask,
+            head_mask,
+            self.scale_attn,
         )
 
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
@@ -251,12 +261,13 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
 
         return outputs  # a, present, (attentions)
 
+
 class GPTJAttention(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.layer_id = layer_id
         self.attention = GPTJSelfAttention(config)
-        
+
     def forward(
         self,
         hidden_states,
@@ -294,10 +305,10 @@ class GPTJMLP(nn.Module):
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
+
 class GPTJBlock(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
-        n_ctx = config.n_ctx
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
         self.attn = GPTJAttention(config, layer_id)
@@ -324,7 +335,7 @@ class GPTJBlock(nn.Module):
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
-        
+
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = attn_output + feed_forward_hidden_states + residual
 
@@ -366,14 +377,15 @@ class GPTJPreTrainedModel(PreTrainedModel):
 
 
 GPTJ_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.GPTJConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 GPTJ_INPUTS_DOCSTRING = r"""
@@ -381,9 +393,9 @@ GPTJ_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.GPTJTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.GPTJTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
@@ -402,8 +414,8 @@ GPTJ_INPUTS_DOCSTRING = r"""
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.n_positions - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.n_positions - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_attention_heads,)` or :obj:`(n_layer, num_attention_heads)`, `optional`):
@@ -598,7 +610,7 @@ class GPTJModel(GPTJPreTrainedModel):
                 outputs = block(
                     hidden_states,
                     layer_past=layer_past,
-                    attention_mask= attention_mask,
+                    attention_mask=attention_mask,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
@@ -630,7 +642,12 @@ class GPTJModel(GPTJPreTrainedModel):
 
 
 class GPTJForCausalLM(GPTJPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.attention\.scale_attn", r"lm_head\.weight", r"h\.\d+\.attn\.attention\.bias"]
+    _keys_to_ignore_on_load_missing = [
+        r"h\.\d+\.attn\.masked_bias",
+        r"h\.\d+\.attn\.attention\.scale_attn",
+        r"lm_head\.weight",
+        r"h\.\d+\.attn\.attention\.bias",
+    ]
     _keys_to_ignore_on_save = [r"lm_head.weight"]
 
     def __init__(self, config):
@@ -765,12 +782,11 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     """
     The GPTJ Model transformer with a sequence classification head on top (linear layer).
     :class:`~transformers.GPTJForSequenceClassification` uses the last token in order to do the classification, as
-    other causal models (e.g. GPT-1) do.
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
-    row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
-    guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
-    the last value in each row of the batch).
+    other causal models (e.g. GPT-1) do. Since it does classification on the last token, it requires to know the
+    position of the last token. If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that
+    is not a padding token in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each
+    row of the batch. Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of
+    :obj:`input_ids`, it does the same (take the last value in each row of the batch).
     """,
     GPTJ_START_DOCSTRING,
 )

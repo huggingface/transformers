@@ -201,8 +201,8 @@ _import_structure = {
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
-    "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
+    "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
@@ -804,14 +804,6 @@ if is_torch_available():
             "load_tf_weights_in_gpt2",
         ]
     )
-    _import_structure["models.gptj"].extend(
-        [
-            "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GPTJForCausalLM",
-            "GPTJModel",
-            "GPTJPreTrainedModel",
-        ]
-    )
     _import_structure["models.gpt_neo"].extend(
         [
             "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -820,6 +812,15 @@ if is_torch_available():
             "GPTNeoModel",
             "GPTNeoPreTrainedModel",
             "load_tf_weights_in_gpt_neo",
+        ]
+    )
+    _import_structure["models.gptj"].extend(
+        [
+            "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTJForCausalLM",
+            "GPTJForSequenceClassification",
+            "GPTJModel",
+            "GPTJPreTrainedModel",
         ]
     )
     _import_structure["models.hubert"].extend(
@@ -1834,7 +1835,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1897,8 +1897,8 @@ if TYPE_CHECKING:
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
-    from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
+    from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
@@ -2106,13 +2106,6 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-        from .models.gptj import (
-            GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTJForCausalLM,
-            GPTJLayer,
-            GPTJModel,
-            GPTJPreTrainedModel,
-        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2419,12 +2412,6 @@ if TYPE_CHECKING:
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
         )
-        from .models.gptj import (
-            GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTJForCausalLM,
-            GPTJModel,
-            GPTJPreTrainedModel,
-        )
         from .models.gpt_neo import (
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoForCausalLM,
@@ -2432,6 +2419,13 @@ if TYPE_CHECKING:
             GPTNeoModel,
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
+        )
+        from .models.gptj import (
+            GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTJForCausalLM,
+            GPTJForSequenceClassification,
+            GPTJModel,
+            GPTJPreTrainedModel,
         )
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -1832,6 +1832,7 @@ class GPTNeoForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+
 class GPTNeoModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -1853,9 +1854,20 @@ class GPTNeoPreTrainedModel:
 def load_tf_weights_in_gpt_neo(*args, **kwargs):
     requires_backends(load_tf_weights_in_gpt_neo, ["torch"])
 
+
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
+
 class GPTJForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class GPTJForSequenceClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -1880,7 +1892,7 @@ class GPTJPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
-    
+
 
 HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 

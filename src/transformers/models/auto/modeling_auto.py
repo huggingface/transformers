@@ -287,6 +287,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("gptj", "GPTJForSequenceClassification"),
         ("rembert", "RemBertForSequenceClassification"),
         ("canine", "CanineForSequenceClassification"),
         ("roformer", "RoFormerForSequenceClassification"),

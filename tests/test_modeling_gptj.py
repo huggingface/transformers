@@ -28,7 +28,13 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 if is_torch_available():
     import torch
 
-    from transformers import GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST, GPT2Tokenizer, GPTJForCausalLM, GPTJModel
+    from transformers import (
+        GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
+        GPT2Tokenizer,
+        GPTJForCausalLM,
+        GPTJForSequenceClassification,
+        GPTJModel,
+    )
 
 
 class GPTJModelTester:
@@ -352,7 +358,7 @@ class GPTJModelTester:
 @require_torch
 class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (GPTJModel, GPTJForCausalLM) if is_torch_available() else ()
+    all_model_classes = (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
     fx_ready_model_classes = all_model_classes
     test_pruning = False
@@ -489,7 +495,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
                 640,
                 284,
                 923,
-                3612
+                3612,
             ]  # The dog days of summer are upon us, and that means it’s time to start thinking
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
@@ -514,9 +520,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
-        )
+        EXPECTED_OUTPUT_STR = "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])

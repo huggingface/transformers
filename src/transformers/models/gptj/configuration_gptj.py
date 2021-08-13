@@ -1,4 +1,3 @@
-
 # coding=utf-8
 # Copyright 2021 The EleutherAI and HuggingFace Teams. All rights reserved.
 #
@@ -32,9 +31,10 @@ class GPTJConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.GPTJModel`. It is used to
     instantiate a GPT-J model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPT-J `gpt-j-6B
-    <https://huggingface.co/EleutherAI/gpt-j-6B>`__ architecture.
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    <https://huggingface.co/EleutherAI/gpt-j-6B>`__ architecture. Configuration objects inherit from
+    :class:`~transformers.PretrainedConfig` and can be used to control the model outputs. Read the documentation from
+    :class:`~transformers.PretrainedConfig` for more information.
+
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50400):
             Vocabulary size of the GPT-J model. Defines the number of different tokens that can be represented by the
@@ -69,7 +69,9 @@ class GPTJConfig(PretrainedConfig):
         summary_type (:obj:`string`, `optional`, defaults to :obj:`"cls_index"`):
             Argument used when doing sequence summary, used in the models :class:`~transformers.GPT2DoubleHeadsModel`
             and :class:`~transformers.TFGPT2DoubleHeadsModel`.
+
             Has to be one of the following options:
+
                 - :obj:`"last"`: Take the last token hidden state (like XLNet).
                 - :obj:`"first"`: Take the first token hidden state (like BERT).
                 - :obj:`"mean"`: Take the mean of all tokens hidden states.
@@ -77,20 +79,20 @@ class GPTJConfig(PretrainedConfig):
                 - :obj:`"attn"`: Not implemented now, use multi-head attention.
         summary_use_proj (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Argument used when doing sequence summary, used in the models :class:`~transformers.GPT2DoubleHeadsModel`
-            and :class:`~transformers.TFGPT2DoubleHeadsModel`.
-            Whether or not to add a projection after the vector extraction.
+            and :class:`~transformers.TFGPT2DoubleHeadsModel`. Whether or not to add a projection after the vector
+            extraction.
         summary_activation (:obj:`str`, `optional`):
             Argument used when doing sequence summary. Used in for the multiple choice head in
-            :class:`~transformers.GPT2DoubleHeadsModel`.
-            Pass :obj:`"tanh"` for a tanh activation to the output, any other value will result in no activation.
+            :class:`~transformers.GPT2DoubleHeadsModel`. Pass :obj:`"tanh"` for a tanh activation to the output, any
+            other value will result in no activation.
         summary_proj_to_labels (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Argument used when doing sequence summary, used in the models :class:`~transformers.GPT2DoubleHeadsModel`
-            and :class:`~transformers.TFGPT2DoubleHeadsModel`.
-            Whether the projection outputs should have :obj:`config.num_labels` or :obj:`config.hidden_size` classes.
+            and :class:`~transformers.TFGPT2DoubleHeadsModel`. Whether the projection outputs should have
+            :obj:`config.num_labels` or :obj:`config.hidden_size` classes.
         summary_first_dropout (:obj:`float`, `optional`, defaults to 0.1):
             Argument used when doing sequence summary, used in the models :class:`~transformers.GPT2DoubleHeadsModel`
-            and :class:`~transformers.TFGPT2DoubleHeadsModel`.
-            The dropout ratio to be used after the projection and activation.
+            and :class:`~transformers.TFGPT2DoubleHeadsModel`. The dropout ratio to be used after the projection and
+            activation.
         scale_attn_weights (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Scale attention weights by dividing by sqrt(hidden_size).
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -99,15 +101,15 @@ class GPTJConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
     Example::
-        
+
         >>> from transformers import GPTJModel, GPTJConfig
-        
+
         >>> # Initializing a GPT-J 6B configuration
         >>> configuration = GPTJConfig()
-        
+
         >>> # Initializing a model from the configuration
         >>> model = GPTJModel(configuration)
-        
+
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """

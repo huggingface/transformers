@@ -16,8 +16,9 @@ GPT-J
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The GPT-J model was released in the `kingoflolz/mesh-transformer-jax <https://github.com/kingoflolz/mesh-transformer-jax>`__ repository by Ben Wang and Aran Komatsuzaki. It is a GPT-2-like causal language model trained on `the
-Pile <https://pile.eleuther.ai/>`__ dataset.
+The GPT-J model was released in the `kingoflolz/mesh-transformer-jax
+<https://github.com/kingoflolz/mesh-transformer-jax>`__ repository by Ben Wang and Aran Komatsuzaki. It is a GPT-2-like
+causal language model trained on `the Pile <https://pile.eleuther.ai/>`__ dataset.
 
 This model was contributed by `Stella Biderman <https://huggingface.co/stellaathena>`__.
 
@@ -59,4 +60,11 @@ GPTJForCausalLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPTJForCausalLM
+    :members: forward
+
+
+GPTJForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.GPTJForSequenceClassification
     :members: forward
