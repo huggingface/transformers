@@ -16,6 +16,8 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import tensorflow as tf
 
+import numpy as np
+
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
@@ -60,124 +62,40 @@ class TFDataCollatorForLanguageModeling:
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
 
+            
     @tf.function
     def pseudo_bernoulli(self, prob_matrix, labels):
         return tf.cast(prob_matrix - tf.random.uniform(tf.shape(labels), 0, 1) >= 0, tf.bool)
 
+    
     @tf.function
     def mask_special_tokens(self, labels, special_tokens):
         # Finds all special tokens within labels
         x = tf.map_fn(lambda b: tf.cast(tf.math.equal(labels, b), tf.int32), special_tokens)
         return tf.math.greater(tf.reduce_sum(x, axis=0), 0)
 
-    @tf.function
-    def tf_pad_tokens(
-        self, examples, tokenizer, pad_to_multiple_of: Optional[int] = None, token_override: Optional[int] = None
-    ):
-        """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
-        shape = examples.shape
-        multiple_tensors = len(tf.shape(examples)) > 1
+    
+    def __call__(self, examples: tf.data.Dataset, is_ragged=False, drop_remainder=False) -> tf.data.Dataset:
+        # Trim off the last partial batch if present
+        sample_ordering = np.random.permutation(len(examples))
+        for sample_idx in sample_ordering:
 
-        # Tensorize if necessary.
-        if not isinstance(examples[0], tf.Tensor):
-            temporary = []
-            for e in examples:
-                temporary.append(tf.constant(e, dtype=tf.float64))
-            examples = temporary
+            input = examples[int(sample_idx)]
+            
+            example = self.tokenizer.pad(input, return_tensors="tf", pad_to_multiple_of=self.padding_length)
 
-        # Check if padding is necessary.
-        if multiple_tensors:
-            length_of_first = tf.shape(examples[0])[0]
+            # Mask example sequences and create their respective labels
+            self.special_tokens_mask = example.pop("special_tokens_mask", None)
+            example["input_ids"], example["labels"] = self.tf_mask_tokens(example["input_ids"])
+            
+            example["labels"] = tf.where(example["labels"] == self.tokenizer.pad_token_id, -100, example["labels"])
+            
+            example = {key: tf.convert_to_tensor(arr) for key, arr in example.items()}
+            
+            yield example, {"labels":example["labels"], "next_sentence_label": example["next_sentence_label"]}
+        return 
 
-            are_tensors_same_length = True
-            for x in examples:
-                are_tensors_same_length &= tf.shape(x)[0] == length_of_first
-
-            no_padding_necessary = are_tensors_same_length and (
-                pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0
-            )
-        else:
-            length_of_first = tf.shape(examples)[0] if shape[0] is None else shape[0]
-            no_padding_necessary = pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0
-
-        if no_padding_necessary:
-            return tf.stack(examples, axis=0)
-
-        # Check if we have a `pad_token`.
-        if tokenizer._pad_token is None and token_override is None:
-            raise ValueError(
-                "You are attempting to pad samples but the tokenizer you are using"
-                f" ({tokenizer.__class__.__name__}) does not have a pad token."
-            )
-
-        # Padding our tensor with the appropriate pad token.
-        max_length = length_of_first
-        if multiple_tensors:
-            for x in examples:
-                if x.shape[0] > max_length:
-                    max_length = tf.shape(x)[0]
-
-        if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of - length_of_first
-
-        token = tokenizer.pad_token_id if token_override is None else token_override
-
-        if tokenizer.padding_side == "right":
-            if multiple_tensors:
-                result = tf.pad(examples, [[0, 0], [0, max_length]], constant_values=token)
-            else:
-                result = tf.pad(examples, [[0, max_length]], constant_values=token)
-        else:
-            if multiple_tensors:
-                result = tf.pad(examples, [[0, 0], [max_length, 0]], constant_values=token)
-            else:
-                result = tf.pad(examples, [[max_length, 0]], constant_values=token)
-
-        return result
-
-    @tf.function()
-    def encode_objects(self, examples: Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]) -> tf.data.Dataset:
-        if isinstance(examples, BatchEncoding):
-            examples = examples.data
-
-        if isinstance(examples, dict):
-            input = examples["input_ids"]
-        else:
-            input = examples
-
-        padded_output = self.tf_pad_tokens(input, self.tokenizer, self.padding_length)
-
-        encoded_batch = dict()
-        if isinstance(examples, dict):
-            encoded_batch.update(examples)
-            if self.padding_length is not None:
-                if "token_type_ids" in encoded_batch:
-                    encoded_batch["token_type_ids"] = self.tf_pad_tokens(
-                        encoded_batch["token_type_ids"], self.tokenizer, self.padding_length, 0
-                    )
-                if "attention_mask" in encoded_batch:
-                    encoded_batch["attention_mask"] = self.tf_pad_tokens(
-                        encoded_batch["attention_mask"], self.tokenizer, self.padding_length, 0
-                    )
-
-        # Mask example sequences and create their respective labels
-        encoded_batch["input_ids"], encoded_batch["labels"] = self.tf_mask_tokens(padded_output)
-        return encoded_batch
-
-    @tf.function
-    def square_ragged_tensors(self, examples):
-        if isinstance(examples, dict):
-            examples["input_ids"] = examples["input_ids"].to_tensor(0)
-            return examples
-        else:
-            return examples.to_tensor(0)
-
-    def __call__(self, examples: tf.data.Dataset, is_ragged=False) -> tf.data.Dataset:
-        if is_ragged:
-            examples = examples.batch(self.batch_size).map(self.square_ragged_tensors).unbatch()
-
-        return examples.map(self.encode_objects).batch(self.batch_size)
-
+    
     @tf.function
     def tf_mask_tokens(self, inputs: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
         """
