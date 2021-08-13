@@ -1038,6 +1038,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 labels,
                 overflowing_tokens,
                 overflowing_token_boxes,
+                overflowing_labels,
             ) = self.truncate_sequences(
                 ids,
                 token_boxes,
@@ -1067,6 +1068,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         if return_overflowing_tokens:
             encoded_inputs["overflowing_tokens"] = overflowing_tokens
             encoded_inputs["overflowing_token_boxes"] = overflowing_token_boxes
+            encoded_inputs["overflowing_labels"] = overflowing_labels
             encoded_inputs["num_truncated_tokens"] = total_len - max_length
 
         # Add special tokens
@@ -1171,13 +1173,14 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             list of overflowing tokens.
         """
         if num_tokens_to_remove <= 0:
-            return ids, token_boxes, pair_ids, pair_token_boxes, labels, [], []
+            return ids, token_boxes, pair_ids, pair_token_boxes, labels, [], [], []
 
         if not isinstance(truncation_strategy, TruncationStrategy):
             truncation_strategy = TruncationStrategy(truncation_strategy)
 
         overflowing_tokens = []
         overflowing_token_boxes = []
+        overflowing_labels = []
         if truncation_strategy == TruncationStrategy.LONGEST_FIRST:
             for _ in range(num_tokens_to_remove):
                 if pair_ids is None or len(ids) > len(pair_ids):
@@ -1187,6 +1190,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                         window_len = 1
                     overflowing_tokens.extend(ids[-window_len:])
                     overflowing_token_boxes.extend(token_boxes[-window_len:])
+                    overflowing_labels.extend(labels[-window_len:])
                     ids = ids[:-1]
                     token_boxes = token_boxes[:-1]
                     labels = labels[:-1]
@@ -1204,6 +1208,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 window_len = min(len(ids), stride + num_tokens_to_remove)
                 overflowing_tokens = ids[-window_len:]
                 overflowing_token_boxes = token_boxes[-window_len:]
+                overflowing_labels = labels[-window_len:]
                 ids = ids[:-num_tokens_to_remove]
                 token_boxes = token_boxes[:-num_tokens_to_remove]
                 labels = labels[:-num_tokens_to_remove]
@@ -1229,7 +1234,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     f"for instance 'longest_first' or 'only_first'."
                 )
 
-        return (ids, token_boxes, pair_ids, pair_token_boxes, labels, overflowing_tokens, overflowing_token_boxes)
+        return (ids, token_boxes, pair_ids, pair_token_boxes, labels, overflowing_tokens, overflowing_token_boxes, overflowing_labels)
 
     def _pad(
         self,
