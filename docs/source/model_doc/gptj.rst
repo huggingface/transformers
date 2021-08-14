@@ -25,7 +25,7 @@ This model was contributed by `Stella Biderman <https://huggingface.co/stellaath
 Generation
 _______________________________________________________________________________________________________________________
 
-The :obj:`generate()` method can be used to generate text using GPT-J model.
+The :meth:`~transformers.generation_utils.GenerationMixin.generate` method can be used to generate text using GPT-J model.
 
 .. code-block::
 
