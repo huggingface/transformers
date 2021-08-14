@@ -107,11 +107,10 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         for i, token in enumerate(additional_special_tokens):
             self.special_tokens_encoder[token] = self.vocab_size + i - n - 1
         self.special_tokens_decoder: Dict[str, int] = {v: k for k, v in self.special_tokens_encoder.items()}
-        self.patter = self.get_pattern()
 
     def get_pattern(self):
         tokens = list(self.special_tokens_encoder.keys()) + list(self.added_tokens_encoder.keys())
-        tokens = [t.replace("|", "\|") for t in tokens]
+        tokens = [re.escape(t) for t in tokens]
         token_reg = "|".join(tokens)
         return re.compile(fr"({token_reg}|.)")
 
@@ -205,14 +204,9 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             token_ids_1 = self._add_eos_if_not_present(token_ids_1)
             return token_ids_0 + token_ids_1
 
-    def _add_tokens(self, *args, **kwargs):
-        result = super()._add_tokens(*args, **kwargs)
-        self.pattern = self.get_pattern()
-        return result
-
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        tokens = list(self.pattern.findall(text))
+        tokens = list(text)
         return tokens
 
     def _convert_token_to_id(self, token):
