@@ -66,33 +66,6 @@ class GPTJConfig(PretrainedConfig):
             The epsilon to use in the layer normalization layers.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        summary_type (:obj:`string`, `optional`, defaults to :obj:`"cls_index"`):
-            Argument used when doing sequence summary, used in the models :class:`~transformers.GPT2DoubleHeadsModel`
-            and :class:`~transformers.TFGPT2DoubleHeadsModel`.
-
-            Has to be one of the following options:
-
-                - :obj:`"last"`: Take the last token hidden state (like XLNet).
-                - :obj:`"first"`: Take the first token hidden state (like BERT).
-                - :obj:`"mean"`: Take the mean of all tokens hidden states.
-                - :obj:`"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
-                - :obj:`"attn"`: Not implemented now, use multi-head attention.
-        summary_use_proj (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Argument used when doing sequence summary, used in the models :class:`~transformers.GPT2DoubleHeadsModel`
-            and :class:`~transformers.TFGPT2DoubleHeadsModel`. Whether or not to add a projection after the vector
-            extraction.
-        summary_activation (:obj:`str`, `optional`):
-            Argument used when doing sequence summary. Used in for the multiple choice head in
-            :class:`~transformers.GPT2DoubleHeadsModel`. Pass :obj:`"tanh"` for a tanh activation to the output, any
-            other value will result in no activation.
-        summary_proj_to_labels (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Argument used when doing sequence summary, used in the models :class:`~transformers.GPT2DoubleHeadsModel`
-            and :class:`~transformers.TFGPT2DoubleHeadsModel`. Whether the projection outputs should have
-            :obj:`config.num_labels` or :obj:`config.hidden_size` classes.
-        summary_first_dropout (:obj:`float`, `optional`, defaults to 0.1):
-            Argument used when doing sequence summary, used in the models :class:`~transformers.GPT2DoubleHeadsModel`
-            and :class:`~transformers.TFGPT2DoubleHeadsModel`. The dropout ratio to be used after the projection and
-            activation.
         scale_attn_weights (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Scale attention weights by dividing by sqrt(hidden_size).
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
