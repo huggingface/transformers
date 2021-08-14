@@ -324,9 +324,10 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
 
         decoder_batch_size, decoder_sequence_length = decoder_input_ids.shape
-        assert (
-            decoder_batch_size == batch_size
-        ), f"The inputs of encoder and decoder should have the same batch size, but got {batch_size} for encoder and {decoder_batch_size} for decoder."
+        if not decoder_batch_size == batch_size:
+            raise ValueError(
+                f"The inputs of encoder and decoder should have the same batch size, but got {batch_size} for encoder and {decoder_batch_size} for decoder."
+            )
         decoder_position_ids = jnp.broadcast_to(
             jnp.arange(decoder_sequence_length)[None, :], (decoder_batch_size, decoder_sequence_length)
         )
