@@ -20,10 +20,11 @@ from typing import Dict, List, Tuple
 
 from transformers import FNetConfig, is_torch_available
 from transformers.models.auto import get_values
+from transformers.models.fnet.modeling_fnet import FNetBasicFourierTransform
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -33,6 +34,7 @@ if is_torch_available():
         MODEL_FOR_PRETRAINING_MAPPING,
         FNetForMaskedLM,
         FNetForMultipleChoice,
+        FNetForNextSentencePrediction,
         FNetForPreTraining,
         FNetForQuestionAnswering,
         FNetForSequenceClassification,
@@ -73,7 +75,7 @@ class FNetModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
-        scope=None,  # TODO: Check if scope is needed.
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -89,7 +91,7 @@ class FNetModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size  # TODO: Check what is type_sequence_label_size
+        self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
@@ -125,7 +127,25 @@ class FNetModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
+            tpu_short_seq_length=self.seq_length,
         )
+
+    def create_and_check_fourier_transform(self, config):
+        hidden_states = floats_tensor([self.batch_size, self.seq_length, config.hidden_size])
+        transform = FNetBasicFourierTransform(config)
+        fftn_output = transform(hidden_states)
+
+        config.use_tpu_fourier_optimizations = True
+        transform = FNetBasicFourierTransform(config)
+        dft_output = transform(hidden_states)
+
+        config.max_position_embeddings = 4097
+        transform = FNetBasicFourierTransform(config)
+        fft_output = transform(hidden_states)
+
+        self.parent.assertTrue(torch.allclose(fftn_output[0][0], dft_output[0][0], atol=1e-4))
+        self.parent.assertTrue(torch.allclose(fft_output[0][0], dft_output[0][0], atol=1e-4))
+        self.parent.assertTrue(torch.allclose(fftn_output[0][0], fft_output[0][0], atol=1e-4))
 
     def create_and_check_model(self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels):
         model = FNetModel(config=config)
@@ -158,6 +178,19 @@ class FNetModelTester:
         model.eval()
         result = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_for_next_sentence_prediction(
+        self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
+    ):
+        model = FNetForNextSentencePrediction(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            token_type_ids=token_type_ids,
+            next_sentence_label=sequence_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
@@ -232,6 +265,7 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
             FNetModel,
             FNetForPreTraining,
             FNetForMaskedLM,
+            FNetForNextSentencePrediction,
             FNetForMultipleChoice,
             FNetForQuestionAnswering,
             FNetForSequenceClassification,
@@ -399,7 +433,7 @@ class FNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-1.7533, -7.7820, -7.5424], [-3.2497, -8.2926, -7.5661], [-3.4102, -8.6046, -8.0170]]]
+            [[[-1.7770, -7.7386, -7.5002], [-3.4747, -8.5963, -7.7719], [-3.2070, -9.0645, -8.3344]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

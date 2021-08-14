@@ -35,6 +35,13 @@ than the fastest models across all sequence lengths on GPUs (and across relative
 FNet has a light memory footprint and is particularly efficient at smaller model sizes: for a fixed speed and accuracy
 budget, small FNet models outperform Transformer counterparts.*
 
+.. note::
+
+    Due to differences in the fourier transforms in PyTorch (current implementation) and JAX/Flax (original
+    implementation), the outputs of the pretrained model is not entirely identical to the original implementation. The
+    outputs for `FNetForPreTraining` match within ~0.03 of the original for MLM logits, while for NSP logits match
+    within ~0.01. Hence, fine-tuning the model is highly recommended.
+
 This model was contributed by `gchhablani <https://huggingface.co/gchhablani>`__. The original code can be found `here
 <https://github.com/google-research/google-research/tree/master/f_net>`__.
 
@@ -80,6 +87,12 @@ FNetForMaskedLM
 .. autoclass:: transformers.FNetForMaskedLM
     :members: forward
 
+
+FNetForNextSentencePrediction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FNetForNextSentencePrediction
+    :members: forward
 
 FNetForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

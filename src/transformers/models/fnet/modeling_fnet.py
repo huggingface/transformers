@@ -14,7 +14,9 @@
 # limitations under the License.
 """ PyTorch FNet model. """
 
+import warnings
 from dataclasses import dataclass
+from functools import partial
 from typing import Optional, Tuple
 
 import torch
@@ -22,6 +24,8 @@ import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
+
+from scipy import linalg
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -36,6 +40,7 @@ from ...modeling_outputs import (
     MaskedLMOutput,
     ModelOutput,
     MultipleChoiceModelOutput,
+    NextSentencePredictorOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
@@ -53,8 +58,40 @@ _TOKENIZER_FOR_DOC = "FNetTokenizer"
 
 FNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gchhablani/fnet-base",
+    "gchhablani/fnet-large"
     # See all FNet models at https://huggingface.co/models?filter=fnet
 ]
+
+
+# Adapted from https://github.com/google-research/google-research/blob/master/f_net/fourier.py
+def _two_dim_matmul(x, matrix_dim_one, matrix_dim_two):
+    """Applies 2D matrix multiplication to 3D input arrays."""
+    seq_length = x.shape[1]
+    matrix_dim_one = matrix_dim_one[:seq_length, :seq_length]
+    x = x.type(torch.complex64)
+    return torch.einsum("bij,jk,ni->bnk", x, matrix_dim_two, matrix_dim_one)
+
+
+# # Adapted from https://github.com/google-research/google-research/blob/master/f_net/fourier.py
+def two_dim_matmul(x, matrix_dim_one, matrix_dim_two):
+    return _two_dim_matmul(x, matrix_dim_one, matrix_dim_two)
+
+
+# Adapted from https://github.com/google-research/google-research/blob/master/f_net/fourier.py
+def fftn(x):
+    """
+    Applies n-dimensional Fast Fourier Transform (FFT) to input array.
+
+    Args:
+        x: Input n-dimensional array.
+
+    Returns:
+        n-dimensional Fourier transform of input n-dimensional array.
+    """
+    out = x
+    for axis in reversed(range(x.ndim)[1:]):  # We don't need to apply FFT to last axis
+        out = torch.fft.fft(out, axis=axis)
+    return out
 
 
 class FNetEmbeddings(nn.Module):
@@ -62,7 +99,6 @@ class FNetEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        # TODO: Check if `config.pad_token_id` is needed.
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
@@ -121,23 +157,46 @@ class FNetEmbeddings(nn.Module):
 
 
 class FNetBasicFourierTransform(nn.Module):
-    # TODO: Check if _init_fourier_transform items are required here - specific to TPUs?
     def __init__(self, config):
         super().__init__()
-        self.fourier_transform = torch.fft.fftn
+        self._init_fourier_transform(config)
+
+    def _init_fourier_transform(self, config):
+        if not config.use_tpu_fourier_optimizations:
+            # TODO: Check if we need partial from functools specifically
+            self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
+        elif config.max_position_embeddings <= 4096:
+            # TODO: Check if this is correct.
+            self.register_buffer("dft_mat_hidden", torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64))
+            self.register_buffer(
+                "dft_mat_seq", torch.tensor(linalg.dft(config.tpu_short_sequence_length), dtype=torch.complex64)
+            )
+
+            # TODO: Check if lambda function is okay or we need partial from functools specifically
+            self.fourier_transform = partial(
+                two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
+            )
+        else:
+            self.fourier_transform = fftn
 
     def forward(self, hidden_states):
-        return (self.fourier_transform(hidden_states).real,)
+
+        # NOTE: We do not use torch.vmap as it is not integrated into PyTorch stable versions.
+        # Interested users can modify the code to use vmap from the nightly versions, getting the vmap from here:
+        # https://pytorch.org/docs/master/generated/torch.vmap.html. Note that fourier transform methods will need
+        # change accordingly.
+
+        outputs = self.fourier_transform(hidden_states).real
+        return (outputs,)
 
 
 class FNetBasicOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # TODO: Check if removal of a dense layer and dropout is okay.
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, input_tensor):
-        hidden_states = self.LayerNorm(input_tensor + hidden_states)  # NOTE: Order has been changed.
+        hidden_states = self.LayerNorm(input_tensor + hidden_states)
         return hidden_states
 
 
@@ -312,6 +371,17 @@ class FNetOnlyMLMHead(nn.Module):
     def forward(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
+
+
+# Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->FNet
+class FNetOnlyNSPHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.seq_relationship = nn.Linear(config.hidden_size, 2)
+
+    def forward(self, pooled_output):
+        seq_relationship_score = self.seq_relationship(pooled_output)
+        return seq_relationship_score
 
 
 class FNetPreTrainingHeads(nn.Module):
@@ -489,6 +559,15 @@ class FNetModel(FNetPreTrainedModel):
             batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if (
+            self.config.use_tpu_fourier_optimizations
+            and seq_length <= 4096
+            and self.config.tpu_short_seq_length != seq_length
+        ):
+            raise ValueError(
+                "The `tpu_short_seq_length` in FNetConfig should be set equal to the sequence length being passed to the model when using TPU optimizations."
+            )
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
@@ -698,6 +777,93 @@ class FNetForMaskedLM(FNetPreTrainedModel):
 
 
 @add_start_docstrings(
+    """FNet Model with a `next sentence prediction (classification)` head on top. """,
+    FNET_START_DOCSTRING,
+)
+class FNetForNextSentencePrediction(FNetPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.fnet = FNetModel(config)
+        self.cls = FNetOnlyNSPHead(config)
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(FNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        labels=None,
+        output_hidden_states=None,
+        return_dict=None,
+        **kwargs,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
+            (see ``input_ids`` docstring). Indices should be in ``[0, 1]``:
+
+            - 0 indicates sequence B is a continuation of sequence A,
+            - 1 indicates sequence B is a random sequence.
+
+        Returns:
+
+        Example::
+            >>> from transformers import FNetTokenizer, FNetForNextSentencePrediction
+            >>> import torch
+            >>> tokenizer = FNetTokenizer.from_pretrained('gchhablani/fnet-base')
+            >>> model = FNetForNextSentencePrediction.from_pretrained('gchhablani/fnet-base')
+            >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+            >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+            >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+            >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
+            >>> logits = outputs.logits
+            >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
+        """
+
+        if "next_sentence_label" in kwargs:
+            warnings.warn(
+                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                FutureWarning,
+            )
+            labels = kwargs.pop("next_sentence_label")
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.fnet(
+            input_ids,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs[1]
+
+        seq_relationship_scores = self.cls(pooled_output)
+
+        next_sentence_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            next_sentence_loss = loss_fct(seq_relationship_scores.view(-1, 2), labels.view(-1))
+
+        if not return_dict:
+            output = (seq_relationship_scores,) + outputs[2:]
+            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
+
+        return NextSentencePredictorOutput(
+            loss=next_sentence_loss,
+            logits=seq_relationship_scores,
+            hidden_states=outputs.hidden_states,
+        )
+
+
+@add_start_docstrings(
     """
     FNet Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
     output) e.g. for GLUE tasks.
@@ -749,7 +915,6 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # TODO: Check if we should use the pooled output directly.
         pooled_output = outputs[1]
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
