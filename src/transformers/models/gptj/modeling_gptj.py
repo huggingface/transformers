@@ -801,7 +801,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
