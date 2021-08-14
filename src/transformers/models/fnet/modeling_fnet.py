@@ -25,7 +25,14 @@ from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from scipy import linalg
+
+try:
+    from scipy import linalg
+
+    _scipy_available = True
+except ImportError:
+    _scipy_available = False
+
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -163,19 +170,23 @@ class FNetBasicFourierTransform(nn.Module):
 
     def _init_fourier_transform(self, config):
         if not config.use_tpu_fourier_optimizations:
-            # TODO: Check if we need partial from functools specifically
             self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
         elif config.max_position_embeddings <= 4096:
-            # TODO: Check if this is correct.
-            self.register_buffer("dft_mat_hidden", torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64))
-            self.register_buffer(
-                "dft_mat_seq", torch.tensor(linalg.dft(config.tpu_short_sequence_length), dtype=torch.complex64)
-            )
-
-            # TODO: Check if lambda function is okay or we need partial from functools specifically
-            self.fourier_transform = partial(
-                two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
-            )
+            if _scipy_available:
+                self.register_buffer(
+                    "dft_mat_hidden", torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64)
+                )
+                self.register_buffer(
+                    "dft_mat_seq", torch.tensor(linalg.dft(config.tpu_short_sequence_length), dtype=torch.complex64)
+                )
+                self.fourier_transform = partial(
+                    two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
+                )
+            else:
+                logging.warning(
+                    "SciPy is need for DFT matrix calculation and is not found. Using TPU optimized fast fourier transform instead."
+                )
+                self.fourier_transform = fftn
         else:
             self.fourier_transform = fftn
 
@@ -412,7 +423,7 @@ class FNetPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            # TODO: Check if this is correct. Original code uses same initialization as weights for biases as well.
+            # NOTE: Original code uses same initialization as weights for biases as well.
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
