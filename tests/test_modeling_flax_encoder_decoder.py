@@ -211,7 +211,10 @@ class FlaxEncoderDecoderMixin:
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
-            input_ids, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id
+            input_ids,
+            pad_token_id=enc_dec_model.config.decoder.pad_token_id,
+            eos_token_id=enc_dec_model.config.decoder.eos_token_id,
+            decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
         )
         self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
 

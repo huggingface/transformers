@@ -820,7 +820,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
 
         # init model
-        model = cls(config, dtype=dtype, **kwargs)
+        model = cls(config, dtype=dtype)
         model.params["encoder"] = encoder.params
         model.params["decoder"] = decoder.params
 
