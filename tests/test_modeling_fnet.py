@@ -20,12 +20,10 @@ from typing import Dict, List, Tuple
 
 from transformers import FNetConfig, is_torch_available
 from transformers.models.auto import get_values
-
-# from transformers.models.fnet.modeling_fnet import FNetBasicFourierTransform, _scipy_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor  # floats_tensor,
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -42,7 +40,11 @@ if is_torch_available():
         FNetForTokenClassification,
         FNetModel,
     )
-    from transformers.models.fnet.modeling_fnet import FNET_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.fnet.modeling_fnet import (
+        FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        FNetBasicFourierTransform,
+        _scipy_available,
+    )
 
 
 # Override ConfigTester
@@ -131,24 +133,25 @@ class FNetModelTester:
             tpu_short_seq_length=self.seq_length,
         )
 
-    # def create_and_check_fourier_transform(self, config):
-    #     hidden_states = floats_tensor([self.batch_size, self.seq_length, config.hidden_size])
-    #     transform = FNetBasicFourierTransform(config)
-    #     fftn_output = transform(hidden_states)
+    @require_torch
+    def create_and_check_fourier_transform(self, config):
+        hidden_states = floats_tensor([self.batch_size, self.seq_length, config.hidden_size])
+        transform = FNetBasicFourierTransform(config)
+        fftn_output = transform(hidden_states)
 
-    #     config.use_tpu_fourier_optimizations = True
-    #     if _scipy_available:
-    #         transform = FNetBasicFourierTransform(config)
-    #         dft_output = transform(hidden_states)
+        config.use_tpu_fourier_optimizations = True
+        if _scipy_available:
+            transform = FNetBasicFourierTransform(config)
+            dft_output = transform(hidden_states)
 
-    #     config.max_position_embeddings = 4097
-    #     transform = FNetBasicFourierTransform(config)
-    #     fft_output = transform(hidden_states)
+        config.max_position_embeddings = 4097
+        transform = FNetBasicFourierTransform(config)
+        fft_output = transform(hidden_states)
 
-    #     if _scipy_available:
-    #         self.parent.assertTrue(torch.allclose(fftn_output[0][0], dft_output[0][0], atol=1e-4))
-    #         self.parent.assertTrue(torch.allclose(fft_output[0][0], dft_output[0][0], atol=1e-4))
-    #     self.parent.assertTrue(torch.allclose(fftn_output[0][0], fft_output[0][0], atol=1e-4))
+        if _scipy_available:
+            self.parent.assertTrue(torch.allclose(fftn_output[0][0], dft_output[0][0], atol=1e-4))
+            self.parent.assertTrue(torch.allclose(fft_output[0][0], dft_output[0][0], atol=1e-4))
+        self.parent.assertTrue(torch.allclose(fftn_output[0][0], fft_output[0][0], atol=1e-4))
 
     def create_and_check_model(self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels):
         model = FNetModel(config=config)
