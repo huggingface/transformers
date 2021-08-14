@@ -34,6 +34,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
+    test_seq2seq = False
 
     def setUp(self):
         super().setUp()
