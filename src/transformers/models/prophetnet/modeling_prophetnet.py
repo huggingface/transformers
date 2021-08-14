@@ -2250,6 +2250,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
                 break
             expend_targets[i, :, :] = labels
 
+        logits = logits.transpose(0, 1).contiguous()
         lprobs = nn.functional.log_softmax(
             logits.view(-1, logits.size(-1)),
             dim=-1,
