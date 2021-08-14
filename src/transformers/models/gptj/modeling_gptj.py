@@ -153,10 +153,7 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
             .bool()
         )
 
-        self.register_buffer(
-            "bias",
-            bias,
-        )
+        self.register_buffer("bias", bias)
 
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
