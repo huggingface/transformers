@@ -693,8 +693,8 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
-        decoder_pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        encoder_pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = None,
+        decoder_pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = None,
         *model_args,
         **kwargs
     ) -> FlaxPreTrainedModel:
