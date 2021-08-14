@@ -346,11 +346,7 @@ class GPTJModelTester:
             choice_labels,
         ) = config_and_inputs
 
-        inputs_dict = {
-            "input_ids": input_ids,
-            "token_type_ids": token_type_ids,
-            "head_mask": head_mask,
-        }
+        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
 
         return config, inputs_dict
 
