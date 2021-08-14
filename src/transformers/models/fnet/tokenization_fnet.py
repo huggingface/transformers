@@ -99,6 +99,7 @@ class FNetTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["input_ids", "token_type_ids"]
 
     def __init__(
         self,
@@ -116,6 +117,8 @@ class FNetTokenizer(PreTrainedTokenizer):
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
+        # TODO: Need this to ignore `attention_mask`
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
