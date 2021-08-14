@@ -216,7 +216,8 @@ class FlaxEncoderDecoderMixin:
             eos_token_id=enc_dec_model.config.decoder.eos_token_id,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
         )
-        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
+        generated_sequences = generated_output.sequences
+        self.assertEqual(generated_sequences.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
 
     def test_encoder_decoder_model_from_pretrained_configs(self):
         input_ids_dict = self.prepare_config_and_inputs()
