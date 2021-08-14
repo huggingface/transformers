@@ -127,11 +127,6 @@ class GPTJConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_first_dropout = summary_first_dropout
-        self.summary_proj_to_labels = summary_proj_to_labels
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
