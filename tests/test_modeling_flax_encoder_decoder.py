@@ -209,12 +209,26 @@ class FlaxEncoderDecoderMixin:
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
         enc_dec_model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
 
+        pad_token_id = enc_dec_model.config.decoder.pad_token_id
+        eos_token_id = enc_dec_model.config.decoder.eos_token_id
+        decoder_start_token_id = enc_dec_model.config.decoder.decoder_start_token_id
+
+        # Copied from generation_utils (GPT2 doesn't have `pad_token_id`)
+        if pad_token_id is None and eos_token_id is not None:
+            pad_token_id = eos_token_id
+        if decoder_start_token_id is None:
+            decoder_start_token_id = enc_dec_model.config.decoder.bos_token_id
+
         # Bert does not have a bos token id, so use pad_token_id instead
+        # Copied from `test_modeling_encoder_decoder.py`
+        if decoder_start_token_id is None:
+            decoder_start_token_id = pad_token_id
+
         generated_output = enc_dec_model.generate(
             input_ids,
-            pad_token_id=enc_dec_model.config.decoder.pad_token_id,
-            eos_token_id=enc_dec_model.config.decoder.eos_token_id,
-            decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            decoder_start_token_id=decoder_start_token_id,
         )
         generated_sequences = generated_output.sequences
         self.assertEqual(generated_sequences.shape, (input_ids.shape[0],) + (decoder_config.max_length,))

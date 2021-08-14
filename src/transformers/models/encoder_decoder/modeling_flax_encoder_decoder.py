@@ -18,8 +18,6 @@
 import os
 from typing import Optional, Tuple, Union
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -198,19 +196,6 @@ ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
             If set to ``True``, the model will return a
             :class:`~transformers.file_utils.FlaxCausalLMOutputWithCrossAttentions` instead of a plain tuple.
 """
-
-
-# Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
-def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = np.zeros_like(input_ids)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1]
-    shifted_input_ids[:, 0] = decoder_start_token_id
-
-    shifted_input_ids = np.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
-    return shifted_input_ids
 
 
 class FlaxEncoderDecoderModule(nn.Module):
@@ -405,16 +390,17 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
         Example::
 
-            >>> from transformers import BertTokenizer, FlaxEncoderDecoderModel
+            >>> from transformers import FlaxEncoderDecoderModel, GPT2Tokenizer
 
-            >>> # initialize a bert2gpt2 from pretrained BERT/GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
+            >>> # initialize a gpt2togpt2 from pretrained GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('gpt2', 'gpt2')
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
             >>> text = "My friends are cool but they eat too many carbs."
             >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
             >>> encoder_outputs = model.encode(**inputs)
+
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -481,22 +467,24 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
         Example::
 
-            >>> from transformers import BertTokenizer, FlaxEncoderDecoderModel
+            >>> from transformers import FlaxEncoderDecoderModel, GPT2Tokenizer
+            >>> import jax.numpy as jnp
 
-            >>> # initialize a bert2gpt2 from pretrained BERT/GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
+            >>> # initialize a gpt2togpt2 from pretrained GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('gpt2', 'gpt2')
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
             >>> text = "My friends are cool but they eat too many carbs."
             >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
             >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
+            >>> decoder_start_token_id = model.config.decoder.bos_token_id
             >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
             >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
             >>> logits = outputs.logits
+
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -595,23 +583,26 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer, GPT2Tokenizer
+            >>> from transformers import FlaxEncoderDecoderModel, GPT2Tokenizer
 
-            >>> bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> gpt2_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2') # initialize Bert2GPT2 from pre-trained checkpoints
+            >>> # initialize a gpt2togpt2 from pretrained GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('gpt2', 'gpt2')
+
+            >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
             >>> # forward
-            >>> input_ids = bert_tokenizer.encode("Hello, my dog is cute", add_special_tokens=True, return_tensors='jax')  # Batch size 1
-            >>> decoder_input_ids = gpt2_tokenizer.encode("Hello, my dog is cute", add_special_tokens=True, return_tensors='jax')  # Batch size 1
+            >>> input_ids = tokenizer.encode("Hello, my dog is cute", add_special_tokens=True, return_tensors='jax')  # Batch size 1
             >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
 
             >>> # save and load from pretrained
-            >>> model.save_pretrained("bert2gpt2")
-            >>> model = FlaxEncoderDecoderModel.from_pretrained("bert2gpt2")
+            >>> model.save_pretrained("gpt2togpt2")
+            >>> model = FlaxEncoderDecoderModel.from_pretrained("gpt2togpt2")
 
             >>> # generation (use GPT2's `bos_token_id` to start the generation.)
-            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.bos_token_id)
+            >>> eos_token_id = model.config.decoder.eos_token_id
+            >>> pad_token_id = eos_token_id
+            >>> decoder_start_token_id = model.config.decoder.bos_token_id
+            >>> generated = model.generate(input_ids, pad_token_id=pad_token_id, eos_token_id=eos_token_id, decoder_start_token_id=decoder_start_token_id)
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -738,12 +729,12 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         Example::
 
             >>> from transformers import FlaxEncoderDecoderModel
-            >>> # initialize a bert2gpt2 from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
+            >>> # initialize a gpt2togpt2 from pretrained GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('gpt2', 'gpt2')
             >>> # saving model after fine-tuning
-            >>> model.save_pretrained("./bert2gpt2")
+            >>> model.save_pretrained("./gpt2togpt2")
             >>> # load fine-tuned model
-            >>> model = FlaxEncoderDecoderModel.from_pretrained("./bert2gpt2")
+            >>> model = FlaxEncoderDecoderModel.from_pretrained("./gpt2togpt2")
 
         """
 
