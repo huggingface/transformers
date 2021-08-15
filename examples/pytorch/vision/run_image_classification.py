@@ -23,9 +23,6 @@ from transformers import (
     TrainingArguments,
 )
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version
-from transformers.utils.versions import require_version
-from utils import ImageClassificationCollator, image_loader
 
 
 logger = logging.getLogger(__name__)
@@ -115,6 +112,16 @@ class ModelArguments:
             "with private models)."
         },
     )
+
+
+class ImageClassificationCollator:
+    def __init__(self, feature_extractor):
+        self.feature_extractor = feature_extractor
+
+    def __call__(self, batch):
+        encodings = self.feature_extractor([x[0] for x in batch], return_tensors="pt")
+        encodings["labels"] = torch.tensor([x[1] for x in batch], dtype=torch.long)
+        return encodings
 
 
 def main():
