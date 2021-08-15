@@ -254,7 +254,7 @@ class TrainState(train_state.TrainState):
         return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
 
 
-def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
+def write_train_metric(summary_writer, train_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
     train_metrics = get_metrics(train_metrics)
@@ -263,6 +263,8 @@ def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
         for i, val in enumerate(vals):
             summary_writer.scalar(tag, val, step - len(vals) + i + 1)
 
+
+def write_eval_metric(summary_writer, eval_metrics, step):
     for metric_name, value in eval_metrics.items():
         summary_writer.scalar(f"eval_{metric_name}", value, step)
 
@@ -491,6 +493,8 @@ def main():
     # Create sampling rng
     rng, input_rng = jax.random.split(rng)
 
+    num_train_samples = len(train_dataset)
+
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:
         # ======================== Training ================================
@@ -500,62 +504,85 @@ def main():
         rng, input_rng = jax.random.split(rng)
         train_metrics = []
 
-        steps_per_epoch = len(train_dataset) // train_batch_size
+        steps_per_epoch = num_train_samples // train_batch_size
         train_step_progress_bar = tqdm(total=steps_per_epoch, desc="Training...", position=1, leave=False)
         # train
-        for batch in train_loader:
+        for step, batch in enumerate(train_loader):
             batch = shard(batch)
             state, train_metric = p_train_step(state, batch)
             train_metrics.append(train_metric)
 
             train_step_progress_bar.update(1)
 
-        train_time += time.time() - train_start
+            cur_step = epoch * (num_train_samples // train_batch_size) + step + 1
 
-        train_metric = unreplicate(train_metric)
+            if cur_step % training_args.logging_steps == 0 and cur_step > 0:
+                train_metric = unreplicate(train_metric)
+                train_time += time.time() - train_start
+
+                # Save metrics
+                if has_tensorboard and jax.process_index() == 0:
+                    write_train_metric(summary_writer, train_metrics, train_time, cur_step)
+
+                epochs.write(
+                    f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
+                )
+
+                train_metrics = []
+
+            if cur_step % training_args.eval_steps == 0 and cur_step > 0:
+                # ======================== Evaluating ==============================
+                num_eval_samples = len(eval_dataset)
+                eval_metrics = []
+
+                eval_steps = num_eval_samples // eval_batch_size
+                eval_step_progress_bar = tqdm(
+                    total=eval_steps, desc="Evaluating...", position=2, leave=False
+                )
+
+                for batch in eval_loader:
+                    # Model forward
+                    batch = shard(batch)
+                    metrics = p_eval_step(state.params, batch)
+                    eval_metrics.append(metrics)
+
+                    eval_step_progress_bar.update(1)
+
+                # normalize eval metrics
+                eval_metrics = get_metrics(eval_metrics)
+
+                eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+
+                # Print metrics and update progress bar
+                desc = f"Eval at Step: {cur_step} (Loss: {eval_metrics['loss']})"
+                epochs.write(desc)
+                epochs.desc = desc
+
+                # Save metrics
+                if has_tensorboard and jax.process_index() == 0:
+                    write_eval_metric(summary_writer, eval_metrics, cur_step)
+
+            if cur_step % training_args.save_steps == 0 and cur_step > 0:
+                # save checkpoint and push checkpoint to the hub
+                if jax.process_index() == 0:
+                    params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+                    model.save_pretrained(
+                        training_args.output_dir,
+                        params=params,
+                        push_to_hub=training_args.push_to_hub,
+                        commit_message=f"Saving weights and logs of step {cur_step}",
+                    )
 
         train_step_progress_bar.close()
-        epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
-        )
 
-        # ======================== Evaluating ==============================
-        eval_metrics = []
-        eval_steps = len(eval_dataset) // eval_batch_size
-        eval_step_progress_bar = tqdm(total=eval_steps, desc="Evaluating...", position=2, leave=False)
-        for batch in eval_loader:
-            # Model forward
-            batch = shard(batch)
-            metrics = p_eval_step(state.params, batch)
-            eval_metrics.append(metrics)
-
-            eval_step_progress_bar.update(1)
-
-        # normalize eval metrics
-        eval_metrics = get_metrics(eval_metrics)
-
-        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
-
-        # Print metrics and update progress bar
-        eval_step_progress_bar.close()
-        desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']})"
-        epochs.write(desc)
-        epochs.desc = desc
-
-        # Save metrics
-        if has_tensorboard and jax.process_index() == 0:
-            cur_step = epoch * (len(train_dataset) // train_batch_size)
-            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
-
-        # save checkpoint after each epoch and push checkpoint to the hub
-        if jax.process_index() == 0:
-            params = jax.device_get(unreplicate(state.params))
-            model.save_pretrained(
-                training_args.output_dir,
-                params=params,
-                push_to_hub=training_args.push_to_hub,
-                commit_message=f"Saving weights and logs of epoch {epoch+1}",
-            )
+    # save model after training is over
+    params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+    model.save_pretrained(
+        training_args.output_dir,
+        params=params,
+        push_to_hub=training_args.push_to_hub,
+        commit_message="Add final model",
+    )
 
 
 if __name__ == "__main__":
