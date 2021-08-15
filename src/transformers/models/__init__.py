@@ -47,6 +47,7 @@ from . import (
     encoder_decoder,
     flaubert,
     fsmt,
+    fsner,
     funnel,
     gpt2,
     gpt_neo,

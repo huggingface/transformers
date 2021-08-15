@@ -1676,6 +1676,36 @@ class PretrainedFSMTModel:
         requires_backends(cls, ["torch"])
 
 
+FSNER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class FSNERLayer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FSNERModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class FSNERPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+def load_tf_weights_in_fsner(*args, **kwargs):
+    requires_backends(load_tf_weights_in_fsner, ["torch"])
+
+
 FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

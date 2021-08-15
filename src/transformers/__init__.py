@@ -199,6 +199,7 @@ _import_structure = {
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
+    "models.fsner": ["FSNER_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSNERConfig", "FSNERTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
@@ -336,6 +337,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.fsner"].append("FSNERTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -499,6 +501,7 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -776,6 +779,15 @@ if is_torch_available():
         ]
     )
     _import_structure["models.fsmt"].extend(["FSMTForConditionalGeneration", "FSMTModel", "PretrainedFSMTModel"])
+    _import_structure["models.fsner"].extend(
+        [
+            "FSNER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FSNERLayer",
+            "FSNERModel",
+            "FSNERPreTrainedModel",
+            "load_tf_weights_in_fsner",
+        ]
+    )
     _import_structure["models.funnel"].extend(
         [
             "FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1884,6 +1896,7 @@ if TYPE_CHECKING:
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
+    from .models.fsner import FSNER_PRETRAINED_CONFIG_ARCHIVE_MAP, FSNERConfig, FSNERTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
@@ -2026,6 +2039,7 @@ if TYPE_CHECKING:
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
+        from .models.fsner import FSNERTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.herbert import HerbertTokenizerFast
@@ -2093,6 +2107,7 @@ if TYPE_CHECKING:
         from .utils.dummy_timm_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2377,6 +2392,13 @@ if TYPE_CHECKING:
             FlaubertWithLMHeadModel,
         )
         from .models.fsmt import FSMTForConditionalGeneration, FSMTModel, PretrainedFSMTModel
+        from .models.fsner import (
+            FSNER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FSNERLayer,
+            FSNERModel,
+            FSNERPreTrainedModel,
+            load_tf_weights_in_fsner,
+        )
         from .models.funnel import (
             FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
             FunnelBaseModel,
