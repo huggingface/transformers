@@ -45,6 +45,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Speech2TextConfig"
 _TOKENIZER_FOR_DOC = "Speech2TextTokenizer"
+_CHECKPOINT_FOR_DOC = "facebook/s2t-small-librispeech-asr"
 
 
 SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -757,7 +758,6 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if attention_mask is not None:
             attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
 
@@ -1131,7 +1131,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="s2t_transformer_s",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1283,7 +1283,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
             >>> import soundfile as sf
 
             >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
-            >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-small-librispeech-asr")
+            >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])
@@ -1293,7 +1293,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
-            >>> input_features = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt").input_features  # Batch size 1
+            >>> input_features = processor(ds["speech"][0], sampling_rate=16000, return_tensors="pt").input_features  # Batch size 1
             >>> generated_ids = model.generate(input_ids=input_features)
 
             >>> transcription = processor.batch_decode(generated_ids)

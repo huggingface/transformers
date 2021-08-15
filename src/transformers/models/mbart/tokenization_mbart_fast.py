@@ -113,10 +113,16 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     suffix_tokens: List[int] = []
 
     def __init__(
-        self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, additional_special_tokens=None, **kwargs
+        self,
+        vocab_file=None,
+        tokenizer_file=None,
+        src_lang=None,
+        tgt_lang=None,
+        additional_special_tokens=None,
+        **kwargs
     ):
         super().__init__(
-            *args,
+            vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
@@ -127,9 +133,15 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
 
         if additional_special_tokens is not None:
-            _additional_special_tokens.extend(additional_special_tokens)
+            # Only add those special tokens if they are not already there.
+            _additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in _additional_special_tokens]
+            )
 
         self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
+        self.lang_code_to_id = {
+            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
+        }
 
         self._src_lang = src_lang if src_lang is not None else "en_XX"
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)

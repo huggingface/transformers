@@ -41,9 +41,7 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
 )
-from .training_args import ParallelMode
-from .utils import logging
-from .utils.modeling_auto_mapping import (
+from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
@@ -54,6 +52,8 @@ from .utils.modeling_auto_mapping import (
     MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
 )
+from .training_args import ParallelMode
+from .utils import logging
 
 
 TASK_MAPPING = {
@@ -565,6 +565,14 @@ class TrainingSummary:
         if model_name is None:
             model_name = Path(trainer.args.output_dir).name
 
+        # Add `generated_from_trainer` to the tags
+        if tags is None:
+            tags = ["generated_from_trainer"]
+        elif isinstance(tags, str) and tags != "generated_from_trainer":
+            tags = [tags, "generated_from_trainer"]
+        elif "generated_from_trainer" not in tags:
+            tags.append("generated_from_trainer")
+
         _, eval_lines, eval_results = parse_log_history(trainer.state.log_history)
         hyperparameters = extract_hyperparameters_from_trainer(trainer)
 
@@ -729,7 +737,7 @@ def extract_hyperparameters_from_trainer(trainer):
     if trainer.args.fp16:
         if trainer.use_amp:
             hyperparameters["mixed_precision_training"] = "Native AMP"
-        elif trainer._use_apex:
+        elif trainer.use_apex:
             hyperparameters["mixed_precision_training"] = f"Apex, opt level {trainer.args.fp16_opt_level}"
 
     if trainer.args.label_smoothing_factor != 0.0:

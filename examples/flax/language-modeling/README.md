@@ -33,11 +33,31 @@ in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-Let's start by creating a folder to save the trained model and a symbolic link to the `run_mlm_flax.py` script.
+Let's start by creating a model repository to save the trained model and logs.
+Here we call the model `"norwegian-roberta-base"`, but you can change the model name as you like.
+
+You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
+you are logged in) or via the command line:
+
+```
+huggingface-cli repo create norwegian-roberta-base
+```
+
+Next we clone the model repository to add the tokenizer and model files.
+
+```
+git clone https://huggingface.co/<your-username>/norwegian-roberta-base
+```
+
+To setup all relevant files for training, let's go into the cloned model directory.
 
 ```bash
-export MODEL_DIR="./norwegian-roberta-base"
-mkdir -p ${MODEL_DIR}
+cd norwegian-roberta-base
+```
+
+Next, let's add a symbolic link to the `run_mlm_flax.py`.
+
+```bash
 ln -s ~/transformers/examples/flax/language-modeling/run_mlm_flax.py run_mlm_flax.py
 ```
 
@@ -45,14 +65,12 @@ ln -s ~/transformers/examples/flax/language-modeling/run_mlm_flax.py run_mlm_fla
 
 In the first step, we train a tokenizer to efficiently process the text input for the model. Similar to how it is shown in [How to train a new language model from scratch using Transformers and Tokenizers](https://huggingface.co/blog/how-to-train), we use a **`ByteLevelBPETokenizer`**.
 The tokenizer is trained on the complete Norwegian dataset of OSCAR
-and consequently saved in `${MODEL_DIR}`
+and consequently saved in the cloned model directory.
 This can take up to 10 minutes depending on your hardware ☕.
 
 ```python
 from datasets import load_dataset
 from tokenizers import trainers, Tokenizer, normalizers, ByteLevelBPETokenizer
-
-model_dir = "./norwegian-roberta-base"  # ${MODEL_DIR}
 
 # load dataset
 dataset = load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
@@ -74,7 +92,7 @@ tokenizer.train_from_iterator(batch_iterator(), vocab_size=50265, min_frequency=
 ])
 
 # Save files to disk
-tokenizer.save(f"{model_dir}/tokenizer.json")
+tokenizer.save("./")
 ```
 
 ### Create configuration
@@ -86,11 +104,12 @@ in the local model folder:
 ```python
 from transformers import RobertaConfig
 
-model_dir = "./norwegian-roberta-base"  # ${MODEL_DIR}
-
-config = RobertaConfig.from_pretrained("roberta-base")
-config.save_pretrained(model_dir)
+config = RobertaConfig.from_pretrained("roberta-base", vocab_size=50265)
+config.save_pretrained("./")
 ```
+
+Great, we have set up our model repository. During training, we will automatically
+push the training logs and model weights to the repo.
 
 ### Train model
 
@@ -98,10 +117,10 @@ Next we can run the example script to pretrain the model:
 
 ```bash
 ./run_mlm_flax.py \
-    --output_dir="./runs" \
+    --output_dir="./" \
     --model_type="roberta" \
-    --config_name="${MODEL_DIR}" \
-    --tokenizer_name="${MODEL_DIR}" \
+    --config_name="./" \
+    --tokenizer_name="./" \
     --dataset_name="oscar" \
     --dataset_config_name="unshuffled_deduplicated_no" \
     --max_seq_length="128" \
@@ -111,16 +130,19 @@ Next we can run the example script to pretrain the model:
     --learning_rate="3e-4" \
     --warmup_steps="1000" \
     --overwrite_output_dir \
-    --pad_to_max_length \
     --num_train_epochs="18" \
     --adam_beta1="0.9" \
-    --adam_beta2="0.98"
+    --adam_beta2="0.98" \
+    --logging_steps="500" \
+    --save_steps="2500" \
+    --eval_steps="2500" \
+    --push_to_hub
 ```
 
 Training should converge at a loss and accuracy 
 of 1.78 and 0.64 respectively after 18 epochs on a single TPUv3-8.
 This should take less than 18 hours.
-Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/GdYmdak2TWeVz0DDRYOrrg).
+Training statistics can be accessed on [tfhub.dev](https://tensorboard.dev/experiment/GdYmdak2TWeVz0DDRYOrrg).
 
 For a step-by-step walkthrough of how to do masked language modeling in Flax, please have a 
 look at [this](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/masked_language_modeling_flax.ipynb) google colab.
@@ -135,15 +157,67 @@ in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-Let's start by creating a folder to save the trained model and a symbolic link to the `run_clm_flax.py` script.
+Let's start by creating a model repository to save the trained model and logs.
+Here we call the model `"norwegian-gpt2"`, but you can change the model name as you like.
+
+You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
+you are logged in) or via the command line:
+
+```
+huggingface-cli repo create norwegian-gpt2
+```
+
+Next we clone the model repository to add the tokenizer and model files.
+
+```
+git clone https://huggingface.co/<your-username>/norwegian-gpt2
+```
+
+To setup all relevant files for training, let's go into the cloned model directory.
 
 ```bash
-export MODEL_DIR="./norwegian-gpt2"
-mkdir -p ${MODEL_DIR}
+cd norwegian-gpt2
+```
+
+Next, let's add a symbolic link to the training script `run_clm_flax.py`.
+
+```bash
 ln -s ~/transformers/examples/flax/language-modeling/run_clm_flax.py run_clm_flax.py
 ```
 
-Next, we'll follow the same steps as above in [Train tokenizer](#train-tokenizer) to train the tokenizer.
+### Train tokenizer
+
+In the first step, we train a tokenizer to efficiently process the text input for the model. Similar to how it is shown in [How to train a new language model from scratch using Transformers and Tokenizers](https://huggingface.co/blog/how-to-train), we use a **`ByteLevelBPETokenizer`**.
+The tokenizer is trained on the complete Norwegian dataset of OSCAR
+and consequently saved in the cloned model directory.
+This can take up to 10 minutes depending on your hardware ☕.
+
+```python
+from datasets import load_dataset
+from tokenizers import trainers, Tokenizer, normalizers, ByteLevelBPETokenizer
+
+# load dataset
+dataset = load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
+
+# Instantiate tokenizer
+tokenizer = ByteLevelBPETokenizer()
+
+def batch_iterator(batch_size=1000):
+    for i in range(0, len(dataset), batch_size):
+        yield dataset[i: i + batch_size]["text"]
+
+# Customized training
+tokenizer.train_from_iterator(batch_iterator(), vocab_size=50257, min_frequency=2, special_tokens=[
+    "<s>",
+    "<pad>",
+    "</s>",
+    "<unk>",
+    "<mask>",
+])
+
+# Save files to disk
+tokenizer.save("./tokenizer.json")
+```
 
 ### Create configuration
 
@@ -154,22 +228,23 @@ in the local model folder:
 ```python
 from transformers import GPT2Config
 
-model_dir = "./norwegian-gpt2"  # ${MODEL_DIR}
-
-config = GPT2Config.from_pretrained("gpt2", resid_pdrop=0.0, embd_pdrop=0.0, attn_pdrop=0.0)
-config.save_pretrained(model_dir)
+config = GPT2Config.from_pretrained("gpt2", resid_pdrop=0.0, embd_pdrop=0.0, attn_pdrop=0.0, vocab_size=50257)
+config.save_pretrained("./")
 ```
+
+Great, we have set up our model repository. During training, we will now automatically
+push the training logs and model weights to the repo.
 
 ### Train model
 
-Next we can run the example script to pretrain the model:
+Finally, we can run the example script to pretrain the model:
 
 ```bash
 ./run_clm_flax.py \
-    --output_dir="./runs" \
+    --output_dir="./l" \
     --model_type="gpt2" \
-    --config_name="${MODEL_DIR}" \
-    --tokenizer_name="${MODEL_DIR}" \
+    --config_name="./" \
+    --tokenizer_name="./" \
     --dataset_name="oscar" \
     --dataset_config_name="unshuffled_deduplicated_no" \
     --do_train --do_eval \
@@ -180,6 +255,10 @@ Next we can run the example script to pretrain the model:
     --adam_beta1="0.9" --adam_beta2="0.98" --weight_decay="0.01" \
     --overwrite_output_dir \
     --num_train_epochs="20" \
+    --logging_steps="500" \
+    --save_steps="2500" \
+    --eval_steps="2500" \
+    --push_to_hub
 ```
 
 Training should converge at a loss and perplexity 
@@ -187,6 +266,140 @@ of 3.24 and 25.72 respectively after 20 epochs on a single TPUv3-8.
 This should take less than ~21 hours.
 Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/2zEhLwJ0Qp2FAkI3WVH9qA).
 
+For a step-by-step walkthrough of how to do causal language modeling in Flax, please have a 
+look at [this](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/causal_language_modeling_flax.ipynb) google colab.
+
+## T5-like span-masked language modeling
+
+In the following, we demonstrate how to train a T5 model using the span-masked language model 
+objective as proposed in the [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683).
+More specifically, we demonstrate how JAX/Flax can be leveraged 
+to pre-train [**`google/t5-v1_1-base`**](https://huggingface.co/google/t5-v1_1-base)
+in Norwegian on a single TPUv3-8 pod.
+
+The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
+
+Let's start by creating a model repository to save the trained model and logs.
+Here we call the model `"norwegian-t5-base"`, but you can change the model name as you like.
+
+You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
+you are logged in) or via the command line:
+
+```
+huggingface-cli repo create norwegian-t5-base
+```
+
+Next we clone the model repository to add the tokenizer and model files.
+
+```
+git clone https://huggingface.co/<your-username>/norwegian-t5-base
+```
+
+To setup all relevant files for trairing, let's go into the cloned model directory.
+
+```bash
+cd norwegian-t5-base
+```
+
+Next, let's add a symbolic link to the `run_t5_mlm_flax.py` and `t5_tokenizer_model` scripts.
+
+```bash
+ln -s ~/transformers/examples/flax/language-modeling/run_t5_mlm_flax.py run_t5_mlm_flax.py
+ln -s ~/transformers/examples/flax/language-modeling/t5_tokenizer_model.py t5_tokenizer_model.py
+```
+
+### Train tokenizer
+
+In the first step, we train a tokenizer to efficiently process the text input for the model. 
+We make use of the [tokenizers](https://github.com/huggingface/tokenizers) library to train 
+a sentencepiece unigram tokenizer as shown in [t5_tokenizer_model.py](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling/t5_tokenizer_model.py) 
+which is heavily inspired from [yandex-research/DeDLOC's tokenizer model](https://github.com/yandex-research/DeDLOC/blob/5c994bc64e573702a9a79add3ecd68b38f14b548/sahajbert/tokenizer/tokenizer_model.py) .
+
+The tokenizer is trained on the complete Norwegian dataset of OSCAR
+and consequently saved in the cloned model directory.
+This can take up to 120 minutes depending on your hardware ☕☕☕ .
+
+```python
+import datasets
+
+from t5_tokenizer_model import SentencePieceUnigramTokenizer
+
+
+vocab_size = 32_000
+input_sentence_size = None
+
+# Initialize a dataset
+dataset = datasets.load_dataset("oscar", name="unshuffled_deduplicated_no", split="train")
+
+tokenizer = SentencePieceUnigramTokenizer(unk_token="<unk>", eos_token="</s>", pad_token="<pad>")
+
+
+# Build an iterator over this dataset
+def batch_iterator(input_sentence_size=None):
+    if input_sentence_size is None:
+        input_sentence_size = len(dataset)
+    batch_length = 100
+    for i in range(0, input_sentence_size, batch_length):
+        yield dataset[i: i + batch_length]["text"]
+
+
+# Train tokenizer
+tokenizer.train_from_iterator(
+    iterator=batch_iterator(input_sentence_size=input_sentence_size),
+    vocab_size=vocab_size,
+    show_progress=True,
+)
+
+# Save files to disk
+tokenizer.save("./tokenizer.json")
+```
+
+### Create configuration
+
+Next, we create the model's configuration file. This is as simple 
+as loading and storing [`**google/t5-v1_1-base**`](https://huggingface.co/google/t5-v1_1-base)
+in the local model folder:
+
+```python
+from transformers import T5Config
+
+config = T5Config.from_pretrained("google/t5-v1_1-base", vocab_size=tokenizer.get_vocab_size())
+config.save_pretrained("./")
+```
+
+Great, we have set up our model repository. During training, we will automatically
+push the training logs and model weights to the repo.
+
+### Train model
+
+Next we can run the example script to pretrain the model:
+
+```bash
+./run_t5_mlm_flax.py \
+	--output_dir="./" \
+	--model_type="t5" \
+	--config_name="./" \
+	--tokenizer_name="./" \
+	--dataset_name="oscar" \
+	--dataset_config_name="unshuffled_deduplicated_no" \
+	--max_seq_length="512" \
+	--per_device_train_batch_size="32" \
+	--per_device_eval_batch_size="32" \
+	--adafactor \
+	--learning_rate="0.005" \
+	--weight_decay="0.001" \
+	--warmup_steps="2000" \
+	--overwrite_output_dir \
+	--logging_steps="500" \
+	--save_steps="10000" \
+	--eval_steps="2500" \
+	--push_to_hub
+```
+
+Training should converge at a loss and accuracy 
+of 2.36 and 57.0 respectively after 3 epochs on a single TPUv3-8.
+This should take around 4.5 hours.
+Training statistics can be accessed on directly on the 🤗 [hub](https://huggingface.co/patrickvonplaten/t5-base-norwegian/tensorboard)
 
 ## Runtime evaluation
 
@@ -197,14 +410,9 @@ For reproducibility, we state the training commands used for PyTorch/XLA and PyT
 | Task  | [TPU v3-8 (Flax)](https://tensorboard.dev/experiment/GdYmdak2TWeVz0DDRYOrrg/)  | [TPU v3-8 (Pytorch/XLA)](https://tensorboard.dev/experiment/7Jq1kcQQRAmy12KOdXek7A/)| [8 GPU (PyTorch)](https://tensorboard.dev/experiment/PJneV8FQRxa2unPw1QnVHA)  |
 |-------|-----------|------------|------------|
 | MLM   |  15h32m   |  23h46m    | 44h14m     |
-| **COST*** | $124.24  | $187.84 | $877.92 |
 
-*All experiments are ran on Google Cloud Platform. Prices are on-demand prices
-(not preemptible), obtained on May 12, 2021 for zone Iowa (us-central1) using
-the following tables:
-[TPU pricing table](https://cloud.google.com/tpu/pricing) ($8.00/h for v3-8),
-[GPU pricing table](https://cloud.google.com/compute/gpus-pricing) ($2.48/h per
-V100 GPU). GPU experiments are ran without further optimizations besides JAX
+*All experiments are ran on Google Cloud Platform. 
+GPU experiments are ran without further optimizations besides JAX
 transformations. GPU experiments are ran with full precision (fp32). "TPU v3-8"
 are 8 TPU cores on 4 chips (each chips has 2 cores), while "8 GPU" are 8 GPU chips.
 
@@ -281,7 +489,7 @@ mkdir -p ${MODEL_DIR}
 
 ```bash
 python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
-    --output_dir="./runs" \
+    --output_dir="${MODEL_DIR}" \
     --model_type="roberta" \
     --config_name="${MODEL_DIR}" \
     --tokenizer_name="${MODEL_DIR}" \
