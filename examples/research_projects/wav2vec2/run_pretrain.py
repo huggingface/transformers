@@ -51,7 +51,10 @@ class ModelArguments:
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
     gradient_checkpointing: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
     )
     verbose_logging: Optional[bool] = field(
         default=False,
@@ -70,7 +73,7 @@ class ModelArguments:
 
 def configure_logger(model_args: ModelArguments, training_args: TrainingArguments):
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
@@ -108,6 +111,12 @@ class DataTrainingArguments:
         default="validation",
         metadata={
             "help": "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+        },
+    )
+    validation_split_percentage: Optional[int] = field(
+        default=5,
+        metadata={
+            "help": "Percentage of training data that should be used for validation if no validation is present in dataset."
         },
     )
     speech_file_column: Optional[str] = field(
@@ -157,27 +166,49 @@ class DataCollatorForWav2Vec2Pretraining:
 
     model: Wav2Vec2ForPreTraining
     feature_extractor: Wav2Vec2FeatureExtractor
-    padding: Union[bool, str] = "longest"
-    pad_to_multiple_of: Optional[int] = None
-    max_length: Optional[int] = None
+#    padding: Union[bool, str] = "longest"
+#    pad_to_multiple_of: Optional[int] = None
+#    max_length: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
-            max_length=self.max_length,
-            padding=self.padding,
-            pad_to_multiple_of=self.pad_to_multiple_of,
+            max_length=240_000,
+            truncation=True,
+            padding="max_length",
+            pad_to_multiple_of=128,
             return_tensors="pt",
         )
         mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
 
+        batch_size = batch["input_values"].shape[0]
+
+        # make sure that no loss is computed on padded inputs
+        if batch["attention_mask"] is not None:
+            # compute real output lengths according to convolution formula
+            output_lengths = self.model._get_feat_extract_output_lengths(batch["attention_mask"].sum(-1)).to(
+                torch.long
+            )
+
+            attention_mask = torch.zeros(
+                (batch_size, mask_indices_seq_length), dtype=torch.long, device=batch["input_values"].device
+            )
+
+            # these two operations makes sure that all values
+            # before the output lengths indices are attended to
+            attention_mask[
+                (torch.arange(attention_mask.shape[0], device=batch["input_values"].device), output_lengths - 1)
+            ] = 1
+            attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+
         # sample randomly masked indices
         batch["mask_time_indices"] = _compute_mask_indices(
-            (batch["input_values"].shape[0], mask_indices_seq_length),
+            (batch_size, mask_indices_seq_length),
             self.model.config.mask_time_prob,
             self.model.config.mask_time_length,
             device=batch["input_values"].device,
+            attention_mask=attention_mask,
             min_masks=2,
         )
 
@@ -225,12 +256,7 @@ class Wav2Vec2PreTrainer(Trainer):
             loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1 or self.deepspeed:
-            if model.module.config.ctc_loss_reduction == "mean":
-                loss = loss.mean()
-            elif model.module.config.ctc_loss_reduction == "sum":
-                loss = loss.sum() / (inputs["mask_time_indices"]).sum()
-            else:
-                raise ValueError(f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
+            loss = loss.sum() / (inputs["mask_time_indices"]).sum()
 
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
@@ -253,7 +279,7 @@ class Wav2Vec2PreTrainer(Trainer):
             )
         else:
             model.set_gumbel_temperature(
-                max(self.max_gumbel_temp * self.gumbel_temp_decay ** self.num_update_step, self.min_gumbel_temp)
+                max(self.max_gumbel_temp * (self.gumbel_temp_decay ** self.num_update_step), self.min_gumbel_temp)
             )
 
         return loss.detach()
@@ -270,7 +296,7 @@ def main():
     configure_logger(model_args, training_args)
 
     # Downloading and loading a dataset from the hub.
-    datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+    datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, data_dir="/home/patrick/wav2vec2_reproduce/", cache_dir=model_args.cache_dir)
 
     if "validation" not in datasets.keys():
         # make sure only "validation" and "train" keys remain"
@@ -279,12 +305,14 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=f"{data_args.train_split_name}[:{data_args.validation_split_percentage}%]",
+            data_dir="/home/patrick/wav2vec2_reproduce/",
             cache_dir=model_args.cache_dir,
         )
         datasets["train"] = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=f"{data_args.train_split_name}[{data_args.validation_split_percentage}%:]",
+            data_dir="/home/patrick/wav2vec2_reproduce/",
             cache_dir=model_args.cache_dir,
         )
     else:
@@ -316,11 +344,6 @@ def main():
     # load audio files into numpy arrays
     vectorized_datasets = datasets.map(
         prepare_dataset, num_proc=data_args.preprocessing_num_workers, remove_columns=datasets["train"].column_names
-    )
-
-    # filter audio files that are too long
-    vectorized_datasets = vectorized_datasets.filter(
-        lambda data: len(data["speech"]) < int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
     )
 
     def normalize(batch):
