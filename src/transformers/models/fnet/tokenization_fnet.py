@@ -31,14 +31,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "gchhablani/fnet-base": "https://huggingface.co/gchhablani/fnet-base/resolve/main/spiece.model",
-        "gchhablani/fnet-large": "https://huggingface.co/gchhablani/fnet-large/resolve/main/spiece.model",
+        "google/fnet-base": "https://huggingface.co/google/fnet-base/resolve/main/spiece.model",
+        "google/fnet-large": "https://huggingface.co/google/fnet-large/resolve/main/spiece.model",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "gchhablani/fnet-base": 512,
-    "gchhablani/fnet-large": 512,
+    "google/fnet-base": 512,
+    "google/fnet-large": 512,
 }
 
 SPIECE_UNDERLINE = "▁"

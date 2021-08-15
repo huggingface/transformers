@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Google AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 FNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "gchhablani/fnet-base": "https://huggingface.co/gchhablani/fnet-base/resolve/main/config.json",
-    "gchhablani/fnet-large": "https://huggingface.co/gchhablani/fnet-large/resolve/main/config.json"
+    "google/fnet-base": "https://huggingface.co/google/fnet-base/resolve/main/config.json",
+    "google/fnet-large": "https://huggingface.co/google/fnet-large/resolve/main/config.json"
     # See all FNet models at https://huggingface.co/models?filter=fnet
 }
 
@@ -32,7 +32,7 @@ class FNetConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.FNetModel`. It is used to
     instantiate an FNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the FNet `fnet-base
-    <https://huggingface.co/gchhablani/fnet-base>`__ architecture.
+    <https://huggingface.co/google/fnet-base>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.

@@ -429,7 +429,7 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
 class FNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = FNetForMaskedLM.from_pretrained("gchhablani/fnet-base")
+        model = FNetForMaskedLM.from_pretrained("google/fnet-base")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 

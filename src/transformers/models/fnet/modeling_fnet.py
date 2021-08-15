@@ -59,13 +59,13 @@ from .configuration_fnet import FNetConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "gchhablani/fnet-base"
+_CHECKPOINT_FOR_DOC = "google/fnet-base"
 _CONFIG_FOR_DOC = "FNetConfig"
 _TOKENIZER_FOR_DOC = "FNetTokenizer"
 
 FNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "gchhablani/fnet-base",
-    "gchhablani/fnet-large"
+    "google/fnet-base",
+    "google/fnet-large"
     # See all FNet models at https://huggingface.co/models?filter=fnet
 ]
 
@@ -669,8 +669,8 @@ class FNetForPreTraining(FNetPreTrainedModel):
         Example::
             >>> from transformers import FNetTokenizer, FNetForPreTraining
             >>> import torch
-            >>> tokenizer = FNetTokenizer.from_pretrained('gchhablani/fnet-base')
-            >>> model = FNetForPreTraining.from_pretrained('gchhablani/fnet-base')
+            >>> tokenizer = FNetTokenizer.from_pretrained('google/fnet-base')
+            >>> model = FNetForPreTraining.from_pretrained('google/fnet-base')
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> prediction_logits = outputs.prediction_logits
@@ -826,8 +826,8 @@ class FNetForNextSentencePrediction(FNetPreTrainedModel):
         Example::
             >>> from transformers import FNetTokenizer, FNetForNextSentencePrediction
             >>> import torch
-            >>> tokenizer = FNetTokenizer.from_pretrained('gchhablani/fnet-base')
-            >>> model = FNetForNextSentencePrediction.from_pretrained('gchhablani/fnet-base')
+            >>> tokenizer = FNetTokenizer.from_pretrained('google/fnet-base')
+            >>> model = FNetForNextSentencePrediction.from_pretrained('google/fnet-base')
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
             >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')

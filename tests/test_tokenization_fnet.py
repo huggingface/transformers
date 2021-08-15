@@ -370,6 +370,6 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="gchhablani/fnet-base",
+            model_name="google/fnet-base",
             revision="58e0d1f96af163dc8d0a84a2fddf4bd403e4e802",
         )
