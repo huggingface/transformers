@@ -47,7 +47,8 @@ class DataTrainingArguments:
     validation_dir: str = field(
         default=None,
         metadata={
-            "help": "Path to the root validation directory which contains one subdirectory per class. If not provided, the validation dataset will be split off of training dataset using train_val_split"
+            "help": "Path to the root validation directory which contains one subdirectory per class. "
+            "If not provided, the validation dataset will be split off of training dataset using train_val_split."
         },
     )
     test_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the test data."})
@@ -114,14 +115,10 @@ class ModelArguments:
     )
 
 
-class ImageClassificationCollator:
-    def __init__(self, feature_extractor):
-        self.feature_extractor = feature_extractor
-
-    def __call__(self, batch):
-        encodings = self.feature_extractor([x[0] for x in batch], return_tensors="pt")
-        encodings["labels"] = torch.tensor([x[1] for x in batch], dtype=torch.long)
-        return encodings
+def collate_fn(examples):
+    pixel_values = torch.stack([example[0] for example in examples])
+    labels = torch.tensor([example[1] for example in examples])
+    return {"pixel_values": pixel_values, "labels": labels}
 
 
 def main():
@@ -249,14 +246,25 @@ def main():
             use_auth_token=True if model_args.use_auth_token else None,
         )
 
-    # TODO - Limit samples for dataset splits here based on values provided to data_args
+    if data_args.max_train_samples is not None and data_args.max_train_samples < len(train_dataset):
+        indices = torch.randperm(data_args.max_train_samples).tolist()
+        train_dataset = torch.utils.data.Subset(train_dataset, indices)
+    if data_args.max_eval_samples is not None and data_args.max_eval_samples < len(eval_dataset):
+        indices = torch.randperm(data_args.max_eval_samples).tolist()
+        eval_dataset = torch.utils.data.Subset(eval_dataset, indices)
+    if data_args.max_predict_samples is not None and data_args.max_predict_samples < len(test_dataset):
+        indices = torch.randperm(data_args.max_predict_samples).tolist()
+        test_dataset = torch.utils.data.Subset(test_dataset, indices)
 
-    # TODO - Make sure we are using the feature extractor correctly in relation to previously defined train/val transforms
+    # NOTE - We aren't directly using this feature extractor since we defined custom transforms above.
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
+        size=data_args.image_size,
+        image_mean=normalize.mean,
+        image_std=normalize.std,
     )
     trainer = Trainer(
         model_init=model_init,
@@ -265,7 +273,7 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=feature_extractor,
-        data_collator=ImageClassificationCollator(feature_extractor),
+        data_collator=collate_fn,
     )
 
     if training_args.do_train:
