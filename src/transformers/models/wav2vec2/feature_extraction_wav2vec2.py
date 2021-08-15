@@ -79,16 +79,22 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         self.do_normalize = do_normalize
 
     @staticmethod
-    def zero_mean_unit_var_norm(input_values: List[np.ndarray], input_lengths: List[int]) -> List[np.ndarray]:
+    def zero_mean_unit_var_norm(input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value=0.0) -> List[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
+
+        if attention_mask is not None:
+            normed_input_values = np.asarray([
+                (x - np.mean(x[:i])) / np.sqrt(np.var(x[:i]) + 1e-7) for x, i in zip(input_values, attention_mask.sum(-1))
+            ])
+            normed_input_values[(1 - attention_mask).astype(np.bool)] = padding_value
+        else:
+            normed_input_values = (input_values - input_values.mean(-1)[:, None]) / np.sqrt(input_values.var(-1)[:, None] + 1e-7)
+
         if isinstance(input_values[0], np.ndarray):
             input_values = [x.astype(np.float32) for x in input_values]
 
-        normed_input_values = [
-            (x - np.mean(x[:i])) / np.sqrt(np.var(x[:i]) + 1e-5) for x, i in zip(input_values, input_lengths)
-        ]
         return normed_input_values
 
     def __call__(
@@ -199,16 +205,12 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
         )
 
-        if "attention_mask" in padded_inputs:
-            input_lengths = padded_inputs["attention_mask"].sum(-1)
-        else:
-            padded_input_values = padded_inputs["input_values"]
-            input_lengths = [padded_input_values.shape[-1] for _ in range(padded_input_values.shape[0])]
+        attention_mask = padded_inputs.get("attention_mask")
 
         # zero-mean and unit-variance normalization
         if self.do_normalize:
             padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
-                padded_inputs["input_values"], input_lengths=input_lengths
+                padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
             )
 
         if return_tensors is not None:
