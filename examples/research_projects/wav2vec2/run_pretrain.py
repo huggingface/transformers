@@ -174,7 +174,7 @@ class DataCollatorForWav2Vec2Pretraining:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
-            max_length=240_000,
+            max_length=80_000,
             truncation=True,
             padding="max_length",
             pad_to_multiple_of=128,

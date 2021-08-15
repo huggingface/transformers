@@ -1303,7 +1303,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
             # 7. compute diversity loss: \mathbf{L}_d
             num_codevectors = self.config.num_codevectors_per_group * self.config.num_codevector_groups
-            diversity_loss = (num_codevectors - codevector_perplexity) / num_codevectors
+            diversity_loss = ((num_codevectors - codevector_perplexity) / num_codevectors) * mask_time_indices.sum()
 
             # 8. \mathbf{L} = \mathbf{L}_m + \alpha * \mathbf{L}_d
             loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
