@@ -15,8 +15,6 @@
 """ PyTorch FSNER model. """
 
 
-
-
 import math
 import os
 
@@ -186,7 +184,7 @@ class FSNEREmbeddings(nn.Module):
                 token_type_ids = buffered_token_type_ids_expanded
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
-                
+
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
@@ -656,7 +654,7 @@ class FSNERPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -848,7 +846,6 @@ class FSNERModel(FSNERPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
@@ -914,18 +911,17 @@ class FSNERModel(FSNERPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-
     def BERT(self, **inputs):
         return self.forward(**inputs).last_hidden_state
-    
+
     def VectorSum(self, token_embeddings):
         return token_embeddings.sum(2, keepdim=True)
-        
+
     def Atten(self, q_rep, S_rep, T=1):
-        return self.softmax(T*self.cos(q_rep, S_rep))
-    
+        return self.softmax(T * self.cos(q_rep, S_rep))
+
     def get_start_end_token_scores(self, W_query, W_supports):
-        
+
         """
         Find scores of each token being start and end token for an entity.
 
@@ -956,11 +952,11 @@ class FSNERModel(FSNERPreTrainedModel):
             >>> query = ['The KWE 4000 can reach with a maximum speed from up to 450 P/min an accuracy from 50 mg']
             >>> supports = [
             ...        [
-            ...            'Horizontal flow wrapper [E] Pack 403 [/E] features the new retrofit-kit „paper-ON-form“', 
-            ...            '[E] Paloma Pick-and-Place-Roboter [/E] arranges the bakery products for the downstream tray-forming equipment', 
-            ...            'Finally, the new [E] Kliklok ACE [/E] carton former forms cartons and trays without the use of glue', 
-            ...            'We set up our pilot plant with the right [E] FibreForm® [/E] configuration to make prototypes for your marketing tests and package validation', 
-            ...            'The [E] Sigpack HML [/E] is a compact horizontal flow wrapping machine. It is suited for highly reliable hermetic packaging.', 
+            ...            'Horizontal flow wrapper [E] Pack 403 [/E] features the new retrofit-kit „paper-ON-form“',
+            ...            '[E] Paloma Pick-and-Place-Roboter [/E] arranges the bakery products for the downstream tray-forming equipment',
+            ...            'Finally, the new [E] Kliklok ACE [/E] carton former forms cartons and trays without the use of glue',
+            ...            'We set up our pilot plant with the right [E] FibreForm® [/E] configuration to make prototypes for your marketing tests and package validation',
+            ...            'The [E] Sigpack HML [/E] is a compact horizontal flow wrapping machine. It is suited for highly reliable hermetic packaging.',
             ...            'The [E] CAR-T5 [/E] is a reliable, purely mechanically driven cartoning machine for versatile application fields'
             ...        ]
             ...    ]
@@ -976,22 +972,20 @@ class FSNERModel(FSNERPreTrainedModel):
 
         q = self.BERT(**W_query)
         S = self.BERT(**W_supports)
-        
+
         # reshape from (batch_size, 384, 784) to (batch_size, 1, 384, 784)
         q = q.view(q.shape[0], -1, q.shape[1], q.shape[2])
 
         # reshape from (batch_size*n_exaples_per_entity, 384, 784) to (batch_size, n_exaples_per_entity, 384, 784)
         S = S.view(q.shape[0], -1, S.shape[1], S.shape[2])
 
-        s_start = S[(W_supports['input_ids'] == 30522).view(S.shape[:3])].view(S.shape[0], -1, 1, S.shape[-1])
-        s_end = S[(W_supports['input_ids'] == 30523).view(S.shape[:3])].view(S.shape[0], -1, 1, S.shape[-1])
-        
+        s_start = S[(W_supports["input_ids"] == 30522).view(S.shape[:3])].view(S.shape[0], -1, 1, S.shape[-1])
+        s_end = S[(W_supports["input_ids"] == 30523).view(S.shape[:3])].view(S.shape[0], -1, 1, S.shape[-1])
+
         p_start = torch.sum(torch.einsum("bitf,bejf->bet", q, s_start), dim=1)
         p_end = torch.sum(torch.einsum("bitf,bejf->bet", q, s_end), dim=1)
-        
+
         p_start = p_start.softmax(dim=1)
         p_end = p_end.softmax(dim=1)
 
         return p_start, p_end
-
-    

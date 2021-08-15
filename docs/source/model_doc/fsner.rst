@@ -16,12 +16,16 @@ FSNER
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The FSNER model was proposed in `Example-Based Named Entity Recognition <https://arxiv.org/abs/2008.10570>`__ by Morteza Ziyadi, Yuting Sun, Abhishek Goswami, Jade Huang, Weizhu Chen.
-To identify entity spans in a new domain, it uses a train-free few-shot learning approach inspired by question-answering.
+The FSNER model was proposed in `Example-Based Named Entity Recognition <https://arxiv.org/abs/2008.10570>`__ by
+Morteza Ziyadi, Yuting Sun, Abhishek Goswami, Jade Huang, Weizhu Chen. To identify entity spans in a new domain, it
+uses a train-free few-shot learning approach inspired by question-answering.
 
 The abstract from the paper is the following:
 
-*We present a novel approach to named entity recognition (NER) in the presence of scarce data that we call example-based NER. Our train-free few-shot learning approach takes inspiration from question-answering to identify entity spans in a new and unseen domain. In comparison with the current state-of-the-art, the proposed method performs significantly better, especially when using a low number of support examples.*
+*We present a novel approach to named entity recognition (NER) in the presence of scarce data that we call
+example-based NER. Our train-free few-shot learning approach takes inspiration from question-answering to identify
+entity spans in a new and unseen domain. In comparison with the current state-of-the-art, the proposed method performs
+significantly better, especially when using a low number of support examples.*
 
 Tips:
 
@@ -32,10 +36,14 @@ This model was contributed by `sayef <https://huggingface.co/sayef>`__.
 Implementation Notes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- The base model `fsner-bert-base-uncased` is trained for 10 epochs on the datasets ontonotes5, conll2003, wnut2017, and fin (Alvarado et al.).
-- The span selection or sorting is based on the product of span-start probability and span-end probability after applying softmax, where in the original paper it was summation without softmax.
-- Use `get_start_end_token_scores` method of :class:`~transformers.FSNERModel` for extracting start and end probabilities for each corresponding entity supports.
-- Use `extract_entity_from_scores` method of :class:`~transformers.FSNERTokenizer` or :class:`~transformers.FSNERTokenizerFast` for extracting entity span from the query. 
+- The base model `fsner-bert-base-uncased` is trained for 10 epochs on the datasets ontonotes5, conll2003, wnut2017,
+  and fin (Alvarado et al.).
+- The span selection or sorting is based on the product of span-start probability and span-end probability after
+  applying softmax, where in the original paper it was summation without softmax.
+- Use `get_start_end_token_scores` method of :class:`~transformers.FSNERModel` for extracting start and end
+  probabilities for each corresponding entity supports.
+- Use `extract_entity_from_scores` method of :class:`~transformers.FSNERTokenizer` or
+  :class:`~transformers.FSNERTokenizerFast` for extracting entity span from the query.
 
 FSNERConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

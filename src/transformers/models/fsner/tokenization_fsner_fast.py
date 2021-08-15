@@ -59,15 +59,15 @@ class FSNERTokenizerFast(BertTokenizerFast):
         super().__init__(
             **kwargs,
         )
-        
-        self.start_token_id, self.end_token_id = 30522, 30523 
-        
+
+        self.start_token_id, self.end_token_id = 30522, 30523
+
     def extract_entity_from_scores(self, query, W_query, p_start, p_end, thresh=0.70):
         """
         Extracts entities from query using the scores.
 
         Args:
-            query (`List[str]`): 
+            query (`List[str]`):
                 List of query strings.
             W_query (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
                 Indices of query sequence tokens in the vocabulary.
@@ -93,11 +93,11 @@ class FSNERTokenizerFast(BertTokenizerFast):
             >>> query = ['The KWE 4000 can reach with a maximum speed from up to 450 P/min an accuracy from 50 mg']
             >>> supports = [
             ...        [
-            ...            'Horizontal flow wrapper [E] Pack 403 [/E] features the new retrofit-kit „paper-ON-form“', 
-            ...            '[E] Paloma Pick-and-Place-Roboter [/E] arranges the bakery products for the downstream tray-forming equipment', 
-            ...            'Finally, the new [E] Kliklok ACE [/E] carton former forms cartons and trays without the use of glue', 
-            ...            'We set up our pilot plant with the right [E] FibreForm® [/E] configuration to make prototypes for your marketing tests and package validation', 
-            ...            'The [E] Sigpack HML [/E] is a compact horizontal flow wrapping machine. It is suited for highly reliable hermetic packaging.', 
+            ...            'Horizontal flow wrapper [E] Pack 403 [/E] features the new retrofit-kit „paper-ON-form“',
+            ...            '[E] Paloma Pick-and-Place-Roboter [/E] arranges the bakery products for the downstream tray-forming equipment',
+            ...            'Finally, the new [E] Kliklok ACE [/E] carton former forms cartons and trays without the use of glue',
+            ...            'We set up our pilot plant with the right [E] FibreForm® [/E] configuration to make prototypes for your marketing tests and package validation',
+            ...            'The [E] Sigpack HML [/E] is a compact horizontal flow wrapping machine. It is suited for highly reliable hermetic packaging.',
             ...            'The [E] CAR-T5 [/E] is a reliable, purely mechanically driven cartoning machine for versatile application fields'
             ...        ]
             ...    ]
@@ -120,18 +120,18 @@ class FSNERTokenizerFast(BertTokenizerFast):
                 for end_id in end_indexes:
                     if start_id < end_id:
                         output.append((start_id, end_id, p_start[idx][start_id].item(), p_end[idx][end_id].item()))
-                        
-            output.sort(key=lambda tup: (tup[2]*tup[3]), reverse=True)
+
+            output.sort(key=lambda tup: (tup[2] * tup[3]), reverse=True)
 
             temp = []
             for k in range(len(output)):
                 if output[k][2] * output[k][3] >= thresh:
                     c_start_pos, c_end_pos = output[k][0], output[k][1]
-                    decoded = query[idx][W_query.encodings[idx].offsets[c_start_pos][0]:W_query.encodings[idx].offsets[c_end_pos][0]]
+                    decoded = query[idx][
+                        W_query.encodings[idx].offsets[c_start_pos][0] : W_query.encodings[idx].offsets[c_end_pos][0]
+                    ]
                     temp.append((decoded, output[k][2] * output[k][3]))
 
             final_outputs.append(temp)
 
         return final_outputs
-
-    
