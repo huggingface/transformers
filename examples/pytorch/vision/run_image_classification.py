@@ -294,7 +294,7 @@ def main():
         output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")
         if trainer.is_world_process_zero():
             with open(output_predict_file, "w") as writer:
-                logger.info(f"***** Writing predict results *****")
+                logger.info("***** Writing predict results *****")
                 writer.write("index\tfile\tprediction\n")
                 for i, prediction in enumerate(predictions):
                     file = test_dataset.imgs[i][0].split("/")[-1]
