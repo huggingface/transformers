@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch Wav2Vec2 model. """
 
+import math
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
@@ -270,6 +271,12 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
             padding=config.num_conv_pos_embeddings // 2,
             groups=config.num_conv_pos_embedding_groups,
         )
+
+        # special init before magnitude and direction is decoupled
+        nn.init.normal_(
+            self.conv.weight, mean=0, std=2 * math.sqrt(1 / (config.num_conv_pos_embeddings * config.hidden_size))
+        )
+        nn.init.constant_(self.conv.bias, 0)
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -782,11 +789,11 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
     @staticmethod
     def _compute_perplexity(probs, mask=None):
-#        if mask is not None:
-#            mask_extended = mask.flatten()[:, None, None].expand(probs.shape)
-#            probs = torch.where(mask_extended, probs, torch.zeros_like(probs))
-#            marginal_probs = probs.sum(dim=0) / mask.sum()
-#        else:
+        #        if mask is not None:
+        #            mask_extended = mask.flatten()[:, None, None].expand(probs.shape)
+        #            probs = torch.where(mask_extended, probs, torch.zeros_like(probs))
+        #            marginal_probs = probs.sum(dim=0) / mask.sum()
+        #        else:
         marginal_probs = probs.mean(dim=0)
 
         perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
@@ -850,18 +857,20 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.weight_proj.weight.data.normal_(mean=0.0, std=1)
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
+        elif isinstance(module, Wav2Vec2PositionalConvEmbedding):
+            # layer needs special initialization in class `Wav2Vec2PositionalConvEmbedding`
+            pass
+
         elif isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight.data)
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
-            module.bias.data.zero_()
+            nn.init.kaiming_normal_(module.weight)
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """

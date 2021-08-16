@@ -79,20 +79,23 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         self.do_normalize = do_normalize
 
     @staticmethod
-    def zero_mean_unit_var_norm(input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value=0.0) -> List[np.ndarray]:
+    def zero_mean_unit_var_norm(
+        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value=0.0
+    ) -> List[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
 
         if attention_mask is not None and any(0 in mask for mask in attention_mask):
-            normed_input_values = np.asarray([
-                (x - np.mean(x[:i])) / np.sqrt(np.var(x[:i]) + 1e-7) for x, i in zip(input_values, attention_mask.sum(-1))
-            ])
+            normed_input_values = np.asarray(
+                [
+                    (x - np.mean(x[:i])) / np.sqrt(np.var(x[:i]) + 1e-7)
+                    for x, i in zip(input_values, attention_mask.sum(-1))
+                ]
+            )
             normed_input_values[(1 - attention_mask).astype(np.bool)] = padding_value
         else:
-            normed_input_values = np.asarray([
-                (x - np.mean(x)) / np.sqrt(np.var(x) + 1e-7) for x in input_values
-            ])
+            normed_input_values = np.asarray([(x - np.mean(x)) / np.sqrt(np.var(x) + 1e-7) for x in input_values])
 
         if isinstance(input_values[0], np.ndarray):
             input_values = [x.astype(np.float32) for x in input_values]

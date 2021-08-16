@@ -166,9 +166,9 @@ class DataCollatorForWav2Vec2Pretraining:
 
     model: Wav2Vec2ForPreTraining
     feature_extractor: Wav2Vec2FeatureExtractor
-#    padding: Union[bool, str] = "longest"
-#    pad_to_multiple_of: Optional[int] = None
-#    max_length: Optional[int] = None
+    #    padding: Union[bool, str] = "longest"
+    #    pad_to_multiple_of: Optional[int] = None
+    #    max_length: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
@@ -294,8 +294,28 @@ def main():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     configure_logger(model_args, training_args)
 
+    # pretraining is only supported for "newer" stable layer norm architecture
+    # apply_spec_augment has to be True, mask_feature_prob has to be 0.0
+    config = Wav2Vec2Config.from_pretrained(
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        gradient_checkpointing=model_args.gradient_checkpointing,
+    )
+
+    if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
+        raise ValueError(
+            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
+        )
+
+    model = Wav2Vec2ForPreTraining(config)
+
     # Downloading and loading a dataset from the hub.
-    datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, data_dir="/home/patrick/wav2vec2_reproduce/", cache_dir=model_args.cache_dir)
+    datasets = load_dataset(
+        data_args.dataset_name,
+        data_args.dataset_config_name,
+        data_dir="/home/patrick/wav2vec2_reproduce/",
+        cache_dir=model_args.cache_dir,
+    )
 
     if "validation" not in datasets.keys():
         # make sure only "validation" and "train" keys remain"
@@ -356,21 +376,6 @@ def main():
         load_from_cache_file=not data_args.overwrite_cache,
         remove_columns=vectorized_datasets["train"].column_names,
     )
-
-    # pretraining is only supported for "newer" stable layer norm architecture
-    # apply_spec_augment has to be True, mask_feature_prob has to be 0.0
-    config = Wav2Vec2Config.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        gradient_checkpointing=model_args.gradient_checkpointing,
-    )
-
-    if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
-        raise ValueError(
-            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
-        )
-
-    model = Wav2Vec2ForPreTraining(config)
 
     data_collator = DataCollatorForWav2Vec2Pretraining(model=model, feature_extractor=feature_extractor)
 
