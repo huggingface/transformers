@@ -211,7 +211,6 @@ class DataCollatorForWav2Vec2Pretraining:
             attention_mask=attention_mask,
             min_masks=2,
         )
-
         return batch
 
 
