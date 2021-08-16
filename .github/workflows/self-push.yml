@@ -23,7 +23,6 @@ env:
 
 jobs:
   run_tests_torch_gpu:
-    continue-on-error: true
     runs-on: [self-hosted, docker-gpu, single-gpu]
     container:
       image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
@@ -139,7 +138,6 @@ jobs:
 
   run_tests_torch_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
-    continue-on-error: true
     container:
       image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -321,6 +319,7 @@ jobs:
           fetch-depth: 2
 
       - name: NVIDIA-SMI
+        continue-on-error: true
         run: |
           nvidia-smi
 
