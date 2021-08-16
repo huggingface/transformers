@@ -82,6 +82,7 @@ else:
                     "CamembertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ('clip', ("ClipTokenizer", "ClipTokenizerFast")),
             (
                 "pegasus",
                 (
