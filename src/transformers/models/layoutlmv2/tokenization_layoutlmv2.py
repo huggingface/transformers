@@ -1234,7 +1234,16 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     f"for instance 'longest_first' or 'only_first'."
                 )
 
-        return (ids, token_boxes, pair_ids, pair_token_boxes, labels, overflowing_tokens, overflowing_token_boxes, overflowing_labels)
+        return (
+            ids,
+            token_boxes,
+            pair_ids,
+            pair_token_boxes,
+            labels,
+            overflowing_tokens,
+            overflowing_token_boxes,
+            overflowing_labels,
+        )
 
     def _pad(
         self,

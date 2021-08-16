@@ -17,14 +17,13 @@ import os
 import shutil
 import tempfile
 import unittest
-
 from typing import List
 
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
 from transformers.models.layoutlmv2 import LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 
 
 if is_pytesseract_available():
@@ -32,12 +31,13 @@ if is_pytesseract_available():
 
     from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
 
+
 @require_pytesseract
 @require_tokenizers
 class LayoutLMv2ProcessorTest(unittest.TestCase):
     tokenizer_class = LayoutLMv2Tokenizer
     rust_tokenizer_class = LayoutLMv2TokenizerFast
-    
+
     def setUp(self):
         vocab_tokens = [
             "[UNK]",
@@ -79,7 +79,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
 
     def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
-    
+
     def get_feature_extractor(self, **kwargs):
         return LayoutLMv2FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
@@ -151,7 +151,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
         slow_tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
         fast_tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
         return [slow_tokenizer, fast_tokenizer]
-    
+
     @slow
     def test_processor_case_1(self):
         # case 1: document image classification (training, inference) + token classification (inference), apply_ocr = True
@@ -173,7 +173,9 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify image
-            self.assertAlmostEqual(input_feat_extract["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2
+            )
 
             # verify input_ids
             # fmt: off
@@ -192,7 +194,9 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify images
-            self.assertAlmostEqual(input_feat_extract["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2
+            )
 
             # verify input_ids
             # fmt: off

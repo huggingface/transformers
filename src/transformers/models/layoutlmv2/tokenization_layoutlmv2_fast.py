@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast tokenization class for LayoutLMv2. It overwrites 2 methods of the slow tokenizer class,
-   namely _batch_encode_plus and _encode_plus, in which the Rust tokenizer is used.
+"""
+Fast tokenization class for LayoutLMv2. It overwrites 2 methods of the slow tokenizer class, namely _batch_encode_plus
+and _encode_plus, in which the Rust tokenizer is used.
 """
 
 import json
@@ -367,14 +368,11 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         batched_input = [(text, pair)] if pair else [text]
         encodings = self._tokenizer.encode_batch(
-            batched_input,
-            add_special_tokens=add_special_tokens,
-            is_pretokenized=False,  
-            **kwargs
+            batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
         )
-                
+
         return encodings[0].tokens
-    
+
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
         self,
@@ -479,10 +477,10 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
         )
-                
+
         if is_pair:
             batch_text_or_text_pairs = [(text.split(), text_pair) for text, text_pair in batch_text_or_text_pairs]
-                    
+
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
@@ -502,7 +500,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping, 
+                return_offsets_mapping=return_offsets_mapping,
                 return_length=return_length,
                 verbose=verbose,
             )
@@ -531,8 +529,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         for input_ids in sanitized_tokens["input_ids"]:
             self._eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
-        
-        # create the token boxes 
+
+        # create the token boxes
         token_boxes = []
         for batch_index in range(len(sanitized_tokens["input_ids"])):
             if return_overflowing_tokens:
@@ -541,8 +539,9 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 original_index = batch_index
             token_boxes_example = []
             for id, sequence_id, word_id in zip(
-                sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].sequence_ids,
-                sanitized_encodings[batch_index].word_ids
+                sanitized_tokens["input_ids"][batch_index],
+                sanitized_encodings[batch_index].sequence_ids,
+                sanitized_encodings[batch_index].word_ids,
             ):
                 if word_id is not None:
                     if is_pair and sequence_id == 0:
@@ -575,7 +574,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                     sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].word_ids
                 ):
                     # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-                    if word_id is not None and not self.decode([id]).startswith('##'):
+                    if word_id is not None and not self.decode([id]).startswith("##"):
                         labels_example.append(word_labels[original_index][word_id])
                     else:
                         labels_example.append(self.pad_token_label)
@@ -609,8 +608,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
     ) -> BatchEncoding:
 
         # make it a batched input
-        # 2 options: 
-        # 1) only text, in case text must be a list of str 
+        # 2 options:
+        # 1) only text, in case text must be a list of str
         # 2) text + text_pair, in which case text = str and text_pair a list of str
         batched_input = [(text, text_pair)] if text_pair else [text]
         batched_boxes = [boxes]
@@ -731,18 +730,21 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             encoded_inputs["attention_mask"] = [1] * len(required_input)
 
         return encoded_inputs
-    
+
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:
+
         - single sequence: ``[CLS] X [SEP]``
         - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
@@ -758,16 +760,15 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
-        pair mask has the following format:
-        ::
-            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-            | first sequence    | second sequence |
-        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+        pair mask has the following format: :: 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 | first sequence | second
+        sequence | If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
             sequence(s).
@@ -777,8 +778,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
-    
+
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
-

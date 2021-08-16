@@ -33,9 +33,9 @@ class LayoutLMv2Processor:
 
     It first uses :class:`~transformers.LayoutLMv2FeatureExtractor` to resize document images to a fixed size, and
     optionally applies OCR to get words and normalized bounding boxes. These are then provided to
-    :class:`~transformers.LayoutLMv2Tokenizer` or :class:`~transformers.LayoutLMv2TokenizerFast`, which turns the words 
-    and bounding boxes into token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`. 
-    Optionally, one can provide integer :obj:`word_labels`, which are turned into token-level :obj:`labels` for token 
+    :class:`~transformers.LayoutLMv2Tokenizer` or :class:`~transformers.LayoutLMv2TokenizerFast`, which turns the words
+    and bounding boxes into token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`.
+    Optionally, one can provide integer :obj:`word_labels`, which are turned into token-level :obj:`labels` for token
     classification tasks (such as FUNSD, CORD).
 
     Args:
@@ -43,8 +43,8 @@ class LayoutLMv2Processor:
             An instance of :class:`~transformers.LayoutLMv2FeatureExtractor`. The feature extractor is a required
             input.
         tokenizer (:obj:`LayoutLMv2Tokenizer` or :obj:`LayoutLMv2TokenizerFast`):
-            An instance of :class:`~transformers.LayoutLMv2Tokenizer` or :class:`~transformers.LayoutLMv2TokenizerFast`. 
-            The tokenizer is a required input.
+            An instance of :class:`~transformers.LayoutLMv2Tokenizer` or
+            :class:`~transformers.LayoutLMv2TokenizerFast`. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -90,8 +90,9 @@ class LayoutLMv2Processor:
 
             This class method is simply calling LayoutLMv2FeatureExtractor's
             :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.from_pretrained` and
-            LayoutLMv2TokenizerFast's :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`.
-            Please refer to the docstrings of the methods above for more information.
+            LayoutLMv2TokenizerFast's
+            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`. Please refer to the
+            docstrings of the methods above for more information.
 
         Args:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
@@ -105,10 +106,10 @@ class LayoutLMv2Processor:
                   ``./my_model_directory/``.
                 - a path or url to a saved feature extractor JSON `file`, e.g.,
                   ``./my_model_directory/preprocessor_config.json``.
-            
+
             use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to instantiate a fast tokenizer.
-            
+
             **kwargs
                 Additional keyword arguments passed along to both :class:`~transformers.SequenceFeatureExtractor` and
                 :class:`~transformers.PreTrainedTokenizer`
