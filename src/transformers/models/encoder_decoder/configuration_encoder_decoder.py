@@ -26,9 +26,8 @@ logger = logging.get_logger(__name__)
 class EncoderDecoderConfig(PretrainedConfig):
     r"""
     :class:`~transformers.EncoderDecoderConfig` is the configuration class to store the configuration of a
-    :class:`~transformers.EncoderDecoderModel` or a :class:`~transformers.FlaxEncoderDecoderModel`. It is used to
-    instantiate an Encoder Decoder model according to the specified arguments, defining the encoder and decoder
-    configs.
+    :class:`~transformers.EncoderDecoderModel`. It is used to instantiate an Encoder Decoder model according to the
+    specified arguments, defining the encoder and decoder configs.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
