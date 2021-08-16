@@ -22,8 +22,9 @@ import numpy as np
 from transformers import is_flax_available
 from transformers.testing_utils import require_flax, slow
 
+from .test_modeling_flax_bert import FlaxBertModelTester
 from .test_modeling_flax_common import ids_tensor
-from .test_modeling_flax_gpt2 import FlaxBertModelTester, FlaxGPT2ModelTester
+from .test_modeling_flax_gpt2 import FlaxGPT2ModelTester
 
 
 if is_flax_available():
