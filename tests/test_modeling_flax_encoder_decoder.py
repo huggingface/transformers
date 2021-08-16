@@ -23,7 +23,7 @@ from transformers import is_flax_available
 from transformers.testing_utils import require_flax, slow
 
 from .test_modeling_flax_common import ids_tensor
-from .test_modeling_flax_gpt2 import FlaxGPT2ModelTester
+from .test_modeling_flax_gpt2 import FlaxBertModelTester, FlaxGPT2ModelTester
 
 
 if is_flax_available():
@@ -31,9 +31,9 @@ if is_flax_available():
         AutoConfig,
         AutoTokenizer,
         EncoderDecoderConfig,
+        FlaxBertModel,
         FlaxEncoderDecoderModel,
         FlaxGPT2LMHeadModel,
-        FlaxGPT2Model,
     )
 
 
@@ -291,12 +291,12 @@ class FlaxEncoderDecoderMixin:
 @require_flax
 class FlaxGPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
     def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = FlaxGPT2Model(config)
+        encoder_model = FlaxBertModel(config)
         decoder_model = FlaxGPT2LMHeadModel(decoder_config)
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
-        model_tester_encoder = FlaxGPT2ModelTester(self, batch_size=13)
+        model_tester_encoder = FlaxBertModelTester(self, batch_size=13)
         model_tester_decoder = FlaxGPT2ModelTester(self, batch_size=13)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
@@ -326,7 +326,7 @@ class FlaxGPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
         }
 
     def get_pretrained_model(self):
-        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("gpt2", "gpt2")
+        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
 
     @slow
     def test_bert2gpt2_summarization(self):
