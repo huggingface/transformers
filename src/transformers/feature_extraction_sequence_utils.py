@@ -225,16 +225,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         batch_outputs = {}
         for i in range(batch_size):
-            # truncation
-            inputs = self._truncate(
-                truncated_inputs[i],
-                max_length=max_length,
-                pad_to_multiple_of=pad_to_multiple_of,
-                truncation=truncation,
-            )
             # padding
             outputs = self._pad(
-                inputs,
+                truncated_inputs[i],
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
