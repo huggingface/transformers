@@ -18,10 +18,13 @@ import shutil
 import tempfile
 import unittest
 
+from typing import List
+
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
-from transformers.models.layoutlmv2 import LayoutLMv2Tokenizer
+from transformers.models.layoutlmv2 import LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_pytesseract, require_torch, slow
+from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 
 
 if is_pytesseract_available():
@@ -29,9 +32,12 @@ if is_pytesseract_available():
 
     from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
 
-
 @require_pytesseract
+@require_tokenizers
 class LayoutLMv2ProcessorTest(unittest.TestCase):
+    tokenizer_class = LayoutLMv2Tokenizer
+    rust_tokenizer_class = LayoutLMv2TokenizerFast
+    
     def setUp(self):
         vocab_tokens = [
             "[UNK]",
@@ -65,9 +71,15 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
-    def get_tokenizer(self, **kwargs):
-        return LayoutLMv2Tokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
+        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
+    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
+        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+
+    def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
+        return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
+    
     def get_feature_extractor(self, **kwargs):
         return LayoutLMv2FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
@@ -76,24 +88,39 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
 
     def test_save_load_pretrained_default(self):
         feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-        processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor.save_pretrained(self.tmpdirname)
+            processor = LayoutLMv2Processor.from_pretrained(self.tmpdirname)
 
-        processor.save_pretrained(self.tmpdirname)
-        processor = LayoutLMv2Processor.from_pretrained(self.tmpdirname)
+            self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
+            self.assertIsInstance(processor.tokenizer, (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast))
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, LayoutLMv2Tokenizer)
-
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
+            self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+            self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
         processor = LayoutLMv2Processor(feature_extractor=self.get_feature_extractor(), tokenizer=self.get_tokenizer())
         processor.save_pretrained(self.tmpdirname)
 
+        # slow tokenizer
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+        feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
+
+        processor = LayoutLMv2Processor.from_pretrained(
+            self.tmpdirname, use_fast=False, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
+        )
+
+        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        self.assertIsInstance(processor.tokenizer, LayoutLMv2Tokenizer)
+
+        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
+
+        # fast tokenizer
+        tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
 
         processor = LayoutLMv2Processor.from_pretrained(
@@ -101,7 +128,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, LayoutLMv2Tokenizer)
+        self.assertIsInstance(processor.tokenizer, LayoutLMv2TokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
