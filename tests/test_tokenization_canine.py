@@ -192,6 +192,59 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             if self.test_slow_tokenizer:
                 with self.subTest(f"{self.tokenizer_class.__name__} ({pretrained_name})"):
                     subtest(self.tokenizer_class, pretrained_name, kwargs)
+    
+    def test_special_tokens_initialization(self):
+        for pretrained_name, kwargs in self.tokenizers_list:
+            # Canine Tokenizer has different token
+            added_tokens = [AddedToken(chr(0xE004), lstrip=True)]
+            if self.test_slow_tokenizer and self.test_rust_tokenizer:
+                with self.subTest(
+                    f"{self.tokenizer_class.__name__} and {self.rust_tokenizer_class.__name__} ({pretrained_name})"
+                ):
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                    )
+                    tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
+                    )
+                    tokenizer_p = self.tokenizer_class.from_pretrained(
+                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                    )
+
+                    p_output = tokenizer_p.encode("Hey this is a <special> token")
+                    r_output = tokenizer_r.encode("Hey this is a <special> token")
+                    cr_output = tokenizer_cr.encode("Hey this is a <special> token")
+
+                    special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
+
+                    self.assertEqual(p_output, r_output)
+                    self.assertEqual(cr_output, r_output)
+                    self.assertTrue(special_token_id in p_output)
+                    self.assertTrue(special_token_id in r_output)
+                    self.assertTrue(special_token_id in cr_output)
+
+            elif self.test_rust_tokenizer:
+                with self.subTest(f"{self.rust_tokenizer_class.__name__} ({pretrained_name})"):
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                    )
+                    r_output = tokenizer_r.encode("Hey this is a <special> token")
+
+                    special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
+
+                    self.assertTrue(special_token_id in r_output)
+
+            else:
+                with self.subTest(f"{self.tokenizer_class.__name__} ({pretrained_name})"):
+                    tokenizer_p = self.tokenizer_class.from_pretrained(
+                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                    )
+
+                    p_output = tokenizer_p.encode("Hey this is a <special> token")
+
+                    special_token_id = tokenizer_p.encode("<special>", add_special_tokens=False)[0]
+
+                    self.assertTrue(special_token_id in p_output)
 
     @require_tokenizers
     def test_added_token_serializable(self):
