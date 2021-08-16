@@ -3452,8 +3452,11 @@ class TokenizerTesterMixin:
         self.assertEqual(expected_result, decoded_input)
 
     def test_tokenizer_mismatch_warning(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+        for pretrained_name, kwargs in self.tokenizers_list:
+            added_tokens = [AddedToken("<special>", lstrip=True)]
+            with self.subTest(
+                f"{self.tokenizer_class.__name__} and {self.rust_tokenizer_class.__name__} ({pretrained_name})"
+            ):
                 with self.assertLogs("transformers", level="WARNING") as cm:
                     try:
                         if self.tokenizer_class == BertTokenizer:
