@@ -3454,8 +3454,9 @@ class TokenizerTesterMixin:
     def test_tokenizer_mismatch_warning(self):
         for pretrained_name, kwargs in self.tokenizers_list:
             added_tokens = [AddedToken("<special>", lstrip=True)]
+            name_subtest = self.tokenizer_class.__name__ if self.tokenizer_class is not None else self.rust_tokenizer_class.__name__
             with self.subTest(
-                f"{self.tokenizer_class.__name__} and {self.rust_tokenizer_class.__name__} ({pretrained_name})"
+                f"{name_subtest} ({pretrained_name})"
             ):
                 with self.assertLogs("transformers", level="WARNING") as cm:
                     try:
