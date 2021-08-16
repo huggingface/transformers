@@ -19,6 +19,7 @@ import unittest
 
 from transformers.file_utils import is_detectron2_available, is_torch_available
 from transformers.testing_utils import require_detectron2, require_torch, slow, torch_device
+from transformers.models.auto import get_values
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -33,6 +34,7 @@ if is_torch_available():
         LayoutLMv2ForSequenceClassification,
         LayoutLMv2ForTokenClassification,
         LayoutLMv2Model,
+        MODEL_MAPPING,
     )
     from transformers.models.layoutlmv2.modeling_layoutlmv2 import LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -291,7 +293,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
+    
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
