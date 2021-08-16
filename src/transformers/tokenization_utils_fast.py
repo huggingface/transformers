@@ -87,6 +87,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """
 
     slow_tokenizer_class: PreTrainedTokenizer = None
+    can_save_slow_tokenizer: bool = True
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
@@ -551,7 +552,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "might consider leaving the legacy_format at `None` or setting it to `False`."
             )
 
-        save_slow = (legacy_format is None or legacy_format is True) and self.slow_tokenizer_class is not None
+        save_slow = (
+            (legacy_format is None or legacy_format is True)
+            and self.slow_tokenizer_class is not None
+            and self.can_save_slow_tokenizer
+        )
         save_fast = legacy_format is None or legacy_format is False
 
         if save_slow:
