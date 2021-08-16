@@ -97,8 +97,10 @@ class LayoutLMv2Config(PretrainedConfig):
             Whether or not to use a spatial attention bias in the self-attention mechanism.
         has_visual_segment_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to add visual segment embeddings.
-        detectron2_config_args (:obj:`dict`, `optional`, defaults to ...):
-            Dictionary containing the configuration arguments of the Detectron2 visual backbone.
+        detectron2_config_args (:obj:`dict`, `optional`):
+            Dictionary containing the configuration arguments of the Detectron2 visual backbone. Refer to `this file
+            <https://github.com/microsoft/unilm/blob/master/layoutlmft/layoutlmft/models/layoutlmv2/detectron2_config.py>`__
+            for details regarding default values.
 
     Example::
 

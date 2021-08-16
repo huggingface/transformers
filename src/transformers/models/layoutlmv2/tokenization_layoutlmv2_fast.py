@@ -86,17 +86,21 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        clean_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to clean the text before tokenization by removing any control characters and replacing all
-            whitespaces by the classic one.
+        cls_token_box (:obj:`List[int]`, `optional`, defaults to :obj:`[0, 0, 0, 0]`):
+            The bounding box to use for the special [CLS] token.
+        sep_token_box (:obj:`List[int]`, `optional`, defaults to :obj:`[1000, 1000, 1000, 1000]`):
+            The bounding box to use for the special [SEP] token.
+        pad_token_box (:obj:`List[int]`, `optional`, defaults to :obj:`[0, 0, 0, 0]`):
+            The bounding box to use for the special [PAD] token.
+        pad_token_label (:obj:`int`, `optional`, defaults to -100):
+            The label to use for padding tokens. Defaults to -100, which is the :obj:`ignore_index` of PyTorch's
+            CrossEntropyLoss.
         tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see `this
             issue <https://github.com/huggingface/transformers/issues/328>`__).
         strip_accents: (:obj:`bool`, `optional`):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for :obj:`lowercase` (as in the original LayoutLMv2).
-        wordpieces_prefix: (:obj:`str`, `optional`, defaults to :obj:`"##"`):
-            The prefix for subwords.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
