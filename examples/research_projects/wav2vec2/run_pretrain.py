@@ -101,6 +101,10 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
+    manual_data_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "The path to a manual data dir (if required by dataset script of the datasets library)."},
+    )
     train_split_name: Optional[str] = field(
         default="train",
         metadata={
@@ -134,7 +138,10 @@ class DataTrainingArguments:
         default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
     )
     pad_to_multiple_of: Optional[float] = field(
-        default=2**14, metadata={"help": "If set will pad the sequence to a multiple of the provided value. This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta)."},
+        default=2 ** 14,
+        metadata={
+            "help": "If set will pad the sequence to a multiple of the provided value. This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta)."
+        },
     )
 
 
