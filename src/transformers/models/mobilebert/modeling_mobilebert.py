@@ -1415,7 +1415,10 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
         super().__init__(config)
 
         self.mobilebert = MobileBertModel(config)
-        self.dropout = nn.Dropout(config.classifier_dropout)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
