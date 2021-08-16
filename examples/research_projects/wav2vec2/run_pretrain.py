@@ -135,10 +135,10 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_duration_in_seconds: Optional[float] = field(
-        default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
+        default=5.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
     )
     pad_to_multiple_of: Optional[float] = field(
-        default=2 ** 14,
+        default=None,
         metadata={
             "help": "If set will pad the sequence to a multiple of the provided value. This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta)."
         },
@@ -178,13 +178,11 @@ class DataCollatorForWav2Vec2Pretraining:
     feature_extractor: Wav2Vec2FeatureExtractor
     padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
-    max_length: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
-            max_length=self.max_length,
             padding=self.padding,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
@@ -374,19 +372,26 @@ def main():
         prepare_dataset, num_proc=data_args.preprocessing_num_workers, remove_columns=datasets["train"].column_names
     )
 
-    def normalize(batch):
-        return feature_extractor(batch["speech"], sampling_rate=feature_extractor.sampling_rate)
+    # set max audio length in number of samples
+    max_length = int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
+
+    def process_audio(batch):
+        return feature_extractor(
+            batch["speech"], sampling_rate=feature_extractor.sampling_rate, max_length=max_length, truncation=True
+        )
 
     # normalize and transform to `BatchFeatures`
     vectorized_datasets = vectorized_datasets.map(
-        normalize,
+        process_audio,
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
         load_from_cache_file=not data_args.overwrite_cache,
         remove_columns=vectorized_datasets["train"].column_names,
     )
 
-    data_collator = DataCollatorForWav2Vec2Pretraining(model=model, feature_extractor=feature_extractor)
+    data_collator = DataCollatorForWav2Vec2Pretraining(
+        model=model, feature_extractor=feature_extractor, pad_to_multiple_of=data_args.pad_to_multiple_of
+    )
 
     trainer = Wav2Vec2PreTrainer(
         model=model,
