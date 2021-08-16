@@ -698,11 +698,11 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
 
     @staticmethod
     def _compute_perplexity(probs, mask=None):
-#        if mask is not None:
-#            mask_extended = jnp.broadcast_to(mask.flatten()[:, None, None], probs.shape)
-#            probs = jnp.where(mask_extended, probs, jnp.zeros_like(probs))
-#            marginal_probs = probs.sum(axis=0) / mask.sum()
-#        else:
+        #        if mask is not None:
+        #            mask_extended = jnp.broadcast_to(mask.flatten()[:, None, None], probs.shape)
+        #            probs = jnp.where(mask_extended, probs, jnp.zeros_like(probs))
+        #            marginal_probs = probs.sum(axis=0) / mask.sum()
+        #        else:
         marginal_probs = probs.mean(axis=0)
 
         perplexity = jnp.exp(-jnp.sum(marginal_probs * jnp.log(marginal_probs + 1e-7), axis=-1)).sum()
@@ -743,7 +743,6 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
             codevector_probs = jax.nn.one_hot(codevector_idx, hidden_states.shape[-1]) * 1.0
             codevector_probs = codevector_probs.reshape(batch_size * sequence_length, self.num_groups, -1)
             perplexity = self._compute_perplexity(codevector_probs, attention_mask)
-
 
         codevector_probs = codevector_probs.reshape(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
@@ -1077,7 +1076,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        code_vec_indices=None
+        code_vec_indices=None,
     ):
         r"""
         Returns:
@@ -1154,7 +1153,11 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         # quantize all unmasked extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1], deterministic=deterministic)
         quantized_features, codevector_perplexity = self.quantizer(
-            extract_features, attention_mask, deterministic=deterministic, temperature=gumbel_temperature, code_vec_indices=code_vec_indices
+            extract_features,
+            attention_mask,
+            deterministic=deterministic,
+            temperature=gumbel_temperature,
+            code_vec_indices=code_vec_indices,
         )
         quantized_features = self.project_q(quantized_features)
 
