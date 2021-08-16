@@ -23,6 +23,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_
 
 
 if is_flax_available():
+    import jax
     from transformers.models.big_bird.modeling_flax_big_bird import (
         FlaxBigBirdForMaskedLM,
         FlaxBigBirdForMultipleChoice,
@@ -162,3 +163,29 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         if self.test_attn_probs:
             super().test_attention_outputs()
+
+    @slow
+    # copied from `test_modeling_flax_common` because it takes much longer than other models
+    def test_jit_compilation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config)
+
+                @jax.jit
+                def model_jitted(input_ids, attention_mask=None, **kwargs):
+                    return model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = model_jitted(**prepared_inputs_dict).to_tuple()
+
+                with self.subTest("JIT Disabled"):
+                    with jax.disable_jit():
+                        outputs = model_jitted(**prepared_inputs_dict).to_tuple()
+
+                self.assertEqual(len(outputs), len(jitted_outputs))
+                for jitted_output, output in zip(jitted_outputs, outputs):
+
+                    self.assertEqual(jitted_output.shape, output.shape)

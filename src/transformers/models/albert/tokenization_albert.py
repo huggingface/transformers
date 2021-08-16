@@ -238,8 +238,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
         return self.sp_model.IdToPiece(index)
 
     def convert_tokens_to_string(self, tokens):
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
+        return self.sp_model.decode(tokens)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

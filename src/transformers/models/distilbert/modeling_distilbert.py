@@ -18,7 +18,6 @@
 """
 
 
-import copy
 import math
 
 import numpy as np
@@ -27,6 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -85,9 +85,19 @@ class Embeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
         if config.sinusoidal_pos_embds:
-            create_sinusoidal_embeddings(
-                n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
-            )
+
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters(self.position_embeddings.weight, modifier_rank=0):
+                    if torch.distributed.get_rank() == 0:
+                        create_sinusoidal_embeddings(
+                            n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
+                        )
+            else:
+                create_sinusoidal_embeddings(
+                    n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
+                )
 
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
@@ -274,9 +284,7 @@ class Transformer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.n_layers = config.n_layers
-
-        layer = TransformerBlock(config)
-        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.n_layers)])
+        self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
 
     def forward(
         self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_dict=None

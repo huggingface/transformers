@@ -41,6 +41,7 @@ from .configuration_deit import DeiTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DeiTConfig"
+_CHECKPOINT_FOR_DOC = "facebook/deit-base-distilled-patch16-224"
 
 DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/deit-base-distilled-patch16-224",
@@ -465,7 +466,7 @@ class DeiTModel(DeiTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -569,7 +570,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -706,7 +707,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DeiTForImageClassificationWithTeacherOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

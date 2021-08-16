@@ -14,8 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ ALBERT model configuration """
+from collections import OrderedDict
+from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 
 
 ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -151,3 +154,20 @@ class AlbertConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout_prob = classifier_dropout_prob
         self.position_embedding_type = position_embedding_type
+
+
+# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->Albert
+class AlbertOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("token_type_ids", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"}), ("pooler_output", {0: "batch"})])

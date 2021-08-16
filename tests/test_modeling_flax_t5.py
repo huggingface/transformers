@@ -17,8 +17,15 @@ import unittest
 
 import numpy as np
 
+import transformers
 from transformers import is_flax_available
-from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_flax,
+    require_sentencepiece,
+    require_tokenizers,
+    slow,
+)
 
 from .test_configuration_common import ConfigTester
 from .test_generation_flax_utils import FlaxGenerationTesterMixin
@@ -40,6 +47,7 @@ if is_flax_available():
     from flax.training.common_utils import onehot
     from flax.traverse_util import flatten_dict
     from transformers import FLAX_MODEL_MAPPING, ByT5Tokenizer, T5Config, T5Tokenizer
+    from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
     from transformers.models.t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, shift_tokens_right
 
 
@@ -363,6 +371,65 @@ class FlaxT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
+    # overwrite since special base model prefix is used
+    @is_pt_flax_cross_test
+    def test_save_load_from_base_pt(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = base_class(config)
+            base_params = flatten_dict(unfreeze(model.params))
+
+            # convert Flax model to PyTorch model
+            pt_model_class = getattr(transformers, base_class.__name__[4:])  # Skip the "Flax" at the beginning
+            pt_model = pt_model_class(config).eval()
+            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                # save pt model
+                pt_model.save_pretrained(tmpdirname)
+                head_model = model_class.from_pretrained(tmpdirname, from_pt=True)
+
+                base_param_from_head = flatten_dict(unfreeze(head_model.params))
+
+                for key in base_param_from_head.keys():
+                    max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    # overwrite since special base model prefix is used
+    @is_pt_flax_cross_test
+    def test_save_load_to_base_pt(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = model_class(config)
+            base_params_from_head = flatten_dict(unfreeze(model.params))
+
+            # convert Flax model to PyTorch model
+            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
+            pt_model = pt_model_class(config).eval()
+            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_model.save_pretrained(tmpdirname)
+                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
+
+                base_params = flatten_dict(unfreeze(base_model.params))
+
+                for key in base_params_from_head.keys():
+                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
 
 @require_sentencepiece
 @require_tokenizers
@@ -482,8 +549,8 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
         ARTICLE_SUBWAY = 'New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the 2010 marriage license application, according to court documents. Prosecutors said the marriages were part of an immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.  Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted. The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.'
 
         expected_summaries = [
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a cell phone video of the final seconds . "one can hear cries of \'My God\' in several languages," the magazine says . all 150 on board the germanwings flight were killed .',
-            "the Palestinians become the 123rd member of the international criminal court . the accession was marked by a ceremony at the Hague, where the court is based . as members of the court, Palestinians may be subject to counter-charges as well .",
+            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a cell phone video of the final seconds . "one can hear cries of \'My God\' in several languages," one magazine says . all 150 on board were killed when germanwings flight 9525 crashed .',
+            "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a preliminary examination into the situation in the occupied Palestinian territory . as members of the court, Palestinians may be subject to counter-charges as well .",
             "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron miller: the debate that has already begun since the announcement of the new framework will likely result in more heat than light . he says the new framework would reduce Iran's low-enriched uranium stockpile and cut centrifuges . miller: if it had been, there would have been no Iranian team at the table .",
             'prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two criminal counts of "offering a false instrument for filing in the first degree" she has been married 10 times, with nine of her marriages occurring between 1999 and 2002 .',
         ]
