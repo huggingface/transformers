@@ -87,6 +87,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("layoutlm", "LayoutLMConfig"),
         ("rag", "RagConfig"),
         ("tapas", "TapasConfig"),
+        ("splinter", "SplinterConfig"),
     ]
 )
 
@@ -147,6 +148,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("tapas", "TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
@@ -222,6 +224,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("bert-japanese", "BertJapanese"),
         ("byt5", "ByT5"),
         ("mbart50", "mBART-50"),
+        ("splinter", "Splinter"),
     ]
 )
 
