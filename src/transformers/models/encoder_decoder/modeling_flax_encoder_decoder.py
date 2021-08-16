@@ -398,8 +398,8 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
+            >>> input_ids = tokenizer.encode(text, return_tensors='np')
+            >>> encoder_outputs = model.encode(input_ids)
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -476,11 +476,11 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
+            >>> input_ids = tokenizer.encode(text, max_length=1024, return_tensors='np')
+            >>> encoder_outputs = model.encode(input_ids)
 
             >>> decoder_start_token_id = model.config.decoder.bos_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+            >>> decoder_input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
             >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
             >>> logits = outputs.logits
