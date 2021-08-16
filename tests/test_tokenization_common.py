@@ -38,10 +38,10 @@ from transformers import (
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
     SpecialTokensMixin,
+    Trainer,
+    TrainingArguments,
     is_tf_available,
     is_torch_available,
-    Trainer,
-    TrainingArguments
 )
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
@@ -56,6 +56,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.tokenization_utils import AddedToken
+
 
 if is_torch_available():
     import torch.nn as nn
@@ -3394,7 +3395,7 @@ class TokenizerTesterMixin:
                             )
                         )
 
-    @require_torch               
+    @require_torch
     def test_saving_tokenizer_trainer(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3403,18 +3404,19 @@ class TokenizerTesterMixin:
                     tokenizer_old.save_pretrained(tmp_dir, legacy_format=False)  # save only fast version
 
                     model = nn.Module()
-                    
+
                     # load tokenizer from a folder without legacy files
                     tokenizer = self.rust_tokenizer_class.from_pretrained(tmp_dir)
                     training_args = TrainingArguments(
-                            output_dir=tmp_dir,
-                            do_train=True,
-                            no_cuda=True,
-                        )
+                        output_dir=tmp_dir,
+                        do_train=True,
+                        no_cuda=True,
+                    )
                     trainer = Trainer(model=model, args=training_args, tokenizer=tokenizer)
 
                     # should not raise an error
                     trainer.save_model()
+
 
 @is_staging_test
 class TokenizerPushToHubTester(unittest.TestCase):
