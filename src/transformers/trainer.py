@@ -1926,10 +1926,7 @@ class Trainer:
         else:
             self.model.save_pretrained(output_dir, save_config=self.args.should_save, save_function=xm.save)
         if self.tokenizer is not None and self.args.should_save:
-            if self.tokenizer.is_fast:
-                self.tokenizer.save_pretrained(output_dir, legacy_format=False)
-            else:
-                self.tokenizer.save_pretrained(output_dir, legacy_format=True)
+            self.tokenizer.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
@@ -1951,10 +1948,7 @@ class Trainer:
         else:
             self.model.save_pretrained(output_dir, state_dict=state_dict)
         if self.tokenizer is not None:
-            if self.tokenizer.is_fast:
-                self.tokenizer.save_pretrained(output_dir, legacy_format=False)
-            else:
-                self.tokenizer.save_pretrained(output_dir, legacy_format=True)
+            self.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
