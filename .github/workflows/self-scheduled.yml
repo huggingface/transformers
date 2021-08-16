@@ -150,6 +150,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: NVIDIA-SMI
+        continue-on-error: true
         run: |
           nvidia-smi
 
@@ -204,6 +205,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: NVIDIA-SMI
+        continue-on-error: true
         run: |
           nvidia-smi
 
@@ -300,6 +302,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: NVIDIA-SMI
+        continue-on-error: true
         run: |
           nvidia-smi
 
