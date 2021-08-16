@@ -17,7 +17,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import BatchEncoding, ByT5Tokenizer
+from transformers import AddedToken, BatchEncoding, ByT5Tokenizer
 from transformers.file_utils import cached_property, is_tf_available, is_torch_available
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -163,6 +163,21 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(tokenizer.model_max_length, 43)
 
                 shutil.rmtree(tmpdirname)
+
+    # Need to change test because ByT5Tokenizer add an extra_ids argument which is not by default compatible with our new added token
+    def test_special_tokens_initialization(self):
+        added_tokens = [f"<extra_id_{i}>" for i in range(125)] + [AddedToken("<special>", lstrip=True)]
+        for pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{self.tokenizer_class.__name__} ({pretrained_name})"):
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, extra_ids=0, additional_special_tokens=added_tokens, **kwargs
+                )
+
+                p_output = tokenizer_p.encode("Hey this is a <special> token")
+
+                special_token_id = tokenizer_p.encode("<special>", add_special_tokens=False)[0]
+
+                self.assertTrue(special_token_id in p_output)
 
     # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
     def test_pretrained_model_lists(self):
