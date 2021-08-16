@@ -301,15 +301,11 @@ class FlaxGPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
         model_tester_decoder = FlaxGPT2ModelTester(self, batch_size=13)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
-        (
-            config,
-            input_ids,
-            input_mask,
-        ) = encoder_config_and_inputs
+        (config, input_ids, token_type_ids, attention_mask) = encoder_config_and_inputs
         (
             decoder_config,
             decoder_input_ids,
-            decoder_input_mask,
+            decoder_attention_mask,
             encoder_hidden_states,
             encoder_attention_mask,
         ) = decoder_config_and_inputs
@@ -319,10 +315,10 @@ class FlaxGPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
         return {
             "config": config,
             "input_ids": input_ids,
-            "attention_mask": input_mask,
+            "attention_mask": attention_mask,
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
-            "decoder_attention_mask": decoder_input_mask,
+            "decoder_attention_mask": decoder_attention_mask,
             "encoder_hidden_states": encoder_hidden_states,
         }
 
