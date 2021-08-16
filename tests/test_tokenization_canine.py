@@ -161,6 +161,38 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 decoded = tokenizer.decode(encoded, skip_special_tokens=True)
                 self.assertTrue(special_token not in decoded)
 
+    # All unicode code points are already in the vocabulary of the tokenizer so there is no addition to the vocabulary
+    # We keep the checks regarding the addition of special tokens
+    def test_add_tokens(self):
+        def subtest(object_class, pretrained_name, kwargs):
+            tokenizer = object_class.from_pretrained(pretrained_name, **kwargs)
+
+            # a special token for Canine can be defined as follows:
+            SPECIAL_TOKEN = 0xE005
+            special_token = chr(SPECIAL_TOKEN)
+
+            vocab_size = len(tokenizer)
+
+            self.assertRaises(AssertionError, tokenizer.add_special_tokens, {"additional_special_tokens": chr(0xE006)})
+
+            tokenizer.add_special_tokens({"bos_token": chr(0xE004), "eos_token": chr(0xE005)})
+            tokenizer.add_special_tokens({"additional_special_tokens": [chr(0xE007)]})
+            tokenizer.add_special_tokens({"additional_special_tokens": [chr(0xE008), chr(0xE009)]})
+
+            self.assertIn(chr(0xE004), tokenizer.special_tokens_map["bos_token"])
+            self.assertIn(chr(0xE005), tokenizer.special_tokens_map["eos_token"])
+            self.assertIsInstance(tokenizer.special_tokens_map["additional_special_tokens"], list)
+            self.assertGreaterEqual(len(tokenizer.special_tokens_map["additional_special_tokens"]), 2)
+
+        for pretrained_name, kwargs in self.tokenizers_list:
+            if self.test_rust_tokenizer:
+                with self.subTest(f"{self.rust_tokenizer_class.__name__} ({pretrained_name})"):
+                    subtest(self.rust_tokenizer_class, pretrained_name, kwargs)
+
+            if self.test_slow_tokenizer:
+                with self.subTest(f"{self.tokenizer_class.__name__} ({pretrained_name})"):
+                    subtest(self.tokenizer_class, pretrained_name, kwargs)
+
     @require_tokenizers
     def test_added_token_serializable(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
