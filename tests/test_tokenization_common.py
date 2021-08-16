@@ -3400,12 +3400,14 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 with tempfile.TemporaryDirectory() as tmp_dir:
+                    # Save the fast tokenizer files in a temporary directory
                     tokenizer_old = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs, use_fast=True)
                     tokenizer_old.save_pretrained(tmp_dir, legacy_format=False)  # save only fast version
 
+                    # Initialize toy model for the trainer
                     model = nn.Module()
 
-                    # load tokenizer from a folder without legacy files
+                    # Load tokenizer from a folder without legacy files
                     tokenizer = self.rust_tokenizer_class.from_pretrained(tmp_dir)
                     training_args = TrainingArguments(
                         output_dir=tmp_dir,
@@ -3414,8 +3416,9 @@ class TokenizerTesterMixin:
                     )
                     trainer = Trainer(model=model, args=training_args, tokenizer=tokenizer)
 
-                    # should not raise an error
-                    trainer.save_model()
+                    # Should not raise an error
+                    trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
+                    assert "tokenizer.json" in os.listdir(os.path.join(tmp_dir, "checkpoint"))
 
 
 @is_staging_test
