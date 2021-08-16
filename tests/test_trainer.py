@@ -1016,53 +1016,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         self.assertEqual(len(dataset), 31)
 
-    @slow
-    @require_datasets
-    def test_tokenizer_without_legacy_files_saving(self):
-        import datasets
-
-        MODEL_ID = "albert-base-v1"
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tokenizer_old = AutoTokenizer.from_pretrained(MODEL_ID, use_fast=True, model_max_len=128)
-            tokenizer_old.save_pretrained(tmp_dir, legacy_format=False)  # save only fast version
-
-            # load tokenizer from a folder without legacy files
-            tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
-            model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
-
-            raw_datasets = datasets.load_dataset("glue", "mrpc", split="train[0:10]")
-            sentence1_key, sentence2_key = "sentence1", "sentence2"
-
-            def preprocess_function(examples):
-                # Tokenize the texts
-                args = (
-                    (examples[sentence1_key],)
-                    if sentence2_key is None
-                    else (examples[sentence1_key], examples[sentence2_key])
-                )
-                result = tokenizer(*args, padding="max_length", max_length=20, truncation=True)
-                return result
-
-            raw_datasets = raw_datasets.map(
-                preprocess_function,
-                batched=True,
-                desc="Running tokenizer on dataset",
-            )
-            train_dataset = raw_datasets
-
-            training_args = TrainingArguments(
-                output_dir=tmp_dir,
-                do_train=True,
-                per_device_train_batch_size=4,
-                save_steps=1,
-                max_steps=2,
-                no_cuda=True,
-            )
-            trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, tokenizer=tokenizer)
-
-            # should not raise an error
-            _ = trainer.train()
-
     def test_training_iterable_dataset(self):
         config = RegressionModelConfig()
         model = RegressionPreTrainedModel(config)
