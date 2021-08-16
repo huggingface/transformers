@@ -791,7 +791,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
 
-    def forward(self, hidden_states, mask_time_indices=None, code_vec_indices=None):
+    def forward(self, hidden_states, mask_time_indices=None):
         batch_size, sequence_length, hidden_size = hidden_states.shape
         print("Hid 0", hidden_states.sum())
 
@@ -806,9 +806,6 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 #                hidden_states.float(), tau=self.temperature, hard=True
                 hidden_states.float(), tau=2.0, hard=True
             ).type_as(hidden_states)
-
-#            codevector_probs[mask_time_indices.reshape(-1).repeat_interleave(self.num_groups)] = code_vec_indices
-#            codevector_probs = code_vec_indices
 
             # compute perplexity
             codevector_soft_dist = torch.softmax(
@@ -1138,6 +1135,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         with torch.no_grad():
             # get `num_negatives` random vector indices from the same utterance
+            torch.manual_seed(0)
             sampled_negative_indices = torch.randint(
                 low=0,
                 high=sequence_length - 1,
@@ -1208,8 +1206,6 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        fsq_negs=None,
-        code_vec_indices=None,
     ):
         r"""
         mask_time_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1283,7 +1279,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         # 2. quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1])
-        quantized_features, codevector_perplexity = self.quantizer(extract_features, mask_time_indices, code_vec_indices)
+        quantized_features, codevector_perplexity = self.quantizer(extract_features, mask_time_indices)
         print("Quant features", torch.where(mask_time_indices[:, :, None].expand(quantized_features.shape), quantized_features, torch.zeros_like(quantized_features)).sum())
         quantized_features = self.project_q(quantized_features)
         print("Quant features 2", torch.where(mask_time_indices[:, :, None].expand(quantized_features.shape), quantized_features, torch.zeros_like(quantized_features)).sum())
@@ -1293,12 +1289,6 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # for training, we sample negatives
             # 3. sample K negatives (distractors) quantized states for contrastive loss
             negative_quantized_features, sampled_negative_indices = self._sample_negatives(quantized_features, self.config.num_negatives)
-
-            if fsq_negs is not None:
-                negative_quantized_features = fsq_negs
-#                negative_quantized_features[
-#                    mask_time_indices[None, :].broadcast_to(negative_quantized_features.shape[:-1])
-#                ] = fsq_negs.reshape(-1, fsq_negs.shape[-1])
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
             # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
