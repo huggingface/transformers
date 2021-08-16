@@ -108,7 +108,10 @@ class ReformerTokenizerFast(PreTrainedTokenizerFast):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
-            raise ValueError("TODO")
+            raise ValueError(
+                "Your tokenizer fast does not have the necessary information to save the vocabulary of the tokenizer  "
+                "slow."
+            )
 
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
