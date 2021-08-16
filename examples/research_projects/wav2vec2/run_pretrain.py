@@ -133,6 +133,9 @@ class DataTrainingArguments:
     max_duration_in_seconds: Optional[float] = field(
         default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
     )
+    pad_to_multiple_of: Optional[float] = field(
+        default=2**14, metadata={"help": "If set will pad the sequence to a multiple of the provided value. This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta)."},
+    )
 
 
 @dataclass
@@ -166,18 +169,17 @@ class DataCollatorForWav2Vec2Pretraining:
 
     model: Wav2Vec2ForPreTraining
     feature_extractor: Wav2Vec2FeatureExtractor
-    #    padding: Union[bool, str] = "longest"
-    #    pad_to_multiple_of: Optional[int] = None
-    #    max_length: Optional[int] = None
+    padding: Union[bool, str] = "longest"
+    pad_to_multiple_of: Optional[int] = None
+    max_length: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
-            max_length=80_000,
-            truncation=True,
-            padding="max_length",
-            pad_to_multiple_of=128,
+            max_length=self.max_length,
+            padding=self.padding,
+            pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
         mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
@@ -313,7 +315,7 @@ def main():
     datasets = load_dataset(
         data_args.dataset_name,
         data_args.dataset_config_name,
-        data_dir="/home/patrick/wav2vec2_reproduce/",
+        data_dir=data_args.manual_data_dir,
         cache_dir=model_args.cache_dir,
     )
 
@@ -324,14 +326,14 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=f"{data_args.train_split_name}[:{data_args.validation_split_percentage}%]",
-            data_dir="/home/patrick/wav2vec2_reproduce/",
+            data_dir=data_args.manual_data_dir,
             cache_dir=model_args.cache_dir,
         )
         datasets["train"] = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=f"{data_args.train_split_name}[{data_args.validation_split_percentage}%:]",
-            data_dir="/home/patrick/wav2vec2_reproduce/",
+            data_dir=data_args.manual_data_dir,
             cache_dir=model_args.cache_dir,
         )
     else:

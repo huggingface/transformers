@@ -789,12 +789,12 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
     @staticmethod
     def _compute_perplexity(probs, mask=None):
-        #        if mask is not None:
-        #            mask_extended = mask.flatten()[:, None, None].expand(probs.shape)
-        #            probs = torch.where(mask_extended, probs, torch.zeros_like(probs))
-        #            marginal_probs = probs.sum(dim=0) / mask.sum()
-        #        else:
-        marginal_probs = probs.mean(dim=0)
+        if mask is not None:
+            mask_extended = mask.flatten()[:, None, None].expand(probs.shape)
+            probs = torch.where(mask_extended, probs, torch.zeros_like(probs))
+            marginal_probs = probs.sum(dim=0) / mask.sum()
+        else:
+            marginal_probs = probs.mean(dim=0)
 
         perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
