@@ -38,7 +38,7 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Inclusion of 2 tokenizers to test different types of models (Unigram and WordLevel for the moment)
         model_paths = self.get_tokenizer_path_from_rust()
-        self.tokenizers_list = [(PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths]
+        self.tokenizers_list = [(model_path, {}) for model_path in model_paths]
 
         tokenizer = PreTrainedTokenizerFast.from_pretrained(model_paths[0])
         tokenizer.save_pretrained(self.tmpdirname)
