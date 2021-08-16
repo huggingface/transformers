@@ -191,7 +191,7 @@ class LxmertTokenizerFast:
         requires_backends(cls, ["tokenizers"])
 
 
-class MBart50TokenizerFast:
+class MBartTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
 
@@ -200,7 +200,7 @@ class MBart50TokenizerFast:
         requires_backends(cls, ["tokenizers"])
 
 
-class MBartTokenizerFast:
+class MBart50TokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
 
