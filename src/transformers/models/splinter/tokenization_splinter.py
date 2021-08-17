@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Ori Ram, Yuval Kirstain, Jonathan Berant, Amir Globerson, Omer Levy and The HuggingFace Inc. team.
+# Copyright 2021 Tel AViv University, AllenAI and The HuggingFace Inc. team. All rights reserved.
 # All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
