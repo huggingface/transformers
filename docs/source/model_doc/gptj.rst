@@ -29,9 +29,9 @@ The :meth:`~transformers.generation_utils.GenerationMixin.generate` method can b
 
 .. code-block::
 
-    >>> from transformers import GPTNeoForCausalLM, GPT2Tokenizer
-    >>> model = GPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
-    >>> tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer
+    >>> model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+    >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
     >>> prompt = "In a shocking finding, scientists discovered a herd of unicorns living in a remote, " \
     ...          "previously unexplored valley, in the Andes Mountains. Even more surprising to the " \
