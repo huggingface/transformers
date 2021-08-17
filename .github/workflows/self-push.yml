@@ -155,6 +155,7 @@ jobs:
           fetch-depth: 2
 
       - name: NVIDIA-SMI
+        continue-on-error: true
         run: |
           nvidia-smi
 
@@ -318,6 +319,7 @@ jobs:
           fetch-depth: 2
 
       - name: NVIDIA-SMI
+        continue-on-error: true
         run: |
           nvidia-smi
 
