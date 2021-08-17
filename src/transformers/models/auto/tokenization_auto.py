@@ -174,6 +174,7 @@ else:
             ("canine", ("CanineTokenizer", None)),
             ("bertweet", ("BertweetTokenizer", None)),
             ("bert-japanese", ("BertJapaneseTokenizer", None)),
+            ("splinter", ("SplinterTokenizer", "SplinterTokenizerFast")),
             ("byt5", ("ByT5Tokenizer", None)),
             (
                 "cpm",
