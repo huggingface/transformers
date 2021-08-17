@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev
+          apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
 
@@ -100,6 +100,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y git
           pip install --upgrade pip
           pip install .[sklearn,testing,onnx,sentencepiece]
 
@@ -149,12 +150,13 @@ jobs:
         uses: actions/checkout@v2
 
       - name: NVIDIA-SMI
+        continue-on-error: true
         run: |
           nvidia-smi
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev
+          apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
 
@@ -203,11 +205,13 @@ jobs:
         uses: actions/checkout@v2
 
       - name: NVIDIA-SMI
+        continue-on-error: true
         run: |
           nvidia-smi
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y git
           pip install --upgrade pip
           pip install .[sklearn,testing,onnx,sentencepiece]
 
@@ -298,6 +302,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: NVIDIA-SMI
+        continue-on-error: true
         run: |
           nvidia-smi
 
