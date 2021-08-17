@@ -818,6 +818,8 @@ jobs:
             - run: pip install .[torch,testing,vision]
             - run: pip install torchvision
             - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+            - run: sudo apt install tesseract-ocr
+            - run: sudo apt install libtesseract-dev
             - run: pip install pytesseract
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
