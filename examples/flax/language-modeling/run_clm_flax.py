@@ -314,12 +314,14 @@ def main():
         if "validation" not in dataset.keys():
             dataset["validation"] = load_dataset(
                 extension,
+                keep_linebreaks=True,
                 data_files=data_files,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
             )
             dataset["train"] = load_dataset(
                 extension,
+                keep_linebreaks=True,
                 data_files=data_files,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
