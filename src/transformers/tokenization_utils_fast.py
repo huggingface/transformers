@@ -59,6 +59,9 @@ INIT_TOKENIZER_DOCSTRING += """
         tokenizer_object (:class:`tokenizers.Tokenizer`):
             A :class:`tokenizers.Tokenizer` object from 🤗 tokenizers to instantiate from. See :doc:`Using tokenizers
             from 🤗 tokenizers <../fast_tokenizers>` for more information.
+        tokenizer_file (:class:`str`):
+            A path to a local JSON file representing a previously serialized :class:`tokenizers.Tokenizer` object from
+            🤗 tokenizers.
 """
 
 MODEL_TO_TRAINER_MAPPING = {
@@ -584,7 +587,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             text_iterator (generator of :obj:`List[str]`):
                 The training corpus. Should be a generator of batches of texts, for instance a list of lists of texts
                 if you have everything in memory.
-            vocab_size (obj:`int`):
+            vocab_size (:obj:`int`):
                 The size of the vocabulary you want for your tokenizer.
             new_special_tokens (list of :obj:`str` or :obj:`AddedToken`, `optional`):
                 A list of new special tokens to add to the tokenizer you are training.

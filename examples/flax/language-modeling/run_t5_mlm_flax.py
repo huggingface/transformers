@@ -42,12 +42,12 @@ from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
+    AutoTokenizer,
     BatchEncoding,
     FlaxT5ForConditionalGeneration,
     HfArgumentParser,
     PreTrainedTokenizerBase,
     T5Config,
-    T5TokenizerFast,
     TrainingArguments,
     is_tensorboard_available,
     set_seed,
@@ -353,7 +353,8 @@ class FlaxDataCollatorForT5MLM:
             np.random.shuffle(mask_indices)
             first_in_segment = np.pad(mask_indices, [[1, 0]])
             segment_id = np.cumsum(first_in_segment)
-            segment_length = np.asarray(jax.ops.segment_sum(np.ones_like(segment_id), segment_id))
+            # count length of sub segments assuming that list is sorted
+            _, segment_length = np.unique(segment_id, return_counts=True)
             return segment_length
 
         noise_span_lengths = _random_segmentation(num_noise_tokens, num_noise_spans)
@@ -471,17 +472,30 @@ if __name__ == "__main__":
             extension = "text"
         datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
 
+        if "validation" not in datasets.keys():
+            datasets["validation"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[:{data_args.validation_split_percentage}%]",
+                cache_dir=model_args.cache_dir,
+            )
+            datasets["train"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[{data_args.validation_split_percentage}%:]",
+                cache_dir=model_args.cache_dir,
+            )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
     # Load pretrained model and tokenizer
 
     if model_args.tokenizer_name:
-        tokenizer = T5TokenizerFast.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     elif model_args.model_name_or_path:
-        tokenizer = T5TokenizerFast.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     else:
@@ -707,7 +721,7 @@ if __name__ == "__main__":
     state = jax_utils.replicate(state)
 
     train_time = 0
-    epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
+    epochs = tqdm(range(num_epochs), desc="Epoch ... ", position=0)
     for epoch in epochs:
         # ======================== Training ================================
         train_start = time.time()

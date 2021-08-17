@@ -88,6 +88,7 @@ if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VA
             "tf-nightly-cpu",
             "tf-nightly-gpu",
             "intel-tensorflow",
+            "intel-tensorflow-avx512",
             "tensorflow-rocm",
             "tensorflow-macos",
         )
@@ -273,8 +274,9 @@ PRESET_MIRROR_DICT = {
     "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
 }
 
-# This is the version of torch required to run torch.fx features.
+# This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
+TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
 
@@ -296,7 +298,7 @@ def is_torch_cuda_available():
         return False
 
 
-_torch_fx_available = False
+_torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
     _torch_fx_available = (torch_version.major, torch_version.minor) == (
@@ -304,9 +306,15 @@ if _torch_available:
         TORCH_FX_REQUIRED_VERSION.minor,
     )
 
+    _torch_onnx_dict_inputs_support_available = torch_version >= TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION
+
 
 def is_torch_fx_available():
     return _torch_fx_available
+
+
+def is_torch_onnx_dict_inputs_support_available():
+    return _torch_onnx_dict_inputs_support_available
 
 
 def is_tf_available():
@@ -982,7 +990,7 @@ TF_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> choice0 = "It is eaten with a fork and a knife."
         >>> choice1 = "It is eaten while held in the hand."
 
-        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='tf', padding=True)
+        >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors='tf', padding=True)
         >>> inputs = {{k: tf.expand_dims(v, 0) for k, v in encoding.items()}}
         >>> outputs = model(inputs)  # batch size is 1
 
@@ -1055,7 +1063,7 @@ FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
 
-        >>> outputs = model(**inputs, labels=labels)
+        >>> outputs = model(**inputs)
         >>> logits = outputs.logits
 """
 
@@ -1099,7 +1107,7 @@ FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> choice0 = "It is eaten with a fork and a knife."
         >>> choice1 = "It is eaten while held in the hand."
 
-        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='jax', padding=True)
+        >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors='jax', padding=True)
         >>> outputs = model(**{{k: v[None, :] for k,v in encoding.items()}})
 
         >>> logits = outputs.logits
@@ -1114,9 +1122,10 @@ FLAX_CAUSAL_LM_SAMPLE = r"""
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
-        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+        >>> outputs = model(**inputs)
 
-        >>> logits = outputs.logits
+        >>> # retrieve logts for next token
+        >>> next_token_logits = outputs.logits[:, -1]
 """
 
 FLAX_SAMPLE_DOCSTRINGS = {
@@ -1641,6 +1650,53 @@ def get_from_cache(
     return cache_path
 
 
+def get_list_of_files(
+    path_or_repo: Union[str, os.PathLike],
+    revision: Optional[str] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+) -> List[str]:
+    """
+    Gets the list of files inside :obj:`path_or_repo`.
+
+    Args:
+        path_or_repo (:obj:`str` or :obj:`os.PathLike`):
+            Can be either the id of a repo on huggingface.co or a path to a `directory`.
+        revision (:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+            identifier allowed by git.
+        use_auth_token (:obj:`str` or `bool`, `optional`):
+            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+
+    Returns:
+        :obj:`List[str]`: The list of files available in :obj:`path_or_repo`.
+    """
+    path_or_repo = str(path_or_repo)
+    # If path_or_repo is a folder, we just return what is inside (subdirectories included).
+    if os.path.isdir(path_or_repo):
+        list_of_files = []
+        for path, dir_names, file_names in os.walk(path_or_repo):
+            list_of_files.extend([os.path.join(path, f) for f in file_names])
+        return list_of_files
+
+    # Can't grab the files if we are on offline mode.
+    if is_offline_mode():
+        return []
+
+    # Otherwise we grab the token and use the model_info method.
+    if isinstance(use_auth_token, str):
+        token = use_auth_token
+    elif use_auth_token is True:
+        token = HfFolder.get_token()
+    else:
+        token = None
+    model_info = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).model_info(
+        path_or_repo, revision=revision, token=token
+    )
+    return [f.rfilename for f in model_info.siblings]
+
+
 class cached_property(property):
     """
     Descriptor that mimics @property but caches output in member variable.
@@ -1715,10 +1771,10 @@ def is_tensor(x):
             return True
 
     if is_flax_available():
-        import jaxlib.xla_extension as jax_xla
+        import jax.numpy as jnp
         from jax.core import Tracer
 
-        if isinstance(x, (jax_xla.DeviceArray, Tracer)):
+        if isinstance(x, (jnp.ndarray, Tracer)):
             return True
 
     return isinstance(x, np.ndarray)
@@ -1794,11 +1850,15 @@ class ModelOutput(OrderedDict):
         other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
 
         if other_fields_are_none and not is_tensor(first_field):
-            try:
-                iterator = iter(first_field)
+            if isinstance(first_field, dict):
+                iterator = first_field.items()
                 first_field_iterator = True
-            except TypeError:
-                first_field_iterator = False
+            else:
+                try:
+                    iterator = iter(first_field)
+                    first_field_iterator = True
+                except TypeError:
+                    first_field_iterator = False
 
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
@@ -1938,7 +1998,7 @@ class _LazyModule(ModuleType):
         return importlib.import_module("." + module_name, self.__name__)
 
     def __reduce__(self):
-        return (self.__class__, (self._name, self._import_structure))
+        return (self.__class__, (self._name, self.__file__, self._import_structure))
 
 
 def copy_func(f):
@@ -1990,14 +2050,14 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
         """
-        Upload model checkpoint or tokenizer files to the 🤗 Model Hub while synchronizing a local clone of the repo in
+        Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
         :obj:`repo_path_or_name`.
 
         Parameters:
             repo_path_or_name (:obj:`str`, `optional`):
-                Can either be a repository name for your model or tokenizer in the Hub or a path to a local folder (in
-                which case the repository will have the name of that local folder). If not specified, will default to
-                the name given by :obj:`repo_url` and a local directory with that name will be created.
+                Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
+                the repository will have the name of that local folder). If not specified, will default to the name
+                given by :obj:`repo_url` and a local directory with that name will be created.
             repo_url (:obj:`str`, `optional`):
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
                 repository will be created in your namespace (unless you specify an :obj:`organization`) with
@@ -2007,11 +2067,9 @@ class PushToHubMixin:
                 the current working directory. This will slow things down if you are making changes in an existing repo
                 since you will need to clone the repo before every push.
             commit_message (:obj:`str`, `optional`):
-                Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
-                :obj:`"add model"` depending on the type of the class.
+                Message to commit while pushing. Will default to :obj:`"add {object}"`.
             organization (:obj:`str`, `optional`):
-                Organization in which you want to push your model or tokenizer (you must be a member of this
-                organization).
+                Organization in which you want to push your {object} (you must be a member of this organization).
             private (:obj:`bool`, `optional`):
                 Whether or not the repository created should be private (requires a paying subscription).
             use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
@@ -2021,29 +2079,27 @@ class PushToHubMixin:
 
 
         Returns:
-            The url of the commit of your model in the given repository.
+            :obj:`str`: The url of the commit of your {object} in the given repository.
 
         Examples::
 
-            # Upload a model to the Hub:
-            from transformers import AutoModel
+            from transformers import {object_class}
 
-            model = BertModel.from_pretrained("bert-base-cased")
-            # Fine-tuning code
+            {object} = {object_class}.from_pretrained("bert-base-cased")
 
-            # Push the model to your namespace with the name "my-finetuned-bert" and have a local clone in the
+            # Push the {object} to your namespace with the name "my-finetuned-bert" and have a local clone in the
             # `my-finetuned-bert` folder.
-            model.push_to_hub("my-finetuned-bert")
+            {object}.push_to_hub("my-finetuned-bert")
 
-            # Push the model to your namespace with the name "my-finetuned-bert" with no local clone.
-            model.push_to_hub("my-finetuned-bert", use_temp_dir=True)
+            # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
+            {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
 
-            # Push the model to an organization with the name "my-finetuned-bert" and have a local clone in the
+            # Push the {object} to an organization with the name "my-finetuned-bert" and have a local clone in the
             # `my-finetuned-bert` folder.
-            model.push_to_hub("my-finetuned-bert", organization="huggingface")
+            {object}.push_to_hub("my-finetuned-bert", organization="huggingface")
 
             # Make a change to an existing repo that has been cloned locally in `my-finetuned-bert`.
-            model.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
+            {object}.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
         """
         if use_temp_dir:
             # Make sure we use the right `repo_name` for the `repo_url` before replacing it.

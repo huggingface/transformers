@@ -23,9 +23,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.deepspeed import is_deepspeed_zero3_enabled
-
 from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
@@ -41,6 +40,7 @@ from .configuration_wav2vec2 import Wav2Vec2Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
+_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/wav2vec2-base-960h",
@@ -121,6 +121,7 @@ def _compute_mask_indices(
     mask_prob: float,
     mask_length: int,
     device: torch.device,
+    attention_mask: Optional[torch.tensor] = None,
     min_masks: int = 0,
 ) -> torch.tensor:
     """
@@ -179,6 +180,10 @@ def _compute_mask_indices(
 
     # scatter indices to mask
     spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, True)
+
+    if attention_mask is not None:
+        # make sure padded input ids cannot be masked
+        spec_aug_mask = torch.where(attention_mask.bool(), spec_aug_mask, False)
 
     return spec_aug_mask
 
@@ -853,17 +858,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
-
-                if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
-                    with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight.data)
-                else:
-                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight.data)
-            else:
-                nn.init.kaiming_normal_(module.weight.data)
+            nn.init.kaiming_normal_(module.weight.data)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
@@ -882,6 +877,18 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
 
         return input_lengths
+
+    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
+        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+        batch_size = attention_mask.shape[0]
+
+        attention_mask = torch.zeros(
+            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        # these two operations makes sure that all values before the output lengths idxs are attended to
+        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        return attention_mask
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
@@ -961,7 +968,10 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         self.init_weights()
 
     def _mask_hidden_states(
-        self, hidden_states: torch.FloatTensor, mask_time_indices: Optional[torch.FloatTensor] = None
+        self,
+        hidden_states: torch.FloatTensor,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to `SpecAugment
@@ -972,18 +982,19 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         if not getattr(self.config, "apply_spec_augment", True):
             return hidden_states
 
+        # generate indices & apply SpecAugment along time axis
+        batch_size, sequence_length, hidden_size = hidden_states.size()
+
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
         elif self.config.mask_time_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along time axis
-            batch_size, sequence_length, hidden_size = hidden_states.size()
-
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
                 device=hidden_states.device,
+                attention_mask=attention_mask,
                 min_masks=2,
             )
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -995,6 +1006,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
                 device=hidden_states.device,
+                attention_mask=attention_mask,
             )
             hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
 
@@ -1045,26 +1057,13 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         extract_features = extract_features.transpose(1, 2)
 
         if attention_mask is not None:
-            # compute real output lengths according to convolution formula
-            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-
-            attention_mask = torch.zeros(
-                extract_features.shape[:2], dtype=extract_features.dtype, device=extract_features.device
-            )
-
-            # these two operations makes sure that all values
-            # before the output lengths indices are attended to
-            attention_mask[
-                (torch.arange(attention_mask.shape[0], device=extract_features.device), output_lengths - 1)
-            ] = 1
-            attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+            # compute reduced attention_mask correponding to feature vectors
+            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
         hidden_states, extract_features = self.feature_projection(extract_features)
-
-        if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-
-        hidden_states = self._mask_hidden_states(hidden_states)
+        hidden_states = self._mask_hidden_states(
+            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+        )
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -1114,7 +1113,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         self.wav2vec2.feature_extractor._freeze_parameters()
 
     @staticmethod
-    def _sample_negatives(features: torch.FloatTensor, num_negatives: int):
+    def _sample_negatives(
+        features: torch.FloatTensor, num_negatives: int, attention_mask: Optional[torch.LongTensor] = None
+    ):
         """
         Sample `num_negatives` vectors from feature vectors.
         """
@@ -1128,12 +1129,15 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         with torch.no_grad():
             # get `num_negatives` random vector indices from the same utterance
-            sampled_negative_indices = torch.randint(
-                low=0,
-                high=sequence_length - 1,
-                size=(batch_size, num_negatives * sequence_length),
-                device=features.device,
-            )
+            sampled_negative_indices = []
+            for batch_idx in range(batch_size):
+                high = attention_mask[batch_idx].sum() - 1 if attention_mask is not None else sequence_length - 1
+                sampled_indices_slice = torch.randint(
+                    0, high, size=(num_negatives * sequence_length,), device=features.device
+                )
+                sampled_negative_indices.append(sampled_indices_slice)
+
+            sampled_negative_indices = torch.stack(sampled_negative_indices)
 
             # generate indices of the positive vectors themselves, repeat them `num_negatives` times
             feature_indices = (
@@ -1179,7 +1183,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         return logits
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Wav2Vec2ForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values,
@@ -1266,7 +1270,14 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         if self.training:
             # for training, we sample negatives
             # 3. sample K negatives (distractors) quantized states for contrastive loss
-            negative_quantized_features = self._sample_negatives(quantized_features, self.config.num_negatives)
+            # if attention_mask is passed, make sure that padded feature vectors cannot be sampled
+            if attention_mask is not None:
+                # compute reduced attention_mask correponding to feature vectors
+                attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
+
+            negative_quantized_features = self._sample_negatives(
+                quantized_features, self.config.num_negatives, attention_mask=attention_mask
+            )
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
             # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
@@ -1327,7 +1338,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Wav2Vec2BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values,
@@ -1409,7 +1420,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         self.wav2vec2.feature_extractor._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values,
