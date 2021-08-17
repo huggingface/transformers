@@ -69,10 +69,39 @@ def apply_rotary_pos_emb(x, sincos, offset=0):
     return (x * cos) + (rotate_every_two(x) * sin)
 
 
-class GPTJAttentionMixin:
-    """
-    A few attention related utilities for attention modules in GPT-J, to be used as a mixin.
-    """
+class GPTJAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        max_positions = config.max_position_embeddings
+        self.register_buffer(
+            "bias",
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+                1, 1, max_positions, max_positions
+            ),
+        )
+        self.register_buffer("masked_bias", torch.tensor(-1e9))
+
+        self.attn_dropout = nn.Dropout(config.attn_pdrop)
+        self.resid_dropout = nn.Dropout(config.resid_pdrop)
+
+        self.embed_dim = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_attention_heads
+        self.register_buffer("scale_attn", torch.sqrt(torch.tensor(self.head_dim)))
+        if self.head_dim * self.num_attention_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and `num_attention_heads`: {self.num_attention_heads})."
+            )
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.rotary = config.rotary
+        self.rotary_dim = None
+        if config.rotary_dim is not None:
+            self.rotary_dim = config.rotary_dim
 
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
         """
@@ -109,7 +138,7 @@ class GPTJAttentionMixin:
         value,
         causal_mask,
         masked_bias,
-        attn_pdrop,
+        attn_dropout,
         attention_mask=None,
         head_mask=None,
         scale_attn=None,
@@ -130,7 +159,7 @@ class GPTJAttentionMixin:
 
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
         attn_weights = attn_weights.to(value.dtype)
-        attn_weights = attn_pdrop(attn_weights)
+        attn_weights = attn_dropout(attn_weights)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -139,41 +168,6 @@ class GPTJAttentionMixin:
         attn_output = torch.matmul(attn_weights, value)
 
         return attn_output, attn_weights
-
-
-class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
-    def __init__(self, config):
-        super().__init__()
-
-        self.window_size = None
-        max_positions = config.n_positions
-        bias = (
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8))
-            .view(1, 1, max_positions, max_positions)
-            .bool()
-        )
-
-        self.register_buffer("bias", bias)
-
-        self.register_buffer("masked_bias", torch.tensor(-1e9))
-
-        self.attn_pdrop = nn.Dropout(config.attn_pdrop)
-        self.resid_pdrop = nn.Dropout(config.resid_pdrop)
-
-        self.embed_dim = config.n_embd
-        self.num_attention_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_attention_heads
-        self.register_buffer("scale_attn", torch.sqrt(torch.tensor(self.head_dim)))
-        if self.head_dim * self.num_attention_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and `num_attention_heads`: {self.num_attention_heads})."
-            )
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.rotary_dim = config.rotary_dim
 
     def forward(
         self,
@@ -239,7 +233,7 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
             value,
             causal_mask,
             self.masked_bias,
-            self.attn_pdrop,
+            self.attn_dropout,
             attention_mask,
             head_mask,
             self.scale_attn,
@@ -247,40 +241,13 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
 
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)
-        attn_output = self.resid_pdrop(attn_output)
+        attn_output = self.resid_dropout(attn_output)
 
         outputs = (attn_output, present)
         if output_attentions:
             outputs += (attn_weights,)
 
         return outputs  # a, present, (attentions)
-
-
-class GPTJAttention(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.layer_id = layer_id
-        self.attention = GPTJSelfAttention(config)
-
-    def forward(
-        self,
-        hidden_states,
-        layer_past=None,
-        attention_mask=None,
-        head_mask=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
-        outputs = self.attention(
-            hidden_states,
-            attention_mask=attention_mask,
-            layer_past=layer_past,
-            head_mask=head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-        )
-
-        return outputs
 
 
 class GPTJMLP(nn.Module):
