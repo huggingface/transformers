@@ -15,7 +15,6 @@
 """ Tokenization class for model ByT5."""
 
 
-import re
 import warnings
 from typing import Dict, List, Optional, Tuple
 
@@ -107,12 +106,6 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         for i, token in enumerate(additional_special_tokens):
             self.special_tokens_encoder[token] = self.vocab_size + i - n - 1
         self.special_tokens_decoder: Dict[str, int] = {v: k for k, v in self.special_tokens_encoder.items()}
-
-    def get_pattern(self):
-        tokens = list(self.special_tokens_encoder.keys()) + list(self.added_tokens_encoder.keys())
-        tokens = [re.escape(t) for t in tokens]
-        token_reg = "|".join(tokens)
-        return re.compile(fr"({token_reg}|.)")
 
     @property
     def vocab_size(self):
@@ -216,11 +209,6 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         elif token in self.added_tokens_encoder:
             token_id = self.added_tokens_encoder[token]
         elif len(token) != 1:
-            # token of length > 1 must be newly added tokens
-            # import ipdb
-
-            # ipdb.set_trace()
-            # raise Exception(f"Unhandled new added token {token}")
             token_id = self.unk_token_id
         else:
             token_id = ord(token) + self._num_special_tokens
