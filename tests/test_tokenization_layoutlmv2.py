@@ -20,7 +20,7 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import AddedToken, LayoutLMv2TokenizerFast, SpecialTokensMixin
+from transformers import AddedToken, LayoutLMv2TokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
@@ -1726,6 +1726,14 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
+
+                if is_torch_available():
+                    returned_tensor = "pt"
+                elif is_tf_available():
+                    returned_tensor = "tf"
+                else:
+                    returned_tensor = "jax"
+
                 # Single example
                 words, boxes = self.get_words_and_boxes()
                 tokens = tokenizer.encode_plus(
@@ -1734,7 +1742,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=6,
                     padding=True,
                     truncation=True,
-                    return_tensors="pt",
+                    return_tensors=returned_tensor,
                     return_overflowing_tokens=True,
                 )
 
@@ -1753,7 +1761,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=6,
                     padding=True,
                     truncation="only_first",
-                    return_tensors="pt",
+                    return_tensors=returned_tensor,
                     return_overflowing_tokens=True,
                 )
 
