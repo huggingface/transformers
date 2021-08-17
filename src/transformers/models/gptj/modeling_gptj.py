@@ -173,10 +173,7 @@ class GPTJSelfAttention(nn.Module, GPTJAttentionMixin):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.rotary = config.rotary
-        self.rotary_dim = None
-        if config.rotary_dim is not None:
-            self.rotary_dim = config.rotary_dim
+        self.rotary_dim = config.rotary_dim
 
     def forward(
         self,
@@ -447,18 +444,10 @@ class GPTJModel(GPTJPreTrainedModel):
         self.embed_dim = config.n_embd
         self.vocab_size = config.vocab_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-        if not config.rotary:
-            self.wpe = nn.Embedding(config.n_positions, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTJBlock(config, layer_id=i) for i in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-        self.rotary = None
-        if config.rotary:
-            rotary_dim = config.n_ctx // config.num_attention_heads
-            if config.rotary_dim is not None:
-                rotary_dim = min(config.rotary_dim, rotary_dim)
-            self.rotary = True
-
+        self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
         self.init_weights()
 
     def get_input_embeddings(self):
