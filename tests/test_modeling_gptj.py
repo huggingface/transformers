@@ -50,7 +50,6 @@ class GPTJModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        rotary_dim=4,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -74,7 +73,6 @@ class GPTJModelTester:
         self.use_mc_token_ids = use_mc_token_ids
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.rotary_dim = rotary_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -140,7 +138,6 @@ class GPTJModelTester:
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
-            rotary_dim=self.rotary_dim,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
