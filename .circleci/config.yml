@@ -798,7 +798,7 @@ jobs:
             - run: pip install requests
             - run: python ./utils/link_tester.py
 
-    run_tests_detectron2:
+    run_tests_layoutlmv2:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.7
@@ -818,6 +818,7 @@ jobs:
             - run: pip install .[torch,testing,vision]
             - run: pip install torchvision
             - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+            - run: pip install pytesseract
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -874,21 +875,21 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            # - check_code_quality
-            # - check_repository_consistency
-            # - run_examples_torch
-            # - run_tests_custom_tokenizers
-            # - run_tests_torch_and_tf
-            # - run_tests_torch_and_flax
-            # - run_tests_torch
-            # - run_tests_tf
-            # - run_tests_flax
-            # - run_tests_pipelines_torch
-            # - run_tests_pipelines_tf
-            # - run_tests_onnxruntime
-            # - run_tests_hub
-            # - build_doc
-            - run_tests_detectron2
+            - check_code_quality
+            - check_repository_consistency
+            - run_examples_torch
+            - run_tests_custom_tokenizers
+            - run_tests_torch_and_tf
+            - run_tests_torch_and_flax
+            - run_tests_torch
+            - run_tests_tf
+            - run_tests_flax
+            - run_tests_pipelines_torch
+            - run_tests_pipelines_tf
+            - run_tests_onnxruntime
+            - run_tests_hub
+            - build_doc
+            - run_tests_layoutlmv2
             - deploy_doc: *workflow_filters
     nightly:
         triggers:
