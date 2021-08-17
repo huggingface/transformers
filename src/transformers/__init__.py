@@ -818,6 +818,7 @@ if is_torch_available():
         [
             "HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "HubertForCTC",
+            "HubertForSequenceClassification",
             "HubertModel",
             "HubertPreTrainedModel",
         ]
@@ -2423,6 +2424,7 @@ if TYPE_CHECKING:
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             HubertForCTC,
+            HubertForSequenceClassification,
             HubertModel,
             HubertPreTrainedModel,
         )
