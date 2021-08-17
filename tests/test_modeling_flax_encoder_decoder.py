@@ -41,13 +41,13 @@ if is_flax_available():
 @require_flax
 class FlaxEncoderDecoderMixin:
     def get_encoder_decoder_model(self, config, decoder_config):
-        raise NotImplentedError
+        raise NotImplementedError
 
     def prepare_config_and_inputs(self):
-        raise NotImplentedError
+        raise NotImplementedError
 
     def get_pretrained_model(self):
-        raise NotImplentedError
+        raise NotImplementedError
 
     def check_encoder_decoder_model_from_pretrained_configs(
         self,
