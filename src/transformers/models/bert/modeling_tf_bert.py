@@ -1398,6 +1398,13 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
+    def prepare_inputs_for_generation(self, inputs, past=None, attention_mask=None, **model_kwargs):
+        # cut decoder_input_ids if past is used
+        if past:
+            inputs = tf.expand_dims(inputs[:, -1], -1)
+
+        return {"input_ids": inputs, "attention_mask": attention_mask, "past_key_values": past}
+
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,

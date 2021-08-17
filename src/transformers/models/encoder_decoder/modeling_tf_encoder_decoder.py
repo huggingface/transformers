@@ -19,7 +19,7 @@ from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_tf_outputs import TFSeq2SeqLMOutput
+from ...modeling_tf_outputs import TFSeq2SeqLMOutput, TFBaseModelOutput
 from ...modeling_tf_utils import TFPreTrainedModel, input_processing
 from ...utils import logging
 from .configuration_encoder_decoder import EncoderDecoderConfig
@@ -470,19 +470,38 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self,
+        inputs,
+        past,
+        attention_mask,
+        use_cache=None,
+        **kwargs,
     ):
-        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past=past)
-        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
-        input_dict = {
-            "attention_mask": attention_mask,
-            "decoder_attention_mask": decoder_attention_mask,
-            "decoder_input_ids": decoder_inputs["input_ids"],
+        assert past is not None, "past has to be defined for encoder_outputs"
+
+        # first step
+        if len(past) < 2:
+            encoder_outputs, past_key_values = past, None
+        else:
+            encoder_outputs, past_key_values = past[0], past[1]
+
+        encoder_hidden_states = kwargs["encoder_hidden_states"] if "encoder_hidden_states" in kwargs else None
+        encoder_attentions = kwargs["encoder_attentions"] if "encoder_attentions" in kwargs else None
+        encoder_outputs = (*encoder_outputs, encoder_hidden_states, encoder_attentions)
+        encoder_outputs = TFBaseModelOutput(*encoder_outputs)
+
+        # cut decoder_input_ids if past is used
+        if past_key_values is not None:
+            inputs = inputs[:, -1:]
+
+        return {
+            "input_ids": None,  # inputs don't have to be defined, but still need to be passed to make Keras.layer.__call__ happy
+            "decoder_input_ids": inputs,  # inputs are the decoder_input_ids
+            "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
-            "past_key_values": decoder_inputs["past_key_values"],
+            "attention_mask": attention_mask,
             "use_cache": use_cache,
         }
-        return input_dict
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
