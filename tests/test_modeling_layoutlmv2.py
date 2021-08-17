@@ -157,6 +157,11 @@ class LayoutLMv2ModelTester:
             shape_size=self.shape_size,
         )
 
+        # use smaller resnet backbone to make tests faster
+        config.detectron2_config_args["MODEL.RESNETS.DEPTH"] = 18
+        config.detectron2_config_args["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 64
+        config.detectron2_config_args["MODEL.RESNETS.NUM_GROUPS"] = 1
+
         return config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
 
     def create_and_check_model(
