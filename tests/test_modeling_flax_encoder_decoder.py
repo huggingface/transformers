@@ -346,9 +346,9 @@ class FlaxGPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
 
 
 @require_flax
-class EncoderDecoderModelTest(unittest.TestCase):
+class FlaxEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
-        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("gpt2", "gpt2")
+        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
 
     def get_decoder_config(self):
         config = AutoConfig.from_pretrained("gpt2")
