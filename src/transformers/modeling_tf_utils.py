@@ -362,6 +362,15 @@ def input_processing(func, config, input_ids, **kwargs):
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
 
+    if "past" in kwargs["kwargs_call"]:
+        past = kwargs["kwargs_call"].pop("past")
+        if 'past_key_values' in kwargs:
+            kwargs['past_key_values'] = past
+    elif "past_key_values" in kwargs["kwargs_call"]:
+        past = kwargs["kwargs_call"].pop("past_key_values")
+        if 'past' in kwargs:
+            kwargs['past'] = past
+
     if len(kwargs["kwargs_call"]) > 0:
         raise ValueError(
             f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
