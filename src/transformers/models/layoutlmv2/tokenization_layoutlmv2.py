@@ -178,6 +178,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         sep_token_box=[1000, 1000, 1000, 1000],
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
+        only_label_first_subword=True,
         tokenize_chinese_chars=True,
         strip_accents=None,
         model_max_length: int = 512,
@@ -197,6 +198,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             sep_token_box=sep_token_box,
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
+            only_label_first_subword=only_label_first_subword,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
             model_max_length=model_max_length,
@@ -226,6 +228,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         self.sep_token_box = sep_token_box
         self.pad_token_box = pad_token_box
         self.pad_token_label = pad_token_label
+        self.only_label_first_subword = only_label_first_subword
 
     @property
     def do_lower_case(self):
@@ -1000,8 +1003,11 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                     word_tokens = self.tokenize(word)
                     tokens.extend(word_tokens)
                     token_boxes.extend([box] * len(word_tokens))
-                    # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-                    labels.extend([label] + [self.pad_token_label] * (len(word_tokens) - 1))
+                    if self.only_label_first_subword:
+                        # Use the real label id for the first token of the word, and padding ids for the remaining tokens
+                        labels.extend([label] + [self.pad_token_label] * (len(word_tokens) - 1))
+                    else:
+                        labels.extend([label] * len(word_tokens))
         else:
             # CASE 3: document visual question answering (inference)
             # text = question
@@ -1029,6 +1035,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         # Truncation: Handle max sequence length
         overflowing_tokens = []
         overflowing_token_boxes = []
+        overflowing_labels = []
         if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
             (
                 ids,
@@ -1291,7 +1298,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         if needs_to_be_padded:
             difference = max_length - len(required_input)
             if self.padding_side == "right":
-                print("we are here")
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [1] * len(required_input) + [0] * difference
                 if "token_type_ids" in encoded_inputs:

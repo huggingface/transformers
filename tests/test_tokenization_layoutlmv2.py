@@ -1831,6 +1831,34 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     @slow
+    def test_only_label_first_subword(self):
+        words = ["hello", "niels"]
+        boxes = [[1000, 1000, 1000, 1000] for _ in range(len(words))]
+        word_labels = [0, 1]
+
+        # test slow tokenizer
+        tokenizer_p = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
+
+        tokenizer_p = LayoutLMv2Tokenizer.from_pretrained(
+            "microsoft/layoutlmv2-base-uncased", only_label_first_subword=False
+        )
+        encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
+
+        # test fast tokenizer
+        tokenizer_r = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
+
+        tokenizer_r = LayoutLMv2Tokenizer.from_pretrained(
+            "microsoft/layoutlmv2-base-uncased", only_label_first_subword=False
+        )
+        encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
+
+    @slow
     def test_layoutlmv2_integration_test(self):
 
         tokenizer_p = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")

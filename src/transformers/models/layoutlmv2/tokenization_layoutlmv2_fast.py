@@ -95,6 +95,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         pad_token_label (:obj:`int`, `optional`, defaults to -100):
             The label to use for padding tokens. Defaults to -100, which is the :obj:`ignore_index` of PyTorch's
             CrossEntropyLoss.
+        only_label_first_subword (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to only label the first subword, in case word labels are provided.
         tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see `this
             issue <https://github.com/huggingface/transformers/issues/328>`__).
@@ -123,6 +125,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         sep_token_box=[1000, 1000, 1000, 1000],
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
+        only_label_first_subword=True,
         tokenize_chinese_chars=True,
         strip_accents=None,
         **kwargs
@@ -140,6 +143,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             sep_token_box=sep_token_box,
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
+            only_label_first_subword=only_label_first_subword,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
             **kwargs,
@@ -162,6 +166,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         self.sep_token_box = sep_token_box
         self.pad_token_box = pad_token_box
         self.pad_token_label = pad_token_label
+        self.only_label_first_subword = only_label_first_subword
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
@@ -577,9 +582,15 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 for id, word_id in zip(
                     sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].word_ids
                 ):
-                    # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-                    if word_id is not None and not self.decode([id]).startswith("##"):
-                        labels_example.append(word_labels[original_index][word_id])
+                    if word_id is not None:
+                        if self.only_label_first_subword:
+                            if not self.decode([id]).startswith("##"):
+                                # Use the real label id for the first token of the word, and padding ids for the remaining tokens
+                                labels_example.append(word_labels[original_index][word_id])
+                            else:
+                                labels_example.append(self.pad_token_label)
+                        else:
+                            labels_example.append(word_labels[original_index][word_id])
                     else:
                         labels_example.append(self.pad_token_label)
                 labels.append(labels_example)
