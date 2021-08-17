@@ -804,15 +804,6 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
                 ),
                 [0, 2, 1],
             )
-            if shape_list(query_layer)[-2] != shape_list(key_layer)[-2]:
-                pos_index = tf.expand_dims(relative_pos[:, :, :, 0], -1)
-                p2c_att = torch_gather(
-                    p2c_att,
-                    tf.broadcast_to(
-                        pos_index, shape_list(p2c_att)[:2] + [shape_list(pos_index)[-2], shape_list(key_layer)[-2]]
-                    ),
-                    -2,
-                )
             score += p2c_att / scale
 
         # position->position
@@ -820,15 +811,6 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
             pos_query = pos_query_layer[:, :, att_span:, :]
             p2p_att = tf.matmul(pos_query, tf.transpose(pos_key_layer, [0, 2, 1]))
             p2p_att = tf.broadcast_to(shape_list(query_layer)[:2] + shape_list(p2p_att)[2:])
-            if shape_list(query_layer)[-2] != shape_list(key_layer)[-2]:
-                pos_index = tf.expand_dims(relative_pos[:, :, :, 0], -1)
-                p2p_att = torch_gather(
-                    p2p_att,
-                    tf.broadcast_to(
-                        pos_index, shape_list(query_layer)[:2] + [shape_list(pos_index)[-2], shape_list(p2p_att)[-1]]
-                    ),
-                    -2,
-                )
             p2p_att = torch_gather(
                 p2p_att,
                 tf.broadcast_to(
