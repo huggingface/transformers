@@ -175,6 +175,10 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
             decoder = TFAutoModelForCausalLM.from_config(config.decoder, name="decoder")
 
+        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.     
+        assert encoder.name == "encoder"
+        assert decoder.name == "decoder"
+            
         self.encoder = encoder
         self.decoder = decoder
 
@@ -187,10 +191,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                 f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config: {self.config.decoder}"
             )
 
-        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.     
-        assert encoder.name == "encoder"
-        assert decoder.name == "decoder"
-            
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
         self.encoder.config = self.config.encoder
@@ -468,10 +468,10 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                 "kwargs_call": kwargs_encoder
             }
 
-            for k in ['token_type_ids', 'position_ids']:
-                if k in kwargs_encoder:
-                    v = kwargs_encoder.pop(k)
-                    encoder_processing_inputs[k] = v
+            # Add arguments to encoder from `kwargs_encoder`
+            for k, v in kwargs_encoder.items():
+                encoder_processing_inputs[k] = v
+            kwargs_encoder = {}
 
             encoder_inputs = input_processing(**encoder_processing_inputs)
 
@@ -501,10 +501,10 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             "kwargs_call": kwargs_decoder,
         }
 
-        for k in ['token_type_ids', 'position_ids']:
-            if k in kwargs_decoder:
-                v = kwargs_decoder.pop(k)
-                decoder_processing_inputs[k] = v
+        # Add arguments to decoder from `kwargs_decoder`
+        for k, v in kwargs_decoder.items():
+            decoder_processing_inputs[k] = v
+        kwargs_decoder = {}
 
         decoder_inputs = input_processing(**decoder_processing_inputs)
         decoder_outputs = self.decoder(**decoder_inputs)
@@ -524,6 +524,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    # Copied from `modeling_tf_t5.py` with a change (`tuple` -> `TFBaseModelOutput`)
     def prepare_inputs_for_generation(
         self,
         inputs,
@@ -540,6 +541,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         else:
             encoder_outputs, past_key_values = past[0], past[1]
 
+        # Use `TFBaseModelOutput` is easier & more clear than using tuple.
         encoder_hidden_states = kwargs["encoder_hidden_states"] if "encoder_hidden_states" in kwargs else None
         encoder_attentions = kwargs["encoder_attentions"] if "encoder_attentions" in kwargs else None
         encoder_outputs = (*encoder_outputs, encoder_hidden_states, encoder_attentions)
@@ -554,7 +556,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             "decoder_input_ids": inputs,  # inputs are the decoder_input_ids
             "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
-            "attention_mask": attention_mask,
+            "attention_mask": attention_mask,  # attention_mask is encoder's attention_mask
             "use_cache": use_cache,
         }
 
