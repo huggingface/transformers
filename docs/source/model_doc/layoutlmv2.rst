@@ -90,31 +90,126 @@ follows:
 
     width, height = image.size
 
+However, this model includes a brand new :class:`~transformer.LayoutLMv2Processor` which can be used to directly
+prepare data for the model (including applying OCR under the hood). More information can be found in the "Usage"
+section below.
+
 - Internally, :class:`~transformer.LayoutLMv2Model` will send the :obj:`image` input through its visual backbone to
   obtain a lower-resolution feature map, whose shape is equal to the :obj:`image_feature_pool_shape` attribute of
   :class:`~transformer.LayoutLMv2Config`. This feature map is then flattened to obtain a sequence of image tokens. As
   the size of the feature map is 7x7 by default, one obtains 49 image tokens. These are then concatenated with the text
   tokens, and send through the Transformer encoder. This means that the last hidden states of the model will have a
-  length of 512 + 49 = 561, if you pad the text tokens up to the max length.
+  length of 512 + 49 = 561, if you pad the text tokens up to the max length. More generally, the last hidden states
+  will have a shape of :obj:`seq_length` + :obj:`image_feature_pool_shape[0]` *
+  :obj:`config.image_feature_pool_shape[1]`.
 - When calling :meth:`~transformer.LayoutLMv2Model.from_pretrained`, a warning will be printed with a long list of
   parameter names that are not initialized. This is not a problem, as these parameters are batch normalization
   statistics, which are going to have values when fine-tuning on a custom dataset.
 - If you want to train the model in a distributed environment, make sure to call :meth:`synchronize_batch_norm` on the
   model in order to properly synchronize the batch normalization layers of the visual backbone.
 
-In addition, there's LayoutXLM, which is a multilingual version of LayoutLMv2. LayoutXLM was proposed in `LayoutXLM:
-Multimodal Pre-training for Multilingual Visually-rich Document Understanding <https://arxiv.org/abs/2104.08836>`__ by
-Yiheng Xu, Tengchao Lv, Lei Cui, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Furu Wei. One can directly plug in
-the weights of LayoutXLM into a LayoutLMv2 model, like so:
+In addition, there's LayoutXLM, which is a multilingual version of LayoutLMv2. More information can be found on
+:doc:`LayoutXLM's documentation page <layoutxlm>`.
+
+Usage: LayoutLMv2Processor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The easiest way to prepare data for the model is to use :class:`~transformer.LayoutLMv2Processor`, which internally
+combines a feature extractor (:class:`~transformer.LayoutLMv2FeatureExtractor`) and a tokenizer
+(:class:`~transformer.LayoutLMv2Tokenizer` or :class:`~transformer.LayoutLMv2TokenizerFast`). The feature extractor
+handles the image-related stuff, while the tokenizer handles the text-related stuff. A processor combines both, which
+is ideal for a multi-modal model like LayoutLMv2.
+
+In short, one can provide a document image (and possibly additional data) to :class:`~transformer.LayoutLMv2Processor`,
+and it will create the inputs expected by the model. Internally, the processor first uses
+:class:`~transformer.LayoutLMv2FeatureExtractor` to apply OCR on the image to get a list of words and normalized
+bounding boxes, as well to resize the image to a given size in order to get the :obj:`image` input. The words and
+normalized bounding boxes are then provided to :class:`~transformer.LayoutLMv2TokenizerFast`, which converts them to
+token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox` and optional :obj:`labels`.
+
+:class:`~transformer.LayoutLMv2Processor` uses `PyTesseract <https://pypi.org/project/pytesseract/>`__, a Python
+wrapper around Google's Tesseract OCR engine, under the hood. Note that you can still use your own OCR engine of
+choice, and provide the words and normalized boxes yourself. This requires initializing
+:class:`~transformer.LayoutLMv2FeatureExtractor` with :obj:`apply_ocr` set to :obj:`False`, as shown below.
+
+In total, there are 5 use cases that are supported by the processor. Below, we list them all. Note that each of these
+use cases work for both batched and non-batched inputs.
+
+**Use case 1: document image classification (training, inference) + token classification (inference), apply_ocr =
+True**
 
 .. code-block::
 
-    from transformers import LayoutLMv2Model
+    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
 
-    model = LayoutLMv2Model.from_pretrained('microsoft/layoutxlm-base') 
+    feature_extractor = LayoutLMv2FeatureExtractor() # apply_ocr set to True by default
+    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
+    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
 
-This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
-<https://github.com/microsoft/unilm>`__.
+    image = get_image()
+    input_processor = processor(image, return_tensors="pt")
+
+**Use case 2: document image classification (training, inference) + token classification (inference), apply_ocr =
+False**
+
+.. code-block::
+
+    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
+
+    feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
+    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
+
+    image = get_image()
+    words = ["hello", "world"]
+    boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
+    input_processor = processor(image, words, boxes=boxes, return_tensors="pt")
+
+**Use case 3: token classification (training), apply_ocr=False**
+
+.. code-block::
+
+    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
+
+    feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
+    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
+
+    image = get_image()
+    words = ["hello", "world"]
+    boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
+    word_labels = [1, 2]
+    input_processor = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+
+**Use case 4: visual question answering (inference), apply_ocr=True**
+
+.. code-block::
+
+    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
+
+    feature_extractor = LayoutLMv2FeatureExtractor()
+    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
+    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
+
+    image = get_image()
+    question = "What's his name?"
+    input_processor = processor(image, question, return_tensors="pt") 
+
+**Use case 5: visual question answering (inference), apply_ocr=False**
+
+.. code-block::
+
+    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
+
+    feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
+    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
+
+    image = get_image()
+    question = "What's his name?"
+    words = ["hello", "world"]
+    boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
+    input_processor = processor(image, question, words, boxes=boxes, return_tensors="pt")  
 
 LayoutLMv2Config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

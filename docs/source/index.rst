@@ -560,6 +560,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/ibert
     model_doc/layoutlm
     model_doc/layoutlmv2
+    model_doc/layoutxlm
     model_doc/led
     model_doc/longformer
     model_doc/luke

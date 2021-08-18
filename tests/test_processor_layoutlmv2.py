@@ -375,7 +375,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
     @slow
     def test_processor_case_5(self):
-        # case 4: visual question answering (inference), apply_ocr=False
+        # case 5: visual question answering (inference), apply_ocr=False
 
         feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
         tokenizers = self.get_tokenizers
