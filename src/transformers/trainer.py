@@ -50,9 +50,8 @@ import torch
 from packaging import version
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.data import Dataset, IterableDataset
+from torch.utils.data import Dataset, IterableDataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data import RandomSampler, SequentialSampler
 
 from . import __version__
 from .configuration_utils import PretrainedConfig

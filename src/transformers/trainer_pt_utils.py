@@ -29,9 +29,8 @@ import numpy as np
 import torch
 from packaging import version
 from torch import nn
-from torch.utils.data import Dataset, IterableDataset
+from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data import RandomSampler, Sampler
 
 from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
 from .tokenization_utils_base import BatchEncoding
