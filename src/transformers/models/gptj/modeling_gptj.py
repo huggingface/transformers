@@ -513,7 +513,7 @@ class GPTJModel(GPTJPreTrainedModel):
             inputs_embeds = self.wte(input_ids)
 
         hidden_states = inputs_embeds
-        
+
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
             hidden_states = hidden_states + token_type_embeds
