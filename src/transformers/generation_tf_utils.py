@@ -400,8 +400,8 @@ class TFGenerationMixin:
         Parameters:
 
             input_ids (:obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
-                :obj:`tf.Tensor` of shape :obj:`(1,)`.
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it with
+                :obj:`bos_token_id` and a batch size of 1.
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             min_length (:obj:`int`, `optional`, defaults to 10):

@@ -190,7 +190,7 @@ class FlaxGenerationMixin:
 
         Parameters:
 
-            input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
