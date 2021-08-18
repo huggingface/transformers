@@ -21,7 +21,7 @@ import random
 
 import datasets
 from datasets import load_dataset, load_metric
-from torch.utils.data.dataloader import DataLoader
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
