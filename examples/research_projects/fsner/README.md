@@ -25,13 +25,13 @@ The FSNER model was proposed in [Example-Based Named Entity Recognition](https:/
 ## Installation and Example Usage
 ------
 
-You can use the FSNER model in two ways-
+You can use the FSNER model in two ways:
 
-1. Install as a package: `python setup.py install` and import as following code example -
+1. Install as a package: `python setup.py install` and import the model as shown in the code example below
 
     or
 
-2. Change directory to `src` and import as following code example -
+2. Change directory to `src` and import the model as shown in the code example below
 
 
 
@@ -42,7 +42,7 @@ model = FSNERModel("sayef/fsner-bert-base-uncased")
 
 tokenizer = FSNERTokenizerUtils("sayef/fsner-bert-base-uncased")
 
-# size of query and supports must be same. If you want to find all the entitites in one particular query, just repeat same query n times where n is the size of supports (or entities).
+# size of query and supports must be the same. If you want to find all the entitites in one particular query, just repeat the same query n times where n is equal to the number of supports (or entities).
 
 
 query = [
@@ -51,9 +51,7 @@ query = [
 ]
 
 # each list in supports are the examples of one entity type
-
 # wrap entities around with [E] and [/E] in the examples
-
 
 supports = [
         [
@@ -71,7 +69,6 @@ supports = [
             "[E] Flipkart [/E] started it's journey from zero"
         ]
    ]
-
 
 device = 'cpu'
 

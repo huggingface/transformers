@@ -1,6 +1,5 @@
 from transformers import AutoTokenizer
 
-
 class FSNERTokenizerUtils(object):
     def __init__(self, pretrained_model_name_or_path):
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)

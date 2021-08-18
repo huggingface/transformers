@@ -2,7 +2,6 @@ import torch
 
 from transformers import AutoModel, AutoTokenizer
 
-
 class FSNERModel(torch.nn.Module):
     """
     The FSNER model implements a few-shot named entity recognition method from the paper `Example-Based Named Entity Recognition <https://arxiv.org/abs/2008.10570>`__ by
@@ -27,7 +26,6 @@ class FSNERModel(torch.nn.Module):
         return self.softmax(T * self.cos(q_rep, S_rep))
 
     def forward(self, W_query, W_supports):
-
         """
         Find scores of each token being start and end token for an entity.
         Args:
@@ -41,7 +39,6 @@ class FSNERModel(torch.nn.Module):
             p_end (`torch.FloatTensor` of shape `(batch_size, sequence_length)`): Scores of each token as
             being end token of an entity
         """
-
         q = self.BERT(**W_query)
         S = self.BERT(**W_supports)
 
