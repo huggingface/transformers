@@ -19,7 +19,7 @@ The FSNER model was proposed in [Example-Based Named Entity Recognition](https:/
 
 | identifier        | epochs           | datasets  |
 | ---------- |:----------:| :-----:|
-| sayef/fsner-bert-base-uncased      | 10 | ontonotes5, conll2003, wnut2017, and fin (Alvarado et al.). |
+| [sayef/fsner-bert-base-uncased](https://huggingface.co/sayef/fsner-bert-base-uncased)      | 10 | ontonotes5, conll2003, wnut2017, and fin (Alvarado et al.). |
 
 
 ## Installation and Example Usage
@@ -36,7 +36,7 @@ You can use the FSNER model in two ways:
 
 
 ```python
-from fsner import FSNERModel, FSNERTokenizerWrapper
+from fsner import FSNERModel, FSNERTokenizerUtils
 
 model = FSNERModel("sayef/fsner-bert-base-uncased")
 
