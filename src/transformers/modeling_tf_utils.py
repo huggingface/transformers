@@ -521,6 +521,9 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
                 for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
                     # TF names always start with the model name so we ignore it
 
+                    # handle the case where `TFEncoderDecoderModel` has `tf.keras.Model` for encoder/decoder,
+                    # and the names start with the encoder/decoder model names, not with the name of
+                    # `TFEncoderDecoderModel` model, and we should not ignore them.
                     if layer.name == weight_name.split("/")[0] and isinstance(getattr(model, layer.name), tf.keras.Model):
                         name = weight_name
                     else:

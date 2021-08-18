@@ -187,6 +187,10 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                 f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config: {self.config.decoder}"
             )
 
+        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.     
+        assert encoder.name == "encoder"
+        assert decoder.name == "decoder"
+            
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
         self.encoder.config = self.config.encoder
@@ -204,10 +208,12 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         Returns:
             :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        dummy = {"input_ids": tf.constant(DUMMY_INPUTS), "decoder_input_ids": tf.constant(DUMMY_INPUTS)}
+        # Add `decoder_input_ids` because `self.decoder` requires it.
+        input_ids = tf.constant(DUMMY_INPUTS)
+        dummy = {"input_ids": input_ids, "decoder_input_ids": input_ids}
         # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
         if self.config.add_cross_attention:
-            batch_size, seq_len = tf.constant(DUMMY_INPUTS).shape
+            batch_size, seq_len = input_ids.shape
             shape = (batch_size, seq_len) + (self.config.hidden_size,)
             h = tf.random.uniform(shape=shape)
             dummy["encoder_hidden_states"] = h
@@ -384,6 +390,10 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             kwargs_decoder["name"] = "decoder"
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
+        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.     
+        assert encoder.name == "encoder"
+        assert decoder.name == "decoder"
+            
         # instantiate config with corresponding kwargs
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
@@ -465,9 +475,8 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
             encoder_inputs = input_processing(**encoder_processing_inputs)
 
-            # handle the init case
+            # handle the init case where `dummy_inputs` returns a dict containing `decoder_input_ids`.
             if "decoder_input_ids" in encoder_inputs:
-                assert decoder_input_ids is None
                 decoder_input_ids = encoder_inputs.pop("decoder_input_ids")
 
             encoder_outputs = self.encoder(**encoder_inputs)
