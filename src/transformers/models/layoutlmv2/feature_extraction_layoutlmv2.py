@@ -82,7 +82,8 @@ def apply_tesseract(image: Image.Image):
 
 class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a LayoutLMv2 feature extractor.
+    Constructs a LayoutLMv2 feature extractor. This can be used to resize document images to the same size, as well as
+    to apply OCR on them in order to get a list of words and normalized bounding boxes.
 
     This feature extractor inherits from :class:`~transformers.feature_extraction_utils.PreTrainedFeatureExtractor`
     which contains most of the main methods. Users should refer to this superclass for more information regarding those
@@ -142,10 +143,30 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
-            - **words** -- Optional words as identified by Tesseract OCR (only when :class:`~transformers.BatchFeature`
-              was initialized with :obj:`apply_ocr` set to ``True``).
+            - **words** -- Optional words as identified by Tesseract OCR (only when
+              :class:`~transformers.LayoutLMv2FeatureExtractor` was initialized with :obj:`apply_ocr` set to ``True``).
             - **boxes** -- Optional bounding boxes as identified by Tesseract OCR, normalized based on the image size
-              (only when :class:`~transformers.BatchFeature` was initialized with :obj:`apply_ocr` set to ``True``).
+              (only when :class:`~transformers.LayoutLMv2FeatureExtractor` was initialized with :obj:`apply_ocr` set to
+              ``True``).
+
+        Examples::
+
+            >>> from transformers import LayoutLMv2FeatureExtractor
+            >>> from PIL import Image
+
+            >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+
+            >>> # option 1: with apply_ocr=True (default)
+            >>> feature_extractor = LayoutLMv2FeatureExtractor()
+            >>> encoding = feature_extractor(image, return_tensors="pt")
+            >>> print(encoding.keys())
+            >>> # dict_keys(['pixel_values', 'words', 'boxes'])
+
+            >>> # option 2: with apply_ocr=False
+            >>> feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+            >>> encoding = feature_extractor(image, return_tensors="pt")
+            >>> print(encoding.keys())
+            >>> # dict_keys(['pixel_values'])
         """
 
         # Input type checking for clearer error

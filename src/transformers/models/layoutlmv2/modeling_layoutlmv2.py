@@ -798,32 +798,17 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import LayoutLMv2Tokenizer, LayoutLMv2Model
-            >>> import torch
+            >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model
+            >>> from PIL import Image
 
-            >>> tokenizer = LayoutLMv2Tokenizer.from_pretrained('microsoft/layoutlmv2-base-uncased')
+            >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased')
             >>> model = LayoutLMv2Model.from_pretrained('microsoft/layoutlmv2-base-uncased')
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+            >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+            >>> encoding = processor(image, return_tensors="pt")
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = torch.tensor([token_boxes])
-
-            >>> image = torch.randn((1,3,224,224))
-
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, image=image, attention_mask=attention_mask,
-            ...                  token_type_ids=token_type_ids)
+            >>> outputs = model(**encoding)
             >>> last_hidden_states = outputs.last_hidden_state
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -978,33 +963,19 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import LayoutLMv2Tokenizer, LayoutLMv2ForSequenceClassification
+            >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForSequenceClassification
+            >>> from PIL import Image
+            >>> import torch
 
-            >>> tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
-            >>> model = LayoutLMv2ForSequenceClassification.from_pretrained("microsoft/layoutlmv2-base-uncased")
+            >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased')
+            >>> model = LayoutLMv2ForSequenceClassification.from_pretrained('microsoft/layoutlmv2-base-uncased')
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+            >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
-
-            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = torch.tensor([token_boxes])
-
-            >>> image = torch.randn((1,3,224,224))
-
+            >>> encoding = processor(image, return_tensors="pt")
             >>> sequence_label = torch.tensor([1])
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, image=image, attention_mask=attention_mask,
-            ...                  token_type_ids=token_type_ids, labels=sequence_label)
+            >>> outputs = model(**encoding, labels=sequence_label)
             >>> loss = outputs.loss
             >>> logits = outputs.logits
         """
@@ -1146,33 +1117,20 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import LayoutLMv2Tokenizer, LayoutLMv2ForTokenClassification
+            >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForTokenClassification
+            >>> from PIL import Image
 
-            >>> tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
-            >>> model = LayoutLMv2ForTokenClassification.from_pretrained("microsoft/layoutlmv2-base-uncased")
+            >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased', revision="no_ocr")
+            >>> model = LayoutLMv2ForTokenClassification.from_pretrained('microsoft/layoutlmv2-base-uncased')
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+            >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+            >>> words = ["hello", "world"]
+            >>> boxes = [[1, 2, 3, 4], [5, 6, 7, 8]] # make sure to normalize your bounding boxes
+            >>> word_labels = [0, 1]
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+            >>> encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = torch.tensor([token_boxes])
-
-            >>> image = torch.randn((1,3,224,224))
-
-            >>> token_labels = torch.tensor([1,1,0,0]).unsqueeze(0) # batch size of 1
-
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, image=image, attention_mask=attention_mask,
-            ...                  token_type_ids=token_type_ids, labels=token_labels)
+            >>> outputs = model(**encoding)
             >>> loss = outputs.loss
             >>> logits = outputs.logits
         """
@@ -1280,34 +1238,21 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import LayoutLMv2Tokenizer, LayoutLMv2ForQuestionAnswering
+            >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForQuestionAnswering
+            >>> from PIL import Image
+            >>> import torch
 
-            >>> tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
-            >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
+            >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased')
+            >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained('microsoft/layoutlmv2-base-uncased')
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+            >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+            >>> question = "what's his name?"
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
-
-            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = torch.tensor([token_boxes])
-
-            >>> image = torch.randn((1,3,224,224))
-
+            >>> encoding = processor(image, question, return_tensors="pt")
             >>> start_positions = torch.tensor([1])
             >>> end_positions = torch.tensor([3])
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, image=image, attention_mask=attention_mask, token_type_ids=token_type_ids,
-            ...                 start_positions=start_positions, end_positions=end_positions)
+            >>> outputs = model(**encoding, start_positions=start_positions, end_positions=end_positions)
             >>> loss = outputs.loss
             >>> start_scores = outputs.start_logits
             >>> end_scores = outputs.end_logits

@@ -145,13 +145,12 @@ def subfinder(mylist, pattern):
 
 class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     r"""
-    Construct a LayoutLMv2 tokenizer. Based on WordPiece.
+    Construct a LayoutLMv2 tokenizer. Based on WordPiece. :class:`~transformers.LayoutLMv2Tokenizer` can be used to
+    turn words, word-level bounding boxes and optional word labels to token-level :obj:`input_ids`,
+    :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`, and optional :obj:`labels` (for token classification).
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
-    :class:`~transformers.LayoutLMv2Tokenizer` can be used to turn words, word-level bounding boxes and optional
-    word_labels to token-level obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`, and
-    optionally :obj:`word_labels` (for token classification).
 
     :class:`~transformers.LayoutLMv2Tokenizer` runs end-to-end tokenization: punctuation splitting and wordpiece. It
     also turns the word-level bounding boxes into token-level bounding boxes.

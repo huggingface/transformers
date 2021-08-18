@@ -31,6 +31,8 @@ document image understanding benchmarks:
   documents for testing).
 - document image classification: the `RVL-CDIP <https://www.cs.cmu.edu/~aharley/rvl-cdip/>`__ dataset (a collection of
   400,000 images belonging to one of 16 classes).
+- document visual question answering: the `DocVQA <https://arxiv.org/abs/2007.00398>` dataset (a collection of 50,000
+  questions defined on 12,000+ document images).
 
 The abstract from the paper is the following:
 
@@ -117,99 +119,133 @@ Usage: LayoutLMv2Processor
 The easiest way to prepare data for the model is to use :class:`~transformer.LayoutLMv2Processor`, which internally
 combines a feature extractor (:class:`~transformer.LayoutLMv2FeatureExtractor`) and a tokenizer
 (:class:`~transformer.LayoutLMv2Tokenizer` or :class:`~transformer.LayoutLMv2TokenizerFast`). The feature extractor
-handles the image-related stuff, while the tokenizer handles the text-related stuff. A processor combines both, which
-is ideal for a multi-modal model like LayoutLMv2.
+handles the image modality, while the tokenizer handles the text modality. A processor combines both, which is ideal
+for a multi-modal model like LayoutLMv2. Note that you can still use both separately, if you only want to handle one
+modality.
+
+.. code-block::
+
+    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
+
+    feature_extractor = LayoutLMv2FeatureExtractor() # apply_ocr is set to True by default
+    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
+    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
 
 In short, one can provide a document image (and possibly additional data) to :class:`~transformer.LayoutLMv2Processor`,
 and it will create the inputs expected by the model. Internally, the processor first uses
 :class:`~transformer.LayoutLMv2FeatureExtractor` to apply OCR on the image to get a list of words and normalized
 bounding boxes, as well to resize the image to a given size in order to get the :obj:`image` input. The words and
-normalized bounding boxes are then provided to :class:`~transformer.LayoutLMv2TokenizerFast`, which converts them to
-token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox` and optional :obj:`labels`.
+normalized bounding boxes are then provided to :class:`~transformer.LayoutLMv2Tokenizer` or
+:class:`~transformer.LayoutLMv2TokenizerFast`, which converts them to token-level :obj:`input_ids`,
+:obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`. Optionally, one can provide word labels to the processor,
+which are turned into token-level :obj:`labels`.
 
 :class:`~transformer.LayoutLMv2Processor` uses `PyTesseract <https://pypi.org/project/pytesseract/>`__, a Python
 wrapper around Google's Tesseract OCR engine, under the hood. Note that you can still use your own OCR engine of
 choice, and provide the words and normalized boxes yourself. This requires initializing
-:class:`~transformer.LayoutLMv2FeatureExtractor` with :obj:`apply_ocr` set to :obj:`False`, as shown below.
+:class:`~transformer.LayoutLMv2FeatureExtractor` with :obj:`apply_ocr` set to :obj:`False`.
 
 In total, there are 5 use cases that are supported by the processor. Below, we list them all. Note that each of these
-use cases work for both batched and non-batched inputs.
+use cases work for both batched and non-batched inputs (we illustrate them for non-batched inputs).
 
 **Use case 1: document image classification (training, inference) + token classification (inference), apply_ocr =
 True**
 
-.. code-block::
-
-    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
-
-    feature_extractor = LayoutLMv2FeatureExtractor() # apply_ocr set to True by default
-    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
-    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
-
-    image = get_image()
-    input_processor = processor(image, return_tensors="pt")
-
-**Use case 2: document image classification (training, inference) + token classification (inference), apply_ocr =
-False**
+This is the simplest case, in which the processor (actually the feature extractor) will perform OCR on the image to get
+the words and normalized bounding boxes.
 
 .. code-block::
 
-    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
+    from transformers import LayoutLMv2Processor
+    from PIL import Image
 
-    feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
-    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
-    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
+    processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-    image = get_image()
+    image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+    encoding = processor(image, return_tensors="pt") # you can also add all tokenizer parameters here such as padding, truncation
+    print(encoding.keys())
+    # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
+
+**Use case 2: document image classification (training, inference) + token classification (inference), apply_ocr=False**
+
+In case one wants to do OCR themselves, one can initialize the feature extractor with :obj:`apply_ocr` set to
+:obj:`False`. In that case, one should provide the words and corresponding (normalized) bounding boxes themselves to
+the processor.
+
+.. code-block::
+
+    from transformers import LayoutLMv2Processor
+    from PIL import Image
+
+    processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
+
+    image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
     words = ["hello", "world"]
-    boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-    input_processor = processor(image, words, boxes=boxes, return_tensors="pt")
+    boxes = [[1, 2, 3, 4], [5, 6, 7, 8]] # make sure to normalize your bounding boxes
+    encoding = processor(image, words, boxes=boxes, return_tensors="pt")
+    print(encoding.keys())
+    # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 
 **Use case 3: token classification (training), apply_ocr=False**
 
+For token classification tasks (such as FUNSD, CORD, SROIE, Kleister-NDA), one can also provide the corresponding word
+labels in order to train a model. The processor will then convert these into token-level :obj:`labels`. By default, it
+will only label the first wordpiece of a word, and label the remaining wordpieces with -100, which is the
+:obj:`ignore_index` of PyTorch's CrossEntropyLoss. In case you want all wordpieces of a word to be labeled, you can
+initialize the tokenizer with :obj:`only_label_first_subword` set to :obj:`False`.
+
 .. code-block::
 
-    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
+    from transformers import LayoutLMv2Processor
+    from PIL import Image
 
-    feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
-    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
-    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
+    processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
-    image = get_image()
+    image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
     words = ["hello", "world"]
-    boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
+    boxes = [[1, 2, 3, 4], [5, 6, 7, 8]] # make sure to normalize your bounding boxes
     word_labels = [1, 2]
-    input_processor = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+    encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+    print(encoding.keys())
+    # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'labels', 'image'])
 
 **Use case 4: visual question answering (inference), apply_ocr=True**
 
+For visual question answering tasks (such as DocVQA), you can provide a question to the processor. By default, the
+processor will apply OCR on the image, and create [CLS] question tokens [SEP] word tokens [SEP].
+
 .. code-block::
 
-    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
+    from transformers import LayoutLMv2Processor
+    from PIL import Image
 
-    feature_extractor = LayoutLMv2FeatureExtractor()
-    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
-    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
+    processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-    image = get_image()
+    image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
     question = "What's his name?"
-    input_processor = processor(image, question, return_tensors="pt") 
+    encoding = processor(image, question, return_tensors="pt") 
+    print(encoding.keys())
+    # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 
 **Use case 5: visual question answering (inference), apply_ocr=False**
 
+For visual question answering tasks (such as DocVQA), you can provide a question to the processor. If you want to
+perform OCR yourself, you can provide your own words and (normalized) bounding boxes to the processor.
+
 .. code-block::
 
-    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
+    from transformers import LayoutLMv2Processor
+    from PIL import Image
 
-    feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
-    tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
-    processor = LayoutLMv2Processor(feature_extractor, tokenizer)
+    processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
-    image = get_image()
+    image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
     question = "What's his name?"
     words = ["hello", "world"]
-    boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-    input_processor = processor(image, question, words, boxes=boxes, return_tensors="pt")  
+    boxes = [[1, 2, 3, 4], [5, 6, 7, 8]] # make sure to normalize your bounding boxes
+    encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")  
+    print(encoding.keys())
+    # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 
 LayoutLMv2Config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
