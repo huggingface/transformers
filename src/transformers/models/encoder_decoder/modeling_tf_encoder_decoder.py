@@ -17,8 +17,10 @@
 
 from typing import Optional
 
+import tensorflow as tf
+
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_tf_outputs import TFSeq2SeqLMOutput, TFBaseModelOutput
 from ...modeling_tf_utils import TFPreTrainedModel, input_processing
 from ...utils import logging
@@ -166,12 +168,12 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         if encoder is None:
             from ..auto.modeling_tf_auto import TFAutoModel
 
-            encoder = TFAutoModel.from_config(config.encoder)
+            encoder = TFAutoModel.from_config(config.encoder, name="encoder")
 
         if decoder is None:
-            from ..auto.modeling_auto import TFAutoModelForCausalLM
+            from ..auto.modeling_tf_auto import TFAutoModelForCausalLM
 
-            decoder = TFAutoModelForCausalLM.from_config(config.decoder)
+            decoder = TFAutoModelForCausalLM.from_config(config.decoder, name="decoder")
 
         self.encoder = encoder
         self.decoder = decoder
@@ -194,6 +196,24 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             self.encoder.get_output_embeddings() is None
         ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
 
+    @property
+    def dummy_inputs(self):
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        dummy = {"input_ids": tf.constant(DUMMY_INPUTS), "decoder_input_ids": tf.constant(DUMMY_INPUTS)}
+        # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
+        if self.config.add_cross_attention:
+            batch_size, seq_len = tf.constant(DUMMY_INPUTS).shape
+            shape = (batch_size, seq_len) + (self.config.hidden_size,)
+            h = tf.random.uniform(shape=shape)
+            dummy["encoder_hidden_states"] = h
+
+        return dummy
+
     def get_encoder(self):
         return self.encoder
 
@@ -208,6 +228,24 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
+
+    # def save_pretrained(self, save_directory, saved_model=False, version=1, push_to_hub=False, **kwargs):
+    #
+    #     import os
+    #     self.encoder.save_pretrained(os.path.join(save_directory, 'encoder'), saved_model, version, push_to_hub, **kwargs)
+    #     self.decoder.save_pretrained(os.path.join(save_directory, 'decoder'), saved_model, version, push_to_hub, **kwargs)
+    #     self.config.save_pretrained(save_directory, push_to_hub, **kwargs)
+    #
+    # @classmethod
+    # def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    #
+    #     import os
+    #     return cls.from_encoder_decoder_pretrained(
+    #         os.path.join(pretrained_model_name_or_path, 'encoder'),
+    #         os.path.join(pretrained_model_name_or_path, 'decoder'),
+    #         *model_args,
+    #         **kwargs
+    #     )
 
     @classmethod
     def from_encoder_decoder_pretrained(
@@ -315,6 +353,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
                 kwargs_encoder["config"] = encoder_config
 
+            kwargs_encoder["name"] = "encoder"
             encoder = TFAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
         decoder = kwargs_decoder.pop("model", None)
@@ -342,6 +381,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
+            kwargs_decoder["name"] = "decoder"
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
@@ -424,6 +464,12 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                     encoder_processing_inputs[k] = v
 
             encoder_inputs = input_processing(**encoder_processing_inputs)
+
+            # handle the init case
+            if "decoder_input_ids" in encoder_inputs:
+                assert decoder_input_ids is None
+                decoder_input_ids = encoder_inputs.pop("decoder_input_ids")
+
             encoder_outputs = self.encoder(**encoder_inputs)
 
         encoder_hidden_states = encoder_outputs[0]

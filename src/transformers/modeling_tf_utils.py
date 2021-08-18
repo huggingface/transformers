@@ -520,7 +520,11 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
                 # And a set with only the names
                 for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
                     # TF names always start with the model name so we ignore it
-                    name = "/".join(weight_name.split("/")[1:])
+
+                    if layer.name == weight_name.split("/")[0] and isinstance(getattr(model, layer.name), tf.keras.Model):
+                        name = weight_name
+                    else:
+                        name = "/".join(weight_name.split("/")[1:])
 
                     if _prefix is not None:
                         name = _prefix + "/" + name
