@@ -102,13 +102,20 @@ class GPTJAttention(nn.Module):
         if config.rotary_dim is not None:
             self.rotary_dim = config.rotary_dim
 
-    def _split_heads(self, tensor, num_attention_heads, attn_head_size):
+    def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
         """
         Splits n_ctx dim into attn_head_size and num_attention_heads
         """
         new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
         tensor = tensor.view(*new_shape)
-        return tensor
+        if rotary:
+            return tensor
+        if len(tensor.shape) == 5:
+            return tensor.permute(0, 1, 3, 2, 4)  # (batch, blocks, head, block_length, head_features)
+        elif len(tensor.shape) == 4:
+            return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+        else:
+            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
 
     def _merge_heads(self, tensor, num_attention_heads, attn_head_size):
         """
@@ -175,35 +182,34 @@ class GPTJAttention(nn.Module):
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
-        query = self._split_heads(query, self.num_attention_heads, self.head_dim, self.rotary)
-        key = self._split_heads(key, self.num_attention_heads, self.head_dim, self.rotary)
+        query = self._split_heads(query, self.num_attention_heads, self.head_dim, True)
+        key = self._split_heads(key, self.num_attention_heads, self.head_dim, True)
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
 
-        if self.rotary:
-            seq_len = key.shape[1]
-            offset = 0
-            if layer_past is not None:
-                offset = layer_past[0].shape[-2]
-                seq_len += offset
-            if self.rotary_dim is not None:
-                k_rot = key[:, :, :, : self.rotary_dim]
-                k_pass = key[:, :, :, self.rotary_dim :]
+        seq_len = key.shape[1]
+        offset = 0
+        if layer_past is not None:
+            offset = layer_past[0].shape[-2]
+            seq_len += offset
+        if self.rotary_dim is not None:
+            k_rot = key[:, :, :, : self.rotary_dim]
+            k_pass = key[:, :, :, self.rotary_dim :]
 
-                q_rot = query[:, :, :, : self.rotary_dim]
-                q_pass = query[:, :, :, self.rotary_dim :]
+            q_rot = query[:, :, :, : self.rotary_dim]
+            q_pass = query[:, :, :, self.rotary_dim :]
 
-                sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
-                k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
-                q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset)
+            sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
+            k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
+            q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset)
 
-                key = torch.cat([k_rot, k_pass], dim=-1)
-                query = torch.cat([q_rot, q_pass], dim=-1)
-            else:
-                sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
-                key = apply_rotary_pos_emb(key, sincos, offset=offset)
-                query = apply_rotary_pos_emb(query, sincos, offset=offset)
-            key = key.permute(0, 2, 1, 3)
-            query = query.permute(0, 2, 1, 3)
+            key = torch.cat([k_rot, k_pass], dim=-1)
+            query = torch.cat([q_rot, q_pass], dim=-1)
+        else:
+            sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
+            key = apply_rotary_pos_emb(key, sincos, offset=offset)
+            query = apply_rotary_pos_emb(query, sincos, offset=offset)
+        key = key.permute(0, 2, 1, 3)
+        query = query.permute(0, 2, 1, 3)
 
         if layer_past is not None:
             past_key = layer_past[0]
@@ -506,12 +512,8 @@ class GPTJModel(GPTJPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        if self.rotary is not None:
-            hidden_states = inputs_embeds
-        else:
-            position_embeds = self.wpe(position_ids)
-            hidden_states = inputs_embeds + position_embeds
-
+        hidden_states = inputs_embeds
+        
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
             hidden_states = hidden_states + token_type_embeds
