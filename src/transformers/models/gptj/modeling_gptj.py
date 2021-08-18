@@ -268,11 +268,11 @@ class GPTJMLP(nn.Module):
 
 
 class GPTJBlock(nn.Module):
-    def __init__(self, config, layer_id):
+    def __init__(self, config):
         super().__init__()
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
-        self.attn = GPTJAttention(config, layer_id)
+        self.attn = GPTJAttention(config)
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
@@ -412,7 +412,7 @@ class GPTJModel(GPTJPreTrainedModel):
         self.vocab_size = config.vocab_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([GPTJBlock(config, layer_id=i) for i in range(config.n_layer)])
+        self.h = nn.ModuleList([GPTJBlock(config) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
         self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
         self.init_weights()
