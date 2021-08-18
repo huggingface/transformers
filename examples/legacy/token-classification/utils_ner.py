@@ -206,7 +206,7 @@ class TokenClassificationTask:
 if is_torch_available():
     import torch
     from torch import nn
-    from torch.utils.data.dataset import Dataset
+    from torch.utils.data import Dataset
 
     class TokenClassificationDataset(Dataset):
         """
