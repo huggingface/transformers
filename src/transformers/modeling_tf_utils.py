@@ -362,14 +362,14 @@ def input_processing(func, config, input_ids, **kwargs):
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
 
-    if "past" in kwargs["kwargs_call"]:
-        past = kwargs["kwargs_call"].pop("past")
-        if 'past_key_values' in kwargs:
-            kwargs['past_key_values'] = past
-    elif "past_key_values" in kwargs["kwargs_call"]:
-        past = kwargs["kwargs_call"].pop("past_key_values")
-        if 'past' in kwargs:
-            kwargs['past'] = past
+    # `TFGPT2` has `past` parameter while other models use `past_key_values`
+    # It is probably better to change `TFGPT2`'s parameter instead of adding this block.
+    # (The past keys/values are added only if the model accepts it - otherwise we should leave it in `kwargs_call`)
+    if "past" in kwargs["kwargs_call"] and "past_key_values" in kwargs:
+        kwargs["past_key_values"] = kwargs["kwargs_call"].pop("past")
+        # add `past` only if `past_key_values`
+    elif "past_key_values" in kwargs["kwargs_call"] and "past" in kwargs:
+        kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
     if len(kwargs["kwargs_call"]) > 0:
         raise ValueError(
