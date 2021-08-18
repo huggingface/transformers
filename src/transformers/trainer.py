@@ -208,11 +208,11 @@ class Trainer:
             The dataset to use for training. If it is an :obj:`datasets.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
 
-            Note that if it's a :obj:`torch.utils.data.IterableDataset` with some randomization and you are
-            training in a distributed fashion, your iterable dataset should either use a internal attribute
-            :obj:`generator` that is a :obj:`torch.Generator` for the randomization that must be identical on all
-            processes (and the Trainer will manually set the seed of this :obj:`generator` at each epoch) or have a
-            :obj:`set_epoch()` method that internally sets the seed of the RNGs used.
+            Note that if it's a :obj:`torch.utils.data.IterableDataset` with some randomization and you are training in
+            a distributed fashion, your iterable dataset should either use a internal attribute :obj:`generator` that
+            is a :obj:`torch.Generator` for the randomization that must be identical on all processes (and the Trainer
+            will manually set the seed of this :obj:`generator` at each epoch) or have a :obj:`set_epoch()` method that
+            internally sets the seed of the RNGs used.
         eval_dataset (:obj:`torch.utils.data.Dataset`, `optional`):
              The dataset to use for evaluation. If it is an :obj:`datasets.Dataset`, columns not accepted by the
              ``model.forward()`` method are automatically removed.
