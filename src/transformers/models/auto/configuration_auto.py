@@ -20,6 +20,7 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
+from ...file_utils import CONFIG_NAME
 
 
 CONFIG_MAPPING_NAMES = OrderedDict(
@@ -520,6 +521,6 @@ class AutoConfig:
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "
-            "Should have a `model_type` key in its config.json, or contain one of the following strings "
+            f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
             f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
         )
