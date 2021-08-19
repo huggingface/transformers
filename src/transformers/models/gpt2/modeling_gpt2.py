@@ -697,6 +697,7 @@ class GPT2Model(GPT2PreTrainedModel):
         # GPT2Attention mask.
         if attention_mask is not None:
             raise BatchSizeError("batch_size has to be defined and > 0") if not batch_size or batch_size<=0 else None
+            
             attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
