@@ -4,4 +4,6 @@
 import os, sys
 
 class BatchSizeError(BaseException):
-    pass
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+    
