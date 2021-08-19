@@ -175,9 +175,9 @@ class TrainerCallback:
             The optimizer used for the training steps.
         lr_scheduler (:obj:`torch.optim.lr_scheduler.LambdaLR`):
             The scheduler used for setting the learning rate.
-        train_dataloader (:obj:`torch.utils.data.dataloader.DataLoader`, `optional`):
+        train_dataloader (:obj:`torch.utils.data.DataLoader`, `optional`):
             The current dataloader used for training.
-        eval_dataloader (:obj:`torch.utils.data.dataloader.DataLoader`, `optional`):
+        eval_dataloader (:obj:`torch.utils.data.DataLoader`, `optional`):
             The current dataloader used for training.
         metrics (:obj:`Dict[str, float]`):
             The metrics computed by the last evaluation phase.
