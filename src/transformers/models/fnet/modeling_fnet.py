@@ -395,6 +395,7 @@ class FNetOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->FNet
 class FNetPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -667,6 +668,8 @@ class FNetForPreTraining(FNetPreTrainedModel):
         Returns:
 
         Example::
+
+
             >>> from transformers import FNetTokenizer, FNetForPreTraining
             >>> import torch
             >>> tokenizer = FNetTokenizer.from_pretrained('google/fnet-base')
@@ -773,19 +776,6 @@ class FNetForMaskedLM(FNetPreTrainedModel):
 
         return MaskedLMOutput(loss=masked_lm_loss, logits=prediction_scores, hidden_states=outputs.hidden_states)
 
-    def prepare_inputs_for_generation(self, input_ids, **model_kwargs):
-        input_shape = input_ids.shape
-        effective_batch_size = input_shape[0]
-
-        #  add a dummy token
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
-        dummy_token = torch.full(
-            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-        )
-        input_ids = torch.cat([input_ids, dummy_token], dim=1)
-
-        return {"input_ids": input_ids}
-
 
 @add_start_docstrings(
     """FNet Model with a `next sentence prediction (classification)` head on top. """,
@@ -824,6 +814,8 @@ class FNetForNextSentencePrediction(FNetPreTrainedModel):
         Returns:
 
         Example::
+
+
             >>> from transformers import FNetTokenizer, FNetForNextSentencePrediction
             >>> import torch
             >>> tokenizer = FNetTokenizer.from_pretrained('google/fnet-base')

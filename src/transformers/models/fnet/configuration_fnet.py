@@ -76,16 +76,17 @@ class FNetConfig(PretrainedConfig):
 
     Example::
 
-    >>> from transformers import FNetModel, FNetConfig
 
-    >>> # Initializing a FNet fnet-base style configuration
-    >>> configuration = FNetConfig()
+        >>> from transformers import FNetModel, FNetConfig
 
-    >>> # Initializing a model from the fnet-base style configuration
-    >>> model = FNetModel(configuration)
+        >>> # Initializing a FNet fnet-base style configuration
+        >>> configuration = FNetConfig()
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
+        >>> # Initializing a model from the fnet-base style configuration
+        >>> model = FNetModel(configuration)
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
     """
     model_type = "fnet"
 
