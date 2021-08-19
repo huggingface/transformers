@@ -29,7 +29,7 @@ if is_torch_available():
 
     from transformers import (
         GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
-        GPT2Tokenizer,
+        AutoTokenizer,
         GPTJForCausalLM,
         GPTJForSequenceClassification,
         GPTJModel,
@@ -397,7 +397,7 @@ class GPTJModelTest(unittest.TestCase):
     def test_batch_generation(self):
         model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
         tokenizer.padding_side = "left"
 
@@ -446,7 +446,7 @@ class GPTJModelTest(unittest.TestCase):
 
         expected_output_sentence = [
             "Hello, my dog is a little over a year old and has been diagnosed with a heart murmur",
-            "Today, I’m going to talk about the most important thing in the world: the future",
+            "Today, I’m going to talk about the most important thing in the",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
@@ -494,7 +494,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gptj_sample(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
         model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
         model.to(torch_device)
 
@@ -520,7 +520,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gptj_sample_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
         model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
         model.to(torch_device)
 

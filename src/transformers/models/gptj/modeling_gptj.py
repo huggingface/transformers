@@ -76,7 +76,7 @@ class GPTJAttention(nn.Module):
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
         )
@@ -88,11 +88,11 @@ class GPTJAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_attention_heads
-        self.register_buffer("scale_attn", torch.sqrt(torch.tensor(self.head_dim)))
         if self.head_dim * self.num_attention_heads != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and `num_attention_heads`: {self.num_attention_heads})."
             )
+        self.scale_attn = torch.sqrt(torch.tensor(self.head_dim))
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -268,7 +268,7 @@ class GPTJMLP(nn.Module):
 class GPTJBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * config.n_embd
+        inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
         self.attn = GPTJAttention(config)
         self.mlp = GPTJMLP(inner_dim, config)
@@ -482,23 +482,21 @@ class GPTJModel(GPTJPreTrainedModel):
         # Attention mask.
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
-            global_attention_mask = attention_mask.view(batch_size, -1)
+            attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_attention_heads, from_seq_length, to_seq_length]
+            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            global_attention_mask = global_attention_mask[:, None, None, :]
+            attention_mask = attention_mask[:, None, None, :]
 
-            # Since global_attention_mask is 1.0 for positions we want to attend and 0.0 for
+            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            global_attention_mask = global_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            global_attention_mask = (1.0 - global_attention_mask) * -10000.0
-        else:
-            global_attention_mask = None
+            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            attention_mask = (1.0 - attention_mask) * -10000.0
 
         # Local causal attention mask
         batch_size, seq_length = input_shape
