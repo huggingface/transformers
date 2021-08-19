@@ -375,7 +375,7 @@ class TFBertAttention(tf.keras.layers.Layer):
         attention_output = self.dense_output(
             hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
         )
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions (possibly with past_key_value) if we output them
 
         return outputs
 
@@ -750,6 +750,10 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             kwargs_call=kwargs,
         )
 
+        # Copied from `modeling_bert.py` (we can't do this in `booleans_processing`)
+        if not self.is_decoder:
+            inputs["use_cache"] = False
+
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
@@ -803,9 +807,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
                 seq_ids[None, :, None],
             )
             causal_mask = tf.cast(causal_mask, dtype=inputs["attention_mask"].dtype)
-            inputs["attention_mask"] = causal_mask * inputs["attention_mask"][:, None, :]
-            attention_mask_shape = shape_list(inputs["attention_mask"])
-            extended_attention_mask = tf.reshape(inputs["attention_mask"], (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2]))
+            extended_attention_mask = causal_mask * inputs["attention_mask"][:, None, :]
+            attention_mask_shape = shape_list(extended_attention_mask)
+            extended_attention_mask = tf.reshape(extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2]))
         else:
             extended_attention_mask = tf.reshape(inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1]))
 
@@ -1403,7 +1407,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
 
-        return {"input_ids": inputs, "attention_mask": attention_mask, "past_key_values": past}
+        return {"input_ids": inputs, "attention_mask": attention_mask, "past_key_values": past, "use_cache": model_kwargs["use_cache"]}
 
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
