@@ -674,8 +674,6 @@ class DataCollatorForLanguageModeling:
         return batch
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        import torch
-
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], (dict, BatchEncoding)):
             batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
@@ -731,8 +729,6 @@ class DataCollatorForLanguageModeling:
         return inputs, labels
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        import numpy as np
-
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], (dict, BatchEncoding)):
             batch = self.tokenizer.pad(examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of)
