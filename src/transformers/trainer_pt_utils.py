@@ -50,6 +50,8 @@ if is_sagemaker_dp_enabled():
 else:
     import torch.distributed as dist
 
+if is_training_run_on_sagemaker():
+    logging.add_handler(StreamHandler(sys.stdout))
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
@@ -61,9 +63,6 @@ except ImportError:
     SAVE_STATE_WARNING = ""
 
 logger = logging.get_logger(__name__)
-
-if is_training_run_on_sagemaker():
-    logging.add_handler(StreamHandler(sys.stdout))
 
 
 def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
