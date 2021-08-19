@@ -1038,9 +1038,11 @@ if is_torch_available():
             "load_tf_weights_in_roformer",
         ]
     )
+    _import_structure["models.speech_encoder_decoder"] = ["SpeechEncoderDecoderModel"]
     _import_structure["models.speech_to_text"].extend(
         [
             "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Speech2TextForCausalLM",
             "Speech2TextForConditionalGeneration",
             "Speech2TextModel",
             "Speech2TextPreTrainedModel",
@@ -2596,8 +2598,10 @@ if TYPE_CHECKING:
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
         )
+        from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Speech2TextForCausalLM,
             Speech2TextForConditionalGeneration,
             Speech2TextModel,
             Speech2TextPreTrainedModel,

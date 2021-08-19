@@ -39,6 +39,7 @@ if is_speech_available():
 if is_torch_available():
     _import_structure["modeling_speech_to_text"] = [
         "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Speech2TextForCausalLM",
         "Speech2TextForConditionalGeneration",
         "Speech2TextModel",
         "Speech2TextPreTrainedModel",
@@ -60,6 +61,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Speech2TextForCausalLM,
             Speech2TextForConditionalGeneration,
             Speech2TextModel,
             Speech2TextPreTrainedModel,
