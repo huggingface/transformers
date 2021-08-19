@@ -5,5 +5,5 @@ import os, sys
 
 class BatchSizeError(BaseException):
     def __init__(self, *args: object) -> None:
-        super().__init__(*args)
+        super(BatchSizeError,self).__init__(*args)
     
