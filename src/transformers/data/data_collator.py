@@ -61,21 +61,6 @@ def default_data_collator(features: List[InputDataClass], return_tensors="pt") -
 class DefaultDataCollator:
     return_tensors: str = "pt"
 
-    def __post_init__(self):
-        try:
-            if self.return_tensors == "pt":
-                import torch
-            elif self.return_tensors == "tf":
-                import tensorflow
-            elif self.return_tensors == "np":
-                import numpy
-            else:
-                raise ValueError(f"Framework '{self.return_tensors}' not recognized!")
-        except ImportError:
-            raise ImportError(
-                f"return_tensors is set to {self.return_tensors} " "but we were unable to load that framework!"
-            )
-
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
@@ -222,21 +207,6 @@ class DataCollatorWithPadding:
     pad_to_multiple_of: Optional[int] = None
     return_tensors: str = "pt"
 
-    def __post_init__(self):
-        try:
-            if self.return_tensors == "pt":
-                import torch
-            elif self.return_tensors == "tf":
-                import tensorflow
-            elif self.return_tensors == "np":
-                import numpy
-            else:
-                raise ValueError(f"Framework '{self.return_tensors}' not recognized!")
-        except ImportError:
-            raise ImportError(
-                f"return_tensors is set to {self.return_tensors} " "but we were unable to load that framework!"
-            )
-
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
         batch = self.tokenizer.pad(
             features,
@@ -289,21 +259,6 @@ class DataCollatorForTokenClassification:
     pad_to_multiple_of: Optional[int] = None
     label_pad_token_id: int = -100
     return_tensors: str = "pt"
-
-    def __post_init__(self):
-        try:
-            if self.return_tensors == "pt":
-                import torch
-            elif self.return_tensors == "tf":
-                import tensorflow
-            elif self.return_tensors == "np":
-                import numpy
-            else:
-                raise ValueError(f"Framework '{self.return_tensors}' not recognized!")
-        except ImportError:
-            raise ImportError(
-                f"return_tensors is set to {self.return_tensors} " "but we were unable to load that framework!"
-            )
 
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
