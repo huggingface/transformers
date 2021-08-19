@@ -20,9 +20,11 @@ import datetime
 import json
 import math
 import os
+import sys
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
+from logging import StreamHandler
 from typing import Dict, Iterator, List, Optional, Union
 
 import numpy as np
@@ -33,7 +35,12 @@ from torch.utils.data.dataset import Dataset, IterableDataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
-from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
+from .file_utils import (
+    is_sagemaker_dp_enabled,
+    is_sagemaker_mp_enabled,
+    is_torch_tpu_available,
+    is_training_run_on_sagemaker,
+)
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -54,6 +61,9 @@ except ImportError:
     SAVE_STATE_WARNING = ""
 
 logger = logging.get_logger(__name__)
+
+if is_training_run_on_sagemaker():
+    logging.add_handler(StreamHandler(sys.stdout))
 
 
 def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
