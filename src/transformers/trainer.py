@@ -175,8 +175,8 @@ if is_sagemaker_mp_enabled():
 
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 
-if is_training_run_on_sagemaker():
-    logging.add_handler(StreamHandler(sys.stdout))
+# if is_training_run_on_sagemaker():
+#     logging.add_handler(StreamHandler(sys.stdout))
 
 
 if TYPE_CHECKING:
