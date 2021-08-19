@@ -196,7 +196,9 @@ class TrainingArguments:
             :func:`~transformers.Trainer.model_init` function to instantiate the model if it has some randomly
             initialized parameters.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use 16-bit (mixed) precision training instead of 32-bit training.
+            Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
+        bf16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
             For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
             on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
@@ -878,7 +880,7 @@ class TrainingArguments:
 
         if device.type == "cuda":
             torch.cuda.set_device(device)
-
+        
         return device
 
     @property
