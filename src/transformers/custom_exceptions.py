@@ -3,5 +3,5 @@
 
 import os, sys
 
-class BatchSizeError(Exception):
+class BatchSizeError(BaseException):
     pass
