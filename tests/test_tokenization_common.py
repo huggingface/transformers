@@ -3197,7 +3197,7 @@ class TokenizerTesterMixin:
                 self.assertIn(
                     "an_additional_special_token", tokenizer_without_change_in_init.additional_special_tokens
                 )
-                # self.assertIn("an_additional_special_token",tokenizer_without_change_in_init.get_vocab()) # ByT5Tokenization no vocab
+                self.assertIn("an_additional_special_token",tokenizer_without_change_in_init.get_vocab())
                 self.assertEqual(
                     ["an_additional_special_token"],
                     tokenizer_without_change_in_init.convert_ids_to_tokens(
