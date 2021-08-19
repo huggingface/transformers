@@ -147,7 +147,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
     """
     config_class = EncoderDecoderConfig
-    base_model_prefix = "encoder_decoder"
+    base_model_prefix = "speech_encoder_decoder"
 
     def __init__(
         self,
@@ -198,9 +198,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         assert (
             self.encoder.get_output_embeddings() is None
         ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
-
-        # tie encoder, decoder weights if config set accordingly
-        self.decoder.tie_weights()
 
     def get_encoder(self):
         return self.encoder
@@ -429,6 +426,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
         encoder_hidden_states = encoder_outputs[0]
 
+        # project encoder_hidden_states
+        encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
+
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -455,7 +455,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+#            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_last_hidden_state=encoder_hidden_states,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )

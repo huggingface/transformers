@@ -141,6 +141,8 @@ class Speech2TextConfig(PretrainedConfig):
         max_target_positions=1024,
         num_conv_layers=2,
         conv_kernel_sizes=(5, 5),
+        subsample_kernels=None,
+        subsample_strides=None,
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
@@ -190,6 +192,9 @@ class Speech2TextConfig(PretrainedConfig):
                 f"but is `len(config.conv_kernel_sizes) = {len(self.conv_kernel_sizes)}`,"
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
+
+        self.subsample_kernels = subsample_kernels
+        self.subsample_strides = subsample_strides
 
     @property
     def num_attention_heads(self) -> int:

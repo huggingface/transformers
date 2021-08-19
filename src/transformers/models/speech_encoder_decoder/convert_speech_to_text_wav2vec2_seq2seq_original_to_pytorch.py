@@ -16,16 +16,12 @@
 
 
 import argparse
-import json
-import os
 
 import fairseq
 import torch
-from fairseq.data import Dictionary
 from torch import nn
 
 from transformers import (
-    EncoderDecoderConfig,
     Speech2TextConfig,
     Speech2TextForCausalLM,
     SpeechEncoderDecoderModel,
@@ -120,7 +116,6 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                #                mapped_key = "wav2vec2." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
                 if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                     is_used = True
                     if "*" in mapped_key:
@@ -133,7 +128,6 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
                     elif "bias" in name:
                         weight_type = "bias"
                     elif "weight" in name:
-                        # TODO: don't match quantizer.weight_proj
                         weight_type = "weight"
                     else:
                         weight_type = None
@@ -191,50 +185,20 @@ def make_linear_from_emb(emb):
 
 
 @torch.no_grad()
-def convert_wav2vec2_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None):
+def convert_wav2vec2_checkpoint(checkpoint_path, pytorch_dump_folder_path, dict_path, encoder_config_path, decoder_config_path, vocab_size, num_decoder_layers):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
-    encoder_config = Wav2Vec2Config.from_pretrained("facebook/wav2vec2-large-lv60")
-    decoder_config = Speech2TextConfig.from_pretrained(
-        "facebook/s2t-small-mustc-en-fr-st", vocab_size=10224, decoder_layers=7
-    )
-    config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+    encoder_config = Wav2Vec2Config.from_pretrained(encoder_config_path)
+    decoder_config = Speech2TextConfig.from_pretrained(decoder_config_path, vocab_size=vocab_size, decoder_layers=num_decoder_layers)
 
-    #    target_dict = Dictionary.load(dict_path)
-    #
-    # important change bos & pad token id since CTC symbol is <pad> and
-    # not <s> as in fairseq
-    #            config.bos_token_id = target_dict.pad_index
-    #            config.pad_token_id = target_dict.bos_index
-    #            config.eos_token_id = target_dict.eos_index
-    #            config.vocab_size = len(target_dict.symbols)
-    #            vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
-    #            if not os.path.isdir(pytorch_dump_folder_path):
-    #                logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
-    #                return
-    #            os.makedirs(pytorch_dump_folder_path, exist_ok=True)
-    #            with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
-    #                json.dump(target_dict.indices, vocab_handle)
-    #            tokenizer = Wav2Vec2CTCTokenizer(
-    #                vocab_path,
-    #                unk_token=target_dict.unk_word,
-    #                pad_token=target_dict.pad_word,
-    #                bos_token=target_dict.bos_word,
-    #                eos_token=target_dict.eos_word,
-    #                word_delimiter_token="|",
-    #                do_lower_case=False,
-    #            )
-    #            return_attention_mask = True if config.feat_extract_norm == "layer" else False
-    #            feature_extractor = Wav2Vec2FeatureExtractor(
-    #                feature_size=1,
-    #                sampling_rate=16000,
-    #                padding_value=0,
-    #                do_normalize=True,
-    #                return_attention_mask=return_attention_mask,
-    #            )
-    #            processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-    #            processor.save_pretrained(pytorch_dump_folder_path)
+    feature_extractor = Wav2Vec2FeatureExtractor(
+        feature_size=1,
+        sampling_rate=16000,
+        padding_value=0,
+        do_normalize=True,
+        return_attention_mask=True,
+    )
 
     model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
         [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
@@ -257,12 +221,14 @@ def convert_wav2vec2_checkpoint(checkpoint_path, pytorch_dump_folder_path, confi
     logger.warning(f"The following keys are unexpected when loading the decoder weights: {unexpected_keys}")
 
     hf_wav2vec = SpeechEncoderDecoderModel(encoder=hf_encoder, decoder=hf_decoder)
+    hf_wav2vec.config.tie_word_embeddings = False
 
     # add projection layer
     hf_wav2vec.enc_to_dec_proj.weight = nn.Parameter(projection_layer.weight)
     hf_wav2vec.enc_to_dec_proj.bias = nn.Parameter(projection_layer.bias)
 
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
+    feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -270,6 +236,10 @@ if __name__ == "__main__":
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument("--encoder_config_path", default="facebook/wav2vec2-large-lv60", type=str, help="Path to hf encoder wav2vec2 checkpoint config")
+    parser.add_argument("--decoder_config_path", default="facebook/s2t-small-mustc-en-fr-st", type=str, help="Path to hf decoder s2t checkpoint config")
+    parser.add_argument("--vocab_size", default=10224, type=int, help="Vocab size of decoder")
+    parser.add_argument("--num_decoder_layers", default=7, type=int, help="Number of decoder layers")
+
     args = parser.parse_args()
-    convert_wav2vec2_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path)
+    convert_wav2vec2_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, encoder_config_path=args.encoder_config_path, decoder_config_path=args.decoder_config_path, vocab_size=args.vocab_size, num_decoder_layers=args.num_decoder_layers)

@@ -545,13 +545,20 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _get_subsampled_output_lengths(self, input_lengths: torch.LongTensor):
+    def _get_subsampled_output_lengths(self, input_lengths: torch.LongTensor, kernel_size=1, stride=2):
         """
         Computes the output length of the convolutional layers
         """
 
+        if self.config.conv_stride_sizes is None:
+            kernels = self.config.num_conv_layers * [1]
+            strides = self.config.num_conv_layers * [2]
+        else:
+            kernels = self.config.conv_kernel_sizes
+            strides = self.config.conv_stride_sizes
+
         for i in range(self.config.num_conv_layers):
-            input_lengths = (input_lengths - 1) // 2 + 1
+            input_lengths = (input_lengths - kernels[i]) // strides[i] + 1
 
         return input_lengths
 
