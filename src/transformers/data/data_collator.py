@@ -1205,6 +1205,18 @@ class DataCollatorForPermutationLanguageModeling:
     max_span_length: int = 5  # maximum length of a span of masked tokens
     return_tensors: str = "pt"
 
+    def __call__(self, features, return_tensors=None):
+        if return_tensors is None:
+            return_tensors = self.return_tensors
+        if return_tensors == "pt":
+            return self.torch_call(features)
+        elif return_tensors == "tf":
+            return self.tf_call(features)
+        elif return_tensors == "np":
+            return self.numpy_call(features)
+        else:
+            raise ValueError(f"Framework '{return_tensors}' not recognized!")
+
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         if isinstance(examples[0], (dict, BatchEncoding)):
             examples = [e["input_ids"] for e in examples]
