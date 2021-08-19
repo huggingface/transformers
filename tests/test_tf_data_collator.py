@@ -51,21 +51,21 @@ class DataCollatorIntegrationTest(unittest.TestCase):
     def test_default_with_dict(self):
         features = [{"label": i, "inputs": [0, 1, 2, 3, 4, 5]} for i in range(8)]
         batch = default_data_collator(features, return_tensors='tf')
-        self.assertAllEqual(batch["labels"], list(range(8)))
+        self.assertEqual(batch["labels"].as_list(), list(range(8)))
         self.assertEqual(batch["labels"].dtype, tf.int64)
         self.assertEqual(batch["inputs"].shape.as_list(), [8, 6])
 
         # With label_ids
         features = [{"label_ids": [0, 1, 2], "inputs": [0, 1, 2, 3, 4, 5]} for i in range(8)]
         batch = default_data_collator(features, return_tensors='tf')
-        self.assertAllEqual(batch["labels"], ([[0, 1, 2]] * 8))
+        self.assertEqual(batch["labels"].as_list(), ([[0, 1, 2]] * 8))
         self.assertEqual(batch["labels"].dtype, tf.int64)
         self.assertEqual(batch["inputs"].shape.as_list(), [8, 6])
 
         # Features can already be tensors
         features = [{"label": i, "inputs": np.randint(10, [10])} for i in range(8)]
         batch = default_data_collator(features, return_tensors='tf')
-        self.assertAllEqual(batch["labels"], (list(range(8))))
+        self.assertEqual(batch["labels"].as_list(), (list(range(8))))
         self.assertEqual(batch["labels"].dtype, tf.int64)
         self.assertEqual(batch["inputs"].shape.as_list(), [8, 10])
 
@@ -73,9 +73,9 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         features = [{"label": np.array(i), "inputs": np.randint(10, [10])} for i in range(8)]
         batch = default_data_collator(features, return_tensors='tf')
         self.assertEqual(batch["labels"].dtype, tf.int64)
-        self.assertAllEqual(batch["labels"], list(range(8)))
+        self.assertEqual(batch["labels"].as_list(), list(range(8)))
         self.assertEqual(batch["labels"].dtype, tf.int64)
-        self.assertEqual(batch["inputs"].shape, torch.Size([8, 10]))
+        self.assertEqual(batch["inputs"].shape.as_list(), [8, 10])
 
     # def test_default_classification_and_regression(self):
     #     data_collator = default_data_collator
