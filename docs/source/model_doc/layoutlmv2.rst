@@ -31,7 +31,7 @@ document image understanding benchmarks:
   documents for testing).
 - document image classification: the `RVL-CDIP <https://www.cs.cmu.edu/~aharley/rvl-cdip/>`__ dataset (a collection of
   400,000 images belonging to one of 16 classes).
-- document visual question answering: the `DocVQA <https://arxiv.org/abs/2007.00398>` dataset (a collection of 50,000
+- document visual question answering: the `DocVQA <https://arxiv.org/abs/2007.00398>`__ dataset (a collection of 50,000
   questions defined on 12,000+ document images).
 
 The abstract from the paper is the following:
