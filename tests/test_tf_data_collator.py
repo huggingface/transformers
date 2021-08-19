@@ -16,6 +16,7 @@ import os
 import shutil
 import tempfile
 import numpy as np
+import unittest
 
 from transformers import BertTokenizer, is_tf_available, set_seed
 from transformers.testing_utils import require_tf
@@ -34,7 +35,7 @@ if is_tf_available():
 
 
 @require_tf
-class DataCollatorIntegrationTest(tf.test.TestCase):
+class DataCollatorIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.tmpdirname = tempfile.mkdtemp()
