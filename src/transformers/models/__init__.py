@@ -79,6 +79,7 @@ from . import (
     roberta,
     roformer,
     speech_to_text,
+    splinter,
     squeezebert,
     t5,
     tapas,
