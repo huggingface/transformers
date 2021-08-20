@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 class BatchSizeError(Exception):
     def __init__(self, *args: object) -> None:
         super(BatchSizeError, self).__init__(*args)
