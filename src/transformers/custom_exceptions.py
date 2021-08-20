@@ -14,7 +14,7 @@
 
 
 class BatchSizeError(Exception):
-    """To raise errors related to batch size."""
+    """To raise errors related to batch size"""
 
     def __init__(self, *args: object) -> None:
         super(BatchSizeError, self).__init__(*args)
