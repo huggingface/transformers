@@ -146,6 +146,7 @@ class Speech2TextConfig(PretrainedConfig):
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
+        do_stable_layer_norm=False,
         **kwargs
     ):
         super().__init__(
@@ -193,8 +194,7 @@ class Speech2TextConfig(PretrainedConfig):
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
 
-        self.subsample_kernels = subsample_kernels
-        self.subsample_strides = subsample_strides
+        self.do_stable_layer_norm = do_stable_layer_norm
 
     @property
     def num_attention_heads(self) -> int:

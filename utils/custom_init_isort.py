@@ -47,6 +47,7 @@ def split_code_in_indented_blocks(code, indent_level="", start_prompt=None, end_
     # Let's split the code into lines and move to start_index.
     index = 0
     lines = code.split("\n")
+
     if start_prompt is not None:
         while not lines[index].startswith(start_prompt):
             index += 1

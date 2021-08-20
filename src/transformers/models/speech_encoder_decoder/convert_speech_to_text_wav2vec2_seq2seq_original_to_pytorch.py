@@ -185,12 +185,22 @@ def make_linear_from_emb(emb):
 
 
 @torch.no_grad()
-def convert_wav2vec2_checkpoint(checkpoint_path, pytorch_dump_folder_path, dict_path, encoder_config_path, decoder_config_path, vocab_size, num_decoder_layers):
+def convert_wav2vec2_checkpoint(
+    checkpoint_path,
+    pytorch_dump_folder_path,
+    dict_path,
+    encoder_config_path,
+    decoder_config_path,
+    vocab_size,
+    num_decoder_layers,
+):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
     encoder_config = Wav2Vec2Config.from_pretrained(encoder_config_path)
-    decoder_config = Speech2TextConfig.from_pretrained(decoder_config_path, vocab_size=vocab_size, decoder_layers=num_decoder_layers)
+    decoder_config = Speech2TextConfig.from_pretrained(
+        decoder_config_path, vocab_size=vocab_size, decoder_layers=num_decoder_layers, do_stable_layer_norm=True
+    )
 
     feature_extractor = Wav2Vec2FeatureExtractor(
         feature_size=1,
@@ -214,7 +224,7 @@ def convert_wav2vec2_checkpoint(checkpoint_path, pytorch_dump_folder_path, dict_
 
     # set output linear layer
     unexpected_keys.remove("embed_out")
-    hf_decoder.lm_head = model.decoder.embed_out
+    hf_decoder.lm_head.weight = nn.Parameter(model.decoder.embed_out.detach())
 
     # layer norm is init to identity matrix so leaving it is fine
     logger.warning(f"The following keys are missing when loading the decoder weights: {missing_keys}")
@@ -236,10 +246,28 @@ if __name__ == "__main__":
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
-    parser.add_argument("--encoder_config_path", default="facebook/wav2vec2-large-lv60", type=str, help="Path to hf encoder wav2vec2 checkpoint config")
-    parser.add_argument("--decoder_config_path", default="facebook/s2t-small-mustc-en-fr-st", type=str, help="Path to hf decoder s2t checkpoint config")
+    parser.add_argument(
+        "--encoder_config_path",
+        default="facebook/wav2vec2-large-lv60",
+        type=str,
+        help="Path to hf encoder wav2vec2 checkpoint config",
+    )
+    parser.add_argument(
+        "--decoder_config_path",
+        default="facebook/s2t-small-mustc-en-fr-st",
+        type=str,
+        help="Path to hf decoder s2t checkpoint config",
+    )
     parser.add_argument("--vocab_size", default=10224, type=int, help="Vocab size of decoder")
     parser.add_argument("--num_decoder_layers", default=7, type=int, help="Number of decoder layers")
 
     args = parser.parse_args()
-    convert_wav2vec2_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, encoder_config_path=args.encoder_config_path, decoder_config_path=args.decoder_config_path, vocab_size=args.vocab_size, num_decoder_layers=args.num_decoder_layers)
+    convert_wav2vec2_checkpoint(
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.dict_path,
+        encoder_config_path=args.encoder_config_path,
+        decoder_config_path=args.decoder_config_path,
+        vocab_size=args.vocab_size,
+        num_decoder_layers=args.num_decoder_layers,
+    )

@@ -429,12 +429,17 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         # project encoder_hidden_states
         encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
+        # compute correct encoder attention mask
+        encoder_attention_mask = self.encoder._get_feature_vector_attention_mask(
+            encoder_hidden_states.shape[1], attention_mask
+        )
+
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
             labels=labels,
             output_attentions=output_attentions,
@@ -455,7 +460,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-#            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            #            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_last_hidden_state=encoder_hidden_states,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
