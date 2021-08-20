@@ -1294,7 +1294,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             #    weights entry - we assume all weights are of the same dtype
             # we also may have config.torch_dtype available, but we won't rely on it till v5
             dtype_orig = None
-            if torch_dtype is not None:
+            if torch_dtype is not None or config.torch_dtype is not None:
+                torch_dtype = torch_dtype or config.torch_dtype
                 if isinstance(torch_dtype, str):
                     if torch_dtype == "auto":
                         torch_dtype = next(iter(state_dict.values())).dtype
