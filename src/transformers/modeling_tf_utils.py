@@ -296,7 +296,7 @@ def booleans_processing(config, **kwargs):
         )
 
         if "use_cache" in kwargs:
-            final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
+            final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
     else:
         if (
             kwargs["output_attentions"] not in (None, config.output_attentions)
@@ -521,13 +521,7 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
                 for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
                     # TF names always start with the model name so we ignore it
 
-                    # handle the case where `TFEncoderDecoderModel` has `tf.keras.Model` for encoder/decoder,
-                    # and the names start with the encoder/decoder model names, not with the name of
-                    # `TFEncoderDecoderModel` model, and we should not ignore them.
-                    if layer.name == weight_name.split("/")[0] and isinstance(getattr(model, layer.name), tf.keras.Model):
-                        name = weight_name
-                    else:
-                        name = "/".join(weight_name.split("/")[1:])
+                    name = "/".join(weight_name.split("/")[1:])
 
                     if _prefix is not None:
                         name = _prefix + "/" + name
@@ -541,11 +535,15 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
                 for symbolic_weight in symbolic_weights:
                     # TF names always start with the model name so we ignore it
                     if _prefix is not None:
-                        delimeter = len(_prefix.split("/"))
-                        symbolic_weight_name = "/".join(
-                            symbolic_weight.name.split("/")[:delimeter]
-                            + symbolic_weight.name.split("/")[delimeter + 1 :]
-                        )
+
+                        if symbolic_weight.name in saved_weight_names_set:
+                            symbolic_weight_name = symbolic_weight.name
+                        else:
+                            delimeter = len(_prefix.split("/"))
+                            symbolic_weight_name = "/".join(
+                                symbolic_weight.name.split("/")[:delimeter]
+                                + symbolic_weight.name.split("/")[delimeter + 1 :]
+                            )
                     else:
                         symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
 

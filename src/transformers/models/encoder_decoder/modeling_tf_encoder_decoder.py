@@ -148,6 +148,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
+    load_weight_prefix = "tf_enocder_decoder_model_1"
 
     def __init__(
         self,
@@ -360,6 +361,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                 kwargs_encoder["config"] = encoder_config
 
             kwargs_encoder["name"] = "encoder"
+            kwargs_encoder["load_weight_prefix"] = cls.load_weight_prefix
             encoder = TFAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
         decoder = kwargs_decoder.pop("model", None)
@@ -388,6 +390,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                 )
 
             kwargs_decoder["name"] = "decoder"
+            kwargs_decoder["load_weight_prefix"] = cls.load_weight_prefix
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.     
