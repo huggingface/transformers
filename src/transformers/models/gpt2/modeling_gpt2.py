@@ -23,8 +23,9 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
-from ...custom_exceptions import BatchSizeError
+
 from ...activations import ACT2FN
+from ...custom_exceptions import BatchSizeError
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
