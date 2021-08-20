@@ -131,7 +131,6 @@ class CodeStyler:
     def init_in_block(self, text):
         """
         Returns the initial value for `self.in_block`.
-
         Useful for some docstrings beginning inside an argument declaration block (all models).
         """
         return SpecialBlock.NOT_SPECIAL
@@ -139,7 +138,6 @@ class CodeStyler:
     def end_of_special_style(self, line):
         """
         Sets back the `in_block` attribute to `NOT_SPECIAL`.
-
         Useful for some docstrings where we may have to go back to `ARG_LIST` instead.
         """
         self.in_block = SpecialBlock.NOT_SPECIAL
@@ -489,14 +487,12 @@ def style_file_docstrings(code_file, max_len=119, check_only=False):
     """Style all docstrings in `code_file` to `max_len`."""
     with open(code_file, "r", encoding="utf-8", newline="\n") as f:
         code = f.read()
-    # fmt: off
-    splits = code.split('\"\"\"')
+    splits = code.split('"""')
     splits = [
         (s if i % 2 == 0 or _re_doc_ignore.search(splits[i - 1]) is not None else style_docstring(s, max_len=max_len))
         for i, s in enumerate(splits)
     ]
-    clean_code = '\"\"\"'.join(splits)
-    # fmt: on
+    clean_code = '"""'.join(splits)
 
     diff = clean_code != code
     if not check_only and diff:
