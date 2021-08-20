@@ -1300,9 +1300,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if torch_dtype == "auto":
                         torch_dtype = next(iter(state_dict.values())).dtype
                     else:
-                        raise ValueError(
-                            f"`torch_dtype` can be either a `torch.dtype` or `auto`, but received {torch_dtype}"
-                        )
+                        torch_dtype= getattr(torch, torch_dtype)
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
         config.name_or_path = pretrained_model_name_or_path
