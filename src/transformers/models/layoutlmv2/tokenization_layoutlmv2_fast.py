@@ -509,7 +509,9 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
+                return_offsets_mapping=True
+                if word_labels is not None
+                else return_offsets_mapping,  # we use offsets to create the labels
                 return_length=return_length,
                 verbose=verbose,
             )
@@ -579,12 +581,14 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 else:
                     original_index = batch_index
                 labels_example = []
-                for id, word_id in zip(
-                    sanitized_tokens["input_ids"][batch_index], sanitized_encodings[batch_index].word_ids
+                for id, offset, word_id in zip(
+                    sanitized_tokens["input_ids"][batch_index],
+                    sanitized_tokens["offset_mapping"][batch_index],
+                    sanitized_encodings[batch_index].word_ids,
                 ):
                     if word_id is not None:
                         if self.only_label_first_subword:
-                            if not self.decode([id]).startswith("##"):
+                            if offset[0] == 0:
                                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
                                 labels_example.append(word_labels[original_index][word_id])
                             else:
@@ -596,6 +600,9 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 labels.append(labels_example)
 
             sanitized_tokens["labels"] = labels
+            # finally, remove offsets if the user didn't want them
+            if not return_offsets_mapping:
+                del sanitized_tokens["offset_mapping"]
 
         return BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
 
