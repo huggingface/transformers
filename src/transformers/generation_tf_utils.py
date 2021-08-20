@@ -650,7 +650,7 @@ class TFGenerationMixin:
 
         # current position and vocab size
         cur_len = shape_list(input_ids)[1]  # unused
-        vocab_size = self.config.vocab_size
+        vocab_size = self.config.vocab_size if not self.config.is_encoder_decoder else self.config.decoder.vocab_size
 
         # set effective batch size and effective batch multiplier according to do_sample
         if do_sample:
@@ -1447,10 +1447,10 @@ class TFGenerationMixin:
         the generate method.
         """
         if cur_len == 1 and forced_bos_token_id is not None:
-            vocab_range = tf.constant(range(self.config.vocab_size))
+            vocab_range = tf.constant(range(self.config.vocab_size if not self.config.is_encoder_decoder else self.config.decoder.vocab_size))
             return tf.where(vocab_range != forced_bos_token_id, -1e8, logits)
         elif cur_len == max_length - 1 and forced_eos_token_id is not None:
-            vocab_range = tf.constant(range(self.config.vocab_size))
+            vocab_range = tf.constant(range(self.config.vocab_size if not self.config.is_encoder_decoder else self.config.decoder.vocab_size))
             return tf.where(vocab_range != forced_eos_token_id, -1e8, logits)
         else:
             return logits
