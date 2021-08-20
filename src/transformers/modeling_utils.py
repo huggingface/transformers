@@ -681,10 +681,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if getattr(output_embeddings, "bias", None) is not None:
             output_embeddings.bias.data = nn.functional.pad(
                 output_embeddings.bias.data,
-                (
-                    0,
-                    output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0],
-                ),
+                (0, output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0],),
                 "constant",
                 0,
             )
@@ -1242,10 +1239,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     filename = WEIGHTS_NAME
 
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path,
-                    filename=filename,
-                    revision=revision,
-                    mirror=mirror,
+                    pretrained_model_name_or_path, filename=filename, revision=revision, mirror=mirror,
                 )
 
             try:
@@ -1300,7 +1294,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if torch_dtype == "auto":
                         torch_dtype = next(iter(state_dict.values())).dtype
                     else:
-                        torch_dtype= getattr(torch, torch_dtype)
+                        torch_dtype = getattr(torch, torch_dtype)
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
         config.name_or_path = pretrained_model_name_or_path
@@ -1995,11 +1989,7 @@ class SequenceSummary(nn.Module):
             output = hidden_states.mean(dim=1)
         elif self.summary_type == "cls_index":
             if cls_index is None:
-                cls_index = torch.full_like(
-                    hidden_states[..., :1, :],
-                    hidden_states.shape[-2] - 1,
-                    dtype=torch.long,
-                )
+                cls_index = torch.full_like(hidden_states[..., :1, :], hidden_states.shape[-2] - 1, dtype=torch.long,)
             else:
                 cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
                 cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
