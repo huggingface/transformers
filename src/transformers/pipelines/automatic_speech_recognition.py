@@ -139,9 +139,9 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         processed = self.ensure_tensor_on_device(**processed)
 
         name = self.model.__class__.__name__
-        if name.endswith("ForConditionalGeneration"):
-            input_ids = processed["input_features"]
-            tokens = self.model.generate(input_ids=input_ids)
+        if name.endswith("ForConditionalGeneration") or name.endswith("DecoderModel"):
+            encoder_inputs = self.model.encoder(**processed)
+            tokens = self.model.generate(encoder_inputs=encoder_inputs)
             tokens = tokens.squeeze(0)
         elif name.endswith("ForCTC"):
             outputs = self.model(**processed)

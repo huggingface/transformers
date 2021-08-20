@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support Encoder-Decoder architectures """
+""" Classes to support Speech-Encoder-Text-Decoder architectures """
 
 
 from typing import Optional
@@ -31,10 +31,10 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "EncoderDecoderConfig"
 
-ENCODER_DECODER_START_DOCSTRING = r"""
-    This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
-    encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via
-    :meth:`~transformers.AutoModel.from_pretrained` function and the decoder is loaded via
+SPEECH_ENCODER_DECODER_START_DOCSTRING = r"""
+    This class can be used to initialize a speech-sequence-to-text-sequence model with any pretrained speech
+    autoencoding model as the encoder and any pretrained text autoregressive model as the decoder. The encoder is
+    loaded via :meth:`~transformers.AutoModel.from_pretrained` function and the decoder is loaded via
     :meth:`~transformers.AutoModelForCausalLM.from_pretrained` function. Cross-attention layers are automatically added
     to the decoder and should be fine-tuned on a downstream generative task, like summarization.
 
@@ -43,8 +43,12 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
     Zhou, Wei Li, Peter J. Liu.
 
-    After such an Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other models
-    (see the examples for more information).
+    Additionally, in `Large-Scale Self- and Semi-Supervised Learning for Speech Translation
+    <https://arxiv.org/abs/2104.06678>`__ it is shown how leveraging large pretrained speech models for speech
+    translation yields a significant performance improvement.
+
+    After such an Speech-Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other
+    models (see the examples for more information).
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -55,22 +59,27 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.PretrainedConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
 """
 
-ENCODER_DECODER_INPUTS_DOCSTRING = r"""
+SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
+        input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Processor` should
+            be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
+            :meth:`transformers.Wav2Vec2Processor.__call__` for details.
+        input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, feature_size)`, `optional`):
+            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
+            by loading a ``.flac`` or ``.wav`` audio file into an array of type :obj:`List[float]` or a
+            :obj:`numpy.ndarray`, *e.g.* via the soundfile library (``pip install soundfile``). To prepare the array
+            into :obj:`input_features`, the :class:`~transformers.Speech2TextTokenizer` should be used for extracting
+            the fbank features, padding and conversion into a tensor of type :obj:`torch.FloatTensor`. See
+            :meth:`~transformers.Speech2TextTokenizer.__call__`
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
@@ -138,7 +147,7 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(ENCODER_DECODER_START_DOCSTRING)
+@add_start_docstrings(SPEECH_ENCODER_DECODER_START_DOCSTRING)
 class SpeechEncoderDecoderModel(PreTrainedModel):
     r"""
     :class:`~transformers.EncoderDecoder` is a generic model class that will be instantiated as a transformer
@@ -192,8 +201,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
-        # encoder outputs might need to be projected to different dimension for decoder
-        self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
+        if self.encoder.config.hidden_size != self.decoder.config.hidden_size:
+            # encoder outputs might need to be projected to different dimension for decoder
+            self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
 
         assert (
             self.encoder.get_output_embeddings() is None
@@ -277,12 +287,12 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         Example::
 
             >>> from transformers import SpeechEncoderDecoderModel
-            >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-            >>> model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased')
+            >>> # initialize a wav2vec2bert from a pretrained Wav2Vec2 and a pretrained BERT model. Note that the cross-attention layers will be randomly initialized
+            >>> model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained('facebook/wav2vec2-base-960h', 'bert-base-uncased')
             >>> # saving model after fine-tuning
-            >>> model.save_pretrained("./bert2bert")
+            >>> model.save_pretrained("./wav2vec2bert")
             >>> # load fine-tuned model
-            >>> model = SpeechEncoderDecoderModel.from_pretrained("./bert2bert")
+            >>> model = SpeechEncoderDecoderModel.from_pretrained("./wav2vec2bert")
 
         """
 
@@ -357,12 +367,12 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
-    @add_start_docstrings_to_model_forward(ENCODER_DECODER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values=None,
-        input_vectors=None,
+        input_features=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -411,12 +421,18 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        # TODO select depending on encoder
-        #        inputs =
+        if input_values is not None and input_features is not None:
+            raise ValueError("You cannot specify both input_values and input_features at the same time")
+        elif input_values is not None:
+            inputs = input_values
+        elif input_features is not None:
+            inputs = input_features
+        else:
+            raise ValueError("You have to specify either input_values or input_features")
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_values,
+                inputs,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -430,9 +446,12 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
         # compute correct encoder attention mask
-        encoder_attention_mask = self.encoder._get_feature_vector_attention_mask(
-            encoder_hidden_states.shape[1], attention_mask
-        )
+        if attention_mask is not None:
+            encoder_attention_mask = self.encoder._get_feature_vector_attention_mask(
+                encoder_hidden_states.shape[1], attention_mask
+            )
+        else:
+            encoder_attention_mask = None
 
         # Decode
         decoder_outputs = self.decoder(
@@ -441,7 +460,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
@@ -454,13 +472,11 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
-            loss=decoder_outputs.loss,
             logits=decoder_outputs.logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            #            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_last_hidden_state=encoder_hidden_states,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,

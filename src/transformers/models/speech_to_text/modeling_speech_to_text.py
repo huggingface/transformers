@@ -670,16 +670,17 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
 
         return input_lengths
 
-    def _get_subsampled_encoder_attn_mask(self, attention_mask):
+    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 
         subsampled_lengths = self._get_subsampled_output_lengths(attention_mask.sum(-1))
-        max_len = subsampled_lengths.max().item()
         bsz = attention_mask.size()[0]
-        attention_mask = torch.zeros((bsz, max_len), dtype=attention_mask.dtype, device=attention_mask.device)
+        attention_mask = torch.zeros(
+            (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
 
         # these two operations makes sure that all values
         # before the output lengths indices are attended to
@@ -875,16 +876,16 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if attention_mask is not None:
-            attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
-
         inputs_embeds = self.conv(input_features)
         inputs_embeds = self.embed_scale * inputs_embeds
 
-        if attention_mask is None:
-            padding_mask = torch.zeros_like(inputs_embeds, dtype=torch.long)
-        else:
+        # subsample attention mask if necessary
+        if attention_mask is not None:
+            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
             padding_mask = attention_mask.ne(1).long()
+        else:
+            padding_mask = torch.zeros_like(inputs_embeds, dtype=torch.long)
+
         embed_pos = self.embed_positions(padding_mask)
 
         hidden_states = inputs_embeds + embed_pos
@@ -1569,7 +1570,12 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
             )
 
         # downsample encoder attention mask
-        encoder_attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
+        if attention_mask is not None:
+            encoder_attention_mask = self._get_feature_vector_attention_mask(
+                encoder_outputs[0].shape[1], attention_mask
+            )
+        else:
+            encoder_attention_mask = None
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
