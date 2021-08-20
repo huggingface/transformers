@@ -262,7 +262,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: Union[PreTrainedModel, nn.Module] = None,
+        model: Union[PreTrainedModel] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
