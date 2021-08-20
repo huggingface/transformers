@@ -726,6 +726,7 @@ jobs:
                   key: v0.4-build_doc-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
+            - run: sed -n 260,280p ./src/transformers/trainer.py
             - run: cd docs && make html SPHINXOPTS="-W -j 4"
             - store_artifacts:
                 path: ./docs/_build
