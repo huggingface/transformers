@@ -473,6 +473,7 @@ GPT2_INPUTS_DOCSTRING = r"""
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
+
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
