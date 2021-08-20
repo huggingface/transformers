@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...custom_exceptions import BatchSizeError
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -47,7 +48,7 @@ from ...modeling_utils import (
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gpt2 import GPT2Config
-from ...custom_exceptions import BatchSizeError
+
 
 logger = logging.get_logger(__name__)
 
