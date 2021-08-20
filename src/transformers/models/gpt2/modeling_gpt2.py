@@ -65,13 +65,6 @@ GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
 ]
 
-class BatchSizeError(Exception):
-    """Raise Exception related to batch size"""
-    def __init__(self, *args: object) -> None:
-        super(BatchSizeError,self).__init__(*args)
-
-
-
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""
     try:
