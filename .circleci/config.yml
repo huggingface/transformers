@@ -711,7 +711,7 @@ jobs:
     build_doc:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.6.14
         resource_class: large
         steps:
             - checkout
