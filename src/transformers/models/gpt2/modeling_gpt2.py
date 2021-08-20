@@ -527,6 +527,7 @@ PARALLELIZE_DOCSTRING = r"""
 """
 DEPARALLELIZE_DOCSTRING = r"""
     Moves the model to cpu from a model parallel state.
+
     Example::
         # On a 4 GPU machine with gpt2-large:
         model = GPT2LMHeadModel.from_pretrained('gpt2-large')
