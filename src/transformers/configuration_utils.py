@@ -30,6 +30,7 @@ from .file_utils import (
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
+    is_torch_available,
 )
 from .utils import logging
 
@@ -276,9 +277,10 @@ class PretrainedConfig(PushToHubMixin):
         if self.torch_dtype is not None and isinstance(self.torch_dtype, str):
             # we will start using self.torch_dtype in v5, but to be consistent with
             # from_pretrained's torch_dtype arg convert it to an actual torch.dtype object
-            import torch
+            if is_torch_available():
+                import torch
 
-            self.torch_dtype = getattr(torch, self.torch_dtype)
+                self.torch_dtype = getattr(torch, self.torch_dtype)
 
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
         self.tokenizer_class = kwargs.pop("tokenizer_class", None)
