@@ -49,7 +49,7 @@ class FNetConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
+        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
@@ -96,7 +96,7 @@ class FNetConfig(PretrainedConfig):
         hidden_size=768,
         num_hidden_layers=12,
         intermediate_size=3072,
-        hidden_act="gelu",
+        hidden_act="gelu_new",
         hidden_dropout_prob=0.1,
         max_position_embeddings=512,
         type_vocab_size=4,
