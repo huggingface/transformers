@@ -17,6 +17,7 @@
 from ...utils import logging
 from ..bert.configuration_bert import BertConfig
 
+
 logger = logging.get_logger(__name__)
 
 ESM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -27,15 +28,15 @@ ESM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ESMConfig(BertConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.ESMModel`. It is used to instantiate a ESM model according to the specified
-    arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.ESMModel`. It is used to
+    instantiate a ESM model according to the specified arguments, defining the model architecture.
 
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
-    The :class:`~transformers.ESMConfig` class directly inherits :class:`~transformers.BertConfig`. It reuses the
-    same defaults. Please check the parent class for more information.
+    The :class:`~transformers.ESMConfig` class directly inherits :class:`~transformers.BertConfig`. It reuses the same
+    defaults. Please check the parent class for more information.
 
     Examples::
 

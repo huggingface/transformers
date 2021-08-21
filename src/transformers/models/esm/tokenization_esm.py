@@ -13,11 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for ESM."""
-from typing import List, Optional
-
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
-from ..gpt2.tokenization_gpt2 import GPT2Tokenizer
 
 
 logger = logging.get_logger(__name__)

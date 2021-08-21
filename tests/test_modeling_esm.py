@@ -18,10 +18,9 @@
 import unittest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import ESMConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
-from transformers import ESMConfig
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -42,7 +41,7 @@ if is_torch_available():
     from transformers.models.esm.modeling_esm import (
         ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
         ESMEmbeddings,
-        create_position_ids_from_input_ids
+        create_position_ids_from_input_ids,
     )
 
 
@@ -518,6 +517,7 @@ class ESMModelIntegrationTest(TestCasePlus):
     # XXX: this might be a candidate for common tests if we have many of those
     def test_lm_head_ignore_keys(self):
         from copy import deepcopy
+
         keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
         keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
         config = ESMConfig.from_pretrained("/checkpoint/jasonliu/tmp/huggingface/")
@@ -535,5 +535,3 @@ class ESMModelIntegrationTest(TestCasePlus):
 
             # test that saving works with updated ignore keys - just testing that it doesn't fail
             model.save_pretrained(self.get_auto_remove_tmp_dir())
-
-

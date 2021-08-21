@@ -147,7 +147,6 @@ class ESMEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
-        self.encoder_keep_prob = config.encoder_keep_prob
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -155,6 +154,7 @@ class ESMEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        # End copy
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
@@ -163,7 +163,7 @@ class ESMEmbeddings(nn.Module):
                 persistent=False,
             )
 
-        # End copy
+        self.encoder_keep_prob = config.encoder_keep_prob
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
@@ -213,7 +213,7 @@ class ESMEmbeddings(nn.Module):
         #     mask_ratio_observed = (tokens == self.mask_idx).sum(-1).float() / src_lengths
         #     x = x * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]
         embeddings *= self.encoder_keep_prob
-        
+
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
@@ -1231,8 +1231,8 @@ class ESMLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    ESM Model transformer with a sequence classification/regression head on top (a linear layer on top of the
-    pooled output) e.g. for GLUE tasks.
+    ESM Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
     """,
     ESM_START_DOCSTRING,
 )

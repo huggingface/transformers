@@ -18,15 +18,10 @@
 import argparse
 import pathlib
 
-import esm as esm_module
 # import fairseq
 import torch
-# from fairseq.modules import TransformerSentenceEncoderLayer
-from packaging import version
 
-
-from transformers.models.esm.configuration_esm import ESMConfig
-from transformers.models.esm.modeling_esm import ESMForMaskedLM, ESMForSequenceClassification
+import esm as esm_module
 from transformers.models.bert.modeling_bert import (
     BertIntermediate,
     BertLayer,
@@ -34,6 +29,8 @@ from transformers.models.bert.modeling_bert import (
     BertSelfAttention,
     BertSelfOutput,
 )
+from transformers.models.esm.configuration_esm import ESMConfig
+from transformers.models.esm.modeling_esm import ESMForMaskedLM, ESMForSequenceClassification
 from transformers.utils import logging
 
 
@@ -49,9 +46,7 @@ SAMPLE_DATA = [
 ]
 
 
-def convert_esm_checkpoint_to_pytorch(
-    pytorch_dump_folder_path: str, classification_head: bool
-):
+def convert_esm_checkpoint_to_pytorch(pytorch_dump_folder_path: str, classification_head: bool):
     """
     Copy/paste/tweak esm's weights to our BERT structure.
     """
@@ -70,36 +65,24 @@ def convert_esm_checkpoint_to_pytorch(
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
         attention_probs_dropout_prob=0.0,
         hidden_dropout_prob=0,
-        encoder_keep_prob=0.88, # TODO: temporary hack, explained in modeling_esm
+        encoder_keep_prob=0.88,  # TODO: temporary hack, explained in modeling_esm
     )
     if classification_head:
-        config.num_labels = esm.classification_heads[
-            "mnli"
-        ].out_proj.weight.shape[0]
+        config.num_labels = esm.classification_heads["mnli"].out_proj.weight.shape[0]
     print("Our BERT config:", config)
 
-    model = (
-        ESMForSequenceClassification(config)
-        if classification_head
-        else ESMForMaskedLM(config)
-    )
+    model = ESMForSequenceClassification(config) if classification_head else ESMForMaskedLM(config)
     model.eval()
 
     # Now let's copy all the weights.
     # Embeddings
-    model.esm.embeddings.word_embeddings.weight = (
-        esm_sent_encoder.embed_tokens.weight
-    )
-    model.esm.embeddings.position_embeddings.weight = (
-        esm_sent_encoder.embed_positions.weight
-    )
+    model.esm.embeddings.word_embeddings.weight = esm_sent_encoder.embed_tokens.weight
+    model.esm.embeddings.position_embeddings.weight = esm_sent_encoder.embed_positions.weight
     model.esm.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
         model.esm.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c ESM doesn't use them.
 
-    model.esm.embeddings.LayerNorm.weight = (
-        esm_sent_encoder.emb_layer_norm_before.weight
-    )
+    model.esm.embeddings.LayerNorm.weight = esm_sent_encoder.emb_layer_norm_before.weight
     model.esm.embeddings.LayerNorm.bias = esm_sent_encoder.emb_layer_norm_before.bias
 
     model.esm.encoder.emb_layer_norm_after.weight = esm_sent_encoder.emb_layer_norm_after.weight
@@ -126,20 +109,16 @@ def convert_esm_checkpoint_to_pytorch(
         self_attn.key.bias.data = esm_layer.self_attn.k_proj.bias
         self_attn.value.weight.data = esm_layer.self_attn.v_proj.weight
         self_attn.value.bias.data = esm_layer.self_attn.v_proj.bias
-        
-        ########## LayerNorm changes for pre-activation
+
+        # LayerNorm changes for pre-activation
         layer.attention.LayerNorm.weight = esm_layer.self_attn_layer_norm.weight
         layer.attention.LayerNorm.bias = esm_layer.self_attn_layer_norm.bias
         layer.LayerNorm.weight = esm_layer.final_layer_norm.weight
         layer.LayerNorm.bias = esm_layer.final_layer_norm.bias
-        ##########
-        
+
         # self-attention output
         self_output: BertSelfOutput = layer.attention.output
-        assert (
-            self_output.dense.weight.shape
-            == esm_layer.self_attn.out_proj.weight.shape
-        )
+        assert self_output.dense.weight.shape == esm_layer.self_attn.out_proj.weight.shape
         self_output.dense.weight = esm_layer.self_attn.out_proj.weight
         self_output.dense.bias = esm_layer.self_attn.out_proj.bias
 
@@ -157,25 +136,15 @@ def convert_esm_checkpoint_to_pytorch(
         # end of layer
 
     if classification_head:
-        model.classifier.dense.weight = esm.esm.classification_heads[
-            "mnli"
-        ].dense.weight
-        model.classifier.dense.bias = esm.classification_heads[
-            "mnli"
-        ].dense.bias
-        model.classifier.out_proj.weight = esm.classification_heads[
-            "mnli"
-        ].out_proj.weight
-        model.classifier.out_proj.bias = esm.classification_heads[
-            "mnli"
-        ].out_proj.bias
+        model.classifier.dense.weight = esm.esm.classification_heads["mnli"].dense.weight
+        model.classifier.dense.bias = esm.classification_heads["mnli"].dense.bias
+        model.classifier.out_proj.weight = esm.classification_heads["mnli"].out_proj.weight
+        model.classifier.out_proj.bias = esm.classification_heads["mnli"].out_proj.bias
     else:
         # LM Head
         model.lm_head.dense.weight = esm.lm_head.dense.weight
         model.lm_head.dense.bias = esm.lm_head.dense.bias
-        model.lm_head.layer_norm.weight = (
-            esm.lm_head.layer_norm.weight
-        )
+        model.lm_head.layer_norm.weight = esm.lm_head.layer_norm.weight
         model.lm_head.layer_norm.bias = esm.lm_head.layer_norm.bias
         model.lm_head.decoder.weight = esm.lm_head.weight
         model.lm_head.decoder.bias = esm.lm_head.bias
@@ -184,7 +153,7 @@ def convert_esm_checkpoint_to_pytorch(
     batch_converter = alphabet.get_batch_converter()
 
     # Prepare data (first 2 sequences from ESMStructuralSplitDataset superfamily / 4)
-    
+
     batch_labels, batch_strs, batch_tokens = batch_converter(SAMPLE_DATA)
     input_ids = batch_tokens
 
@@ -193,7 +162,7 @@ def convert_esm_checkpoint_to_pytorch(
         if classification_head:
             their_output = esm.model.classification_heads["mnli"](esm.extract_features(input_ids))
         else:
-            their_output = esm(input_ids)['logits']
+            their_output = esm(input_ids)["logits"]
     print(our_output.shape, their_output.shape)
     max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
     print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-7
@@ -217,6 +186,4 @@ if __name__ == "__main__":
         "--classification_head", action="store_true", help="Whether to convert a final classification head."
     )
     args = parser.parse_args()
-    convert_esm_checkpoint_to_pytorch(
-        args.pytorch_dump_folder_path, args.classification_head
-    )
+    convert_esm_checkpoint_to_pytorch(args.pytorch_dump_folder_path, args.classification_head)
