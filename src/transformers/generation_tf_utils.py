@@ -911,7 +911,6 @@ class TFGenerationMixin:
             # set eos token prob to zero if min_length is not reached
             if eos_token_id is not None and cur_len < min_length:
                 # create eos_token_id boolean mask
-                # Q: `token is eos_token_id` is always `False` here, and need to change to `token == eos_token_id`.
                 is_token_logit_eos_token = tf.convert_to_tensor(
                     [True if token == eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
@@ -1144,7 +1143,7 @@ class TFGenerationMixin:
                 num_batch_hypotheses = batch_size * num_beams
 
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
+                    [True if token == eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [num_batch_hypotheses, vocab_size])
 
