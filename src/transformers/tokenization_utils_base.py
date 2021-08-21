@@ -2980,7 +2980,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     for __ in ids[-window_len:]:
                         overflowing_tokens.insert(ct, __)
                         ct = ct + 1
-                    ids = ids[:-window_len]
+                    ids = ids[:-1]
                 else:
                     if not overflowing_tokens:
                         window_len = min(len(pair_ids), stride + 1)
@@ -2990,7 +2990,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     for __ in pair_ids[-window_len:]:
                         overflowing_tokens.insert(ct, __)
                         ct = ct + 1
-                    pair_ids = pair_ids[:-window_len]
+                    pair_ids = pair_ids[:-1]
         elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
