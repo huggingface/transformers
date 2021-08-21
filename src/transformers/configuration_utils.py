@@ -207,6 +207,9 @@ class PretrainedConfig(PushToHubMixin):
           this attribute contains just the floating type string without the ``torch.`` prefix. For example, for
           ``torch.float16`` ``torch_dtype`` is the ``"float16"`` string.
 
+          This attribute is currently not being used during model loading time, but this may change in the future
+          versions. But we can already start preparing for the future by saving the dtype with save_pretrained.
+
     TensorFlow specific parameters
 
         - **use_bfloat16** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should use
@@ -269,6 +272,13 @@ class PretrainedConfig(PushToHubMixin):
             # Keys are always strings in JSON so convert ids to int here.
         else:
             self.num_labels = kwargs.pop("num_labels", 2)
+
+        if self.torch_dtype is not None and isinstance(self.torch_dtype, str):
+            # we will start using self.torch_dtype in v5, but to be consistent with
+            # from_pretrained's torch_dtype arg convert it to an actual torch.dtype object
+            import torch
+
+            self.torch_dtype = getattr(torch, self.torch_dtype)
 
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
         self.tokenizer_class = kwargs.pop("tokenizer_class", None)
@@ -574,7 +584,8 @@ class PretrainedConfig(PushToHubMixin):
         for key, value in kwargs.items():
             if hasattr(config, key):
                 setattr(config, key, value)
-                to_remove.append(key)
+                if key != "torch_dtype":
+                    to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
 
@@ -655,6 +666,9 @@ class PretrainedConfig(PushToHubMixin):
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
+
+        if output.get("torch_dtype", None) is not None and not isinstance(output["torch_dtype"], str):
+            output["torch_dtype"] = str(output["torch_dtype"]).split(".")[1]
 
         return output
 
