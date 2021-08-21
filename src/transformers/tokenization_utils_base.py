@@ -3027,7 +3027,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     f"Please select another truncation strategy than {truncation_strategy}, "
                     f"for instance 'longest_first' or 'only_first'."
                 )
-        # print("overflowing_tokens",overflowing_tokens)
+        
         return (ids, pair_ids, overflowing_tokens)
 
     def _pad(
