@@ -2971,7 +2971,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         overflowing_tokens = []
         temp_ids = ids[:]
         temp_pair_ids = None
-        if(pair_ids != None):
+        if pair_ids is not None:
             temp_pair_ids = pair_ids[:]
         if truncation_strategy == TruncationStrategy.LONGEST_FIRST:
             overflowing_tokens_ids = []
@@ -2999,10 +2999,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         ct = ct + 1
                     pair_ids = pair_ids[:-1]
                     temp_pair_ids = temp_pair_ids[:-window_len]
-            if(len(overflowing_tokens_ids) != 0):
+            if len(overflowing_tokens_ids) != 0:
                 overflowing_tokens.extend(overflowing_tokens_ids)
-            if (len(overflowing_tokens_pair_ids) != 0):
-                overflowing_tokens.extend(overflowing_tokens_pair_ids)     
+            if len(overflowing_tokens_pair_ids) != 0:
+                overflowing_tokens.extend(overflowing_tokens_pair_ids)
         elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
@@ -3027,7 +3027,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     f"Please select another truncation strategy than {truncation_strategy}, "
                     f"for instance 'longest_first' or 'only_first'."
                 )
-
+        
         return (ids, pair_ids, overflowing_tokens)
 
     def _pad(
