@@ -62,7 +62,7 @@ class HfDeepSpeedConfig:
 
         if isinstance(config_file_or_dict, dict):
             # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
-            # modified it, it will not be accepted here again, since `auto` values would have been overriden
+            # modified it, it will not be accepted here again, since `auto` values would have been overridden
             config = deepcopy(config_file_or_dict)
         elif isinstance(config_file_or_dict, str):
             with io.open(config_file_or_dict, "r", encoding="utf-8") as f:
