@@ -141,7 +141,6 @@ class ESMEmbeddings(nn.Module):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -365,7 +364,6 @@ class ESMSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class ESMSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -379,7 +377,6 @@ class ESMSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->ESM
 class ESMAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -447,7 +444,6 @@ class ESMIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class ESMOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -461,7 +457,6 @@ class ESMOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->ESM
 class ESMLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -547,7 +542,6 @@ class ESMLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->ESM
 class ESMEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
