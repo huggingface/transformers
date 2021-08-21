@@ -748,6 +748,8 @@ class Pipeline(_ScikitCompat):
         Parse arguments and tokenize
         """
         # Parse arguments
+        if self.tokenizer.pad_token is None:
+            padding = False
         inputs = self.tokenizer(
             inputs,
             add_special_tokens=add_special_tokens,

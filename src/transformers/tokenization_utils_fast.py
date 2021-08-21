@@ -587,7 +587,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             text_iterator (generator of :obj:`List[str]`):
                 The training corpus. Should be a generator of batches of texts, for instance a list of lists of texts
                 if you have everything in memory.
-            vocab_size (obj:`int`):
+            vocab_size (:obj:`int`):
                 The size of the vocabulary you want for your tokenizer.
             new_special_tokens (list of :obj:`str` or :obj:`AddedToken`, `optional`):
                 A list of new special tokens to add to the tokenizer you are training.

@@ -233,6 +233,7 @@ _import_structure = {
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
     ],
+    "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
@@ -369,6 +370,7 @@ if is_tokenizers_available():
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
     _import_structure["models.retribert"].append("RetriBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
+    _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
@@ -1046,6 +1048,15 @@ if is_torch_available():
             "Speech2TextPreTrainedModel",
         ]
     )
+    _import_structure["models.splinter"].extend(
+        [
+            "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SplinterForQuestionAnswering",
+            "SplinterLayer",
+            "SplinterModel",
+            "SplinterPreTrainedModel",
+        ]
+    )
     _import_structure["models.squeezebert"].extend(
         [
             "SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1295,6 +1306,17 @@ if is_tf_available():
             "TFCTRLLMHeadModel",
             "TFCTRLModel",
             "TFCTRLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deberta"].extend(
+        [
+            "TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFDebertaForMaskedLM",
+            "TFDebertaForQuestionAnswering",
+            "TFDebertaForSequenceClassification",
+            "TFDebertaForTokenClassification",
+            "TFDebertaModel",
+            "TFDebertaPreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -1903,6 +1925,7 @@ if TYPE_CHECKING:
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
     from .models.speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
+    from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
@@ -2034,6 +2057,7 @@ if TYPE_CHECKING:
         from .models.retribert import RetriBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
         from .models.roformer import RoFormerTokenizerFast
+        from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
@@ -2591,6 +2615,13 @@ if TYPE_CHECKING:
             Speech2TextModel,
             Speech2TextPreTrainedModel,
         )
+        from .models.splinter import (
+            SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SplinterForQuestionAnswering,
+            SplinterLayer,
+            SplinterModel,
+            SplinterPreTrainedModel,
+        )
         from .models.squeezebert import (
             SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             SqueezeBertForMaskedLM,
@@ -2819,6 +2850,15 @@ if TYPE_CHECKING:
             TFCTRLLMHeadModel,
             TFCTRLModel,
             TFCTRLPreTrainedModel,
+        )
+        from .models.deberta import (
+            TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDebertaForMaskedLM,
+            TFDebertaForQuestionAnswering,
+            TFDebertaForSequenceClassification,
+            TFDebertaForTokenClassification,
+            TFDebertaModel,
+            TFDebertaPreTrainedModel,
         )
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

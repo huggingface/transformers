@@ -378,7 +378,6 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @slow
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
