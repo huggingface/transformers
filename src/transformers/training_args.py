@@ -706,18 +706,12 @@ class TrainingArguments:
             self.run_name = self.output_dir
 
         if self.fp16 and self.bf16:
-            raise ValueError(
-                "At most one of fp16 and bf16 can be True, but not both"
-            )
+            raise ValueError("At most one of fp16 and bf16 can be True, but not both")
         if self.bf16:
             if self.half_precision_backend == "apex":
-                raise ValueError(
-                    "bf16 is not supported by apex backend"
-                )
+                raise ValueError("bf16 is not supported by apex backend")
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
-                raise ValueError(
-                    "sharded_ddp is not supported with bf16"
-                )
+                raise ValueError("sharded_ddp is not supported with bf16")
         if is_torch_available() and self.device.type != "cuda" and (self.fp16 or self.half_precision_full_eval):
             raise ValueError(
                 "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation can only be used on CUDA devices."
@@ -880,7 +874,7 @@ class TrainingArguments:
 
         if device.type == "cuda":
             torch.cuda.set_device(device)
-        
+
         return device
 
     @property
