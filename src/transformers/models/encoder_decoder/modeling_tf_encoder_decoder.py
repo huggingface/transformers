@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,8 +34,8 @@ _CONFIG_FOR_DOC = "EncoderDecoderConfig"
 ENCODER_DECODER_START_DOCSTRING = r"""
     This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
     encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via
-    :meth:`~transformers.AutoModel.from_pretrained` function and the decoder is loaded via
-    :meth:`~transformers.AutoModelForCausalLM.from_pretrained` function. Cross-attention layers are automatically added
+    :meth:`~transformers.TFAutoModel.from_pretrained` function and the decoder is loaded via
+    :meth:`~transformers.TFAutoModelForCausalLM.from_pretrained` function. Cross-attention layers are automatically added
     to the decoder and should be fine-tuned on a downstream generative task, like summarization.
 
     The effectiveness of initializing sequence-to-sequence models with pretrained checkpoints for sequence generation
@@ -46,24 +46,24 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     After such an Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other models
     (see the examples for more information).
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
-        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.EncoderDecoderConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the model
             weights.
 """
 
 ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
@@ -71,14 +71,14 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+        decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
@@ -93,29 +93,29 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Provide for sequence to sequence training to the decoder. Indices can be obtained using
             :class:`~transformers.PreTrainedTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
             :meth:`transformers.PreTrainedTokenizer.__call__` for details.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+        decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
-        encoder_outputs (:obj:`tuple(torch.FloatTensor)`, `optional`):
+        encoder_outputs (:obj:`tuple(tuple(tf.Tensor)`, `optional`):
             This tuple must consist of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
-            :obj:`attentions`) :obj:`last_hidden_state` (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,
+            :obj:`attentions`) :obj:`last_hidden_state` (:obj:`tf.Tensor` of shape :obj:`(batch_size,
             sequence_length, hidden_size)`) is a tensor of hidden-states at the output of the last layer of the
             encoder. Used in the cross-attention of the decoder.
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (:obj:`tuple(tuple(tf.Tensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
+        decoder_inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
             representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`
             indices into associated vectors than the model's internal embedding lookup matrix.
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss for the decoder. Indices should be in ``[-100, 0,
             ..., config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
@@ -131,6 +131,9 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.Seq2SeqLMOutput` instead of a
             plain tuple.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
         kwargs: (`optional`) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
 
             - Without a prefix which will be input as ``**encoder_kwargs`` for the encoder forward function.
@@ -141,10 +144,10 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(ENCODER_DECODER_START_DOCSTRING)
 class TFEncoderDecoderModel(TFPreTrainedModel):
     r"""
-    :class:`~transformers.EncoderDecoder` is a generic model class that will be instantiated as a transformer
+    :class:`~transformers.TFEncoderDecoder` is a generic model class that will be instantiated as a transformer
     architecture with one of the base model classes of the library as encoder and another one as decoder when created
-    with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
-    :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
+    with the :meth`~transformers.TFAutoModel.from_pretrained` class method for the encoder and
+    :meth`~transformers.TFAutoModelForCausalLM.from_pretrained` class method for the decoder.
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
@@ -236,24 +239,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
 
-    # def save_pretrained(self, save_directory, saved_model=False, version=1, push_to_hub=False, **kwargs):
-    #
-    #     import os
-    #     self.encoder.save_pretrained(os.path.join(save_directory, 'encoder'), saved_model, version, push_to_hub, **kwargs)
-    #     self.decoder.save_pretrained(os.path.join(save_directory, 'decoder'), saved_model, version, push_to_hub, **kwargs)
-    #     self.config.save_pretrained(save_directory, push_to_hub, **kwargs)
-    #
-    # @classmethod
-    # def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-    #
-    #     import os
-    #     return cls.from_encoder_decoder_pretrained(
-    #         os.path.join(pretrained_model_name_or_path, 'encoder'),
-    #         os.path.join(pretrained_model_name_or_path, 'decoder'),
-    #         *model_args,
-    #         **kwargs
-    #     )
-
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
@@ -266,10 +251,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model
         checkpoints.
 
-
-        The model is set in evaluation mode by default using :obj:`model.eval()` (Dropout modules are deactivated). To
-        train the model, you need to first set it back in training mode with :obj:`model.train()`.
-
         Params:
             encoder_pretrained_model_name_or_path (:obj: `str`, `optional`):
                 Information necessary to initiate the encoder. Can be either:
@@ -278,11 +259,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                       Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
                       a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
-                      :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
-                    - A path or url to a `tensorflow index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In
-                      this case, ``from_tf`` should be set to :obj:`True` and a configuration object should be provided
-                      as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in
-                      a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                      :func:`~transformers.TFPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
 
             decoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
                 Information necessary to initiate the decoder. Can be either:
@@ -291,11 +268,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                       Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
                       a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
-                      :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
-                    - A path or url to a `tensorflow index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In
-                      this case, ``from_tf`` should be set to :obj:`True` and a configuration object should be provided
-                      as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in
-                      a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                      :func:`~transformers.TFPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
 
             model_args (remaining positional arguments, `optional`):
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
@@ -313,12 +286,12 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         Example::
 
             >>> from transformers import TFEncoderDecoderModel
-            >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-            >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased')
+            >>> # initialize a bert2gpt2 from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
+            >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
             >>> # saving model after fine-tuning
-            >>> model.save_pretrained("./bert2bert")
+            >>> model.save_pretrained("./bert2gpt2")
             >>> # load fine-tuned model
-            >>> model = TFEncoderDecoderModel.from_pretrained("./bert2bert")
+            >>> model = TFEncoderDecoderModel.from_pretrained("./bert2gpt2")
 
         """
 
@@ -427,13 +400,14 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         Examples::
 
             >>> from transformers import TFEncoderDecoderModel, BertTokenizer
-            >>> import torch
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
+            >>> # initialize a bert2gpt2 from a pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-cased', 'gpt2')
+
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 
             >>> # forward
-            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> input_ids = tokenizer.encode("Hello, my dog is cute", add_special_tokens=True, return_tensors='tf')  # Batch size 1
             >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
 
             >>> # training
@@ -441,11 +415,11 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             >>> loss, logits = outputs.loss, outputs.logits
 
             >>> # save and load from pretrained
-            >>> model.save_pretrained("bert2bert")
-            >>> model = TFEncoderDecoderModel.from_pretrained("bert2bert")
+            >>> model.save_pretrained("bert2gpt2")
+            >>> model = TFEncoderDecoderModel.from_pretrained("bert2gpt2")
 
             >>> # generation
-            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
+            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.bos_token_id)
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

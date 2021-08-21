@@ -732,6 +732,26 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         training=False,
         **kwargs,
     ):
+        r"""
+        encoder_hidden_states  (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+        past (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If :obj:`past` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past`). Set to :obj:`False` during training, :obj:`True` during generation
+        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -833,6 +853,24 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         **kwargs,
     ):
         r"""
+        encoder_hidden_states  (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+        past (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If :obj:`past` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past`). Set to :obj:`False` during training, :obj:`True` during generation
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
             config.vocab_size - 1]``.
