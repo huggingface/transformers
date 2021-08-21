@@ -651,6 +651,8 @@ class PretrainedConfig(PushToHubMixin):
             ):
                 serializable_config_dict[key] = value
 
+        self.dict_torch_dtype_to_str(serializable_config_dict)
+
         return serializable_config_dict
 
     def to_dict(self) -> Dict[str, Any]:
@@ -667,8 +669,7 @@ class PretrainedConfig(PushToHubMixin):
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
 
-        if output.get("torch_dtype", None) is not None and not isinstance(output["torch_dtype"], str):
-            output["torch_dtype"] = str(output["torch_dtype"]).split(".")[1]
+        self.dict_torch_dtype_to_str(output)
 
         return output
 
@@ -751,6 +752,15 @@ class PretrainedConfig(PushToHubMixin):
                 )
 
             setattr(self, k, v)
+
+    def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
+        """
+        Checks whether the passed dictionary has a `torch_dtype` key and if it's not None, converts torch.dtype to a
+        string of just the type. For example, :obj:`torch.float32` get converted into `"float32"` string, which can
+        then be stored in the json format.
+        """
+        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
+            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
 
 
 PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)
