@@ -298,6 +298,24 @@ def is_torch_cuda_available():
         return False
 
 
+def is_torch_bf16_available():
+    if is_torch_available():
+        import torch
+
+        try:
+            # this will fail if
+            # 1. the hardware doesn't support bf16
+            # 2. torch <= 1.9
+            # XXX: one problem here is that it may give invalid results on mixed hardware, so it's
+            # really only correct for the 0th gpu (or currently set default device if different from 0)
+            torch.cuda.amp.autocast(fast_dtype=torch.bfloat16)
+            return True
+        except RuntimeError:
+            return False
+    else:
+        return False
+
+
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
