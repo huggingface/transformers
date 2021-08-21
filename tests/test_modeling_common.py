@@ -16,6 +16,7 @@
 import copy
 import gc
 import inspect
+import json
 import os.path
 import random
 import tempfile
@@ -1690,8 +1691,13 @@ class ModelUtilsTest(TestCasePlus):
         model = model.half()
         model.save_pretrained(model_path)
         model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
-        self.assertEqual(model.config.torch_dtype, torch.float16)  # tests `config.torch_dtype` saving
+        self.assertEqual(model.config.torch_dtype, torch.float16)
         self.assertEqual(model.dtype, torch.float16)
+
+        # tests `config.torch_dtype` saving
+        with open(f"{model_path}/config.json") as f:
+            config_dict = json.load(f)
+        self.assertEqual(config_dict["torch_dtype"], "float16")
 
         # test fp16 save_pretrained, loaded with the explicit fp16
         model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float16)
