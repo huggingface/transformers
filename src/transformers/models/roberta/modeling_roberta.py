@@ -81,7 +81,9 @@ class RobertaEmbeddings(nn.Module):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.normalize_embeddings = config.normalize_embeddings
+        if self.normalize_embeddings:
+            self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -135,7 +137,9 @@ class RobertaEmbeddings(nn.Module):
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
-        embeddings = self.LayerNorm(embeddings)
+
+        if self.normalize_embeddings:
+            embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
@@ -287,14 +291,18 @@ class RobertaSelfAttention(nn.Module):
 class RobertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.normalize_before = config.normalize_embeddings
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        if self.normalize_before:
+            self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
+        if self.normalize_before:
+            hidden_states = self.LayerNorm(hidden_states + input_tensor)
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = hidden_states+input_tensor
         return hidden_states
 
 
@@ -302,6 +310,9 @@ class RobertaSelfOutput(nn.Module):
 class RobertaAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.normalize_before = config.normalize_embeddings
+        if not self.normalize_before:
+            self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.self = RobertaSelfAttention(config)
         self.output = RobertaSelfOutput(config)
         self.pruned_heads = set()
@@ -334,8 +345,10 @@ class RobertaAttention(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
+        if not self.normalize_before:
+            self_outputs=self.self_attn_layer_norm(hidden_states)
         self_outputs = self.self(
-            hidden_states,
+            hidden_states if self.normalize_before else self_outputs,
             attention_mask,
             head_mask,
             encoder_hidden_states,
@@ -369,13 +382,18 @@ class RobertaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.normalize_before = config.normalize_embeddings
+        if self.normalize_before:
+            self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+            self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        if self.normalize_before :
+            hidden_states = self.dropout(hidden_states)
+            hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        else: 
+            hidden_states = hidden_states + input_tensor
         return hidden_states
 
 
@@ -392,7 +410,10 @@ class RobertaLayer(nn.Module):
             assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
             self.crossattention = RobertaAttention(config)
         self.intermediate = RobertaIntermediate(config)
-        self.output = RobertaOutput(config)
+        self.output = RobertaOutput(config) 
+        self.normalize_before = config.normalize_embeddings
+        if not self.normalize_before:
+            self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -458,7 +479,10 @@ class RobertaLayer(nn.Module):
         return outputs
 
     def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
+        if not self.normalize_before:
+            intermediate_output = self.LayerNorm(attention_output)
+
+        intermediate_output = self.intermediate(attention_output if self.normalize_before else intermediate_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
@@ -469,6 +493,9 @@ class RobertaEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([RobertaLayer(config) for _ in range(config.num_hidden_layers)])
+        self.normalize_embeddings = config.normalize_embeddings
+        if not self.normalize_embeddings:
+            self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -536,6 +563,9 @@ class RobertaEncoder(nn.Module):
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
+
+        if not self.normalize_embeddings:
+            hidden_states = self.LayerNorm(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
