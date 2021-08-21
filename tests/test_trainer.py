@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_bf16,
     require_torch_gpu,
     require_torch_multi_gpu,
     require_torch_non_multi_gpu,
@@ -1260,6 +1261,22 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # should be about half of fp16_init
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
+
+    @require_torch_gpu
+    @require_torch_bf16
+    def test_bf16_full_eval(self):
+
+        # XXX: to be written once the new cli args are chosen
+        pass
+
+    @require_torch_gpu
+    @require_torch_bf16
+    def test_mixed_bf16(self):
+
+        # very basic test
+        trainer = get_regression_trainer(bf16=True)
+        trainer.train()
+
 
     def test_no_wd_param_group(self):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
