@@ -2969,22 +2969,40 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation_strategy = TruncationStrategy(truncation_strategy)
 
         overflowing_tokens = []
+        temp_ids = ids[:]
+        temp_pair_ids = None
+        if pair_ids is not None:
+            temp_pair_ids = pair_ids[:]
         if truncation_strategy == TruncationStrategy.LONGEST_FIRST:
+            overflowing_tokens_ids = []
+            overflowing_tokens_pair_ids = []
             for _ in range(num_tokens_to_remove):
                 if pair_ids is None or len(ids) > len(pair_ids):
-                    if not overflowing_tokens:
+                    if not overflowing_tokens_ids:
                         window_len = min(len(ids), stride + 1)
                     else:
                         window_len = 1
-                    overflowing_tokens.extend(ids[-window_len:])
+                    ct = 0
+                    for __ in temp_ids[-window_len:]:
+                        overflowing_tokens_ids.insert(ct, __)
+                        ct = ct + 1
                     ids = ids[:-1]
+                    temp_ids = temp_ids[:-window_len]
                 else:
-                    if not overflowing_tokens:
+                    if not overflowing_tokens_pair_ids:
                         window_len = min(len(pair_ids), stride + 1)
                     else:
                         window_len = 1
-                    overflowing_tokens.extend(pair_ids[-window_len:])
+                    ct = 0
+                    for __ in temp_pair_ids[-window_len:]:
+                        overflowing_tokens_pair_ids.insert(ct, __)
+                        ct = ct + 1
                     pair_ids = pair_ids[:-1]
+                    temp_pair_ids = temp_pair_ids[:-window_len]
+            if len(overflowing_tokens_ids) != 0:
+                overflowing_tokens.extend(overflowing_tokens_ids)
+            if len(overflowing_tokens_pair_ids) != 0:
+                overflowing_tokens.extend(overflowing_tokens_pair_ids)
         elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
@@ -3009,7 +3027,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     f"Please select another truncation strategy than {truncation_strategy}, "
                     f"for instance 'longest_first' or 'only_first'."
                 )
-
+        # print("overflowing_tokens",overflowing_tokens)
         return (ids, pair_ids, overflowing_tokens)
 
     def _pad(
