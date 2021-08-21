@@ -16,19 +16,31 @@ ESM
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ESM model was proposed in `<INSERT PAPER NAME HERE> <<INSERT PAPER LINK HERE>>`__ by <INSERT AUTHORS HERE>. <INSERT
-SHORT SUMMARY HERE>
+The ESM model was proposed in `Biological structure and function emerge from scaling unsupervised learning to 250
+million protein sequences <https://www.pnas.org/content/118/15/e2016239118>`__. ESM is the ESM-1b Transformer protein
+language model from Facebook AI Research.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*In the field of artificial intelligence, a combination of scale in data and model capacity enabled by unsupervised
+learning has led to major advances in representation learning and statistical generation. In the life sciences, the
+anticipated growth of sequencing promises unprecedented data on natural sequence diversity. Protein language modeling
+at the scale of evolution is a logical step toward predictive and generative artificial intelligence for biology. To
+this end, we use unsupervised learning to train a deep contextual language model on 86 billion amino acids across 250
+million protein sequences spanning evolutionary diversity. The resulting model contains information about biological
+properties in its representations. The representations are learned from sequence data alone. The learned representation
+space has a multiscale organization reflecting structure from the level of biochemical properties of amino acids to
+remote homology of proteins. Information about secondary and tertiary structure is encoded in the representations and
+can be identified by linear projections. Representation learning produces features that generalize across a range of
+applications, enabling state-of-the-art supervised prediction of mutational effect and secondary structure and
+improving state-of-the-art features for long-range contact prediction.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- ESM was trained with the masked language modeling (MLM)
 
-This model was contributed by `<INSERT YOUR HF USERNAME HERE> <https://huggingface.co/<INSERT YOUR HF USERNAME
-HERE>>`__. The original code can be found `here <<INSERT LINK TO GITHUB REPO HERE>>`__.
+This model was contributed by `jasonliu <https://huggingface.co/jasonliu>`__. The original code can be found 
+`here <https://github.com/facebookresearch/esm>`__.
 
 ESMConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -45,11 +57,11 @@ ESMTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
-ESMTokenizerFast
+.. ESMTokenizerFast ..
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.ESMTokenizerFast
-    :members:
+.. .. autoclass:: transformers.ESMTokenizerFast
+..     :members:
 
 
 ESMModel
