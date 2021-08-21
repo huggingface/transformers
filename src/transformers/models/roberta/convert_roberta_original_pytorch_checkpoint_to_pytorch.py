@@ -33,10 +33,11 @@ from transformers.models.bert.modeling_bert import (
     BertSelfOutput,
 )
 from transformers.utils import logging
+from transformers.models.roberta.modeling_roberta import RobertaAttention
 
 
-if version.parse(fairseq.__version__) < version.parse("0.9.0"):
-    raise Exception("requires fairseq >= 0.9.0")
+if version.parse(fairseq.__version__) < version.parse("1.0.0a"):
+    raise Exception("requires fairseq >= 1.0.0a")
 
 
 logging.set_verbosity_info()
@@ -56,17 +57,26 @@ def convert_roberta_checkpoint_to_pytorch(
     roberta_sent_encoder = roberta.model.encoder.sentence_encoder
     config = RobertaConfig(
         vocab_size=roberta_sent_encoder.embed_tokens.num_embeddings,
-        hidden_size=roberta.args.encoder_embed_dim,
-        num_hidden_layers=roberta.args.encoder_layers,
-        num_attention_heads=roberta.args.encoder_attention_heads,
-        intermediate_size=roberta.args.encoder_ffn_embed_dim,
+        hidden_size=roberta.cfg.model.encoder_embed_dim,
+        num_hidden_layers=roberta.cfg.model.encoder_layers,
+        num_attention_heads=roberta.cfg.model.encoder_attention_heads,
+        intermediate_size=roberta.cfg.model.encoder_ffn_embed_dim,
         max_position_embeddings=514,
         type_vocab_size=1,
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
     )
     if classification_head:
         config.num_labels = roberta.model.classification_heads["mnli"].out_proj.weight.shape[0]
-    print("Our BERT config:", config)
+
+    # Older fairseq models have normalized embeddings, see https://github.com/pytorch/fairseq/issues/3600
+    normalize_embeddings = (
+        hasattr(roberta_sent_encoder, "layernorm_embedding") and roberta_sent_encoder.layernorm_embedding
+    )
+
+    if not normalize_embeddings:
+        config.normalize_embeddings = False
+
+    print("Our RoBERTa config:", config)
 
     model = RobertaForSequenceClassification(config) if classification_head else RobertaForMaskedLM(config)
     model.eval()
@@ -78,13 +88,25 @@ def convert_roberta_checkpoint_to_pytorch(
     model.roberta.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
         model.roberta.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c RoBERTa doesn't use them.
-    model.roberta.embeddings.LayerNorm.weight = roberta_sent_encoder.emb_layer_norm.weight
-    model.roberta.embeddings.LayerNorm.bias = roberta_sent_encoder.emb_layer_norm.bias
+
+    if normalize_embeddings:
+        model.roberta.embeddings.LayerNorm.weight = roberta_sent_encoder.layernorm_embedding.weight
+        model.roberta.embeddings.LayerNorm.bias = roberta_sent_encoder.layernorm_embedding.bias
+    else:
+        model.roberta.encoder.LayerNorm.weight = roberta_sent_encoder.layer_norm.weight
+        model.roberta.encoder.LayerNorm.bias = roberta_sent_encoder.layer_norm.bias
+
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
         layer: BertLayer = model.roberta.encoder.layer[i]
         roberta_layer: TransformerSentenceEncoderLayer = roberta_sent_encoder.layers[i]
+            
+        attention: RobertaAttention = layer.attention
+        if not normalize_embeddings:
+            
+            attention.self_attn_layer_norm.weight = roberta_layer.self_attn_layer_norm.weight
+            attention.self_attn_layer_norm.bias = roberta_layer.self_attn_layer_norm.bias
 
         # self attention
         self_attn: BertSelfAttention = layer.attention.self
@@ -107,8 +129,10 @@ def convert_roberta_checkpoint_to_pytorch(
         assert self_output.dense.weight.shape == roberta_layer.self_attn.out_proj.weight.shape
         self_output.dense.weight = roberta_layer.self_attn.out_proj.weight
         self_output.dense.bias = roberta_layer.self_attn.out_proj.bias
-        self_output.LayerNorm.weight = roberta_layer.self_attn_layer_norm.weight
-        self_output.LayerNorm.bias = roberta_layer.self_attn_layer_norm.bias
+        
+        # this one is final layer norm
+        layer.LayerNorm.weight = roberta_layer.final_layer_norm.weight
+        layer.LayerNorm.bias = roberta_layer.final_layer_norm.bias
 
         # intermediate
         intermediate: BertIntermediate = layer.intermediate
@@ -121,8 +145,6 @@ def convert_roberta_checkpoint_to_pytorch(
         assert bert_output.dense.weight.shape == roberta_layer.fc2.weight.shape
         bert_output.dense.weight = roberta_layer.fc2.weight
         bert_output.dense.bias = roberta_layer.fc2.bias
-        bert_output.LayerNorm.weight = roberta_layer.final_layer_norm.weight
-        bert_output.LayerNorm.bias = roberta_layer.final_layer_norm.bias
         # end of layer
 
     if classification_head:
