@@ -169,19 +169,22 @@ class BeamSearchScorer(BeamScorer):
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
         self.num_beam_groups = num_beam_groups
         self.group_size = self.num_beams // self.num_beam_groups
+        self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
+        self.num_beam_hyps_to_keep_per_group = num_beam_hyps_to_keep // self.num_beam_groups
 
         self._is_init = False
         self._beam_hyps = [
             [
                 BeamHypotheses(
-                    num_beams=self.num_beams,
+                    num_beams=self.group_size,
                     length_penalty=self.length_penalty,
                     early_stopping=self.do_early_stopping,
                 ) for _ in range(num_beam_groups)
             ]
             for _ in range(batch_size)
         ] # individual beam hypothesis for each group and each input
-        self._done = torch.tensor([False for _ in range(batch_size)], dtype=torch.bool, device=self.device)
+        self._done = torch.tensor([[False for _ in range(num_beam_groups)] for _ in range(batch_size)],
+                                  dtype=torch.bool, device=self.device)
 
         if not isinstance(num_beams, int) or num_beams <= 1:
             raise ValueError(
@@ -203,7 +206,7 @@ class BeamSearchScorer(BeamScorer):
 
     @property
     def is_done(self) -> bool:
-        return self._done.all()
+        return bool(self._done.all())
 
     def process(
         self,
