@@ -678,6 +678,7 @@ class TFGenerationMixin:
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                return_dict=return_dict_in_generate,
             )
             if return_dict_in_generate:
                 if output_attentions:
