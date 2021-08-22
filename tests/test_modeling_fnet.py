@@ -463,12 +463,12 @@ class FNetModelIntegrationTest(unittest.TestCase):
             >>> import sentencepiece as spm
             >>> from flax.training import checkpoints
             >>> from f_net.models import PreTrainingModel
-            >>> from f_net.configs.pretraining import get_config, ModelArchitecture 
-            
-            >>> pretrained_params = checkpoints.restore_checkpoint('./f_net/f_net_checkpoint', None) # Location of original checkpoint     
+            >>> from f_net.configs.pretraining import get_config, ModelArchitecture
+
+            >>> pretrained_params = checkpoints.restore_checkpoint('./f_net/f_net_checkpoint', None) # Location of original checkpoint
             >>> pretrained_config  = get_config()
             >>> pretrained_config.model_arch = ModelArchitecture.F_NET
-           
+
             >>> vocab_filepath = "./f_net/c4_bpe_sentencepiece.model" # Location of the sentence piece model
             >>> tokenizer = spm.SentencePieceProcessor()
             >>> tokenizer.Load(vocab_filepath)
@@ -483,8 +483,7 @@ class FNetModelIntegrationTest(unittest.TestCase):
             >>> flax_model_outputs = flax_pretraining_model.apply({"params": pretrained_model_params}, tokens, attention_mask, type_ids, None, None, None, None, deterministic=True)
             >>> masked_lm_logits[:, :3, :3]
         """
-        
-        
+
         model = FNetForMaskedLM.from_pretrained("google/fnet-base")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
