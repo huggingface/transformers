@@ -654,6 +654,7 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
 
         if inputs["position_ids"] is None:
             inputs["position_ids"] = tf.expand_dims(tf.range(past_key_values_length, seq_length + past_key_values_length), axis=0)
+            inputs["position_ids"] = tf.tile(input=inputs["position_ids"], multiples=(batch_size, 1))
 
         if inputs["attention_mask"] is None:
             inputs["attention_mask"] = tf.fill(dims=(batch_size, seq_length + past_key_values_length), value=1)
@@ -1280,7 +1281,7 @@ class TFRobertaForCausalLM(TFRobertaPreTrainedModel, TFCausalLanguageModelingLos
         )
 
         sequence_output = outputs[0]
-        logits = self.lm_head(sequence_output=sequence_output)
+        logits = self.lm_head(hidden_states=sequence_output)
         loss = None
 
         if inputs["labels"] is not None:
