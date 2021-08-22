@@ -181,6 +181,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "TFBlenderbotForConditionalGeneration"),
         ("blenderbot-small", "TFBlenderbotSmallForConditionalGeneration"),
         ("bart", "TFBartForConditionalGeneration"),
+        ("encoder-decoder", "TFEncoderDecoderModel"),
     ]
 )
 
