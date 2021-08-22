@@ -507,7 +507,10 @@ if is_torch_available():
     _import_structure["models.cvt"].extend(
         [
             "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CvTForImageClassification",
+            "CvTForMaskedImageModeling",
             "CvTModel",
+            "CvTPreTrainedModel",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -2100,6 +2103,8 @@ if TYPE_CHECKING:
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.vit import ViTFeatureExtractor
+        from .models.cvt import CvTFeatureExtractor
+
     else:
         from .utils.dummy_vision_objects import *
 
@@ -2120,6 +2125,8 @@ if TYPE_CHECKING:
         from .models.cvt import (
             CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
             CvTModel,
+            CvTPreTrainedModel,
+            CvTForImageClassification,
         )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark

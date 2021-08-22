@@ -17,6 +17,8 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+import torch
+import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
@@ -24,7 +26,6 @@ CVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/cvt-21-384x384": "https://huggingface.co/microsoft/cvt-21-384x384/resolve/main/config.json",
     # See all CvT models at https://huggingface.co/models?filter=cvt
 }
-
 
 class CvTConfig(PretrainedConfig):
     r"""
@@ -89,7 +90,9 @@ class CvTConfig(PretrainedConfig):
     model_type = "cvt"
     def __init__(
         self,
+        in_chans = 3,
         init = 'trunc_norm',
+        num_classes = 1000,
         num_stages = 3,
         patch_size = [7, 3, 3],
         patch_stride = [4, 2, 2],
@@ -110,11 +113,14 @@ class CvTConfig(PretrainedConfig):
         stride_kv = [2, 2, 2],
         padding_q = [1, 1, 1],
         stride_q = [1, 1, 1],
+        act_layer="gelu",
+        norm_layer="layer_norm",
         **kwargs
     ):
         super().__init__(**kwargs)
-
+        self.in_chans = in_chans
         self.num_stages = num_stages
+        self.num_classes = num_classes
         self.init = init
         self.patch_size = patch_size
         self.patch_stride = patch_stride
@@ -135,4 +141,5 @@ class CvTConfig(PretrainedConfig):
         self.stride_kv = stride_kv
         self.padding_q = padding_q
         self.stride_q = stride_q
-        
+        self.act_layer = act_layer
+        self.norm_layer = norm_layer
