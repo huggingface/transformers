@@ -593,7 +593,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         r"lm_head\.weight",
         r"h\.\d+\.attn\.attention\.bias",
     ]
-    _keys_to_ignore_on_save = [r"lm_head.weight"]
+    _keys_to_ignore_on_save = []
 
     def __init__(self, config):
         super().__init__(config)
