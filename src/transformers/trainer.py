@@ -423,7 +423,7 @@ class Trainer:
             else:
                 self.half_precision_backend = args.half_precision_backend
             logger.info(f"Using {self.half_precision_backend} half precision backend")
-        
+
         self.do_grad_scaling = False
         if (args.fp16 or args.bf16) and not args.deepspeed:  # deepspeed manages its own half precision
             if self.half_precision_backend == "amp":
