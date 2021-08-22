@@ -293,7 +293,7 @@ class FNetTokenizer(PreTrainedTokenizer):
                     prev_mask = True
                     slice_indices.append(False)
 
-                elif prev_mask:
+                elif prev_mask and token not in self.unique_no_split_tokens:
                     prev_mask = False
                     slice_indices.append(True)
 
