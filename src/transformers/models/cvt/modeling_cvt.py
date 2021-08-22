@@ -558,42 +558,6 @@ class CvTModel(CvTPreTrainedModel):
         self.norm = self.norm_layer(dim_embed)
         self.cls_token = self.config.cls_token[-1]
 
-    def init_weights(self, pretrained="", pretrained_layers=[], verbose=True):
-        if os.path.isfile(pretrained):
-            pretrained_dict = torch.load(pretrained, map_location="cpu")
-            logger.info(f"=> loading pretrained model {pretrained}")
-            model_dict = self.state_dict()
-            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict.keys()}
-            need_init_state_dict = {}
-            for k, v in pretrained_dict.items():
-                need_init = k.split(".")[0] in pretrained_layers or pretrained_layers[0] == "*"
-                if need_init:
-                    if verbose:
-                        logger.info(f"=> init {k} from {pretrained}")
-                    if "pos_embed" in k and v.size() != model_dict[k].size():
-                        size_pretrained = v.size()
-                        size_new = model_dict[k].size()
-                        logger.info("=> load_pretrained: resized variant: {} to {}".format(size_pretrained, size_new))
-
-                        ntok_new = size_new[1]
-                        ntok_new -= 1
-
-                        posemb_tok, posemb_grid = v[:, :1], v[0, 1:]
-
-                        gs_old = int(np.sqrt(len(posemb_grid)))
-                        gs_new = int(np.sqrt(ntok_new))
-
-                        logger.info("=> load_pretrained: grid-size from {} to {}".format(gs_old, gs_new))
-
-                        posemb_grid = posemb_grid.reshape(gs_old, gs_old, -1)
-                        zoom = (gs_new / gs_old, gs_new / gs_old, 1)
-                        posemb_grid = scipy.ndimage.zoom(posemb_grid, zoom, order=1)
-                        posemb_grid = posemb_grid.reshape(1, gs_new ** 2, -1)
-                        v = torch.tensor(np.concatenate([posemb_tok, posemb_grid], axis=1))
-
-                    need_init_state_dict[k] = v
-            self.load_state_dict(need_init_state_dict, strict=False)
-
     @torch.jit.ignore
     def no_weight_decay(self):
         layers = set()
@@ -737,42 +701,6 @@ class CvTForImageClassification(CvTPreTrainedModel):
         self.cls_token = self.config.cls_token[-1]
         self.head = nn.Linear(dim_embed, self.num_classes) if self.num_classes > 0 else nn.Identity()
         trunc_normal_(self.head.weight, std=0.02)
-
-    def init_weights(self, pretrained="", pretrained_layers=[], verbose=True):
-        if os.path.isfile(pretrained):
-            pretrained_dict = torch.load(pretrained, map_location="cpu")
-            logger.info(f"=> loading pretrained model {pretrained}")
-            model_dict = self.state_dict()
-            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict.keys()}
-            need_init_state_dict = {}
-            for k, v in pretrained_dict.items():
-                need_init = k.split(".")[0] in pretrained_layers or pretrained_layers[0] == "*"
-                if need_init:
-                    if verbose:
-                        logger.info(f"=> init {k} from {pretrained}")
-                    if "pos_embed" in k and v.size() != model_dict[k].size():
-                        size_pretrained = v.size()
-                        size_new = model_dict[k].size()
-                        logger.info("=> load_pretrained: resized variant: {} to {}".format(size_pretrained, size_new))
-
-                        ntok_new = size_new[1]
-                        ntok_new -= 1
-
-                        posemb_tok, posemb_grid = v[:, :1], v[0, 1:]
-
-                        gs_old = int(np.sqrt(len(posemb_grid)))
-                        gs_new = int(np.sqrt(ntok_new))
-
-                        logger.info("=> load_pretrained: grid-size from {} to {}".format(gs_old, gs_new))
-
-                        posemb_grid = posemb_grid.reshape(gs_old, gs_old, -1)
-                        zoom = (gs_new / gs_old, gs_new / gs_old, 1)
-                        posemb_grid = scipy.ndimage.zoom(posemb_grid, zoom, order=1)
-                        posemb_grid = posemb_grid.reshape(1, gs_new ** 2, -1)
-                        v = torch.tensor(np.concatenate([posemb_tok, posemb_grid], axis=1))
-
-                    need_init_state_dict[k] = v
-            self.load_state_dict(need_init_state_dict, strict=False)
 
     @torch.jit.ignore
     def no_weight_decay(self):
