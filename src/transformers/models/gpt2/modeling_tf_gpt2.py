@@ -151,7 +151,18 @@ class TFAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
-    def call(self, x, layer_past, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask, use_cache, output_attentions, training=False):
+    def call(
+        self,
+        x,
+        layer_past,
+        attention_mask,
+        head_mask,
+        encoder_hidden_states,
+        encoder_attention_mask,
+        use_cache,
+        output_attentions,
+        training=False,
+    ):
 
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
@@ -167,7 +178,6 @@ class TFAttention(tf.keras.layers.Layer):
         else:
             x = self.c_attn(x)
             query, key, value = tf.split(x, 3, axis=2)
-
 
         query = self.split_heads(query)
         key = self.split_heads(key)
@@ -225,11 +235,24 @@ class TFBlock(tf.keras.layers.Layer):
             # This doesn't apply to cross-attention, however it seems that `n_ctx` is never used.
             # It's not clear if it makes sense to specify it here.
             self.crossattention = TFAttention(nx, n_ctx, config, scale, name="crossattention", is_cross_attention=True)
-            self.ln_cross_attn = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_cross_attn")
+            self.ln_cross_attn = tf.keras.layers.LayerNormalization(
+                epsilon=config.layer_norm_epsilon, name="ln_cross_attn"
+            )
 
         self.mlp = TFMLP(inner_dim, config, name="mlp")
 
-    def call(self, x, layer_past, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask, use_cache, output_attentions, training=False):
+    def call(
+        self,
+        x,
+        layer_past,
+        attention_mask,
+        head_mask,
+        encoder_hidden_states,
+        encoder_attention_mask,
+        use_cache,
+        output_attentions,
+        training=False,
+    ):
         a = self.ln_1(x)
         output_attn = self.attn(
             a,
@@ -240,7 +263,7 @@ class TFBlock(tf.keras.layers.Layer):
             encoder_attention_mask=None,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            training=training
+            training=training,
         )
         a = output_attn[0]  # output_attn: a, present, (attentions)
         outputs = output_attn[1:]
@@ -265,7 +288,7 @@ class TFBlock(tf.keras.layers.Layer):
                 encoder_attention_mask=encoder_attention_mask,
                 use_cache=False,
                 output_attentions=output_attentions,
-                training=training
+                training=training,
             )
             ca = output_cross_attn[0]  # output_attn: a, present, (cross_attentions)
             x = x + ca
@@ -507,7 +530,11 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
 
         if not inputs["return_dict"]:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions, all_cross_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, presents, all_hidden_states, all_attentions, all_cross_attentions]
+                if v is not None
+            )
 
         return TFBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
@@ -745,9 +772,9 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
 
         past (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+            If :obj:`past` are used, the user can optionally input only the last :obj:`decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)` instead of all
+            :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past`). Set to :obj:`False` during training, :obj:`True` during generation
@@ -794,10 +821,20 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions and self.config.add_cross_attention and output.cross_attentions is not None else None
+        cross_attns = (
+            tf.convert_to_tensor(output.cross_attentions)
+            if self.config.output_attentions
+            and self.config.add_cross_attention
+            and output.cross_attentions is not None
+            else None
+        )
 
         return TFBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=output.last_hidden_state, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
+            cross_attentions=cross_attns,
         )
 
 
@@ -865,9 +902,9 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
         past (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+            If :obj:`past` are used, the user can optionally input only the last :obj:`decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)` instead of all
+            :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past`). Set to :obj:`False` during training, :obj:`True` during generation
@@ -938,9 +975,17 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions and self.config.add_cross_attention and output.cross_attentions is not None else None
+        cross_attns = (
+            tf.convert_to_tensor(output.cross_attentions)
+            if self.config.output_attentions
+            and self.config.add_cross_attention
+            and output.cross_attentions is not None
+            else None
+        )
 
-        return TFCausalLMOutputWithCrossAttentions(logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns)
+        return TFCausalLMOutputWithCrossAttentions(
+            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
+        )
 
 
 @add_start_docstrings(

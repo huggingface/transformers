@@ -20,8 +20,13 @@ from typing import Optional
 import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_tf_outputs import TFSeq2SeqLMOutput, TFBaseModelOutput
+from ...file_utils import (
+    DUMMY_INPUTS,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
+from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
 from ...modeling_tf_utils import TFPreTrainedModel, input_processing
 from ...utils import logging
 from .configuration_encoder_decoder import EncoderDecoderConfig
@@ -35,8 +40,8 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
     encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via
     :meth:`~transformers.TFAutoModel.from_pretrained` function and the decoder is loaded via
-    :meth:`~transformers.TFAutoModelForCausalLM.from_pretrained` function. Cross-attention layers are automatically added
-    to the decoder and should be fine-tuned on a downstream generative task, like summarization.
+    :meth:`~transformers.TFAutoModelForCausalLM.from_pretrained` function. Cross-attention layers are automatically
+    added to the decoder and should be fine-tuned on a downstream generative task, like summarization.
 
     The effectiveness of initializing sequence-to-sequence models with pretrained checkpoints for sequence generation
     tasks was shown in `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks
@@ -46,9 +51,9 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     After such an Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other models
     (see the examples for more information).
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
 
     This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
     it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
@@ -57,8 +62,8 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     Parameters:
         config (:class:`~transformers.EncoderDecoderConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
+            model weights.
 """
 
 ENCODER_DECODER_INPUTS_DOCSTRING = r"""
@@ -98,9 +103,9 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             also be used by default.
         encoder_outputs (:obj:`tuple(tuple(tf.Tensor)`, `optional`):
             This tuple must consist of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
-            :obj:`attentions`) :obj:`last_hidden_state` (:obj:`tf.Tensor` of shape :obj:`(batch_size,
-            sequence_length, hidden_size)`) is a tensor of hidden-states at the output of the last layer of the
-            encoder. Used in the cross-attention of the decoder.
+            :obj:`attentions`) :obj:`last_hidden_state` (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,
+            hidden_size)`) is a tensor of hidden-states at the output of the last layer of the encoder. Used in the
+            cross-attention of the decoder.
         past_key_values (:obj:`tuple(tuple(tf.Tensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
@@ -179,10 +184,10 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
             decoder = TFAutoModelForCausalLM.from_config(config.decoder, name="decoder")
 
-        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.     
+        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
         assert encoder.name == "encoder"
         assert decoder.name == "decoder"
-            
+
         self.encoder = encoder
         self.decoder = decoder
 
@@ -370,10 +375,10 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             kwargs_decoder["load_weight_prefix"] = cls.load_weight_prefix
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
-        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.     
+        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
         assert encoder.name == "encoder"
         assert decoder.name == "decoder"
-            
+
         # instantiate config with corresponding kwargs
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
@@ -446,7 +451,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                 "output_hidden_states": output_hidden_states,
                 "return_dict": return_dict,
                 "training": training,
-                "kwargs_call": kwargs_encoder
+                "kwargs_call": kwargs_encoder,
             }
 
             # Add arguments to encoder from `kwargs_encoder`
@@ -511,7 +516,11 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
         enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions and output.cross_attentions is not None else None
+        cross_attns = (
+            tf.convert_to_tensor(output.cross_attentions)
+            if self.config.output_attentions and output.cross_attentions is not None
+            else None
+        )
 
         return TFSeq2SeqLMOutput(
             logits=output.logits,

@@ -358,7 +358,8 @@ class TFRobertaAttention(tf.keras.layers.Layer):
         attention_output = self.dense_output(
             hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
         )
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions (possibly with past_key_value) if we output them
+        # add attentions (possibly with past_key_value) if we output them
+        outputs = (attention_output,) + self_outputs[1:]
 
         return outputs
 
@@ -544,7 +545,9 @@ class TFRobertaEncoder(tf.keras.layers.Layer):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions, all_cross_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, all_hidden_states, all_attentions, all_cross_attentions] if v is not None
+            )
 
         return TFBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
@@ -653,7 +656,9 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
             past_key_values_length = shape_list(inputs["past_key_values"][0][0])[-2]
 
         if inputs["position_ids"] is None:
-            inputs["position_ids"] = tf.expand_dims(tf.range(past_key_values_length, seq_length + past_key_values_length), axis=0)
+            inputs["position_ids"] = tf.expand_dims(
+                tf.range(past_key_values_length, seq_length + past_key_values_length), axis=0
+            )
             inputs["position_ids"] = tf.tile(input=inputs["position_ids"], multiples=(batch_size, 1))
 
         if inputs["attention_mask"] is None:
@@ -691,9 +696,13 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
             causal_mask = tf.cast(causal_mask, dtype=inputs["attention_mask"].dtype)
             extended_attention_mask = causal_mask * inputs["attention_mask"][:, None, :]
             attention_mask_shape = shape_list(extended_attention_mask)
-            extended_attention_mask = tf.reshape(extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2]))
+            extended_attention_mask = tf.reshape(
+                extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
+            )
         else:
-            extended_attention_mask = tf.reshape(inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1]))
+            extended_attention_mask = tf.reshape(
+                inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
+            )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -998,11 +1007,19 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
         return outputs
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
-    def serving_output(self, output: TFBaseModelOutputWithPoolingAndCrossAttentions) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
+    def serving_output(
+        self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
+    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions and self.config.add_cross_attention and output.cross_attentions is not None else None
+        cross_attns = (
+            tf.convert_to_tensor(output.cross_attentions)
+            if self.config.output_attentions
+            and self.config.add_cross_attention
+            and output.cross_attentions is not None
+            else None
+        )
 
         return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=output.last_hidden_state,
@@ -1010,7 +1027,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
             past_key_values=pkv,
             hidden_states=hs,
             attentions=attns,
-            cross_attentions=cross_attns
+            cross_attentions=cross_attns,
         )
 
 
@@ -1191,8 +1208,12 @@ class TFRobertaForCausalLM(TFRobertaPreTrainedModel, TFCausalLanguageModelingLos
         if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
 
-        return {"input_ids": inputs, "attention_mask": attention_mask, "past_key_values": past,
-                "use_cache": model_kwargs["use_cache"]}
+        return {
+            "input_ids": inputs,
+            "attention_mask": attention_mask,
+            "past_key_values": past,
+            "use_cache": model_kwargs["use_cache"],
+        }
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1308,10 +1329,17 @@ class TFRobertaForCausalLM(TFRobertaPreTrainedModel, TFCausalLanguageModelingLos
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(
-            output.cross_attentions) if self.config.output_attentions and self.config.add_cross_attention and output.cross_attentions is not None else None
+        cross_attns = (
+            tf.convert_to_tensor(output.cross_attentions)
+            if self.config.output_attentions
+            and self.config.add_cross_attention
+            and output.cross_attentions is not None
+            else None
+        )
 
-        return TFCausalLMOutputWithCrossAttentions(logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns)
+        return TFCausalLMOutputWithCrossAttentions(
+            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
+        )
 
 
 class TFRobertaClassificationHead(tf.keras.layers.Layer):
