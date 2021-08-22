@@ -1593,6 +1593,7 @@ if is_tf_available():
     _import_structure["models.roberta"].extend(
         [
             "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRobertaForCausalLM",
             "TFRobertaForMaskedLM",
             "TFRobertaForMultipleChoice",
             "TFRobertaForQuestionAnswering",
@@ -3200,6 +3201,7 @@ if TYPE_CHECKING:
         )
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRobertaForCausalLM,
             TFRobertaForMaskedLM,
             TFRobertaForMultipleChoice,
             TFRobertaForQuestionAnswering,
