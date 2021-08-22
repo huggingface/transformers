@@ -409,7 +409,7 @@ class TFEncoderDecoderMixin:
 @require_tf
 class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "bert-base-cased")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFBertModel(config, name='encoder')
@@ -469,6 +469,10 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
             from transformers import EncoderDecoderModel
 
             tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+
+            # Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.layer...`
+            # (For Bert decoder, there is no issue, because `BertModel` is wrapped into `decoder` as `bert`)
+            # model = TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", from_pt=True)
 
             # workaround to load from pt
             _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
@@ -553,6 +557,10 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
             tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
             tokenizer_out = AutoTokenizer.from_pretrained("gpt2")
 
+            # Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.layer...`
+            # (For GPT2 decoder, there is no issue)
+            # model = TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16", from_pt=True)
+
             # workaround to load from pt
             _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
             _model.encoder.save_pretrained('./encoder')
@@ -573,7 +581,7 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 @require_tf
 class TFEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "gpt2")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
 
     def get_decoder_config(self):
         config = AutoConfig.from_pretrained("gpt2")
@@ -581,11 +589,11 @@ class TFEncoderDecoderModelTest(unittest.TestCase):
         config.add_cross_attention = True
         return config
 
-    # def get_encoderdecoder_model(self):
-    #     return TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+    def get_encoderdecoder_model(self):
+        return TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16", from_pt=True)
 
     def get_encoder_decoder_models(self):
-        encoder_model = TFBertModel.from_pretrained("bert-base-uncased", name='encoder')
+        encoder_model = TFBertModel.from_pretrained("bert-base-cased", name='encoder')
         decoder_model = TFGPT2LMHeadModel.from_pretrained("gpt2", config=self.get_decoder_config(), name='decoder')
         return {"encoder": encoder_model, "decoder": decoder_model}
 
@@ -601,5 +609,5 @@ class TFEncoderDecoderModelTest(unittest.TestCase):
         model = TFEncoderDecoderModel(**self.get_encoder_decoder_models())
         self._check_configuration_tie(model)
 
-        # model = self.get_encoderdecoder_model()
-        # self._check_configuration_tie(model)
+        model = self.get_encoderdecoder_model()
+        self._check_configuration_tie(model)
