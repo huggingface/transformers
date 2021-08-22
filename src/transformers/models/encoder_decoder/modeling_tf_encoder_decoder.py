@@ -260,6 +260,8 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                       a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformers.TFPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                    - A path or url to a `pytorch index checkpoint file` (e.g, ``./pt_model/``). In this case,
+                      ``encoder_from_pt`` should be set to :obj:`True`.
 
             decoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
                 Information necessary to initiate the decoder. Can be either:
@@ -269,6 +271,8 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                       a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformers.TFPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                    - A path or url to a `pytorch checkpoint file` (e.g, ``./pt_model/``). In this case,
+                      ``decoder_from_pt`` should be set to :obj:`True`.
 
             model_args (remaining positional arguments, `optional`):
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
