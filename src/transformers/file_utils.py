@@ -306,7 +306,7 @@ def is_torch_bf16_available():
         # with additional check for torch version
         # to succeed:
         # 1. the hardware needs to support bf16 (arch >= Ampere)
-        # 2. torch > 1.9
+        # 2. torch >= 1.9
         # 3. CUDA >= 11
         # XXX: one problem here is that it may give invalid results on mixed hardware, so it's
         # really only correct for the 0th gpu (or currently set default device if different from 0)
@@ -317,12 +317,22 @@ def is_torch_bf16_available():
             return False
         if int(torch.version.cuda.split(".")[0]) < 11:
             return False
-        if not version.parse(torch.__version__) > version.parse("1.09"):
+        if not version.parse(torch.__version__) >= version.parse("1.09"):
             return False
 
         return True
     else:
         return False
+
+
+def is_torch_bf16_autocast_available():
+    # bf16 torch.autocast support was added sometime in 1.10.dev - the support test is to check `torch.autocast` exists
+    if is_torch_available():
+        import torch
+
+        if is_torch_bf16_available() and hasattr(torch, "autocast"):
+            return True
+    return False
 
 
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
