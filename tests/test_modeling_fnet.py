@@ -439,7 +439,7 @@ class FNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-1.7770, -7.7386, -7.5002], [-3.4747, -8.5963, -7.7719], [-3.2070, -9.0645, -8.3344]]]
+            [[[-1.7819, -7.7384, -7.5002], [-3.4746, -8.5943, -7.7762], [-3.2052, -9.0771, -8.3468]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
