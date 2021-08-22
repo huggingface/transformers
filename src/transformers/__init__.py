@@ -1440,6 +1440,7 @@ if is_tf_available():
             "TFElectraPreTrainedModel",
         ]
     )
+    _import_structure["models.encoder_decoder"].append("TFEncoderDecoderModel")
     _import_structure["models.flaubert"].extend(
         [
             "TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3089,6 +3090,7 @@ if TYPE_CHECKING:
             TFElectraModel,
             TFElectraPreTrainedModel,
         )
+        from .models.encoder_decoder import TFEncoderDecoderModel
         from .models.flaubert import (
             TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFFlaubertForMultipleChoice,

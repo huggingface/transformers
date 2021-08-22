@@ -42,6 +42,13 @@ EncoderDecoderModel
     :members: forward, from_encoder_decoder_pretrained
 
 
+TFEncoderDecoderModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFEncoderDecoderModel
+    :members: call, from_encoder_decoder_pretrained
+
+    
 FlaxEncoderDecoderModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
