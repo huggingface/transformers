@@ -133,7 +133,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvTConfig"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -183,6 +182,7 @@ _import_structure = {
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
+    "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvTConfig"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
@@ -417,10 +417,10 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
-    _import_structure["models.cvt"].append("CvTFeatureExtractor")
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
+    _import_structure["models.cvt"].append("CvTFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
@@ -504,15 +504,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.cvt"].extend(
-        [
-            "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CvTForImageClassification",
-            "CvTForMaskedImageModeling",
-            "CvTModel",
-            "CvTPreTrainedModel",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -704,6 +695,15 @@ if is_torch_available():
             "CTRLLMHeadModel",
             "CTRLModel",
             "CTRLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.cvt"].extend(
+        [
+            "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CvTForImageClassification",
+            "CvTForMaskedImageModeling",
+            "CvTModel",
+            "CvTPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -1847,7 +1847,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvTConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1891,6 +1890,7 @@ if TYPE_CHECKING:
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
+    from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvTConfig
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
@@ -2100,10 +2100,10 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
+        from .models.cvt import CvTFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.vit import ViTFeatureExtractor
-        from .models.cvt import CvTFeatureExtractor
 
     else:
         from .utils.dummy_vision_objects import *
@@ -2122,12 +2122,6 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-        from .models.cvt import (
-            CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CvTModel,
-            CvTPreTrainedModel,
-            CvTForImageClassification,
-        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2341,6 +2335,12 @@ if TYPE_CHECKING:
             CTRLLMHeadModel,
             CTRLModel,
             CTRLPreTrainedModel,
+        )
+        from .models.cvt import (
+            CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CvTForImageClassification,
+            CvTModel,
+            CvTPreTrainedModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,

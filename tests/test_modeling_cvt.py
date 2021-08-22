@@ -29,7 +29,6 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_te
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import MODEL_MAPPING, CvTForImageClassification, CvTModel
     from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
@@ -47,17 +46,17 @@ class CvTModelTester:
         parent,
         batch_size=2,
         image_size=256,
-        in_chans = 3,
-        num_classes = 1000,
-        num_stages = 3,
-        patch_size = [7, 3, 3],
-        patch_stride = [4, 2, 2],
-        patch_padding = [2, 1, 1],
-        dim_embed = [64, 192, 384],
-        num_heads = [1, 3, 6],
-        depth = [1, 4, 16],
-        type_sequence_label_size = 10,
-        use_labels = False,
+        in_chans=3,
+        num_classes=1000,
+        num_stages=3,
+        patch_size=[7, 3, 3],
+        patch_stride=[4, 2, 2],
+        patch_padding=[2, 1, 1],
+        dim_embed=[64, 192, 384],
+        num_heads=[1, 3, 6],
+        depth=[1, 4, 16],
+        type_sequence_label_size=10,
+        use_labels=False,
         is_training=True,
     ):
         self.parent = parent
@@ -107,9 +106,12 @@ class CvTModelTester:
         result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = to_2tuple(self.image_size)
-        patch_size = to_2tuple(self.patch_size)
-        #num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, image_size/(self.patch_stride[-1]*self.patch_stride[-2]) + 1, self.dim_embed[-1]))
+        # patch_size = to_2tuple(self.patch_size)
+        # num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, image_size / (self.patch_stride[-1] * self.patch_stride[-2]) + 1, self.dim_embed[-1]),
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -137,9 +139,7 @@ class CvTModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (CvTModel, CvTForImageClassification) if is_torch_available() else ()
-    )
+    all_model_classes = (CvTModel, CvTForImageClassification) if is_torch_available() else ()
 
     test_pruning = False
     test_torchscript = False
@@ -249,19 +249,21 @@ class CvTModelTest(ModelTesterMixin, unittest.TestCase):
             img_size = self.model_tester.image_size
             for i in range(len(self.model_tester.depth)):
                 depth_index = depth_index + self.model_tester.depth[i]
-                img_size = (img_size + 2*self.model_tester.patch_padding[i] - self.model_tester.patch_size[i])/(self.model_tester.patch_stride[i]) 
-                if i != self.model_tester.num_stages - 1: 
+                img_size = (img_size + 2 * self.model_tester.patch_padding[i] - self.model_tester.patch_size[i]) / (
+                    self.model_tester.patch_stride[i]
+                )
+                if i != self.model_tester.num_stages - 1:
                     self.assertListEqual(
-                        list(attentions[depth_index-1].shape[-3:]),
-                        [self.model_tester.num_heads[i], img_size*img_size, img_size//4],
+                        list(attentions[depth_index - 1].shape[-3:]),
+                        [self.model_tester.num_heads[i], img_size * img_size, img_size // 4],
                     )
                 else:
                     self.assertListEqual(
-                        list(attentions[depth_index-1].shape[-3:]),
-                        [self.model_tester.num_heads[i], img_size*img_size + 1, img_size//4 + 1],
+                        list(attentions[depth_index - 1].shape[-3:]),
+                        [self.model_tester.num_heads[i], img_size * img_size + 1, img_size // 4 + 1],
                     )
-                
-            out_len = len(outputs)
+
+            # out_len = len(outputs)
 
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
@@ -289,18 +291,19 @@ class CvTModelTest(ModelTesterMixin, unittest.TestCase):
             img_size = self.model_tester.image_size
             for i in range(len(self.model_tester.depth)):
                 depth_index = depth_index + self.model_tester.depth[i]
-                img_size = (img_size + 2*self.model_tester.patch_padding[i] - self.model_tester.patch_size[i])/(self.model_tester.patch_stride[i])
-                if i != self.model_tester.num_stages - 1: 
+                img_size = (img_size + 2 * self.model_tester.patch_padding[i] - self.model_tester.patch_size[i]) / (
+                    self.model_tester.patch_stride[i]
+                )
+                if i != self.model_tester.num_stages - 1:
                     self.assertListEqual(
-                        list(attentions[depth_index-1].shape[-3:]),
-                        [self.model_tester.num_heads[i], img_size*img_size, img_size//4],
+                        list(attentions[depth_index - 1].shape[-3:]),
+                        [self.model_tester.num_heads[i], img_size * img_size, img_size // 4],
                     )
                 else:
                     self.assertListEqual(
-                        list(attentions[depth_index-1].shape[-3:]),
-                        [self.model_tester.num_heads[i], img_size*img_size + 1, img_size//4 + 1],
+                        list(attentions[depth_index - 1].shape[-3:]),
+                        [self.model_tester.num_heads[i], img_size * img_size + 1, img_size // 4 + 1],
                     )
-                
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -321,16 +324,18 @@ class CvTModelTest(ModelTesterMixin, unittest.TestCase):
             img_size = self.model_tester.image_size
             for i in range(len(self.model_tester.depth)):
                 depth_index = depth_index + self.model_tester.depth[i]
-                img_size = (img_size + 2*self.model_tester.patch_padding[i] - self.model_tester.patch_size[i])/(self.model_tester.patch_stride[i]) 
+                img_size = (img_size + 2 * self.model_tester.patch_padding[i] - self.model_tester.patch_size[i]) / (
+                    self.model_tester.patch_stride[i]
+                )
                 if i != self.model_tester.num_stages - 1:
                     self.assertListEqual(
-                    list(hidden_states[depth_index-1].shape[-2:]),
-                    [img_size*img_size, self.model_tester.dim_embed[i]],
+                        list(hidden_states[depth_index - 1].shape[-2:]),
+                        [img_size * img_size, self.model_tester.dim_embed[i]],
                     )
                 else:
                     self.assertListEqual(
-                    list(hidden_states[depth_index-1].shape[-2:]),
-                    [img_size*img_size + 1, self.model_tester.dim_embed[i]],
+                        list(hidden_states[depth_index - 1].shape[-2:]),
+                        [img_size * img_size + 1, self.model_tester.dim_embed[i]],
                     )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -370,9 +375,7 @@ def prepare_img():
 class CvTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return (
-            CvTFeatureExtractor.from_pretrained("microsoft/cvt-base-patch16-224") if is_vision_available() else None
-        )
+        return CvTFeatureExtractor.from_pretrained("microsoft/cvt-base-patch16-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):

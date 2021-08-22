@@ -26,6 +26,11 @@ class CLIPProcessor:
         requires_backends(cls, ["vision"])
 
 
+class CvTFeatureExtractor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DeiTFeatureExtractor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])

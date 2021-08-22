@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    cvt,
     albert,
     auto,
     bart,
@@ -37,6 +36,7 @@ from . import (
     convbert,
     cpm,
     ctrl,
+    cvt,
     deberta,
     deberta_v2,
     deit,

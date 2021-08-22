@@ -15,32 +15,25 @@
 """ PyTorch CvT model. """
 
 
-
 import collections.abc
-import math
-from collections import OrderedDict
-from functools import partial
-from itertools import repeat
-from torch._six import container_abcs
-
 import os
+from collections import OrderedDict
+
 import numpy as np
-import scipy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss, MSELoss
 
+import scipy
 from einops import rearrange
 from einops.layers.torch import Rearrange
-
 from timm.models.layers import DropPath, trunc_normal_
 
-from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, no_init_weights, prune_linear_layer
+from ...modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_cvt import CvTConfig
 
@@ -67,45 +60,28 @@ def to_2tuple(x):
 
 
 class PatchEmbeddings(nn.Module):
-    """ Image to Conv Embedding"""
-    def __init__(self,
-                 patch_size=7,
-                 in_chans=3,
-                 embed_dim=64,
-                 stride=4,
-                 padding=2,
-                 norm_layer=None):
+    """Image to Conv Embedding"""
+
+    def __init__(self, patch_size=7, in_chans=3, embed_dim=64, stride=4, padding=2, norm_layer=None):
         super().__init__()
         patch_size = to_2tuple(patch_size)
         self.patch_size = patch_size
 
-        self.proj = nn.Conv2d(
-            in_chans, embed_dim,
-            kernel_size=patch_size,
-            stride=stride,
-            padding=padding
-        )
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
         self.norm = norm_layer(embed_dim) if norm_layer else None
 
     def forward(self, x):
         x = self.proj(x)
         B, C, H, W = x.shape
-        x = rearrange(x, 'b c h w -> b (h w) c')
+        x = rearrange(x, "b c h w -> b (h w) c")
         if self.norm:
             x = self.norm(x)
-        x = rearrange(x, 'b (h w) c -> b c h w', h=H, w=W)
+        x = rearrange(x, "b (h w) c -> b c h w", h=H, w=W)
         return x
 
 
-
 class CvTOutput(nn.Module):
-    def __init__(self,
-                in_features,
-                hidden_features=None,
-                out_features=None,
-                act_layer=nn.GELU,
-                drop=0.0
-                ):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -122,23 +98,25 @@ class CvTOutput(nn.Module):
         x = self.drop(x)
         return x
 
+
 class CvTAttention(nn.Module):
-    def __init__(self,
-                 dim_in,
-                 dim_out,
-                 num_heads,
-                 qkv_bias=False,
-                 attn_drop=0.,
-                 proj_drop=0.,
-                 method='dw_bn',
-                 kernel_size=3,
-                 stride_kv=1,
-                 stride_q=1,
-                 padding_kv=1,
-                 padding_q=1,
-                 with_cls_token=True,
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        dim_in,
+        dim_out,
+        num_heads,
+        qkv_bias=False,
+        attn_drop=0.0,
+        proj_drop=0.0,
+        method="dw_bn",
+        kernel_size=3,
+        stride_kv=1,
+        stride_q=1,
+        padding_kv=1,
+        padding_q=1,
+        with_cls_token=True,
+        **kwargs
+    ):
         super().__init__()
         self.stride_kv = stride_kv
         self.stride_q = stride_q
@@ -149,17 +127,10 @@ class CvTAttention(nn.Module):
         self.with_cls_token = with_cls_token
 
         self.conv_proj_q = self._build_projection(
-            dim_in, dim_out, kernel_size, padding_q,
-            stride_q, 'linear' if method == 'avg' else method
+            dim_in, dim_out, kernel_size, padding_q, stride_q, "linear" if method == "avg" else method
         )
-        self.conv_proj_k = self._build_projection(
-            dim_in, dim_out, kernel_size, padding_kv,
-            stride_kv, method
-        )
-        self.conv_proj_v = self._build_projection(
-            dim_in, dim_out, kernel_size, padding_kv,
-            stride_kv, method
-        )
+        self.conv_proj_k = self._build_projection(dim_in, dim_out, kernel_size, padding_kv, stride_kv, method)
+        self.conv_proj_v = self._build_projection(dim_in, dim_out, kernel_size, padding_kv, stride_kv, method)
 
         self.proj_q = nn.Linear(dim_in, dim_out, bias=qkv_bias)
         self.proj_k = nn.Linear(dim_in, dim_out, bias=qkv_bias)
@@ -169,64 +140,64 @@ class CvTAttention(nn.Module):
         self.proj = nn.Linear(dim_out, dim_out)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def _build_projection(self,
-                          dim_in,
-                          dim_out,
-                          kernel_size,
-                          padding,
-                          stride,
-                          method):
-        if method == 'dw_bn':
-            proj = nn.Sequential(OrderedDict([
-                ('conv', nn.Conv2d(
-                    dim_in,
-                    dim_in,
-                    kernel_size=kernel_size,
-                    padding=padding,
-                    stride=stride,
-                    bias=False,
-                    groups=dim_in
-                )),
-                ('bn', nn.BatchNorm2d(dim_in)),
-                ('rearrage', Rearrange('b c h w -> b (h w) c')),
-            ]))
-        elif method == 'avg':
-            proj = nn.Sequential(OrderedDict([
-                ('avg', nn.AvgPool2d(
-                    kernel_size=kernel_size,
-                    padding=padding,
-                    stride=stride,
-                    ceil_mode=True
-                )),
-                ('rearrage', Rearrange('b c h w -> b (h w) c')),
-            ]))
-        elif method == 'linear':
+    def _build_projection(self, dim_in, dim_out, kernel_size, padding, stride, method):
+        if method == "dw_bn":
+            proj = nn.Sequential(
+                OrderedDict(
+                    [
+                        (
+                            "conv",
+                            nn.Conv2d(
+                                dim_in,
+                                dim_in,
+                                kernel_size=kernel_size,
+                                padding=padding,
+                                stride=stride,
+                                bias=False,
+                                groups=dim_in,
+                            ),
+                        ),
+                        ("bn", nn.BatchNorm2d(dim_in)),
+                        ("rearrage", Rearrange("b c h w -> b (h w) c")),
+                    ]
+                )
+            )
+        elif method == "avg":
+            proj = nn.Sequential(
+                OrderedDict(
+                    [
+                        ("avg", nn.AvgPool2d(kernel_size=kernel_size, padding=padding, stride=stride, ceil_mode=True)),
+                        ("rearrage", Rearrange("b c h w -> b (h w) c")),
+                    ]
+                )
+            )
+        elif method == "linear":
             proj = None
         else:
-            raise ValueError('Unknown method ({})'.format(method))
+            raise ValueError("Unknown method ({})".format(method))
 
         return proj
 
     def forward_conv(self, x, h, w):
         if self.with_cls_token:
-            cls_token, x = torch.split(x, [1, h*w], 1)
+            cls_token, x = torch.split(x, [1, h * w], 1)
 
-        x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w)
+        x = rearrange(x, "b (h w) c -> b c h w", h=h, w=w)
 
         if self.conv_proj_q is not None:
             q = self.conv_proj_q(x)
         else:
-            q = rearrange(x, 'b c h w -> b (h w) c')
+            q = rearrange(x, "b c h w -> b (h w) c")
 
         if self.conv_proj_k is not None:
             k = self.conv_proj_k(x)
         else:
-            k = rearrange(x, 'b c h w -> b (h w) c')
+            k = rearrange(x, "b c h w -> b (h w) c")
 
         if self.conv_proj_v is not None:
             v = self.conv_proj_v(x)
         else:
-            v = rearrange(x, 'b c h w -> b (h w) c')
+            v = rearrange(x, "b c h w -> b (h w) c")
 
         if self.with_cls_token:
             q = torch.cat((cls_token, q), dim=1)
@@ -236,30 +207,26 @@ class CvTAttention(nn.Module):
         return q, k, v
 
     def forward(self, x, h, w, output_attentions=False):
-        if (
-            self.conv_proj_q is not None
-            or self.conv_proj_k is not None
-            or self.conv_proj_v is not None
-        ):
+        if self.conv_proj_q is not None or self.conv_proj_k is not None or self.conv_proj_v is not None:
             q, k, v = self.forward_conv(x, h, w)
 
-        q = rearrange(self.proj_q(q), 'b t (h d) -> b h t d', h=self.num_heads)
-        k = rearrange(self.proj_k(k), 'b t (h d) -> b h t d', h=self.num_heads)
-        v = rearrange(self.proj_v(v), 'b t (h d) -> b h t d', h=self.num_heads)
+        q = rearrange(self.proj_q(q), "b t (h d) -> b h t d", h=self.num_heads)
+        k = rearrange(self.proj_k(k), "b t (h d) -> b h t d", h=self.num_heads)
+        v = rearrange(self.proj_v(v), "b t (h d) -> b h t d", h=self.num_heads)
 
-        attn_score = torch.einsum('bhlk,bhtk->bhlt', [q, k]) * self.scale
+        attn_score = torch.einsum("bhlk,bhtk->bhlt", [q, k]) * self.scale
         attn = F.softmax(attn_score, dim=-1)
         attn = self.attn_drop(attn)
 
-        x = torch.einsum('bhlt,bhtv->bhlv', [attn, v])
-        x = rearrange(x, 'b h t d -> b t (h d)')
+        x = torch.einsum("bhlt,bhtv->bhlv", [attn, v])
+        x = rearrange(x, "b h t d -> b t (h d)")
 
         x = self.proj(x)
         x = self.proj_drop(x)
 
         if output_attentions:
             return x, attn
-        
+
         return x
 
     @staticmethod
@@ -270,7 +237,7 @@ class CvTAttention(nn.Module):
         flops = 0
 
         _, T, C = input.shape
-        H = W = int(np.sqrt(T-1)) if module.with_cls_token else int(np.sqrt(T))
+        H = W = int(np.sqrt(T - 1)) if module.with_cls_token else int(np.sqrt(T))
 
         H_Q = H / module.stride_q
         W_Q = H / module.stride_q
@@ -289,40 +256,16 @@ class CvTAttention(nn.Module):
         # [B x T x S] x [B x S x C] --> [B x T x C]
         flops += T_Q * module.dim * T_KV
 
-        if (
-            hasattr(module, 'conv_proj_q')
-            and hasattr(module.conv_proj_q, 'conv')
-        ):
-            params = sum(
-                [
-                    p.numel()
-                    for p in module.conv_proj_q.conv.parameters()
-                ]
-            )
+        if hasattr(module, "conv_proj_q") and hasattr(module.conv_proj_q, "conv"):
+            params = sum([p.numel() for p in module.conv_proj_q.conv.parameters()])
             flops += params * H_Q * W_Q
 
-        if (
-            hasattr(module, 'conv_proj_k')
-            and hasattr(module.conv_proj_k, 'conv')
-        ):
-            params = sum(
-                [
-                    p.numel()
-                    for p in module.conv_proj_k.conv.parameters()
-                ]
-            )
+        if hasattr(module, "conv_proj_k") and hasattr(module.conv_proj_k, "conv"):
+            params = sum([p.numel() for p in module.conv_proj_k.conv.parameters()])
             flops += params * H_KV * W_KV
 
-        if (
-            hasattr(module, 'conv_proj_v')
-            and hasattr(module.conv_proj_v, 'conv')
-        ):
-            params = sum(
-                [
-                    p.numel()
-                    for p in module.conv_proj_v.conv.parameters()
-                ]
-            )
+        if hasattr(module, "conv_proj_v") and hasattr(module.conv_proj_v, "conv"):
+            params = sum([p.numel() for p in module.conv_proj_v.conv.parameters()])
             flops += params * H_KV * W_KV
 
         params = sum([p.numel() for p in module.proj_q.parameters()])
@@ -338,39 +281,32 @@ class CvTAttention(nn.Module):
 
 
 class CvTLayer(nn.Module):
-    def __init__(self,
-                 dim_in,
-                 dim_out,
-                 num_heads,
-                 mlp_ratio=4.,
-                 qkv_bias=False,
-                 drop=0.,
-                 attn_drop=0.,
-                 drop_path=0.,
-                 act_layer=nn.GELU,
-                 norm_layer=nn.LayerNorm,
-                 **kwargs):
+    def __init__(
+        self,
+        dim_in,
+        dim_out,
+        num_heads,
+        mlp_ratio=4.0,
+        qkv_bias=False,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        **kwargs
+    ):
         super().__init__()
 
-        self.with_cls_token = kwargs['with_cls_token']
+        self.with_cls_token = kwargs["with_cls_token"]
 
         self.norm1 = norm_layer(dim_in)
-        self.attn = CvTAttention(
-            dim_in, dim_out, num_heads, qkv_bias, attn_drop, drop,
-            **kwargs
-        )
+        self.attn = CvTAttention(dim_in, dim_out, num_heads, qkv_bias, attn_drop, drop, **kwargs)
 
-        self.drop_path = DropPath(drop_path) \
-            if drop_path > 0. else nn.Identity()
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = norm_layer(dim_out)
 
         dim_mlp_hidden = int(dim_out * mlp_ratio)
-        self.mlp = CvTOutput(
-            in_features=dim_out,
-            hidden_features=dim_mlp_hidden,
-            act_layer=act_layer,
-            drop=drop
-        )
+        self.mlp = CvTOutput(in_features=dim_out, hidden_features=dim_mlp_hidden, act_layer=act_layer, drop=drop)
 
     def forward(self, x, h, w, output_attentions=False):
         res = x
@@ -383,25 +319,29 @@ class CvTLayer(nn.Module):
             return x, all_attn
         return x
 
+
 class CvTEncoder(nn.Module):
-    """ Vision Transformer with support for patch or hybrid CNN input stage """
-    def __init__(self,
-                 patch_size=16,
-                 patch_stride=16,
-                 patch_padding=0,
-                 in_chans=3,
-                 embed_dim=768,
-                 depth=12,
-                 num_heads=12,
-                 mlp_ratio=4.,
-                 qkv_bias=False,
-                 drop_rate=0.,
-                 attn_drop_rate=0.,
-                 drop_path_rate=0.,
-                 act_layer=nn.GELU,
-                 norm_layer=nn.LayerNorm,
-                 init='trunc_norm',
-                 **kwargs):
+    """Vision Transformer with support for patch or hybrid CNN input stage"""
+
+    def __init__(
+        self,
+        patch_size=16,
+        patch_stride=16,
+        patch_padding=0,
+        in_chans=3,
+        embed_dim=768,
+        depth=12,
+        num_heads=12,
+        mlp_ratio=4.0,
+        qkv_bias=False,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        init="trunc_norm",
+        **kwargs
+    ):
         super().__init__()
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
 
@@ -414,14 +354,12 @@ class CvTEncoder(nn.Module):
             stride=patch_stride,
             padding=patch_padding,
             embed_dim=embed_dim,
-            norm_layer=norm_layer
+            norm_layer=norm_layer,
         )
 
-        with_cls_token = kwargs['with_cls_token']
+        with_cls_token = kwargs["with_cls_token"]
         if with_cls_token:
-            self.cls_token = nn.Parameter(
-                torch.zeros(1, 1, embed_dim)
-            )
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         else:
             self.cls_token = None
 
@@ -442,25 +380,25 @@ class CvTEncoder(nn.Module):
                     drop_path=dpr[j],
                     act_layer=act_layer,
                     norm_layer=norm_layer,
-                    **kwargs
+                    **kwargs,
                 )
             )
         self.blocks = nn.ModuleList(blocks)
 
         if self.cls_token is not None:
-            trunc_normal_(self.cls_token, std=.02)
+            trunc_normal_(self.cls_token, std=0.02)
 
-        if init == 'xavier':
+        if init == "xavier":
             self.apply(self._init_weights_xavier)
         else:
             self.apply(self._init_weights_trunc_normal)
 
     def _init_weights_trunc_normal(self, m):
         if isinstance(m, nn.Linear):
-            logger.info('=> init weight of Linear from trunc norm')
+            logger.info("=> init weight of Linear from trunc norm")
             trunc_normal_(m.weight, std=0.02)
             if m.bias is not None:
-                logger.info('=> init bias of Linear to zeros')
+                logger.info("=> init bias of Linear to zeros")
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, (nn.LayerNorm, nn.BatchNorm2d)):
             nn.init.constant_(m.bias, 0)
@@ -468,10 +406,10 @@ class CvTEncoder(nn.Module):
 
     def _init_weights_xavier(self, m):
         if isinstance(m, nn.Linear):
-            logger.info('=> init weight of Linear from xavier uniform')
+            logger.info("=> init weight of Linear from xavier uniform")
             nn.init.xavier_uniform_(m.weight)
             if m.bias is not None:
-                logger.info('=> init bias of Linear to zeros')
+                logger.info("=> init bias of Linear to zeros")
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, (nn.LayerNorm, nn.BatchNorm2d)):
             nn.init.constant_(m.bias, 0)
@@ -484,7 +422,7 @@ class CvTEncoder(nn.Module):
         x = self.patch_embed(x)
         B, C, H, W = x.size()
 
-        x = rearrange(x, 'b c h w -> b (h w) c')
+        x = rearrange(x, "b c h w -> b (h w) c")
 
         cls_tokens = None
         if self.cls_token is not None:
@@ -506,12 +444,10 @@ class CvTEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (x,)
 
         if self.cls_token is not None:
-            cls_tokens, x = torch.split(x, [1, H*W], 1)
-        x = rearrange(x, 'b (h w) c -> b c h w', h=H, w=W)
-        
+            cls_tokens, x = torch.split(x, [1, H * W], 1)
+        x = rearrange(x, "b (h w) c -> b c h w", h=H, w=W)
+
         return x, all_hidden_states, all_self_attentions, cls_tokens
-        
-        
 
 
 class CvTPreTrainedModel(PreTrainedModel):
@@ -574,8 +510,8 @@ CvT_INPUTS_DOCSTRING = r"""
     CvT_START_DOCSTRING,
 )
 class CvTModel(CvTPreTrainedModel):
-    def __init__(self, config, in_chans = 3):
-        
+    def __init__(self, config, in_chans=3):
+
         super().__init__(config)
         self.config = config
         self.num_stages = self.config.num_stages
@@ -584,69 +520,60 @@ class CvTModel(CvTPreTrainedModel):
             self.act_layer = nn.GELU
         if self.config.norm_layer == "layer_norm":
             self.norm_layer = nn.LayerNorm
-        
+
         for i in range(self.num_stages):
             kwargs = {
-                'patch_size': self.config.patch_size[i],
-                'patch_stride': self.config.patch_stride[i],
-                'patch_padding': self.config.patch_padding[i],
-                'embed_dim': self.config.dim_embed[i],
-                'depth': self.config.depth[i],
-                'num_heads': self.config.num_heads[i],
-                'mlp_ratio': self.config.mlp_ratio[i],
-                'qkv_bias': self.config.qkv_bias[i],
-                'drop_rate': self.config.drop_rate[i],
-                'attn_drop_rate': self.config.attn_drop_rate[i],
-                'drop_path_rate': self.config.drop_path_rate[i],
-                'with_cls_token': self.config.cls_token[i],
-                'method': self.config.qkv_proj_method[i],
-                'kernel_size': self.config.kernel_qkv[i],
-                'padding_q': self.config.padding_q[i],
-                'padding_kv': self.config.padding_kv[i],
-                'stride_kv': self.config.stride_kv[i],
-                'stride_q': self.config.stride_q[i],
+                "patch_size": self.config.patch_size[i],
+                "patch_stride": self.config.patch_stride[i],
+                "patch_padding": self.config.patch_padding[i],
+                "embed_dim": self.config.dim_embed[i],
+                "depth": self.config.depth[i],
+                "num_heads": self.config.num_heads[i],
+                "mlp_ratio": self.config.mlp_ratio[i],
+                "qkv_bias": self.config.qkv_bias[i],
+                "drop_rate": self.config.drop_rate[i],
+                "attn_drop_rate": self.config.attn_drop_rate[i],
+                "drop_path_rate": self.config.drop_path_rate[i],
+                "with_cls_token": self.config.cls_token[i],
+                "method": self.config.qkv_proj_method[i],
+                "kernel_size": self.config.kernel_qkv[i],
+                "padding_q": self.config.padding_q[i],
+                "padding_kv": self.config.padding_kv[i],
+                "stride_kv": self.config.stride_kv[i],
+                "stride_q": self.config.stride_q[i],
             }
 
             stage = CvTEncoder(
-                in_chans= in_chans,
+                in_chans=in_chans,
                 init=self.config.init,
                 act_layer=self.act_layer,
                 norm_layer=self.norm_layer,
-                **kwargs
+                **kwargs,
             )
-            setattr(self, f'stage{i}', stage)
+            setattr(self, f"stage{i}", stage)
 
             in_chans = self.config.dim_embed[i]
-        
+
         dim_embed = self.config.dim_embed[-1]
         self.norm = self.norm_layer(dim_embed)
         self.cls_token = self.config.cls_token[-1]
 
-    def init_weights(self, pretrained='', pretrained_layers=[], verbose=True):
+    def init_weights(self, pretrained="", pretrained_layers=[], verbose=True):
         if os.path.isfile(pretrained):
-            pretrained_dict = torch.load(pretrained, map_location='cpu')
-            logger.info(f'=> loading pretrained model {pretrained}')
+            pretrained_dict = torch.load(pretrained, map_location="cpu")
+            logger.info(f"=> loading pretrained model {pretrained}")
             model_dict = self.state_dict()
-            pretrained_dict = {
-                k: v for k, v in pretrained_dict.items()
-                if k in model_dict.keys()
-            }
+            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict.keys()}
             need_init_state_dict = {}
             for k, v in pretrained_dict.items():
-                need_init = (
-                        k.split('.')[0] in pretrained_layers
-                        or pretrained_layers[0] is '*'
-                )
+                need_init = k.split(".")[0] in pretrained_layers or pretrained_layers[0] == "*"
                 if need_init:
                     if verbose:
-                        logger.info(f'=> init {k} from {pretrained}')
-                    if 'pos_embed' in k and v.size() != model_dict[k].size():
+                        logger.info(f"=> init {k} from {pretrained}")
+                    if "pos_embed" in k and v.size() != model_dict[k].size():
                         size_pretrained = v.size()
                         size_new = model_dict[k].size()
-                        logger.info(
-                            '=> load_pretrained: resized variant: {} to {}'
-                            .format(size_pretrained, size_new)
-                        )
+                        logger.info("=> load_pretrained: resized variant: {} to {}".format(size_pretrained, size_new))
 
                         ntok_new = size_new[1]
                         ntok_new -= 1
@@ -656,20 +583,13 @@ class CvTModel(CvTPreTrainedModel):
                         gs_old = int(np.sqrt(len(posemb_grid)))
                         gs_new = int(np.sqrt(ntok_new))
 
-                        logger.info(
-                            '=> load_pretrained: grid-size from {} to {}'
-                            .format(gs_old, gs_new)
-                        )
+                        logger.info("=> load_pretrained: grid-size from {} to {}".format(gs_old, gs_new))
 
                         posemb_grid = posemb_grid.reshape(gs_old, gs_old, -1)
                         zoom = (gs_new / gs_old, gs_new / gs_old, 1)
-                        posemb_grid = scipy.ndimage.zoom(
-                            posemb_grid, zoom, order=1
-                        )
+                        posemb_grid = scipy.ndimage.zoom(posemb_grid, zoom, order=1)
                         posemb_grid = posemb_grid.reshape(1, gs_new ** 2, -1)
-                        v = torch.tensor(
-                            np.concatenate([posemb_tok, posemb_grid], axis=1)
-                        )
+                        v = torch.tensor(np.concatenate([posemb_tok, posemb_grid], axis=1))
 
                     need_init_state_dict[k] = v
             self.load_state_dict(need_init_state_dict, strict=False)
@@ -678,8 +598,8 @@ class CvTModel(CvTPreTrainedModel):
     def no_weight_decay(self):
         layers = set()
         for i in range(self.num_stages):
-            layers.add(f'stage{i}.pos_embed')
-            layers.add(f'stage{i}.cls_token')
+            layers.add(f"stage{i}.pos_embed")
+            layers.add(f"stage{i}.cls_token")
 
         return layers
 
@@ -688,7 +608,9 @@ class CvTModel(CvTPreTrainedModel):
         all_self_attentions = () if output_attentions else None
 
         for i in range(self.num_stages):
-            x, hidden_states, attentions, cls_tokens = getattr(self, f'stage{i}')(x, output_attentions, output_hidden_states)
+            x, hidden_states, attentions, cls_tokens = getattr(self, f"stage{i}")(
+                x, output_attentions, output_hidden_states
+            )
             if output_hidden_states:
                 if i == 0:
                     all_hidden_states = all_hidden_states + hidden_states
@@ -697,12 +619,11 @@ class CvTModel(CvTPreTrainedModel):
             if output_attentions:
                 all_self_attentions = all_self_attentions + attentions
 
-
         if self.cls_token:
             x = self.norm(cls_tokens)
             x = torch.squeeze(x)
         else:
-            x = rearrange(x, 'b c h w -> b (h w) c')
+            x = rearrange(x, "b c h w -> b (h w) c")
             x = self.norm(x)
             x = torch.mean(x, dim=1)
 
@@ -744,17 +665,20 @@ class CvTModel(CvTPreTrainedModel):
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
-        x, all_hidden_states, all_self_attentions = self.forward_features(pixel_values, output_attentions, output_hidden_states)
+        x, all_hidden_states, all_self_attentions = self.forward_features(
+            pixel_values, output_attentions, output_hidden_states
+        )
 
         if not return_dict:
             return x, all_hidden_states, all_self_attentions
-        
+
         return BaseModelOutputWithPooling(
             last_hidden_state=all_hidden_states[-1],
             pooler_output=x,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
 
 @add_start_docstrings(
     """
@@ -764,8 +688,8 @@ class CvTModel(CvTPreTrainedModel):
     CvT_START_DOCSTRING,
 )
 class CvTForImageClassification(CvTPreTrainedModel):
-    def __init__(self, config, in_chans = 3):
-        
+    def __init__(self, config, in_chans=3):
+
         super().__init__(config)
         self.config = config
         self.num_stages = self.config.num_stages
@@ -774,71 +698,62 @@ class CvTForImageClassification(CvTPreTrainedModel):
             self.act_layer = nn.GELU
         if self.config.norm_layer == "layer_norm":
             self.norm_layer = nn.LayerNorm
-        
+
         for i in range(self.num_stages):
             kwargs = {
-                'patch_size': self.config.patch_size[i],
-                'patch_stride': self.config.patch_stride[i],
-                'patch_padding': self.config.patch_padding[i],
-                'embed_dim': self.config.dim_embed[i],
-                'depth': self.config.depth[i],
-                'num_heads': self.config.num_heads[i],
-                'mlp_ratio': self.config.mlp_ratio[i],
-                'qkv_bias': self.config.qkv_bias[i],
-                'drop_rate': self.config.drop_rate[i],
-                'attn_drop_rate': self.config.attn_drop_rate[i],
-                'drop_path_rate': self.config.drop_path_rate[i],
-                'with_cls_token': self.config.cls_token[i],
-                'method': self.config.qkv_proj_method[i],
-                'kernel_size': self.config.kernel_qkv[i],
-                'padding_q': self.config.padding_q[i],
-                'padding_kv': self.config.padding_kv[i],
-                'stride_kv': self.config.stride_kv[i],
-                'stride_q': self.config.stride_q[i],
+                "patch_size": self.config.patch_size[i],
+                "patch_stride": self.config.patch_stride[i],
+                "patch_padding": self.config.patch_padding[i],
+                "embed_dim": self.config.dim_embed[i],
+                "depth": self.config.depth[i],
+                "num_heads": self.config.num_heads[i],
+                "mlp_ratio": self.config.mlp_ratio[i],
+                "qkv_bias": self.config.qkv_bias[i],
+                "drop_rate": self.config.drop_rate[i],
+                "attn_drop_rate": self.config.attn_drop_rate[i],
+                "drop_path_rate": self.config.drop_path_rate[i],
+                "with_cls_token": self.config.cls_token[i],
+                "method": self.config.qkv_proj_method[i],
+                "kernel_size": self.config.kernel_qkv[i],
+                "padding_q": self.config.padding_q[i],
+                "padding_kv": self.config.padding_kv[i],
+                "stride_kv": self.config.stride_kv[i],
+                "stride_q": self.config.stride_q[i],
             }
 
             stage = CvTEncoder(
-                in_chans= in_chans,
+                in_chans=in_chans,
                 init=self.config.init,
                 act_layer=self.act_layer,
                 norm_layer=self.norm_layer,
-                **kwargs
+                **kwargs,
             )
-            setattr(self, f'stage{i}', stage)
+            setattr(self, f"stage{i}", stage)
 
             in_chans = self.config.dim_embed[i]
-        
+
         dim_embed = self.config.dim_embed[-1]
         self.norm = self.norm_layer(dim_embed)
         self.cls_token = self.config.cls_token[-1]
         self.head = nn.Linear(dim_embed, self.num_classes) if self.num_classes > 0 else nn.Identity()
         trunc_normal_(self.head.weight, std=0.02)
 
-    def init_weights(self, pretrained='', pretrained_layers=[], verbose=True):
+    def init_weights(self, pretrained="", pretrained_layers=[], verbose=True):
         if os.path.isfile(pretrained):
-            pretrained_dict = torch.load(pretrained, map_location='cpu')
-            logger.info(f'=> loading pretrained model {pretrained}')
+            pretrained_dict = torch.load(pretrained, map_location="cpu")
+            logger.info(f"=> loading pretrained model {pretrained}")
             model_dict = self.state_dict()
-            pretrained_dict = {
-                k: v for k, v in pretrained_dict.items()
-                if k in model_dict.keys()
-            }
+            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict.keys()}
             need_init_state_dict = {}
             for k, v in pretrained_dict.items():
-                need_init = (
-                        k.split('.')[0] in pretrained_layers
-                        or pretrained_layers[0] is '*'
-                )
+                need_init = k.split(".")[0] in pretrained_layers or pretrained_layers[0] == "*"
                 if need_init:
                     if verbose:
-                        logger.info(f'=> init {k} from {pretrained}')
-                    if 'pos_embed' in k and v.size() != model_dict[k].size():
+                        logger.info(f"=> init {k} from {pretrained}")
+                    if "pos_embed" in k and v.size() != model_dict[k].size():
                         size_pretrained = v.size()
                         size_new = model_dict[k].size()
-                        logger.info(
-                            '=> load_pretrained: resized variant: {} to {}'
-                            .format(size_pretrained, size_new)
-                        )
+                        logger.info("=> load_pretrained: resized variant: {} to {}".format(size_pretrained, size_new))
 
                         ntok_new = size_new[1]
                         ntok_new -= 1
@@ -848,20 +763,13 @@ class CvTForImageClassification(CvTPreTrainedModel):
                         gs_old = int(np.sqrt(len(posemb_grid)))
                         gs_new = int(np.sqrt(ntok_new))
 
-                        logger.info(
-                            '=> load_pretrained: grid-size from {} to {}'
-                            .format(gs_old, gs_new)
-                        )
+                        logger.info("=> load_pretrained: grid-size from {} to {}".format(gs_old, gs_new))
 
                         posemb_grid = posemb_grid.reshape(gs_old, gs_old, -1)
                         zoom = (gs_new / gs_old, gs_new / gs_old, 1)
-                        posemb_grid = scipy.ndimage.zoom(
-                            posemb_grid, zoom, order=1
-                        )
+                        posemb_grid = scipy.ndimage.zoom(posemb_grid, zoom, order=1)
                         posemb_grid = posemb_grid.reshape(1, gs_new ** 2, -1)
-                        v = torch.tensor(
-                            np.concatenate([posemb_tok, posemb_grid], axis=1)
-                        )
+                        v = torch.tensor(np.concatenate([posemb_tok, posemb_grid], axis=1))
 
                     need_init_state_dict[k] = v
             self.load_state_dict(need_init_state_dict, strict=False)
@@ -870,8 +778,8 @@ class CvTForImageClassification(CvTPreTrainedModel):
     def no_weight_decay(self):
         layers = set()
         for i in range(self.num_stages):
-            layers.add(f'stage{i}.pos_embed')
-            layers.add(f'stage{i}.cls_token')
+            layers.add(f"stage{i}.pos_embed")
+            layers.add(f"stage{i}.cls_token")
 
         return layers
 
@@ -880,7 +788,9 @@ class CvTForImageClassification(CvTPreTrainedModel):
         all_self_attentions = () if output_attentions else None
 
         for i in range(self.num_stages):
-            x, hidden_states, attentions, cls_tokens = getattr(self, f'stage{i}')(x, output_attentions, output_hidden_states)
+            x, hidden_states, attentions, cls_tokens = getattr(self, f"stage{i}")(
+                x, output_attentions, output_hidden_states
+            )
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + hidden_states
             if output_attentions:
@@ -890,7 +800,7 @@ class CvTForImageClassification(CvTPreTrainedModel):
             x = self.norm(cls_tokens)
             x = torch.squeeze(x)
         else:
-            x = rearrange(x, 'b c h w -> b (h w) c')
+            x = rearrange(x, "b c h w -> b (h w) c")
             x = self.norm(x)
             x = torch.mean(x, dim=1)
 
@@ -937,7 +847,9 @@ class CvTForImageClassification(CvTPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        x, all_hidden_states, all_self_attentions = self.forward_features(pixel_values, output_attentions, output_hidden_states)
+        x, all_hidden_states, all_self_attentions = self.forward_features(
+            pixel_values, output_attentions, output_hidden_states
+        )
         logits = self.head(x)
 
         loss = None
@@ -952,15 +864,10 @@ class CvTForImageClassification(CvTPreTrainedModel):
 
         if not return_dict:
             return logits, all_hidden_states, all_self_attentions
-        
+
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits.view(-1, self.num_classes),
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-
-
-
-
