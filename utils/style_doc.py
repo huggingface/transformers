@@ -131,7 +131,6 @@ class CodeStyler:
     def init_in_block(self, text):
         """
         Returns the initial value for `self.in_block`.
-
         Useful for some docstrings beginning inside an argument declaration block (all models).
         """
         return SpecialBlock.NOT_SPECIAL
@@ -139,7 +138,6 @@ class CodeStyler:
     def end_of_special_style(self, line):
         """
         Sets back the `in_block` attribute to `NOT_SPECIAL`.
-
         Useful for some docstrings where we may have to go back to `ARG_LIST` instead.
         """
         self.in_block = SpecialBlock.NOT_SPECIAL
