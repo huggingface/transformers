@@ -652,8 +652,9 @@ class TFGenerationMixin:
         cur_len = shape_list(input_ids)[1]  # unused
         vocab_size = getattr(self.config, "vocab_size", None)
         if vocab_size is None and self.config.is_encoder_decoder:
-            vocab_size = getattr(self.config.decoder, "vocab_size", None)
-        assert vocab_size is not None
+            decoder_config = getattr(self.config, "decoder", None)
+            if decoder_config is not None:
+                vocab_size = getattr(self.config.decoder, "vocab_size", None)
 
         # set effective batch size and effective batch multiplier according to do_sample
         if do_sample:
@@ -1452,8 +1453,9 @@ class TFGenerationMixin:
         """
         vocab_size = getattr(self.config, "vocab_size", None)
         if vocab_size is None and self.config.is_encoder_decoder:
-            vocab_size = getattr(self.config.decoder, "vocab_size", None)
-        assert vocab_size is not None
+            decoder_config = getattr(self.config, "decoder", None)
+            if decoder_config is not None:
+                vocab_size = getattr(self.config.decoder, "vocab_size", None)
 
         if cur_len == 1 and forced_bos_token_id is not None:
             vocab_range = tf.constant(range(vocab_size))
