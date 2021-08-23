@@ -409,7 +409,6 @@ class Trainer:
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
-        args.half_precision_backend = None
 
         if args.fp16 or args.bf16:
             if args.half_precision_backend == "auto":
