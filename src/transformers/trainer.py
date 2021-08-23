@@ -143,7 +143,7 @@ if is_apex_available():
 if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_torch_generator_available = True
     _is_native_amp_available = True
-    from torch import autocast
+    from torch.cuda.amp import autocast
 
 if is_datasets_available():
     import datasets
@@ -1782,7 +1782,7 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         if self.use_amp:
-            with autocast(device_type=self.args.device.type, fast_dtype=self.amp_dtype):
+            with autocast(fast_dtype=self.amp_dtype):
                 loss = self.compute_loss(model, inputs)
         else:
             loss = self.compute_loss(model, inputs)
@@ -2429,7 +2429,7 @@ class Trainer:
                 else:
                     loss = None
                     if self.use_amp:
-                        with autocast(device_type=self.args.device, fast_dtype=self.amp_dtype):
+                        with autocast(fast_dtype=self.amp_dtype):
                             outputs = model(**inputs)
                     else:
                         outputs = model(**inputs)
