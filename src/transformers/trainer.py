@@ -772,8 +772,8 @@ class Trainer:
         Trainer's init through :obj:`optimizers`, or subclass and override this method (or :obj:`create_optimizer`
         and/or :obj:`create_scheduler`) in a subclass.
         """
-        self.optimizer = self.create_optimizer()
-        self.lr_scheduler = self.create_scheduler(optimizer=self.optimizer, num_training_steps=num_training_steps)
+        self.create_optimizer()
+        self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer)
 
     def create_optimizer(self):
         """
@@ -820,7 +820,7 @@ class Trainer:
 
         return self.optimizer
 
-    def create_scheduler(self, optimizer: torch.optim.Optimizer, num_training_steps: int):
+    def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
 
@@ -830,7 +830,7 @@ class Trainer:
         if self.lr_scheduler is None:
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
-                optimizer,
+                optimizer=self.optimizer if optimizer is None else optimizer,
                 num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
             )
