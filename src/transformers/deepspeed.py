@@ -349,7 +349,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
             # Optimizer is not available, so use callable to defer lr_scheduler creation to DS init
             lr_scheduler = _lr_scheduler_callable
         else:
-            lr_scheduler = trainer.create_scheduler(optimizer=optimizer, num_training_steps=num_training_steps)
+            lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
