@@ -26,7 +26,6 @@ import shutil
 import sys
 import time
 import warnings
-from logging import StreamHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -49,10 +48,8 @@ import numpy as np
 import torch
 from packaging import version
 from torch import nn
-from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.dataset import Dataset, IterableDataset
+from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -70,7 +67,6 @@ from .file_utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_tpu_available,
-    is_training_run_on_sagemaker,
 )
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
@@ -175,9 +171,6 @@ if is_sagemaker_mp_enabled():
 
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 
-if is_training_run_on_sagemaker():
-    logging.add_handler(StreamHandler(sys.stdout))
-
 
 if TYPE_CHECKING:
     import optuna
@@ -206,16 +199,16 @@ class Trainer:
             The function to use to form a batch from a list of elements of :obj:`train_dataset` or :obj:`eval_dataset`.
             Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is provided, an instance of
             :func:`~transformers.DataCollatorWithPadding` otherwise.
-        train_dataset (:obj:`torch.utils.data.dataset.Dataset` or :obj:`torch.utils.data.dataset.IterableDataset`, `optional`):
+        train_dataset (:obj:`torch.utils.data.Dataset` or :obj:`torch.utils.data.IterableDataset`, `optional`):
             The dataset to use for training. If it is an :obj:`datasets.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
 
-            Note that if it's a :obj:`torch.utils.data.dataset.IterableDataset` with some randomization and you are
-            training in a distributed fashion, your iterable dataset should either use a internal attribute
-            :obj:`generator` that is a :obj:`torch.Generator` for the randomization that must be identical on all
-            processes (and the Trainer will manually set the seed of this :obj:`generator` at each epoch) or have a
-            :obj:`set_epoch()` method that internally sets the seed of the RNGs used.
-        eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
+            Note that if it's a :obj:`torch.utils.data.IterableDataset` with some randomization and you are training in
+            a distributed fashion, your iterable dataset should either use a internal attribute :obj:`generator` that
+            is a :obj:`torch.Generator` for the randomization that must be identical on all processes (and the Trainer
+            will manually set the seed of this :obj:`generator` at each epoch) or have a :obj:`set_epoch()` method that
+            internally sets the seed of the RNGs used.
+        eval_dataset (:obj:`torch.utils.data.Dataset`, `optional`):
              The dataset to use for evaluation. If it is an :obj:`datasets.Dataset`, columns not accepted by the
              ``model.forward()`` method are automatically removed.
         tokenizer (:class:`PreTrainedTokenizerBase`, `optional`):
@@ -537,7 +530,7 @@ class Trainer:
         else:
             return dataset.remove_columns(ignored_columns)
 
-    def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
+    def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
         if not isinstance(self.train_dataset, collections.abc.Sized):
             return None
 
@@ -617,7 +610,7 @@ class Trainer:
         if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
 
-        if isinstance(train_dataset, torch.utils.data.dataset.IterableDataset):
+        if isinstance(train_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
                 train_dataset = IterableDatasetShard(
                     train_dataset,
@@ -647,7 +640,7 @@ class Trainer:
             pin_memory=self.args.dataloader_pin_memory,
         )
 
-    def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
+    def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
         # Deprecated code
         if self.args.use_legacy_prediction_loop:
             if is_torch_tpu_available():
@@ -683,7 +676,7 @@ class Trainer:
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
-            eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
+            eval_dataset (:obj:`torch.utils.data.Dataset`, `optional`):
                 If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`, columns not
                 accepted by the ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
@@ -694,7 +687,7 @@ class Trainer:
         if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
 
-        if isinstance(eval_dataset, torch.utils.data.dataset.IterableDataset):
+        if isinstance(eval_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
                 eval_dataset = IterableDatasetShard(
                     eval_dataset,
@@ -730,14 +723,14 @@ class Trainer:
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
-            test_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
+            test_dataset (:obj:`torch.utils.data.Dataset`, `optional`):
                 The test dataset to use. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
         if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             test_dataset = self._remove_unused_columns(test_dataset, description="test")
 
-        if isinstance(test_dataset, torch.utils.data.dataset.IterableDataset):
+        if isinstance(test_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
                 test_dataset = IterableDatasetShard(
                     test_dataset,
