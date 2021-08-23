@@ -298,7 +298,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
 
 
 @require_tf
-class DataCollatorIntegrationTest(unittest.TestCase):
+class TFDataCollatorIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.tmpdirname = tempfile.mkdtemp()
