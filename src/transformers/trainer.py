@@ -772,11 +772,8 @@ class Trainer:
         Trainer's init through :obj:`optimizers`, or subclass and override this method (or :obj:`create_optimizer`
         and/or :obj:`create_scheduler`) in a subclass.
         """
-        if self.optimizer is None:
-            self.optimizer = self.create_optimizer()
-
-        if self.lr_scheduler is None:
-            self.lr_scheduler = self.create_scheduler(optimizer=self.optimizer, num_training_steps=num_training_steps)
+        self.optimizer = self.create_optimizer()
+        self.lr_scheduler = self.create_scheduler(optimizer=self.optimizer, num_training_steps=num_training_steps)
 
     def create_optimizer(self):
         """
@@ -785,42 +782,43 @@ class Trainer:
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
-        decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
-        decay_parameters = [name for name in decay_parameters if "bias" not in name]
-        optimizer_grouped_parameters = [
-            {
-                "params": [p for n, p in self.model.named_parameters() if n in decay_parameters],
-                "weight_decay": self.args.weight_decay,
-            },
-            {
-                "params": [p for n, p in self.model.named_parameters() if n not in decay_parameters],
-                "weight_decay": 0.0,
-            },
-        ]
-        optimizer_cls = Adafactor if self.args.adafactor else AdamW
-        if self.args.adafactor:
-            optimizer_cls = Adafactor
-            optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
-        else:
-            optimizer_cls = AdamW
-            optimizer_kwargs = {
-                "betas": (self.args.adam_beta1, self.args.adam_beta2),
-                "eps": self.args.adam_epsilon,
-            }
-        optimizer_kwargs["lr"] = self.args.learning_rate
-        if self.sharded_ddp == ShardedDDPOption.SIMPLE:
-            optimizer = OSS(
-                params=optimizer_grouped_parameters,
-                optim=optimizer_cls,
-                **optimizer_kwargs,
-            )
-        else:
-            optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+        if self.optimizer is None:
+            decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
+            decay_parameters = [name for name in decay_parameters if "bias" not in name]
+            optimizer_grouped_parameters = [
+                {
+                    "params": [p for n, p in self.model.named_parameters() if n in decay_parameters],
+                    "weight_decay": self.args.weight_decay,
+                },
+                {
+                    "params": [p for n, p in self.model.named_parameters() if n not in decay_parameters],
+                    "weight_decay": 0.0,
+                },
+            ]
+            optimizer_cls = Adafactor if self.args.adafactor else AdamW
+            if self.args.adafactor:
+                optimizer_cls = Adafactor
+                optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
+            else:
+                optimizer_cls = AdamW
+                optimizer_kwargs = {
+                    "betas": (self.args.adam_beta1, self.args.adam_beta2),
+                    "eps": self.args.adam_epsilon,
+                }
+            optimizer_kwargs["lr"] = self.args.learning_rate
+            if self.sharded_ddp == ShardedDDPOption.SIMPLE:
+                self.optimizer = OSS(
+                    params=optimizer_grouped_parameters,
+                    optim=optimizer_cls,
+                    **optimizer_kwargs,
+                )
+            else:
+                self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
-        if is_sagemaker_mp_enabled():
-            optimizer = smp.DistributedOptimizer(optimizer)
+            if is_sagemaker_mp_enabled():
+                self.optimizer = smp.DistributedOptimizer(self.optimizer)
 
-        return optimizer
+        return self.optimizer
 
     def create_scheduler(self, optimizer: torch.optim.Optimizer, num_training_steps: int):
         """
@@ -829,12 +827,14 @@ class Trainer:
         Args:
             num_training_steps (int): The number of training steps to do.
         """
-        return get_scheduler(
-            self.args.lr_scheduler_type,
-            optimizer,
-            num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
-            num_training_steps=num_training_steps,
-        )
+        if self.lr_scheduler is None:
+            self.lr_scheduler = get_scheduler(
+                self.args.lr_scheduler_type,
+                optimizer,
+                num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
+                num_training_steps=num_training_steps,
+            )
+        return self.lr_scheduler
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
