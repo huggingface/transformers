@@ -22,7 +22,7 @@ from ...file_utils import _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_transfo_xl": ["TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "TransfoXLConfig"],
+    "configuration_transfo_xl": ["TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "TransfoXLConfig", "TransfoXLOnnxConfig"],
     "tokenization_transfo_xl": ["TransfoXLCorpus", "TransfoXLTokenizer"],
 }
 

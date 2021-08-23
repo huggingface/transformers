@@ -12,6 +12,7 @@ from ..models.longformer import LongformerOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
+from ..models.transfo_xl import TransfoXLOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
 
 
@@ -68,6 +69,7 @@ class FeaturesManager:
         "t5": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=T5OnnxConfig
         ),
+        "transfo-xl": supported_features_mapping("default", onnx_config_cls=TransfoXLOnnxConfig),
         "xlm-roberta": supported_features_mapping("default", onnx_config_cls=XLMRobertaOnnxConfig),
         "gpt-neo": supported_features_mapping(
             "default",
