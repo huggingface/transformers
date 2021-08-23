@@ -29,6 +29,7 @@ if is_tf_available():
 
     from transformers.models.roberta.modeling_tf_roberta import (
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFRobertaForCausalLM,
         TFRobertaForMaskedLM,
         TFRobertaForMultipleChoice,
         TFRobertaForQuestionAnswering,
@@ -142,6 +143,13 @@ class TFRobertaModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_roberta_for_causal_lm(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = TFRobertaForCausalLM(config=config)
+        result = model([input_ids, input_mask, token_type_ids])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
     def create_and_check_roberta_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -204,6 +212,7 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFRobertaModel,
+            TFRobertaForCausalLM,
             TFRobertaForMaskedLM,
             TFRobertaForSequenceClassification,
             TFRobertaForTokenClassification,
