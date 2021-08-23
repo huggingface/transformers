@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Hubert model. """
 
-
 import math
 import unittest
 
@@ -31,7 +30,13 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import HubertForCTC, HubertForSequenceClassification, HubertModel, Wav2Vec2Processor
+    from transformers import (
+        HubertForCTC,
+        HubertForSequenceClassification,
+        HubertModel,
+        Wav2Vec2FeatureExtractor,
+        Wav2Vec2Processor,
+    )
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
 
 
@@ -623,6 +628,13 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
         return ds["speech"][:num_samples]
 
+    def _load_superb(self, task, num_samples):
+        from datasets import load_dataset
+
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+
+        return ds[:num_samples]
+
     def test_inference_ctc_batched(self):
         model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft").to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
@@ -646,23 +658,28 @@ class HubertModelIntegrationTest(unittest.TestCase):
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
-    def test_inference_classification_batched(self):
+    def test_inference_keyword_spotting(self):
         model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-s3prl-superb-ks").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained(
-            "anton-l/hubert-base-s3prl-superb-ks", do_lower_case=True, return_attention_mask=True
+        processor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "anton-l/hubert-base-s3prl-superb-ks", return_attention_mask=True, do_normalize=False
         )
-        # TODO: use SUPERB Keyword Spotting instead
-        input_speech = self._load_datasamples(2)
-
-        inputs = processor(input_speech, return_tensors="pt", padding=True)
+        input_data = self._load_superb("ks", 10)
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_values, attention_mask=attention_mask).logits
+            outputs = model(input_values, attention_mask=attention_mask)
 
-        predicted_ids = torch.argmax(logits, dim=-1)
+        predicted_ids = torch.argmax(outputs.logits, dim=-1)
 
-        EXPECTED_CLASSES = [10, 10]  # all _unknown_
-        self.assertListEqual(predicted_ids.tolist(), EXPECTED_CLASSES)
+        expected_labels = [2, 6, 10, 9, 3, 5, 10, 4, 1, 1]
+        # s3prl logits for "on/94de6a6a_nohash_2.wav"
+        expected_logits = torch.tensor(
+            [-4.5676, -3.1766, 7.6727, -5.5378, -5.2282, -4.8550, 0.6328, 5.5028, -1.0397, -2.2920, 3.0236, -7.1656],
+            device=torch_device,
+        )
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertTrue(torch.allclose(outputs.logits[0], expected_logits, atol=1e-2))

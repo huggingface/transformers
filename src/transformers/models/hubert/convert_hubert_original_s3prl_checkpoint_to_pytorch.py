@@ -19,14 +19,7 @@ import argparse
 
 import torch
 
-from transformers import (
-    HubertConfig,
-    HubertForSequenceClassification,
-    Wav2Vec2CTCTokenizer,
-    Wav2Vec2FeatureExtractor,
-    Wav2Vec2Processor,
-    logging,
-)
+from transformers import HubertConfig, HubertForSequenceClassification, Wav2Vec2FeatureExtractor, logging
 
 
 logging.set_verbosity_info()
@@ -48,10 +41,7 @@ def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, mode
 
     hf_congfig = HubertConfig.from_pretrained(config_path)
     hf_model = HubertForSequenceClassification.from_pretrained(base_model_name, config=hf_congfig)
-    # TODO: remove the need for a tokenizer
-    tokenizer = Wav2Vec2CTCTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
-    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
-    hf_processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    hf_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(base_model_name, do_normalize=False)
 
     if hf_congfig.use_weighted_layer_sum:
         hf_model.layer_weights.data = checkpoint["Featurizer"]["weights"]
@@ -61,7 +51,7 @@ def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, mode
     hf_model.classifier.weight.data = downstream_dict["model.post_net.linear.weight"]
     hf_model.classifier.bias.data = downstream_dict["model.post_net.linear.bias"]
 
-    hf_processor.save_pretrained(model_dump_path)
+    hf_feature_extractor.save_pretrained(model_dump_path)
     hf_model.save_pretrained(model_dump_path)
 
 
