@@ -1092,16 +1092,18 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
         )
         transformer_outputs = self.transformer(
-            flat_input_ids,
-            inputs["past"],
-            flat_attention_mask,
-            flat_token_type_ids,
-            flat_position_ids,
-            inputs["head_mask"],
-            inputs["inputs_embeds"],
-            inputs["use_cache"],
-            inputs["output_attentions"],
-            inputs["output_hidden_states"],
+            input_ids=flat_input_ids,
+            past=inputs["past"],
+            attention_mask=flat_attention_mask,
+            token_type_ids=flat_token_type_ids,
+            position_ids=flat_position_ids,
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )

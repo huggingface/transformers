@@ -320,7 +320,7 @@ def booleans_processing(config, **kwargs):
         final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
-            final_booleans["use_cache"] = config.use_cache
+            final_booleans["use_cache"] = getattr(config, "use_cache", None)
 
     return final_booleans
 

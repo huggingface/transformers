@@ -650,7 +650,10 @@ class TFGenerationMixin:
 
         # current position and vocab size
         cur_len = shape_list(input_ids)[1]  # unused
-        vocab_size = self.config.vocab_size if not self.config.is_encoder_decoder else self.config.decoder.vocab_size
+        vocab_size = getattr(self.config, "vocab_size", None)
+        if vocab_size is None and self.config.is_encoder_decoder:
+            vocab_size = getattr(self.config.decoder, "vocab_size", None)
+        assert vocab_size is not None
 
         # set effective batch size and effective batch multiplier according to do_sample
         if do_sample:
