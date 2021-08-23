@@ -28,12 +28,7 @@ import numpy
 from datasets import load_dataset, load_metric
 
 import transformers
-from sparseml_utils import (
-    SparseMLQATrainer,
-    export_model,
-    preprocess_state_dict,
-    load_recipe
-)
+from sparseml_utils import QuestionAnsweringModuleExporter, SparseMLQATrainer
 from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
@@ -46,6 +41,7 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
+from transformers.sparse import export_model, load_recipe, preprocess_state_dict
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from utils_qa import postprocess_qa_predictions
@@ -62,6 +58,7 @@ class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
+
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
@@ -105,8 +102,10 @@ class DataTrainingArguments:
 
     recipe: Optional[str] = field(
         default=None,
-        metadata={"help": "Path to a SparseML sparsification recipe, see https://github.com/neuralmagic/sparseml "
-                  "for more information"},
+        metadata={
+            "help": "Path to a SparseML sparsification recipe, see https://github.com/neuralmagic/sparseml "
+            "for more information"
+        },
     )
     onnx_export_path: Optional[str] = field(
         default=None, metadata={"help": "The filename and path which will be where onnx model is outputed"}
@@ -329,7 +328,7 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
-        state_dict=state_dict
+        state_dict=state_dict,
     )
 
     teacher_model = None
@@ -672,7 +671,8 @@ def main():
     if data_args.onnx_export_path:
         logger.info("*** Export to ONNX ***")
         eval_dataloader = trainer.get_eval_dataloader(eval_dataset)
-        export_model(model, eval_dataloader, data_args.onnx_export_path, data_args.num_exported_samples)
+        exporter = QuestionAnsweringModuleExporter(model, output_dir=data_args.onnx_export_path)
+        export_model(exporter, eval_dataloader, data_args.onnx_export_path, data_args.num_exported_samples)
 
 
 def _mp_fn(index):
