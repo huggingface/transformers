@@ -155,6 +155,7 @@ def get_model_modules():
         "modeling_retribert",
         "modeling_utils",
         "modeling_flax_auto",
+        "modeling_flax_encoder_decoder",
         "modeling_flax_utils",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
@@ -226,6 +227,7 @@ def get_model_test_files():
     _ignore_files = [
         "test_modeling_common",
         "test_modeling_encoder_decoder",
+        "test_modeling_flax_encoder_decoder",
         "test_modeling_marian",
         "test_modeling_tf_common",
     ]

@@ -516,6 +516,15 @@ class FlaxElectraPreTrainedModel:
         requires_backends(cls, ["flax"])
 
 
+class FlaxEncoderDecoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
 class FlaxGPT2LMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])

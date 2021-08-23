@@ -79,6 +79,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("t5", "FlaxT5ForConditionalGeneration"),
         ("mt5", "FlaxMT5ForConditionalGeneration"),
         ("marian", "FlaxMarianMTModel"),
+        ("encoder-decoder", "FlaxEncoderDecoderModel"),
     ]
 )
 
