@@ -673,14 +673,13 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
-        lm_logits = self.lm_head(hidden_states)
+        # make sure sampling in fp16 works correctly and
+        # compute loss in fp32 to match with mesh-tf version
+        # https://github.com/EleutherAI/gpt-neo/blob/89ce74164da2fb16179106f54e2269b5da8db333/models/gpt2/gpt2.py#L179
+        lm_logits = self.lm_head(hidden_states).to(torch.float32)
 
         loss = None
         if labels is not None:
-            # Compute loss in fp32 to match with mesh-tf version
-            # https://github.com/EleutherAI/gpt-neo/blob/89ce74164da2fb16179106f54e2269b5da8db333/models/gpt2/gpt2.py#L179
-            lm_logits = lm_logits.to(torch.float32)
-
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -688,7 +687,6 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
-            lm_logits = lm_logits.to(hidden_states.dtype)
             loss = loss.to(hidden_states.dtype)
 
         if not return_dict:
