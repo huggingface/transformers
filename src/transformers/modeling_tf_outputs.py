@@ -80,6 +80,7 @@ class TFBaseModelOutputWithPooling(ModelOutput):
     attentions: Optional[Tuple[tf.Tensor]] = None
 
 
+@dataclass
 class TFBaseModelOutputWithPoolingAndCrossAttentions(ModelOutput):
     """
     Base class for model's outputs that also contains a pooling of the last hidden states.

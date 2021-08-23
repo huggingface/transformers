@@ -783,6 +783,11 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=inputs["head_mask"],
+            # To pass the test
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=None,
+            past_key_values=None,
+            use_cache=False,
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
