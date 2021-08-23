@@ -583,28 +583,31 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer
+            >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer, GPT2Tokenizer
 
             >>> # load a fine-tuned bert2gpt2 model
             >>> model = FlaxEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+            >>> # load input & output tokenizer
+            >>> tokenizer_input = BertTokenizer.from_pretrained('bert-base-cased')
+            >>> tokenizer_output = GPT2Tokenizer.from_pretrained('gpt2')
 
-            >>> input_str = '''Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members
+            >>> article = '''Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members
             ... singing a racist chant. SAE's national chapter suspended the students,
             ... but University of Oklahoma President David Boren took it a step further,
             ... saying the university's affiliation with the fraternity is permanently done.'''
-            >>> input_ids = tokenizer(article, add_special_tokens=True, return_tensors='np')
+
+            >>> input_ids = tokenizer_input(article, add_special_tokens=True, return_tensors='np').input_ids
 
             >>> # use GPT2's eos_token as the pad as well as eos token
-            >>> eos_token_id = model.config.decoder.eos_token_id
-            >>> pad_token_id = eos_token_id
+            >>> model.config.eos_token_id = model.config.decoder.eos_token_id
+            >>> model.config.pad_token_id = model.config.eos_token_id
 
-            >>> sequences = model.generate(input_ids, pad_token_id=pad_token_id, eos_token_id=eos_token_id, decoder_start_token_id=decoder_start_token_id).sequences
+            >>> sequences = model.generate(input_ids, num_beams=4, max_length=12).sequences
 
-            >>> summary = tokenizer.batch_decode(sequences)[0]
-            >>> assert summary == " "
-
+            >>> summary = tokenizer_output.batch_decode(sequences, skip_special_tokens=True)[0]
+            >>> assert summary == "SAS Alpha Epsilon suspended Sigma Alpha Epsilon members"
         """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
