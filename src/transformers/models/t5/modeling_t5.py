@@ -651,6 +651,7 @@ class T5Block(nn.Module):
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
         
         # clamp inf values to enable fp16 training
+        #TODO
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
