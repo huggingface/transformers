@@ -179,12 +179,14 @@ class BeamSearchScorer(BeamScorer):
                     num_beams=self.group_size,
                     length_penalty=self.length_penalty,
                     early_stopping=self.do_early_stopping,
-                ) for _ in range(num_beam_groups)
+                )
+                for _ in range(num_beam_groups)
             ]
             for _ in range(batch_size)
-        ] # individual beam hypothesis for each group and each input
-        self._done = torch.tensor([[False for _ in range(num_beam_groups)] for _ in range(batch_size)],
-                                  dtype=torch.bool, device=self.device)
+        ]  # individual beam hypothesis for each group and each input
+        self._done = torch.tensor(
+            [[False for _ in range(num_beam_groups)] for _ in range(batch_size)], dtype=torch.bool, device=self.device
+        )
 
         if not isinstance(num_beams, int) or num_beams <= 1:
             raise ValueError(
@@ -328,7 +330,11 @@ class BeamSearchScorer(BeamScorer):
                     best_score = best_hyp_tuple[0]
                     best_hyp = best_hyp_tuple[1]
 
-                    batch_beam_idx = self.num_beam_hyps_to_keep * batch_idx + self.num_beam_hyps_to_keep_per_group * beam_group_idx + j
+                    batch_beam_idx = (
+                        self.num_beam_hyps_to_keep * batch_idx
+                        + self.num_beam_hyps_to_keep_per_group * beam_group_idx
+                        + j
+                    )
                     sent_lengths[batch_beam_idx] = len(best_hyp)
 
                     # append to lists

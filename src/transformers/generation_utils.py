@@ -2464,7 +2464,7 @@ class GenerationMixin:
                     next_indices,
                     pad_token_id=pad_token_id,
                     eos_token_id=eos_token_id,
-                    beam_group_idx=beam_group_idx
+                    beam_group_idx=beam_group_idx,
                 )
                 beam_scores[batch_group_indices] = beam_outputs["next_beam_scores"]
                 beam_next_tokens = beam_outputs["next_beam_tokens"]
