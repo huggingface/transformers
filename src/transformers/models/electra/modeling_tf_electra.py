@@ -466,7 +466,6 @@ class TFElectraPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-# Copied from transformers.models.albert.modeling_tf_albert.TFAlbertEmbeddings with Albert->Electra
 class TFElectraEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
