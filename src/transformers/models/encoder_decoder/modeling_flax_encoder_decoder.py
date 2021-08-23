@@ -585,24 +585,24 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
             >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer
 
-            >>> # initialize a bert2gpt2 from a pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-cased', 'gpt2')
-
+            >>> # load a fine-tuned bert2gpt2 model
+            >>> model = FlaxEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 
-            >>> # forward
-            >>> input_ids = tokenizer.encode("Hello, my dog is cute", add_special_tokens=True, return_tensors='np')  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+            >>> input_str = '''Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members
+            ... singing a racist chant. SAE's national chapter suspended the students,
+            ... but University of Oklahoma President David Boren took it a step further,
+            ... saying the university's affiliation with the fraternity is permanently done.'''
+            >>> input_ids = tokenizer(article, add_special_tokens=True, return_tensors='np')
 
-            >>> # save and load from pretrained
-            >>> model.save_pretrained("bert2gpt2")
-            >>> model = FlaxEncoderDecoderModel.from_pretrained("bert2gpt2")
-
-            >>> # generation (use GPT2's `bos_token_id` to start the generation.)
+            >>> # use GPT2's eos_token as the pad as well as eos token
             >>> eos_token_id = model.config.decoder.eos_token_id
             >>> pad_token_id = eos_token_id
-            >>> decoder_start_token_id = model.config.decoder.bos_token_id
-            >>> generated = model.generate(input_ids, pad_token_id=pad_token_id, eos_token_id=eos_token_id, decoder_start_token_id=decoder_start_token_id)
+
+            >>> sequences = model.generate(input_ids, pad_token_id=pad_token_id, eos_token_id=eos_token_id, decoder_start_token_id=decoder_start_token_id).sequences
+
+            >>> summary = tokenizer.batch_decode(sequences)[0]
+            >>> assert summary == " "
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
