@@ -9,7 +9,7 @@ class FSNERModel(torch.nn.Module):
     uses a train-free few-shot learning approach inspired by question-answering.
     """
 
-    def __init__(self, pretrained_model_name_or_path="sayef/fsner-bert-base-uncsed"):
+    def __init__(self, pretrained_model_name_or_path="sayef/fsner-bert-base-uncased"):
         super(FSNERModel, self).__init__()
 
         self.bert = AutoModel.from_pretrained(pretrained_model_name_or_path, return_dict=True)
