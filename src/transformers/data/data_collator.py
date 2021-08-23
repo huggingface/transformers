@@ -106,8 +106,8 @@ def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
 
 
 def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
 
     if not isinstance(features[0], (dict, BatchEncoding)):
         features = [vars(f) for f in features]
@@ -1312,8 +1312,8 @@ class DataCollatorForPermutationLanguageModeling:
         """
         from random import randint
 
-        import tensorflow as tf
         import numpy as np
+        import tensorflow as tf
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
@@ -1353,7 +1353,10 @@ class DataCollatorForPermutationLanguageModeling:
         masked_indices = tf.cast(tf.convert_to_tensor(masked_indices), dtype=tf.bool)
         target_mapping = tf.convert_to_tensor(target_mapping)
         special_tokens_mask = tf.convert_to_tensor(
-            [self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.numpy().tolist()],
+            [
+                self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True)
+                for val in labels.numpy().tolist()
+            ],
         )
         special_tokens_mask = tf.cast(special_tokens_mask, dtype=tf.bool)
         masked_indices = masked_indices & ~special_tokens_mask
