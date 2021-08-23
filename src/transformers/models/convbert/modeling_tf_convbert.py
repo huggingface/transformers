@@ -103,14 +103,12 @@ class TFConvBertEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
         input_ids: tf.Tensor = None,
         position_ids: tf.Tensor = None,
         token_type_ids: tf.Tensor = None,
         inputs_embeds: tf.Tensor = None,
-        past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
         """
@@ -130,9 +128,7 @@ class TFConvBertEmbeddings(tf.keras.layers.Layer):
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if position_ids is None:
-            position_ids = tf.expand_dims(
-                tf.range(start=past_key_values_length, limit=input_shape[1] + past_key_values_length), axis=0
-            )
+            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
         position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
