@@ -341,7 +341,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
         config["zero_allow_untested_optimizer"] = True
 
     def _lr_scheduler_callable(optimizer):
-        return trainer.create_scheduler(optimizer=optimizer, num_training_steps=num_training_steps)
+        return trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     lr_scheduler = None
     if "scheduler" not in config:
