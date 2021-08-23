@@ -23,7 +23,6 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
-    DUMMY_INPUTS,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
