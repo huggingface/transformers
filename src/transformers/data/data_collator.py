@@ -107,6 +107,7 @@ def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
 
 def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import tensorflow as tf
+    import numpy as np
 
     if not isinstance(features[0], (dict, BatchEncoding)):
         features = [vars(f) for f in features]
@@ -117,8 +118,14 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     # Ensure that tensor is created with the correct type
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
-        label = first["label"].item() if isinstance(first["label"], tf.Tensor) else first["label"]
-        dtype = tf.int64 if isinstance(label, int) else tf.float32
+        if isinstance(first["label"], tf.Tensor):
+            dtype = tf.int64 if first["label"].dtype.is_integer() else tf.float32
+        elif isinstance(first["label"], np.ndarray):
+            dtype = tf.int64 if np.issubdtype(first["label"].dtype, np.integer) else tf.float32
+        elif isinstance(first["label"], (tuple, list)):
+            dtype = tf.int64 if isinstance(first["label"][0], int) else tf.float32
+        else:
+            dtype = tf.int64 if isinstance(first["label"], int) else tf.float32
         batch["labels"] = tf.convert_to_tensor([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
         if isinstance(first["label_ids"], tf.Tensor):
@@ -131,7 +138,7 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     # Again, we will use the first element to figure out which key/values are not None for this model.
     for k, v in first.items():
         if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
-            if isinstance(v, tf.Tensor):
+            if isinstance(v, (tf.Tensor, np.ndarray)):
                 batch[k] = tf.stack([f[k] for f in features])
             else:
                 batch[k] = tf.convert_to_tensor([f[k] for f in features])
@@ -653,22 +660,25 @@ class DataCollatorForLanguageModeling:
             if special_tokens_mask is None:
                 special_tokens_mask = [
                     self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True)
-                    for val in batch["labels"].tolist()
+                    for val in batch["input_ids"].numpy().tolist()
                 ]
-                special_tokens_mask = tf.convert_to_tensor(special_tokens_mask, dtype=tf.bool)
+                # Cannot directly create as bool
+                special_tokens_mask = tf.cast(tf.convert_to_tensor(special_tokens_mask, dtype=tf.int64), tf.bool)
             else:
                 special_tokens_mask = tf.cast(special_tokens_mask, tf.bool)
             batch["input_ids"], batch["labels"] = self.tf_mask_tokens(
-                batch["input_ids"],
+                tf.cast(batch["input_ids"], tf.int64),
                 special_tokens_mask=special_tokens_mask,
                 mask_token_id=self.tokenizer.mask_token_id,
                 vocab_size=len(self.tokenizer),
             )
         else:
-            labels = batch["input_ids"].clone()
+            labels = batch["input_ids"]
             if self.tokenizer.pad_token_id is not None:
                 # Replace self.tokenizer.pad_token_id with -100
                 labels = tf.where(labels == self.tokenizer.pad_token_id, -100, labels)
+            else:
+                labels = tf.identity(labels)  # Makes a copy, just in case
             batch["labels"] = labels
         return batch
 
@@ -1303,27 +1313,28 @@ class DataCollatorForPermutationLanguageModeling:
         from random import randint
 
         import tensorflow as tf
+        import numpy as np
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
                 "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
             )
 
-        if inputs.size(1) % 2 != 0:
+        if tf.shape(inputs)[1] % 2 != 0:
             raise ValueError(
                 "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
             )
 
-        labels = inputs.clone()
+        labels = tf.identity(inputs)
         # Creating the mask and target_mapping tensors
-        masked_indices = tf.fill(tf.shape(labels), 0, dtype=tf.bool)
+        masked_indices = np.full(labels.shape.as_list(), 0, dtype=np.bool)
         labels_shape = tf.shape(labels)
-        target_mapping = tf.zeros((labels_shape[0], labels_shape[1], labels_shape[1]), dtype=tf.float32)
+        target_mapping = np.zeros((labels_shape[0], labels_shape[1], labels_shape[1]), dtype=np.float32)
 
         for i in range(len(labels)):
             # Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
             cur_len = 0
-            max_len = labels.size(1)
+            max_len = tf.shape(labels)[1]
 
             while cur_len < max_len:
                 # Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
@@ -1338,12 +1349,13 @@ class DataCollatorForPermutationLanguageModeling:
 
             # Since we're replacing non-masked tokens with -100 in the labels tensor instead of skipping them altogether,
             # the i-th predict corresponds to the i-th token.
-            target_mapping[i] = tf.eye(labels_shape[1])
-
+            target_mapping[i] = np.eye(labels_shape[1])
+        masked_indices = tf.cast(tf.convert_to_tensor(masked_indices), dtype=tf.bool)
+        target_mapping = tf.convert_to_tensor(target_mapping)
         special_tokens_mask = tf.convert_to_tensor(
-            [self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()],
-            dtype=tf.bool,
+            [self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.numpy().tolist()],
         )
+        special_tokens_mask = tf.cast(special_tokens_mask, dtype=tf.bool)
         masked_indices = masked_indices & ~special_tokens_mask
         if self.tokenizer._pad_token is not None:
             padding_mask = labels == self.tokenizer.pad_token_id
@@ -1352,8 +1364,8 @@ class DataCollatorForPermutationLanguageModeling:
         # Mask indicating non-functional tokens, where functional tokens are [SEP], [CLS], padding, etc.
         non_func_mask = ~(padding_mask | special_tokens_mask)
 
-        inputs[masked_indices] = self.tokenizer.mask_token_id
-        labels[~masked_indices] = -100  # We only compute loss on masked tokens
+        inputs = tf.where(masked_indices, self.tokenizer.mask_token_id, inputs)
+        labels = tf.where(masked_indices, labels, -100)  # We only compute loss on masked tokens
 
         perm_mask = []
 
