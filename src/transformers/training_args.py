@@ -497,7 +497,7 @@ class TrainingArguments:
     )
     half_precision_full_eval: bool = field(
         default=False,
-        metadata={"help": "Whether to use half precision evaluation instead of 32-bit"},
+        metadata={"help": "Whether to use full half precision evaluation instead of 32-bit"},
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
 
