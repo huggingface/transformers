@@ -24,18 +24,11 @@ from transformers.testing_utils import require_tf, require_torch
 if is_torch_available():
     import torch
 
-    from transformers import (
-        DataCollatorForLanguageModeling,
-        DataCollatorForPermutationLanguageModeling,
-        DataCollatorForTokenClassification,
-        DataCollatorWithPadding,
-        default_data_collator,
-    )
-
 if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
+if is_torch_available() or is_tf_available():
     from transformers import (
         DataCollatorForLanguageModeling,
         DataCollatorForPermutationLanguageModeling,
