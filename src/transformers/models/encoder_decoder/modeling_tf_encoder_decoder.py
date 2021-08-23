@@ -256,6 +256,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model
         checkpoints.
 
+
         Params:
             encoder_pretrained_model_name_or_path (:obj: `str`, `optional`):
                 Information necessary to initiate the encoder. Can be either:
