@@ -398,6 +398,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
 class GPT2DoubleHeadsModelOutput(ModelOutput):
     """
     Base class for outputs of models predicting if two sentences are consecutive or not.
+
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided):
             Language modeling loss.
@@ -409,18 +410,16 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
             Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
         past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             Tuple of length :obj:`config.n_layers`, containing tuples of tensors of shape :obj:`(batch_size, num_heads,
-            sequence_length, embed_size_per_head)`).
-            Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
-            :obj:`past_key_values` input) to speed up sequential decoding.
+            sequence_length, embed_size_per_head)`). Contains pre-computed hidden-states (key and values in the
+            attention blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential decoding.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+            each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
-            GPT2Attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
+            sequence_length, sequence_length)`. GPT2Attentions weights after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -435,10 +434,10 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
 GPT2_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    pruning heads etc.) This model is also a PyTorch `torch.nn.Module
+    <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass. Use it as a regular PyTorch Module and refer
+    to the PyTorch documentation for all matter related to general usage and behavior.
+
     Parameters:
         config (:class:`~transformers.GPT2Config`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -451,13 +450,11 @@ GPT2_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
             :obj:`input_ids_length` = ``sequence_length`` if :obj:`past_key_values` is ``None`` else
             ``past_key_values[0][0].shape[-2]`` (``sequence_length`` of input past key value states). Indices of input
-            sequence tokens in the vocabulary.
-            If :obj:`past_key_values` is used, only ``input_ids`` that do not have their past calculated should be
-            passed as ``input_ids``.
-            Indices can be obtained using :class:`~transformers.GPT2Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
-            `What are input IDs? <../glossary.html#input-ids>`__
+            sequence tokens in the vocabulary. If :obj:`past_key_values` is used, only ``input_ids`` that do not have
+            their past calculated should be passed as ``input_ids``. Indices can be obtained using
+            :class:`~transformers.GPT2Tokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :meth:`transformers.PreTrainedTokenizer.__call__` for details. `What are input IDs?
+            <../glossary.html#input-ids>`__
         past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
             :obj:`past_key_values` output below). Can be used to speed up sequential decoding. The ``input_ids`` which
@@ -465,29 +462,30 @@ GPT2_INPUTS_DOCSTRING = r"""
             computed.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
+
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-            `What are position IDs? <../glossary.html#position-ids>`_
+            config.max_position_embeddings - 1]``. `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
-            If :obj:`past_key_values` is used, optionally only the last :obj:`inputs_embeds` have to be input (see
-            :obj:`past_key_values`).
+            vectors than the model's internal embedding lookup matrix. If :obj:`past_key_values` is used, optionally
+            only the last :obj:`inputs_embeds` have to be input (see :obj:`past_key_values`).
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
@@ -501,19 +499,22 @@ GPT2_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 PARALLELIZE_DOCSTRING = r"""
-    This is an experimental feature and is a subject to change at a moment's notice.
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
-    it will evenly distribute blocks across all devices.
+    This is an experimental feature and is a subject to change at a moment's notice. Uses a device map to distribute
+    attention modules of the model across several devices. If no device map is given, it will evenly distribute blocks
+    across all devices.
+
     Args:
         device_map (:obj:`Dict[int, list]`, optional, defaults to None):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
             have fewer attention modules mapped to it than other devices. For reference, the gpt2 models have the
             following number of attention modules:
+
                 - gpt2: 12
                 - gpt2-medium: 24
                 - gpt2-large: 36
                 - gpt2-xl: 48
+
     Example::
             # Here is an example of a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
             model = GPT2LMHeadModel.from_pretrained('gpt2-xl')
@@ -525,6 +526,7 @@ PARALLELIZE_DOCSTRING = r"""
 """
 DEPARALLELIZE_DOCSTRING = r"""
     Moves the model to cpu from a model parallel state.
+
     Example::
         # On a 4 GPU machine with gpt2-large:
         model = GPT2LMHeadModel.from_pretrained('gpt2-large')
@@ -1091,7 +1093,9 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
             num_choices]`` where `num_choices` is the size of the second dimension of the input tensors. (see
             `input_ids` above)
+
         Return:
+
         Example::
             >>> import torch
             >>> from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
@@ -1179,12 +1183,11 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     """
     The GPT2 Model transformer with a sequence classification head on top (linear layer).
     :class:`~transformers.GPT2ForSequenceClassification` uses the last token in order to do the classification, as
-    other causal models (e.g. GPT-1) do.
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
-    row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
-    guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
-    the last value in each row of the batch).
+    other causal models (e.g. GPT-1) do. Since it does classification on the last token, it requires to know the
+    position of the last token. If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that
+    is not a padding token in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each
+    row of the batch. Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of
+    :obj:`input_ids`, it does the same (take the last value in each row of the batch).
     """,
     GPT2_START_DOCSTRING,
 )
