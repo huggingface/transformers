@@ -137,6 +137,15 @@ class M2M100Tokenizer(PreTrainedTokenizer):
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        self.lang_code_to_token = {lang_code: f"__{lang_code}__" for lang_code in FAIRSEQ_LANGUAGE_CODES}
+
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] += [
+            self.get_lang_token(lang_code)
+            for lang_code in FAIRSEQ_LANGUAGE_CODES
+            if self.get_lang_token(lang_code) not in kwargs["additional_special_tokens"]
+        ]
+
         super().__init__(
             src_lang=src_lang,
             tgt_lang=tgt_lang,
@@ -157,14 +166,11 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
         self.encoder_size = len(self.encoder)
 
-        self.lang_code_to_token = {lang_code: f"__{lang_code}__" for lang_code in FAIRSEQ_LANGUAGE_CODES}
-
         self.lang_token_to_id = {
             self.get_lang_token(lang_code): self.encoder_size + i for i, lang_code in enumerate(FAIRSEQ_LANGUAGE_CODES)
         }
         self.lang_code_to_id = {lang_code: self.encoder_size + i for i, lang_code in enumerate(FAIRSEQ_LANGUAGE_CODES)}
         self.id_to_lang_token = {v: k for k, v in self.lang_token_to_id.items()}
-        self._additional_special_tokens = list(self.lang_token_to_id.keys())
 
         self._src_lang = src_lang if src_lang is not None else "en"
         self.tgt_lang = tgt_lang

@@ -12,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import json
+import os
+import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, T5Tokenizer, T5TokenizerFast
@@ -293,6 +295,71 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token_id in p_output)
                 self.assertTrue(special_token_id in r_output)
                 self.assertTrue(special_token_id in cr_output)
+
+    def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
+        tokenizer_list = []
+        if self.test_slow_tokenizer:
+            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
+
+        if self.test_rust_tokenizer:
+            tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
+
+        for tokenizer_class, tokenizer_utils in tokenizer_list:
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tokenizer_utils.save_pretrained(tmp_dir)
+
+                with open(os.path.join(tmp_dir, "special_tokens_map.json"), encoding="utf-8") as json_file:
+                    special_tokens_map = json.load(json_file)
+
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), encoding="utf-8") as json_file:
+                    tokenizer_config = json.load(json_file)
+
+                added_tokens_extra_ids = [f"<extra_id_{i}>" for i in range(100)]
+
+                special_tokens_map["additional_special_tokens"] = added_tokens_extra_ids + [
+                    "an_additional_special_token"
+                ]
+                tokenizer_config["additional_special_tokens"] = added_tokens_extra_ids + [
+                    "an_additional_special_token"
+                ]
+
+                with open(os.path.join(tmp_dir, "special_tokens_map.json"), "w", encoding="utf-8") as outfile:
+                    json.dump(special_tokens_map, outfile)
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as outfile:
+                    json.dump(tokenizer_config, outfile)
+
+                # the following checks allow us to verify that our test works as expected, i.e. that the tokenizer takes
+                # into account the new value of additional_special_tokens given in the "tokenizer_config.json" and
+                # "special_tokens_map.json" files
+                tokenizer_without_change_in_init = tokenizer_class.from_pretrained(
+                    tmp_dir,
+                )
+                self.assertIn(
+                    "an_additional_special_token", tokenizer_without_change_in_init.additional_special_tokens
+                )
+                # self.assertIn("an_additional_special_token",tokenizer_without_change_in_init.get_vocab()) # ByT5Tokenization no vocab
+                self.assertEqual(
+                    ["an_additional_special_token"],
+                    tokenizer_without_change_in_init.convert_ids_to_tokens(
+                        tokenizer_without_change_in_init.convert_tokens_to_ids(["an_additional_special_token"])
+                    ),
+                )
+
+                # Now we test that we can change the value of additional_special_tokens in the from_pretrained
+                new_added_tokens = added_tokens_extra_ids + [AddedToken("a_new_additional_special_token", lstrip=True)]
+                tokenizer = tokenizer_class.from_pretrained(
+                    tmp_dir,
+                    additional_special_tokens=new_added_tokens,
+                )
+
+                self.assertIn("a_new_additional_special_token", tokenizer.additional_special_tokens)
+                self.assertEqual(
+                    ["a_new_additional_special_token"],
+                    tokenizer.convert_ids_to_tokens(
+                        tokenizer.convert_tokens_to_ids(["a_new_additional_special_token"])
+                    ),
+                )
 
     @slow
     def test_tokenizer_integration(self):

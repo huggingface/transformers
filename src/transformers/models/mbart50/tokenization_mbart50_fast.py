@@ -125,6 +125,11 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] += [
+            code for code in FAIRSEQ_LANGUAGE_CODES if code not in kwargs["additional_special_tokens"]
+        ]
+
         super().__init__(
             vocab_file,
             src_lang=src_lang,
@@ -141,7 +146,6 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
 
         self.vocab_file = vocab_file
 
-        self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
         self.lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }
