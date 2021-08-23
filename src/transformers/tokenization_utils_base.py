@@ -1647,8 +1647,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
             fast_tokenizer_file = get_fast_tokenizer_file(
-                pretrained_model_name_or_path, revision=revision, use_auth_token=use_auth_token,
-                local_files_only=local_files_only
+                pretrained_model_name_or_path,
+                revision=revision,
+                use_auth_token=use_auth_token,
+                local_files_only=local_files_only,
             )
             additional_files_names = {
                 "added_tokens_file": ADDED_TOKENS_FILE,
@@ -3392,7 +3394,7 @@ def get_fast_tokenizer_file(
     path_or_repo: Union[str, os.PathLike],
     revision: Optional[str] = None,
     use_auth_token: Optional[Union[bool, str]] = None,
-    local_files_only: bool = False
+    local_files_only: bool = False,
 ) -> str:
     """
     Get the tokenizer file to use for this version of transformers.
@@ -3414,8 +3416,9 @@ def get_fast_tokenizer_file(
         :obj:`str`: The tokenizer file to use.
     """
     # Inspect all files from the repo/folder.
-    all_files = get_list_of_files(path_or_repo, revision=revision, use_auth_token=use_auth_token,
-                                  local_files_only=local_files_only)
+    all_files = get_list_of_files(
+        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
+    )
     tokenizer_files_map = {}
     for file_name in all_files:
         search = _re_tokenizer_file.search(file_name)

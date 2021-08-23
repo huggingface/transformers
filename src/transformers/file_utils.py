@@ -1654,7 +1654,7 @@ def get_list_of_files(
     path_or_repo: Union[str, os.PathLike],
     revision: Optional[str] = None,
     use_auth_token: Optional[Union[bool, str]] = None,
-    local_files_only: bool = False
+    local_files_only: bool = False,
 ) -> List[str]:
     """
     Gets the list of files inside :obj:`path_or_repo`.
