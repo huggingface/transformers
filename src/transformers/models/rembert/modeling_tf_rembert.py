@@ -133,7 +133,9 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if position_ids is None:
-            position_ids = tf.expand_dims(tf.range(start=past_key_values_length, limit=input_shape[1] + past_key_values_length), axis=0)
+            position_ids = tf.expand_dims(
+                tf.range(start=past_key_values_length, limit=input_shape[1] + past_key_values_length), axis=0
+            )
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
         position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
@@ -451,7 +453,7 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        
+
         self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -477,14 +479,14 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-        
+
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             past_key_value = past_key_values[i] if past_key_values is not None else None
-                
+
             layer_outputs = layer_module(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -499,7 +501,7 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
-            
+
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention and encoder_hidden_states is not None:
@@ -680,7 +682,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         # Copied from `modeling_bert.py` (we can't do this in `booleans_processing`)
         if not self.is_decoder:
             inputs["use_cache"] = False
-        
+
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
@@ -841,7 +843,7 @@ class TFRemBertPreTrainedModel(TFPreTrainedModel):
             dummy["encoder_hidden_states"] = h
 
         return dummy
-        
+
 
 REMBERT_START_DOCSTRING = r"""
 

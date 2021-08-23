@@ -618,7 +618,7 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
 
         self.config = config
         self.is_decoder = config.is_decoder
-        
+
         self.embeddings = TFElectraEmbeddings(config, name="embeddings")
 
         if config.embedding_size != config.hidden_size:
@@ -736,7 +736,7 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
         # Copied from `modeling_bert.py` (we can't do this in `booleans_processing`)
         if not self.is_decoder:
             inputs["use_cache"] = False
-        
+
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
@@ -1038,7 +1038,7 @@ class TFElectraModel(TFElectraPreTrainedModel):
             and output.cross_attentions is not None
             else None
         )
-        
+
         return TFBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=output.last_hidden_state,
             past_key_values=pkv,
@@ -1046,6 +1046,7 @@ class TFElectraModel(TFElectraPreTrainedModel):
             attentions=attns,
             cross_attentions=cross_attns,
         )
+
 
 @add_start_docstrings(
     """
