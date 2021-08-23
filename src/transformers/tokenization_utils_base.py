@@ -1862,6 +1862,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                 special_tokens_map = json.load(special_tokens_map_handle)
             for key, value in special_tokens_map.items():
+                if key in kwargs and kwargs[key]:
+                    # This value has already been redefined by the kwargs
+                    # We keep this new value and ignore the one stored in the special_tokens_map_file
+
+                    continue
+
                 if isinstance(value, dict):
                     value = AddedToken(**value)
                 elif isinstance(value, list):

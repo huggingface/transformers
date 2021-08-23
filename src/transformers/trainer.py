@@ -26,7 +26,6 @@ import shutil
 import sys
 import time
 import warnings
-from logging import StreamHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -68,7 +67,6 @@ from .file_utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_tpu_available,
-    is_training_run_on_sagemaker,
 )
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
@@ -172,9 +170,6 @@ if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
-
-if is_training_run_on_sagemaker():
-    logging.add_handler(StreamHandler(sys.stdout))
 
 
 if TYPE_CHECKING:
