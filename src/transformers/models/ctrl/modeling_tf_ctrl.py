@@ -597,7 +597,6 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         )
         return outputs
 
-    # Copied from transformers.models.gpt2.modeling_tf_gpt2.TFGPT2Model.serving_output
     def serving_output(self, output):
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
@@ -754,7 +753,6 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             attentions=transformer_outputs.attentions,
         )
 
-    # Copied from transformers.models.gpt2.modeling_tf_gpt2.TFGPT2LMHeadModel.serving_output
     def serving_output(self, output):
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
