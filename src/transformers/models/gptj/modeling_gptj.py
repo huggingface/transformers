@@ -135,22 +135,22 @@ class GPTJAttention(nn.Module):
         query,
         key,
         value,
-        causal_mask,
-        masked_bias,
-        attn_dropout,
         attention_mask=None,
         head_mask=None,
-        scale_attn=None,
     ):
+
+        # compute causal mask from causal mask buffer
+        query_length, key_length = query.size(-2), key.size(-2)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
         key = key.to(torch.float32)
 
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
-        attn_weights = torch.where(causal_mask, attn_weights, masked_bias.to(attn_weights.dtype))
+        attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
-        if scale_attn is not None:
-            attn_weights = attn_weights / scale_attn
+        attn_weights = attn_weights / self.scale_attn
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -158,7 +158,7 @@ class GPTJAttention(nn.Module):
 
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
         attn_weights = attn_weights.to(value.dtype)
-        attn_weights = attn_dropout(attn_weights)
+        attn_weights = self.attn_dropout(attn_weights)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -188,9 +188,11 @@ class GPTJAttention(nn.Module):
 
         seq_len = key.shape[1]
         offset = 0
+
         if layer_past is not None:
             offset = layer_past[0].shape[-2]
             seq_len += offset
+
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
             k_pass = key[:, :, :, self.rotary_dim :]
@@ -208,6 +210,7 @@ class GPTJAttention(nn.Module):
             sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
             key = apply_rotary_pos_emb(key, sincos, offset=offset)
             query = apply_rotary_pos_emb(query, sincos, offset=offset)
+
         key = key.permute(0, 2, 1, 3)
         query = query.permute(0, 2, 1, 3)
 
@@ -222,20 +225,8 @@ class GPTJAttention(nn.Module):
         else:
             present = None
 
-        query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-
-        attn_output, attn_weights = self._attn(
-            query,
-            key,
-            value,
-            causal_mask,
-            self.masked_bias,
-            self.attn_dropout,
-            attention_mask,
-            head_mask,
-            self.scale_attn,
-        )
+        # compute self-attention: V x Softmax(QK^T)
+        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)
@@ -252,15 +243,17 @@ class GPTJMLP(nn.Module):
     def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * embed_dim
         super().__init__()
         embed_dim = config.n_embd
-        self.c_fc = nn.Linear(embed_dim, intermediate_size)
-        self.c_proj = nn.Linear(intermediate_size, embed_dim)
+
+        self.fc_in = nn.Linear(embed_dim, intermediate_size)
+        self.fc_out = nn.Linear(intermediate_size, embed_dim)
+
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, hidden_states):
-        hidden_states = self.c_fc(hidden_states)
+        hidden_states = self.fc_in(hidden_states)
         hidden_states = self.act(hidden_states)
-        hidden_states = self.c_proj(hidden_states)
+        hidden_states = self.fc_out(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
