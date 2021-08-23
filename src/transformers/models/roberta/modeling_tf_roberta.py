@@ -129,7 +129,15 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
 
         return incremental_indices + self.padding_idx
 
-    def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, past_key_values_length=0, training=False):
+    def call(
+        self,
+        input_ids=None,
+        position_ids=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        past_key_values_length=0,
+        training=False,
+    ):
         """
         Applies embedding based on inputs tensor.
 
@@ -149,7 +157,9 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = self.create_position_ids_from_input_ids(input_ids=input_ids, past_key_values_length=past_key_values_length)
+                position_ids = self.create_position_ids_from_input_ids(
+                    input_ids=input_ids, past_key_values_length=past_key_values_length
+                )
             else:
                 position_ids = tf.expand_dims(
                     tf.range(start=self.padding_idx + 1, limit=input_shape[-1] + self.padding_idx + 1), axis=0

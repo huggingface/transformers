@@ -22,7 +22,12 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import (
+    DUMMY_INPUTS,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
     TFBaseModelOutputWithPoolingAndCrossAttentions,
@@ -921,7 +926,9 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         self.layoutlm = TFLayoutLMMainLayer(config, name="layoutlm")
 
     @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFBaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TFBaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC
+    )
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
