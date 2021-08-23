@@ -342,7 +342,7 @@ class Trainer:
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
         # 1. MP - since we are trying to fit a much bigger than 1 gpu model
-        # 2. half-precision-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
+        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
         #    and we only use deepspeed for training at the moment
         # 3. full half precision eval - since the model needs to be half'ed first
         # 4. Sharded DDP - same as MP
@@ -409,26 +409,24 @@ class Trainer:
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
-        self.half_precision_backend = None
+        args.half_precision_backend = None
 
         if args.fp16 or args.bf16:
             if args.half_precision_backend == "auto":
                 if _is_native_amp_available:
-                    self.half_precision_backend = "amp"
+                    args.half_precision_backend = "amp"
                 else:
                     if args.bf16:
                         raise ValueError("Tried to use `bf16` but native amp is not available")
                     else:
-                        self.half_precision_backend = "apex"
-            else:
-                self.half_precision_backend = args.half_precision_backend
-            logger.info(f"Using {self.half_precision_backend} half precision backend")
+                        args.half_precision_backend = "apex"
+            logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
         if (args.fp16 or args.bf16) and not args.deepspeed:  # deepspeed manages its own half precision
-            if self.half_precision_backend == "amp":
+            if args.half_precision_backend == "amp":
                 self.use_amp = True
-                self.fast_dtype = torch.float16 if args.fp16 else torch.bfloat16
+                self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
                 if args.fp16:  # bf16 does not scale gradients
                     self.do_grad_scaling = True
                     if is_sagemaker_mp_enabled():
@@ -1784,7 +1782,7 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         if self.use_amp:
-            with autocast(device_type=self.args.device.type, fast_dtype=self.fast_dtype):
+            with autocast(device_type=self.args.device.type, fast_dtype=self.amp_dtype):
                 loss = self.compute_loss(model, inputs)
         else:
             loss = self.compute_loss(model, inputs)
@@ -2431,7 +2429,7 @@ class Trainer:
                 else:
                     loss = None
                     if self.use_amp:
-                        with autocast(device_type=self.args.device, fast_dtype=self.fast_dtype):
+                        with autocast(device_type=self.args.device, fast_dtype=self.amp_dtype):
                             outputs = model(**inputs)
                     else:
                         outputs = model(**inputs)
