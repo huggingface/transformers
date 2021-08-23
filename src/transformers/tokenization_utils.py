@@ -49,6 +49,84 @@ ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 
+class Trie:
+    """
+    Trie in Python. Creates a Trie out of a list of words. The trie is used to split on `added_tokens` in one pass
+    """
+
+    def __init__(self):
+        self.data = {}
+
+    def add(self, word):
+        if not word:
+            # Prevent empty string
+            return
+        ref = self.data
+        for char in word:
+            ref[char] = char in ref and ref[char] or {}
+            ref = ref[char]
+        ref[""] = 1
+
+    def split(self, text):
+        states = {}
+        offsets = []
+
+        skip = None
+        for current, c in enumerate(text):
+            if skip and current < skip:
+                # Prevents the lookahead for matching twice
+                # like extra_id_100 and id_100
+                continue
+            to_remove = set()
+            reset = False
+            for start, p in states.items():
+                if c in p:
+                    p = p[c]
+                    if "" in p:
+                        # Lookahead to match longest first
+                        # Important in case of extra_id_1 vs extra_id_100
+                        lookahead_index = current + 1
+                        end = current + 1
+                        next_c = c
+                        while next_c in p:
+                            p = p[next_c]
+                            lookahead_index += 1
+                            if "" in p:
+                                end = lookahead_index + 1
+                                skip = lookahead_index + 1
+
+                            if lookahead_index == len(text):
+                                # End of string
+                                break
+                            next_c = text[lookahead_index]
+                        # End lookahead
+
+                        offsets.append(start)
+                        offsets.append(end)
+                        reset = True
+                    states[start] = p
+                else:
+                    to_remove.add(start)
+            if reset:
+                states = {}
+            else:
+                for start in to_remove:
+                    del states[start]
+            if c in self.data:
+                states[current] = self.data[c]
+
+        tokens = []
+        start = 0
+        for end in offsets:
+            if start == end:
+                continue
+            tokens.append(text[start:end])
+            start = end
+        if start != len(text):
+            tokens.append(text[start:])
+        return tokens
+
+
 def _is_whitespace(char):
     """Checks whether `char` is a whitespace character."""
     # \t, \n, and \r are technically control characters but we treat them
@@ -135,6 +213,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self.added_tokens_encoder: Dict[str, int] = {}
         self.added_tokens_decoder: Dict[int, str] = {}
         self.unique_no_split_tokens: List[str] = []
+        self.trie = Trie()
 
         self._decode_use_source_tokenizer = False
 
@@ -223,8 +302,18 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
             else:
                 self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
+        self._create_trie(self.unique_no_split_tokens)
 
         return len(tokens_to_add)
+
+    def _create_trie(self, unique_no_split_tokens):
+        trie = Trie()
+        for token in unique_no_split_tokens:
+            if hasattr(self, "do_lower_case") and self.do_lower_case and token not in self.all_special_tokens:
+                trie.add(token.lower())
+            else:
+                trie.add(token)
+        self.trie = trie
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
@@ -279,87 +368,40 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
-        def split_on_token(tok, text):
-            result = []
-            tok_extended = all_special_tokens_extended.get(tok, None)
-            split_text = text.split(tok)
-            full_word = ""
-            for i, sub_text in enumerate(split_text):
-                # AddedToken can control whitespace stripping around them.
-                # We use them for GPT2 and Roberta to have different behavior depending on the special token
-                # Cf. https://github.com/huggingface/transformers/pull/2778
-                # and https://github.com/huggingface/transformers/issues/3788
+        no_split_token = set(self.unique_no_split_tokens)
+        trie = self.trie
+        tokens = trie.split(text)
+        # ["This is something", "<special_token_1>", "  else"]
+        for i, token in enumerate(tokens):
+            if token in no_split_token:
+                tok_extended = all_special_tokens_extended.get(token, None)
+                left = tokens[i - 1] if i > 0 else None
+                right = tokens[i + 1] if i < len(tokens) - 1 else None
                 if isinstance(tok_extended, AddedToken):
-                    if tok_extended.single_word:
-                        # Try to avoid splitting on token
-                        if (
-                            i < len(split_text) - 1
-                            and not _is_end_of_word(sub_text)
-                            and not _is_start_of_word(split_text[i + 1])
-                        ):
-                            # Don't extract the special token
-                            full_word += sub_text + tok
-                        elif full_word:
-                            full_word += sub_text
-                            result.append(full_word)
-                            full_word = ""
-                            continue
-                    # Strip white spaces on the right
-                    if tok_extended.rstrip and i > 0:
+                    if tok_extended.rstrip and right:
                         # A bit counter-intuitive but we strip the left of the string
                         # since tok_extended.rstrip means the special token is eating all white spaces on its right
-                        sub_text = sub_text.lstrip()
+                        tokens[i + 1] = right.lstrip()
                     # Strip white spaces on the left
-                    if tok_extended.lstrip and i < len(split_text) - 1:
-                        sub_text = sub_text.rstrip()  # Opposite here
+                    if tok_extended.lstrip and left:
+                        tokens[i - 1] = left.rstrip()  # Opposite here
                 else:
                     # We strip left and right by default
-                    if i < len(split_text) - 1:
-                        sub_text = sub_text.rstrip()
-                    if i > 0:
-                        sub_text = sub_text.lstrip()
-
-                if i == 0 and not sub_text:
-                    result.append(tok)
-                elif i == len(split_text) - 1:
-                    if sub_text:
-                        result.append(sub_text)
-                    else:
-                        pass
-                else:
-                    if sub_text:
-                        result.append(sub_text)
-                    result.append(tok)
-            return result
-
-        def split_on_tokens(tok_list, text):
-            if not text.strip():
-                return []
-            if not tok_list:
-                return self._tokenize(text)
-
-            tokenized_text = []
-            text_list = [text]
-            for tok in tok_list:
-                tokenized_text = []
-                for sub_text in text_list:
-                    if sub_text not in self.unique_no_split_tokens:
-                        tokenized_text.extend(split_on_token(tok, sub_text))
-                    else:
-                        tokenized_text.append(sub_text)
-                text_list = tokenized_text
-
-            return list(
-                itertools.chain.from_iterable(
-                    (
-                        self._tokenize(token) if token not in self.unique_no_split_tokens else [token]
-                        for token in tokenized_text
-                    )
-                )
-            )
-
-        no_split_token = self.unique_no_split_tokens
-        tokenized_text = split_on_tokens(no_split_token, text)
+                    if right:
+                        tokens[i + 1] = right.lstrip()
+                    if left:
+                        tokens[i - 1] = left.rstrip()
+        # ["This is something", "<special_token_1>", "else"]
+        tokenized_text = []
+        for token in tokens:
+            # Need to skip eventual empty (fully stripped) tokens
+            if not token:
+                continue
+            if token in no_split_token:
+                tokenized_text.append(token)
+            else:
+                tokenized_text.extend(self._tokenize(token))
+        # ["This", " is", " something", "<special_token_1>", "else"]
         return tokenized_text
 
     def _tokenize(self, text, **kwargs):
