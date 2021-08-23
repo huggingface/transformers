@@ -32,7 +32,7 @@ from ...file_utils import (
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
     TFBaseModelOutputWithPoolingAndCrossAttentions,
-    TFCausalLMOutput,
+    TFCausalLMOutputWithCrossAttentions,
     TFMaskedLMOutput,
     TFMultipleChoiceModelOutput,
     TFQuestionAnsweringModelOutput,
@@ -1168,10 +1168,22 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
+    def prepare_inputs_for_generation(self, inputs, past=None, attention_mask=None, **model_kwargs):
+        # cut decoder_input_ids if past is used
+        if past:
+            inputs = tf.expand_dims(inputs[:, -1], -1)
+
+        return {
+            "input_ids": inputs,
+            "attention_mask": attention_mask,
+            "past_key_values": past,
+            "use_cache": model_kwargs["use_cache"],
+        }
+
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
-        output_type=TFCausalLMOutput,
+        output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
@@ -1182,14 +1194,36 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
         r"""
+        encoder_hidden_states  (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+        past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`). Set to :obj:`False` during training, :obj:`True` during generation
         labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
             config.vocab_size - 1]``.
@@ -1203,6 +1237,10 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1217,6 +1255,10 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
             position_ids=inputs["position_ids"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
+            encoder_hidden_states=inputs["encoder_hidden_states"],
+            encoder_attention_mask=inputs["encoder_attention_mask"],
+            past_key_values=inputs["past_key_values"],
+            use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
@@ -1236,18 +1278,30 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return TFCausalLMOutput(
+        return TFCausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=logits,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
-    def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
+    def serving_output(self, output: TFCausalLMOutputWithCrossAttentions) -> TFCausalLMOutputWithCrossAttentions:
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        cross_attns = (
+            tf.convert_to_tensor(output.cross_attentions)
+            if self.config.output_attentions
+            and self.config.add_cross_attention
+            and output.cross_attentions is not None
+            else None
+        )
 
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        return TFCausalLMOutputWithCrossAttentions(
+            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
+        )
 
 
 @add_start_docstrings(
