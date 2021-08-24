@@ -692,8 +692,8 @@ class GenerationMixin:
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
-                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it with
+                :obj:`bos_token_id` and a batch size of 1.
             max_length (:obj:`int`, `optional`, defaults to :obj:`model.config.max_length`):
                 The maximum length of the sequence to be generated.
             max_new_tokens (:obj:`int`, `optional`, defaults to None):
@@ -1165,9 +1165,8 @@ class GenerationMixin:
 
         Parameters:
 
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
-                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                The sequence used as a prompt for the generation.
             logits_processor (:obj:`LogitsProcessorList`, `optional`):
                 An instance of :class:`~transformers.LogitsProcessorList`. List of instances of class derived from
                 :class:`~transformers.LogitsProcessor` used to modify the prediction scores of the language modeling
@@ -1391,9 +1390,8 @@ class GenerationMixin:
 
         Parameters:
 
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
-                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                The sequence used as a prompt for the generation.
             logits_processor (:obj:`LogitsProcessorList`, `optional`):
                 An instance of :class:`~transformers.LogitsProcessorList`. List of instances of class derived from
                 :class:`~transformers.LogitsProcessor` used to modify the prediction scores of the language modeling
@@ -1632,9 +1630,8 @@ class GenerationMixin:
 
         Parameters:
 
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
-                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                The sequence used as a prompt for the generation.
             beam_scorer (:obj:`BeamScorer`):
                 An derived instance of :class:`~transformers.BeamScorer` that defines how beam hypotheses are
                 constructed, stored and sorted during generation. For more information, the documentation of
@@ -1925,9 +1922,8 @@ class GenerationMixin:
 
         Parameters:
 
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
-                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                The sequence used as a prompt for the generation.
             beam_scorer (:obj:`BeamScorer`):
                 A derived instance of :class:`~transformers.BeamScorer` that defines how beam hypotheses are
                 constructed, stored and sorted during generation. For more information, the documentation of
@@ -2228,9 +2224,8 @@ class GenerationMixin:
 
         Parameters:
 
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
-                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                The sequence used as a prompt for the generation.
             beam_scorer (:obj:`BeamScorer`):
                 An derived instance of :class:`~transformers.BeamScorer` that defines how beam hypotheses are
                 constructed, stored and sorted during generation. For more information, the documentation of
@@ -2408,6 +2403,9 @@ class GenerationMixin:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
 
+            if output_scores:
+                processed_score = torch.zeros_like(outputs.logits[:, -1, :])
+
             for beam_group_idx in range(num_beam_groups):
                 group_start_idx = beam_group_idx * num_sub_beams
                 group_end_idx = min(group_start_idx + num_sub_beams, num_beams)
@@ -2415,9 +2413,6 @@ class GenerationMixin:
 
                 # indices of beams of current group among all sentences in batch
                 batch_group_indices = []
-
-                if output_scores:
-                    processed_score = torch.zeros_like(outputs.logits[:, -1, :])
 
                 for batch_idx in range(batch_size):
                     batch_group_indices.extend(

@@ -1654,6 +1654,7 @@ def get_list_of_files(
     path_or_repo: Union[str, os.PathLike],
     revision: Optional[str] = None,
     use_auth_token: Optional[Union[bool, str]] = None,
+    local_files_only: bool = False,
 ) -> List[str]:
     """
     Gets the list of files inside :obj:`path_or_repo`.
@@ -1668,6 +1669,8 @@ def get_list_of_files(
         use_auth_token (:obj:`str` or `bool`, `optional`):
             The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
             generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to only rely on local files and not to attempt to download any files.
 
     Returns:
         :obj:`List[str]`: The list of files available in :obj:`path_or_repo`.
@@ -1681,7 +1684,7 @@ def get_list_of_files(
         return list_of_files
 
     # Can't grab the files if we are on offline mode.
-    if is_offline_mode():
+    if is_offline_mode() or local_files_only:
         return []
 
     # Otherwise we grab the token and use the model_info method.
@@ -1850,11 +1853,15 @@ class ModelOutput(OrderedDict):
         other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
 
         if other_fields_are_none and not is_tensor(first_field):
-            try:
-                iterator = iter(first_field)
+            if isinstance(first_field, dict):
+                iterator = first_field.items()
                 first_field_iterator = True
-            except TypeError:
-                first_field_iterator = False
+            else:
+                try:
+                    iterator = iter(first_field)
+                    first_field_iterator = True
+                except TypeError:
+                    first_field_iterator = False
 
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields

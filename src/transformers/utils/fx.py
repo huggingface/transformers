@@ -238,6 +238,10 @@ class HFTracer(Tracer):
 
         clone(**inputs)
 
+        # Useful because sometime the config is changed at inference time, for instance for
+        # classification tasks where config.problem_type can be set.
+        model.config = clone.config
+
         _reset_tensor_methods(original_methods)
 
         self.recorded_methods = {
@@ -266,27 +270,14 @@ class HFTracer(Tracer):
         """
         Helper method which tries to insert a module that was not declared as submodule.
         """
-        # First, retrieve the parent module.
-        if self.prev_module is None:
-            return None
-        parent_path = self.prev_module.rsplit(".", 1)[0]
-        parent_mod = None
-        for path, module in self.root.named_modules():
-            if path == parent_path:
-                parent_mod = module
-                break
-        if parent_mod is None:
-            return None
+        idx = 0
+        mod_name = mod.__class__.__name__.lower()
+        path = f"{mod_name}_{idx}"
+        while hasattr(self.root, path):
+            path = f"{mod_name}_{idx}"
+            idx += 1
 
-        # If retrieving the parent module was possible, set the module not declared as a submodule
-        # as a parent module attribute.
-        path = None
-        for var_name, var_val in inspect.currentframe().f_back.f_locals.items():
-            if mod is var_val:
-                setattr(parent_mod, var_name, mod)
-                path = f"{parent_path}.{var_name}"
-                break
-
+        self.root.add_module(path, mod)
         return path
 
     def path_of_module(self, mod: nn.Module) -> str:

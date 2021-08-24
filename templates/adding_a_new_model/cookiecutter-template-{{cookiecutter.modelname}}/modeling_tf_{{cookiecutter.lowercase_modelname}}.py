@@ -17,7 +17,7 @@
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
 
 import math
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -1484,7 +1484,7 @@ from ...file_utils import (
 )
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
-    TFBaseModelOutputWithPast,
+    TFBaseModelOutputWithPastAndCrossAttentions,
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
 )
@@ -2162,7 +2162,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
             )
 
         # encoder layers
-        for encoder_layer in self.layers:
+        for idx, encoder_layer in enumerate(self.layers):
 
             if inputs["output_hidden_states"]:
                 encoder_states = encoder_states + (hidden_states,)
