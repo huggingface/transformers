@@ -590,6 +590,7 @@ class TFElectraPreTrainedModel(TFPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"dropout"]
 
     @property
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainedModel.dummy_inputs
     def dummy_inputs(self):
         """
         Dummy inputs to build the network.

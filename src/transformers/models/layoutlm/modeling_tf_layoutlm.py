@@ -783,7 +783,7 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=inputs["head_mask"],
-            # To pass the test
+            # Need to pass these required positional arguments to `Encoder`
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=None,
             past_key_values=None,
@@ -1011,6 +1011,7 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
     def serving_output(
         self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
     ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:

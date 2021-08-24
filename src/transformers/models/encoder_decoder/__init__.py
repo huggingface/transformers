@@ -30,7 +30,7 @@ if is_torch_available():
 
 if is_tf_available():
     _import_structure["modeling_tf_encoder_decoder"] = ["TFEncoderDecoderModel"]
-    
+
 if is_flax_available():
     _import_structure["modeling_flax_encoder_decoder"] = ["FlaxEncoderDecoderModel"]
 
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
     if is_tf_available():
         from .modeling_tf_encoder_decoder import TFEncoderDecoderModel
-        
+
     if is_flax_available():
         from .modeling_flax_encoder_decoder import FlaxEncoderDecoderModel
 
