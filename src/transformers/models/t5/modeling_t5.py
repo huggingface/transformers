@@ -1234,7 +1234,7 @@ num_heads)`.
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class T5Model(T5PreTrainedModel):

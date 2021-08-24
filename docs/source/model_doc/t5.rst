@@ -37,13 +37,44 @@ Tips:
 - T5 is an encoder-decoder model pre-trained on a multi-task mixture of unsupervised and supervised tasks and for which
   each task is converted into a text-to-text format. T5 works well on a variety of tasks out-of-the-box by prepending a
   different prefix to the input corresponding to each task, e.g., for translation: *translate English to German: ...*,
-  for summarization: *summarize: ...*.
+  for summarization: *summarize: ...*. According to `this forum post
+  <https://discuss.huggingface.co/t/t5-finetuning-tips/684>`__, task prefixes matter when (1) doing multi-task training
+  (2) your task is similar or related to one of the supervised tasks used in T5's pre-training mixture (see Appendix D
+  of the `paper <https://arxiv.org/pdf/1910.10683.pdf>`__ for the task prefixes used).
 
-  For more information about which prefix to use, it is easiest to look into Appendix D of the `paper
-  <https://arxiv.org/pdf/1910.10683.pdf>`__. - For sequence-to-sequence generation, it is recommended to use
+- T5 is trained using the :obj:`CrossEntropyLoss`. During training,
+  :meth:`~transformers.T5ForConditionalGeneration.forward` is used. At inference time, it is recommended to use
   :meth:`~transformers.generation_utils.GenerationMixin.generate`. This method takes care of feeding the encoded input
-  via cross-attention layers to the decoder and auto-regressively generates the decoder output. - T5 uses relative
-  scalar embeddings. Encoder input padding can be done on the left and on the right.
+  via cross-attention layers to the decoder and auto-regressively generates the decoder output. Check out `this blog
+  post <https://huggingface.co/blog/how-to-generate>`__ to know all the details about generating text with
+  Transformers. Note that T5 uses the :obj:`pad_token_id` as the :obj:`decoder_start_token_id`, so when doing
+  generation without using :meth:`~transformers.generation_utils.GenerationMixin.generate`, make sure you start it with
+  the :obj:`pad_token_id`.
+
+- T5 models need a slightly higher learning rate than the default one set in the :obj:`Trainer`. Typically, 1e-4 and
+  3e-4 work well for almost all problems (classification, summarization, translation, question answering, question
+  generation).
+
+- T5 uses relative scalar embeddings. Encoder input padding can be done on the left and on the right.
+
+- If training on TPU, it is recommended to pad all examples of the dataset to the same length. Trimming batches (i.e.
+  only padding up to the longest example in a batch) leads to very slow training on TPU.
+
+T5 comes in different sizes (`t5-small <https://huggingface.co/t5-small>`__, `t5-base
+<https://huggingface.co/t5-base>`__, `t5-large <https://huggingface.co/t5-large>`__, `t5-3b
+<https://huggingface.co/t5-3b>`__ and `t5-11b <https://huggingface.co/t5-11b>`__). Based on the original T5 model,
+Google has released some follow-up works:
+
+- **T5v1.1**: T5v1.1 is an improved version of T5 with some architectural tweaks, and is pre-trained on C4 only without
+  mixing in the downstream tasks. Refer to the documentation of T5v1.1 which can be found :doc:`here <t5v1.1>`.
+
+- **mT5**: mT5 is a multilingual T5 model. It is pre-trained on the mC4 corpus, which includes 101 languages. Refer to
+  the documentation of mT5 which can be found :doc:`here <mt5>`.
+
+- **byT5**: byT5 is a T5 model pre-trained on byte sequences rather than SentencePiece subword tokens. Refer to the
+  documentation of byT5 which can be found :doc:`here <byt5>`.
+
+All checkpoints can be found on the `hub <https://huggingface.co/models?search=t5>`__.
 
 This model was contributed by `thomwolf <https://huggingface.co/thomwolf>`__. The original code can be found `here
 <https://github.com/google-research/text-to-text-transfer-transformer>`__.
@@ -52,15 +83,15 @@ Training
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 T5 is an encoder-decoder model and converts all NLP problems into a text-to-text format. It is trained using teacher
-forcing. This means that for training we always need an input sequence and a target sequence. The input sequence is fed
-to the model using :obj:`input_ids`. The target sequence is shifted to the right, i.e., prepended by a start-sequence
-token and fed to the decoder using the :obj:`decoder_input_ids`. In teacher-forcing style, the target sequence is then
-appended by the EOS token and corresponds to the :obj:`labels`. The PAD token is hereby used as the start-sequence
-token. T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
+forcing. This means that for training, we always need an input sequence and a corresponding target sequence. The input
+sequence is fed to the model using :obj:`input_ids`. The target sequence is shifted to the right, i.e., prepended by a
+start-sequence token and fed to the decoder using the :obj:`decoder_input_ids`. In teacher-forcing style, the target
+sequence is then appended by the EOS token and corresponds to the :obj:`labels`. The PAD token is hereby used as the
+start-sequence token. T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
 
 - Unsupervised denoising training
 
-  In this setup spans of the input sequence are masked by so-called sentinel tokens (*a.k.a* unique mask tokens) and
+  In this setup, spans of the input sequence are masked by so-called sentinel tokens (*a.k.a* unique mask tokens) and
   the output sequence is formed as a concatenation of the same sentinel tokens and the *real* masked tokens. Each
   sentinel token represents a unique mask token for this sentence and should start with :obj:`<extra_id_0>`,
   :obj:`<extra_id_1>`, ... up to :obj:`<extra_id_99>`. As a default, 100 sentinel tokens are available in
@@ -69,33 +100,92 @@ token. T5 can be trained / fine-tuned both in a supervised and unsupervised fash
   For instance, the sentence "The cute dog walks in the park" with the masks put on "cute dog" and "the" should be
   processed as follows:
 
-.. code-block::
+    .. code-block::
 
-    from transformers import T5ForConditionalGeneration, T5Tokenizer
-    model = T5ForConditionalGeneration.from_pretrained("t5-small")
-    tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        from transformers import T5ForConditionalGeneration, T5Tokenizer
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
-    input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
-    labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='pt').input_ids
-    # the forward function automatically creates the correct decoder_input_ids
-    loss = model(input_ids=input_ids, labels=labels).loss
+        input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
+        labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='pt').input_ids
+        # the forward function automatically creates the correct decoder_input_ids
+        loss = model(input_ids=input_ids, labels=labels).loss
+
+  If you're interested in pre-training T5 on a new corpus, check out the `run_t5_mlm_flax.py
+  <https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling>`__ script in the Examples
+  directory.
 
 - Supervised training
 
-  In this setup the input sequence and output sequence are standard sequence-to-sequence input output mapping. In
-  translation, for instance with the input sequence "The house is wonderful." and output sequence "Das Haus ist
-  wunderbar.", the sentences should be processed as follows:
+  In this setup, the input sequence and output sequence are a standard sequence-to-sequence input-output mapping.
+  Suppose that we want to fine-tune the model for translation for example, and we have a training example: the input
+  sequence "The house is wonderful." and output sequence "Das Haus ist wunderbar.", then they should be prepared for
+  the model as follows:
 
-.. code-block::
+    .. code-block::
 
-    from transformers import T5ForConditionalGeneration, T5Tokenizer
-    model = T5ForConditionalGeneration.from_pretrained("t5-small")
-    tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        from transformers import T5ForConditionalGeneration, T5Tokenizer
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
-    input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids
-    labels = tokenizer('Das Haus ist wunderbar.', return_tensors='pt').input_ids
-    # the forward function automatically creates the correct decoder_input_ids
-    loss = model(input_ids=input_ids, labels=labels).loss
+        input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt')
+        labels = tokenizer('Das Haus ist wunderbar.', return_tensors='pt').input_ids
+        # the forward function automatically creates the correct decoder_input_ids
+        loss = model(input_ids=input_ids, labels=labels).loss
+
+  As you can see, only 2 inputs are required for the model in order to compute a loss: :obj:`input_ids` (which are the
+  :obj:`input_ids` of the encoded input sequence) and :obj:`labels` (which are the :obj:`input_ids` of the encoded
+  target sequence). The model will automatically create the :obj:`decoder_input_ids` based on the :obj:`labels`, by
+  shifting them one position to the right and prepending the :obj:`config.decoder_start_token_id`, which for T5 is
+  equal to 0 (i.e. the id of the pad token). Also note the task prefix: we prepend the input sequence with 'translate
+  English to German: ' before encoding it. This will help in improving the performance, as this task prefix was used
+  during T5's pre-training.
+
+  However, the example above only shows a single training example. In practice, one trains deep learning models in
+  batches. This entails that we must pad/truncate examples to the same length. For encoder-decoder models, one
+  typically defines a :obj:`max_source_length` and :obj:`max_target_length`, which determine the length of the input
+  and output sequences respectively. For summarization and translation, a good setting is setting
+  :obj:`max_source_length` to 1024 and :obj:`max_target_length` to 128. In addition, we must make sure that padding
+  token id's of :obj:`labels` are replaced by -100, such that they are not taken into account by the loss function. We
+  also pass :obj:`attention_mask` as additional input to the model, which makes sure that padding tokens of the inputs
+  are ignored. The code example below illustrates all of this.
+
+    .. code-block::
+
+        from transformers import T5ForConditionalGeneration, T5Tokenizer
+        import torch
+
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        max_source_length = 1024
+        max_target_length = 128
+
+        # Suppose we have the following 2 training examples:
+        input_sequence_1 = "Welcome to NYC"
+        output_sequence_1 = "Bienvenue à NYC"
+
+        input_sequence_2 = "HuggingFace is a company"
+        output_sequence_2 = "HuggingFace est une entreprise"
+
+        # encode the inputs
+        task_prefix = "translate English to French: "
+        input_sequences = [input_sequence_1, input_sequence_2]
+        encoding = tokenizer([task_prefix + sequence for sequence in input_sequences], padding='max_length', max_length=max_source_length, truncation=True, return_tensors="pt")
+        input_ids, attention_mask = encoding.input_ids, encoding.attention_mask
+
+        # encode the targets
+        target_encoding = tokenizer([output_sequence_1, output_sequence_2], padding='max_length', max_length=max_target_length, truncation=True)
+        labels = target_encoding.input_ids
+
+        # replace padding token id's of the labels by -100
+        labels = [
+                   [(label if label != tokenizer.pad_token_id else -100) for label in labels_example] for labels_example in labels
+        ] 
+        labels = torch.tensor(labels)
+
+        # forward pass
+        loss = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).loss
 
 
 T5Config
