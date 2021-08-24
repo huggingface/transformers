@@ -16,6 +16,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import numpy as np
 
 from transformers import BertTokenizer, is_tf_available, is_torch_available, set_seed
 from transformers.testing_utils import require_tf, require_torch
@@ -25,17 +26,15 @@ if is_torch_available():
     import torch
 
 if is_tf_available():
-    import numpy as np
     import tensorflow as tf
 
-if is_torch_available() or is_tf_available():
-    from transformers import (
-        DataCollatorForLanguageModeling,
-        DataCollatorForPermutationLanguageModeling,
-        DataCollatorForTokenClassification,
-        DataCollatorWithPadding,
-        default_data_collator,
-    )
+from transformers import (
+    DataCollatorForLanguageModeling,
+    DataCollatorForPermutationLanguageModeling,
+    DataCollatorForTokenClassification,
+    DataCollatorWithPadding,
+    default_data_collator,
+)
 
 
 @require_torch
