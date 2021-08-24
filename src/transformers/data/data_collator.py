@@ -738,6 +738,7 @@ class DataCollatorForLanguageModeling:
         return inputs, labels
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        import numpy as np
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], (dict, BatchEncoding)):
             batch = self.tokenizer.pad(examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of)
@@ -753,7 +754,7 @@ class DataCollatorForLanguageModeling:
                 batch["input_ids"], special_tokens_mask=special_tokens_mask
             )
         else:
-            labels = batch["input_ids"].clone()
+            labels = np.copy(batch["input_ids"])
             if self.tokenizer.pad_token_id is not None:
                 labels[labels == self.tokenizer.pad_token_id] = -100
             batch["labels"] = labels
@@ -783,7 +784,7 @@ class DataCollatorForLanguageModeling:
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
         indices_replaced = np.random.binomial(1, 0.8, size=labels.shape).astype(np.bool) & masked_indices
-        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
+        inputs[indices_replaced] = self.tokenizer.mask_token_id
 
         # 10% of the time, we replace masked input tokens with random word
         # indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
@@ -793,7 +794,7 @@ class DataCollatorForLanguageModeling:
         random_words = np.random.randint(
             low=0, high=len(self.tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64
         )
-        inputs[indices_random] = random_words[indices_random]
+        inputs[indices_random] = random_words
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
@@ -1433,7 +1434,7 @@ class DataCollatorForPermutationLanguageModeling:
                 "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
             )
 
-        labels = inputs.clone()
+        labels = np.copy(inputs)
         # Creating the mask and target_mapping tensors
         masked_indices = np.full(labels.shape, 0, dtype=np.bool)
         target_mapping = np.zeros((labels.shape[0], labels.shape[1], labels.shape[1]), dtype=np.float32)
