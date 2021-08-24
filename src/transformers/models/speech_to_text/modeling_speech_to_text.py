@@ -206,7 +206,7 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
         return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.bart.modeling_bart.Speech2TextAttention with Speech2Text->Speech2Text
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Speech2Text
 class Speech2TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

@@ -25,13 +25,13 @@ from transformers.testing_utils import (
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-    from transformers.models.speech_to_text.modeling_speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2Decoder
+    from transformers.models.speech_to_text_2.modeling_speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2Decoder
 
 
 @require_torch
@@ -50,11 +50,9 @@ class Speech2Text2StandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=4,
-        encoder_attention_heads=4,
-        decoder_attention_heads=4,
+        decoder_layers=2,
+        decoder_attention_heads=2,
         max_position_embeddings=30,
-        is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -75,7 +73,6 @@ class Speech2Text2StandaloneDecoderModelTester:
         self.num_hidden_layers = decoder_layers
         self.decoder_layers = decoder_layers
         self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
         self.num_attention_heads = decoder_attention_heads
         self.eos_token_id = eos_token_id
@@ -84,7 +81,6 @@ class Speech2Text2StandaloneDecoderModelTester:
         self.decoder_start_token_id = decoder_start_token_id
         self.use_cache = use_cache
         self.max_position_embeddings = max_position_embeddings
-        self.is_encoder_decoder = is_encoder_decoder
 
         self.scope = None
         self.decoder_key_length = decoder_seq_length
@@ -105,10 +101,8 @@ class Speech2Text2StandaloneDecoderModelTester:
         config = Speech2TextConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
-            encoder_layers=self.decoder_layers,
             decoder_layers=self.decoder_layers,
             decoder_ffn_dim=self.decoder_ffn_dim,
-            encoder_attention_heads=self.encoder_attention_heads,
             decoder_attention_heads=self.decoder_attention_heads,
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
@@ -116,33 +110,12 @@ class Speech2Text2StandaloneDecoderModelTester:
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
-            is_encoder_decoder=self.is_encoder_decoder,
         )
 
         return (
             config,
             input_ids,
             attention_mask,
-            lm_labels,
-        )
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
             lm_labels,
         )
 
@@ -203,7 +176,6 @@ class Speech2Text2StandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterM
     all_model_classes = (Speech2Text2Decoder, Speech2Text2ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Speech2Text2ForCausalLM,) if is_torch_available() else ()
     test_pruning = False
-    is_encoder_decoder = False
 
     def setUp(
         self,
