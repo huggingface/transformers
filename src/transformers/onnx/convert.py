@@ -14,7 +14,7 @@
 
 from inspect import signature
 from itertools import chain
-from pathlib import Path
+from os import PathLike
 from typing import Iterable, List, Tuple, Union
 
 import numpy as np
@@ -63,7 +63,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 
 def export(
-    tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path
+    tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: PathLike
 ) -> Tuple[List[str], List[str]]:
     """
     Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
@@ -116,7 +116,7 @@ def export(
     export(
         model,
         (model_inputs,),
-        f=output.as_posix(),
+        f=output,
         input_names=list(config.inputs.keys()),
         output_names=onnx_outputs,
         dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
@@ -136,7 +136,7 @@ def validate_model_outputs(
     config: OnnxConfig,
     tokenizer: PreTrainedTokenizer,
     reference_model: Union[PreTrainedModel, TFPreTrainedModel],
-    onnx_model: Path,
+    onnx_model_path_or_bytes: Union[PathLike, bytes],
     onnx_named_outputs: List[str],
     atol: float,
 ):
