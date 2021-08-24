@@ -216,7 +216,6 @@ class TransfoXLOnnxConfig(OnnxConfig):
         return OrderedDict(
             [
                 ("last_hidden_state", {0: "batch", 1: "sequence"}),
-                ("pooler_output", {0: "batch"})
             ]
         )
 
