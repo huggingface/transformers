@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import os
 import tempfile
 import unittest
 
@@ -34,6 +35,8 @@ if is_tf_available():
         AutoConfig,
         AutoTokenizer,
         EncoderDecoderConfig,
+        TFAutoModel,
+        TFAutoModelForCausalLM,
         TFBertLMHeadModel,
         TFBertModel,
         TFEncoderDecoderModel,
@@ -733,3 +736,73 @@ class TFEncoderDecoderModelTest(unittest.TestCase):
 
         model = self.get_encoderdecoder_model()
         self._check_configuration_tie(model)
+
+
+@require_tf
+class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
+    def get_encoder_decoder_config(self):
+        encoder_config = AutoConfig.from_pretrained("bert-base-uncased")
+        decoder_config = AutoConfig.from_pretrained("gpt2")
+        return EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+
+    @slow
+    def test_encoder_decoder_from_pretrained(self):
+        load_weight_prefix = "tf_encoder_decoder_model_1"
+
+        config = self.get_encoder_decoder_config()
+        encoder_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        decoder_tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+        input_ids = encoder_tokenizer("who sings does he love me with reba", return_tensors="tf").input_ids
+        decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
+
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+
+            # Since most of HF's models don't have pretrained cross-attention layers, they are randomly
+            # initialized even if we create models using `from_pretrained` method.
+            # For the tests, the decoder need to be a model with pretrained cross-attention layers.
+            # So we create pretrained models (without `load_weight_prefix`), save them, and later,
+            # we load them using `from_pretrained`.
+            # (we don't need to do this for encoder, but let's make the code more similar between encoder/decoder)
+            encoder = TFAutoModel.from_pretrained("bert-base-uncased", name="encoder")
+            # It's necessary to specify `add_cross_attention=True` here.
+            decoder = TFAutoModelForCausalLM.from_pretrained(
+                "gpt2", is_decoder=True, add_cross_attention=True, name="decoder"
+            )
+            pretrained_encoder_dir = os.path.join(tmp_dirname, "pretrained_encoder")
+            pretrained_decoder_dir = os.path.join(tmp_dirname, "pretrained_decoder")
+            encoder.save_pretrained(pretrained_encoder_dir)
+            decoder.save_pretrained(pretrained_decoder_dir)
+            del encoder
+            del decoder
+
+            enc_dec_model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+                pretrained_encoder_dir,
+                pretrained_decoder_dir,
+            )
+            # check that the from pretrained methods work
+            enc_dec_model.save_pretrained(tmp_dirname)
+            enc_dec_model.from_pretrained(tmp_dirname)
+
+            output = enc_dec_model(input_ids, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
+
+            loss_pretrained = output.loss
+            del enc_dec_model
+
+            # Create the model using `__init__` with loaded ``pretrained`` encoder / decoder
+            encoder = TFAutoModel.from_pretrained(
+                pretrained_encoder_dir, load_weight_prefix=load_weight_prefix, name="encoder"
+            )
+            decoder = TFAutoModelForCausalLM.from_pretrained(
+                pretrained_decoder_dir, load_weight_prefix=load_weight_prefix, name="decoder"
+            )
+            enc_dec_model = TFEncoderDecoderModel(config=config, encoder=encoder, decoder=decoder)
+
+        output = enc_dec_model(input_ids, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
+
+        loss_init = output.loss
+
+        max_diff = np.max(np.abs(loss_pretrained - loss_init))
+        expected_diff = 0.0
+
+        self.assertAlmostEqual(max_diff, expected_diff, places=4)
