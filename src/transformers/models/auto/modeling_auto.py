@@ -207,7 +207,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "BlenderbotForCausalLM"),
         ("blenderbot-small", "BlenderbotSmallForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
-        ("speech_to_text", "Speech2TextForCausalLM"),
+        ("speech_to_text_2", "Speech2Text2ForCausalLM"),
     ]
 )
 

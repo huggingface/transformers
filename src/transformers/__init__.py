@@ -1042,12 +1042,12 @@ if is_torch_available():
     _import_structure["models.speech_to_text"].extend(
         [
             "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Speech2TextForCausalLM",
             "Speech2TextForConditionalGeneration",
             "Speech2TextModel",
             "Speech2TextPreTrainedModel",
         ]
     )
+    _import_structure["models.speech_to_text_2"].extend(["Speech2TextPreTrainedModel","Speech2Text2ForCausalLM"])
     _import_structure["models.squeezebert"].extend(
         [
             "SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1916,6 +1916,7 @@ if TYPE_CHECKING:
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
     from .models.speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
+    from .models.speech_to_text_2 import SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2Text2Config
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
@@ -2601,9 +2602,12 @@ if TYPE_CHECKING:
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Speech2TextForCausalLM,
             Speech2TextForConditionalGeneration,
             Speech2TextModel,
+            Speech2TextPreTrainedModel,
+        )
+        from .models.speech_to_text_2 import (
+            Speech2Text2ForCausalLM,
             Speech2TextPreTrainedModel,
         )
         from .models.squeezebert import (
