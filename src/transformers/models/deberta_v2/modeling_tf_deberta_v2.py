@@ -15,7 +15,7 @@
 """ TF 2.0 DeBERTa-v2 model. """
 
 
-from typing import Dict, Optional, Sequence, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -272,7 +272,7 @@ class TFDebertaV2ConvLayer(tf.keras.layers.Layer):
 
         self.kernel_size = getattr(config, "conv_kernel_size", 3)
         # groups = getattr(config, "conv_groups", 1)
-        self.conv_act = getattr(config, "conv_act", "tanh")
+        self.conv_act = get_tf_activation(getattr(config, "conv_act", "tanh"))
         self.padding = (self.kernel_size - 1) // 2
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = TFDebertaV2StableDropout(config.hidden_dropout_prob, name="dropout")
@@ -302,7 +302,8 @@ class TFDebertaV2ConvLayer(tf.keras.layers.Layer):
         out = tf.squeeze(tf.nn.bias_add(out, self.conv_bias), 1)
         rmask = tf.cast(1 - input_mask, tf.bool)
         out = tf.where(tf.broadcast_to(tf.expand_dims(rmask, -1), shape_list(out)), 0.0, out)
-        out = get_tf_activation(self.conv_act)(self.dropout(out, training=training))
+        out = self.dropout(out, training=training)
+        hidden_states = self.conv_act(out)
 
         layer_norm_input = residual_states + out
         output = self.LayerNorm(layer_norm_input)
@@ -403,10 +404,7 @@ class TFDebertaV2Encoder(tf.keras.layers.Layer):
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
 
-        if isinstance(hidden_states, Sequence):
-            next_kv = hidden_states[0]
-        else:
-            next_kv = hidden_states
+        next_kv = hidden_states
 
         rel_embeddings = self.get_rel_embedding()
         output_states = next_kv
@@ -429,12 +427,7 @@ class TFDebertaV2Encoder(tf.keras.layers.Layer):
             if i == 0 and self.conv is not None:
                 output_states = self.conv(hidden_states, output_states, input_mask)
 
-            if query_states is not None:
-                query_states = output_states
-                if isinstance(hidden_states, Sequence):
-                    next_kv = hidden_states[i + 1] if i + 1 < len(self.layer) else None
-            else:
-                next_kv = output_states
+            next_kv = output_states
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -521,7 +514,7 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return tf.broadcast_to(pos_index, shapes)
 
 
-def torch_gather(x, indices, gather_axis):
+def take_along_axis(x, indices, gather_axis):
     if gather_axis < 0:
         gather_axis = tf.rank(x) + gather_axis
 
@@ -764,7 +757,7 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
             scale = tf.math.sqrt(tf.cast(shape_list(pos_key_layer)[-1] * scale_factor, tf.float32))
             c2p_att = tf.matmul(query_layer, tf.transpose(pos_key_layer, [0, 2, 1]))
             c2p_pos = tf.clip_by_value(relative_pos + att_span, 0, att_span * 2 - 1)
-            c2p_att = torch_gather(
+            c2p_att = take_along_axis(
                 c2p_att,
                 tf.broadcast_to(
                     tf.squeeze(c2p_pos, 0),
@@ -793,7 +786,7 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
         if "p2c" in self.pos_att_type:
             p2c_att = tf.matmul(key_layer, tf.transpose(pos_query_layer, [0, 2, 1]))
             p2c_att = tf.transpose(
-                torch_gather(
+                take_along_axis(
                     p2c_att,
                     tf.broadcast_to(
                         tf.squeeze(p2c_pos, 0),
@@ -810,7 +803,7 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
             pos_query = pos_query_layer[:, :, att_span:, :]
             p2p_att = tf.matmul(pos_query, tf.transpose(pos_key_layer, [0, 2, 1]))
             p2p_att = tf.broadcast_to(shape_list(query_layer)[:2] + shape_list(p2p_att)[2:])
-            p2p_att = torch_gather(
+            p2p_att = take_along_axis(
                 p2p_att,
                 tf.broadcast_to(
                     c2p_pos,
@@ -1010,7 +1003,6 @@ class TFDebertaV2OnlyMLMHead(tf.keras.layers.Layer):
         return prediction_scores
 
 
-# @keras_serializable
 class TFDebertaV2MainLayer(tf.keras.layers.Layer):
     config_class = DebertaV2Config
 
