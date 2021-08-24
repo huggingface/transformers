@@ -20,9 +20,11 @@ import datetime
 import json
 import math
 import os
+import sys
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
+from logging import StreamHandler
 from typing import Dict, Iterator, List, Optional, Union
 
 import numpy as np
@@ -32,7 +34,12 @@ from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
-from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
+from .file_utils import (
+    is_sagemaker_dp_enabled,
+    is_sagemaker_mp_enabled,
+    is_torch_tpu_available,
+    is_training_run_on_sagemaker,
+)
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -42,6 +49,8 @@ if is_sagemaker_dp_enabled():
 else:
     import torch.distributed as dist
 
+if is_training_run_on_sagemaker():
+    logging.add_handler(StreamHandler(sys.stdout))
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
