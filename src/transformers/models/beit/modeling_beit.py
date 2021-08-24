@@ -696,8 +696,8 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        bool_masked_pos (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, **patch_shape)`):
-            Boolean masked positions. Indicates which patches are masked.
+        bool_masked_pos (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, num_patches)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
