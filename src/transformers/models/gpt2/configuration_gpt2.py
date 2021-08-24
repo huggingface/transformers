@@ -128,15 +128,14 @@ class GPT2Config(PretrainedConfig):
         >>> configuration = model.config
     """
 
+    model_type = "gpt2"
+    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "n_embd",
         "max_position_embeddings": "n_positions",
         "num_attention_heads": "n_head",
         "num_hidden_layers": "n_layer",
     }
-
-    model_type = "gpt2"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
