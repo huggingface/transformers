@@ -213,7 +213,12 @@ class TransfoXLOnnxConfig(OnnxConfig):
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"}), ("pooler_output", {0: "batch"})])
+        return OrderedDict(
+            [
+                ("last_hidden_state", {0: "batch", 1: "sequence"}),
+                ("pooler_output", {0: "batch"})
+            ]
+        )
 
 
     def generate_dummy_inputs(

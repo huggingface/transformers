@@ -50,7 +50,7 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
+    from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig, TransfoXLOnnxConfig
     from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
 
     if is_torch_available():
