@@ -795,6 +795,7 @@ class TFRobertaPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "roberta"
 
     @property
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainedModel.dummy_inputs
     def dummy_inputs(self):
         """
         Dummy inputs to build the network.

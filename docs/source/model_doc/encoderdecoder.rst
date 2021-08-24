@@ -48,7 +48,7 @@ TFEncoderDecoderModel
 .. autoclass:: transformers.TFEncoderDecoderModel
     :members: call, from_encoder_decoder_pretrained
 
-    
+
 FlaxEncoderDecoderModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
