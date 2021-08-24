@@ -28,8 +28,8 @@ SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Speech2Text2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.Speech2Text2ForCausalLM`. It is used
-    to instantiate an Speech2Text2 model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.Speech2Text2ForCausalLM`. It
+    is used to instantiate an Speech2Text2 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Speech2Text2
     `facebook/s2t-small-librispeech-asr <https://huggingface.co/facebook/s2t-small-librispeech-asr>`__ architecture.
 
@@ -50,8 +50,8 @@ class Speech2Text2Config(PretrainedConfig):
         decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the pooler. If string, :obj:`"gelu"`,
+            :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):

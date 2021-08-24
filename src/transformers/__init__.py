@@ -1051,7 +1051,7 @@ if is_torch_available():
             "Speech2TextPreTrainedModel",
         ]
     )
-    _import_structure["models.speech_to_text_2"].extend(["Speech2TextPreTrainedModel","Speech2Text2ForCausalLM"])
+    _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2TextPreTrainedModel"])
     _import_structure["models.squeezebert"].extend(
         [
             "SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2610,10 +2610,7 @@ if TYPE_CHECKING:
             Speech2TextModel,
             Speech2TextPreTrainedModel,
         )
-        from .models.speech_to_text_2 import (
-            Speech2Text2ForCausalLM,
-            Speech2TextPreTrainedModel,
-        )
+        from .models.speech_to_text_2 import Speech2Text2ForCausalLM, Speech2TextPreTrainedModel
         from .models.squeezebert import (
             SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             SqueezeBertForMaskedLM,

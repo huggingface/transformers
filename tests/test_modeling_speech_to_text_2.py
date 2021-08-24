@@ -16,12 +16,8 @@
 
 import unittest
 
-from transformers import Speech2TextConfig
-from transformers.testing_utils import (
-    is_torch_available,
-    require_torch,
-    torch_device,
-)
+from transformers import Speech2Text2Config
+from transformers.testing_utils import is_torch_available, require_torch, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
@@ -31,7 +27,10 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.models.speech_to_text_2.modeling_speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2Decoder
+    from transformers.models.speech_to_text_2.modeling_speech_to_text_2 import (
+        Speech2Text2Decoder,
+        Speech2Text2ForCausalLM,
+    )
 
 
 @require_torch
@@ -98,7 +97,7 @@ class Speech2Text2StandaloneDecoderModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = Speech2TextConfig(
+        config = Speech2Text2Config(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
@@ -181,10 +180,18 @@ class Speech2Text2StandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterM
         self,
     ):
         self.model_tester = Speech2Text2StandaloneDecoderModelTester(self, is_training=False)
-        self.config_tester = ConfigTester(self, config_class=Speech2TextConfig)
+        self.config_tester = ConfigTester(self, config_class=Speech2Text2Config)
 
     # not implemented currently
     def test_inputs_embeds(self):
+        pass
+
+    # speech2text2 has no base model
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    # speech2text2 has no base model
+    def test_save_load_fast_init_to_base(self):
         pass
 
     def test_config(self):
@@ -194,6 +201,6 @@ class Speech2Text2StandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterM
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
 
+    # decoder cannot keep gradients
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

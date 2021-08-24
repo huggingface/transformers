@@ -171,7 +171,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
             assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
+
         # initialize with config
+        # make sure input & output embeddings is not tied
+        config.tie_word_embeddings = False
         super().__init__(config)
 
         if encoder is None:
@@ -365,6 +368,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
         # instantiate config with corresponding kwargs
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+
+        # make sure input & output embeddings is not tied
+        config.tie_word_embeddings = False
         return cls(encoder=encoder, decoder=decoder, config=config)
 
     @add_start_docstrings_to_model_forward(SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING)
@@ -421,16 +427,16 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        if input_values is not None and input_features is not None:
-            raise ValueError("You cannot specify both input_values and input_features at the same time")
-        elif input_values is not None:
-            inputs = input_values
-        elif input_features is not None:
-            inputs = input_features
-        else:
-            raise ValueError("You have to specify either input_values or input_features")
-
         if encoder_outputs is None:
+            if input_values is not None and input_features is not None:
+                raise ValueError("You cannot specify both input_values and input_features at the same time")
+            elif input_values is not None:
+                inputs = input_values
+            elif input_features is not None:
+                inputs = input_features
+            else:
+                raise ValueError("You have to specify either input_values or input_features")
+
             encoder_outputs = self.encoder(
                 inputs,
                 attention_mask=attention_mask,
@@ -443,7 +449,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         encoder_hidden_states = encoder_outputs[0]
 
         # project encoder_hidden_states
-        encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
+        if self.encoder.config.hidden_size != self.decoder.config.hidden_size:
+            encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
         # compute correct encoder attention mask
         if attention_mask is not None:

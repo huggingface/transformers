@@ -543,7 +543,7 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _get_subsampled_output_lengths(self, input_lengths: torch.LongTensor, kernel_size=1, stride=2):
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
         Computes the output length of the convolutional layers
         """
@@ -558,7 +558,7 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 
-        subsampled_lengths = self._get_subsampled_output_lengths(attention_mask.sum(-1))
+        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
         bsz = attention_mask.size()[0]
         attention_mask = torch.zeros(
             (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device

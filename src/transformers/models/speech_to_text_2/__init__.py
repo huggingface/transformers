@@ -21,7 +21,7 @@ from ...file_utils import _LazyModule, is_sentencepiece_available, is_speech_ava
 
 
 _import_structure = {
-    "configuration_speech_to_text": [
+    "configuration_speech_to_text_2": [
         "SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2Text2Config",
     ],
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
         from .tokenization_speech_to_text_2 import Speech2Text2Tokenizer
 
     if is_torch_available():
-        from .modeling_speech_to_text import (
+        from .modeling_speech_to_text_2 import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Speech2Text2ForCausalLM,
             Speech2Text2PreTrainedModel,
