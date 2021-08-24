@@ -660,26 +660,43 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_keyword_spotting(self):
         model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-s3prl-superb-ks").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "anton-l/hubert-base-s3prl-superb-ks", return_attention_mask=True, do_normalize=False
-        )
-        input_data = self._load_superb("ks", 10)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-s3prl-superb-ks")
+        input_data = self._load_superb("ks", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
-
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask)
-
         predicted_ids = torch.argmax(outputs.logits, dim=-1)
 
-        expected_labels = [2, 6, 10, 9, 3, 5, 10, 4, 1, 1]
+        expected_labels = [2, 6, 10, 9]
         # s3prl logits for "on/94de6a6a_nohash_2.wav"
         expected_logits = torch.tensor(
             [-4.5676, -3.1766, 7.6727, -5.5378, -5.2282, -4.8550, 0.6328, 5.5028, -1.0397, -2.2920, 3.0236, -7.1656],
             device=torch_device,
         )
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertTrue(torch.allclose(outputs.logits[0], expected_logits, atol=1e-2))
+
+    def test_inference_emotion_recognition(self):
+        model = HubertForSequenceClassification.from_pretrained("../hf-models/hubert-base-s3prl-superb-er").to(
+            torch_device
+        )
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("../hf-models/hubert-base-s3prl-superb-er")
+        input_data = self._load_superb("er", 1)
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        with torch.no_grad():
+            outputs = model(input_values, attention_mask=attention_mask)
+        predicted_ids = torch.argmax(outputs.logits, dim=-1)
+
+        expected_labels = [1, 1, 2, 2]
+        # s3prl logits for "Ses01M_impro07_F012.wav"
+        expected_logits = torch.tensor([-0.1465, 2.9692, -2.7046, -2.0135], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
         self.assertTrue(torch.allclose(outputs.logits[0], expected_logits, atol=1e-2))

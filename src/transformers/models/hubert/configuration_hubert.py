@@ -116,7 +116,7 @@ class HubertConfig(PretrainedConfig):
             mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
             instance of :class:`~transformers.HubertForCTC`.
         use_weighted_layer_sum (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use a weighted average of layer outputs with learned weights. Only relevant when training an
+            Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
             instance of :class:`~transformers.HubertForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.

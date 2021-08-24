@@ -3482,6 +3482,15 @@ class Wav2Vec2ForPreTraining:
         requires_backends(self, ["torch"])
 
 
+class Wav2Vec2ForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class Wav2Vec2Model:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

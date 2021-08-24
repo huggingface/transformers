@@ -19,7 +19,7 @@ import argparse
 
 import torch
 
-from transformers import HubertConfig, HubertForSequenceClassification, Wav2Vec2FeatureExtractor, logging
+from transformers import Wav2Vec2Config, Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification, logging
 
 
 logging.set_verbosity_info()
@@ -39,8 +39,8 @@ def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, mode
 
     downstream_dict = checkpoint["Downstream"]
 
-    hf_congfig = HubertConfig.from_pretrained(config_path)
-    hf_model = HubertForSequenceClassification.from_pretrained(base_model_name, config=hf_congfig)
+    hf_congfig = Wav2Vec2Config.from_pretrained(config_path)
+    hf_model = Wav2Vec2ForSequenceClassification.from_pretrained(base_model_name, config=hf_congfig)
     hf_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
         base_model_name, return_attention_mask=True, do_normalize=False
     )

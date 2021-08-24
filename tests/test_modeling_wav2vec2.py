@@ -36,6 +36,7 @@ if is_torch_available():
         Wav2Vec2ForCTC,
         Wav2Vec2ForMaskedLM,
         Wav2Vec2ForPreTraining,
+        Wav2Vec2ForSequenceClassification,
         Wav2Vec2Model,
         Wav2Vec2Processor,
     )
@@ -246,7 +247,9 @@ class Wav2Vec2ModelTester:
 @require_torch
 class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForPreTraining) if is_torch_available() else ()
+        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
+        if is_torch_available()
+        else ()
     )
     test_pruning = False
     test_headmasking = False
@@ -384,7 +387,9 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForPreTraining) if is_torch_available() else ()
+        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
+        if is_torch_available()
+        else ()
     )
     test_pruning = False
     test_headmasking = False
@@ -691,6 +696,13 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         return ds["speech"][:num_samples]
 
+    def _load_superb(self, task, num_samples):
+        from datasets import load_dataset
+
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+
+        return ds[:num_samples]
+
     def test_inference_ctc_normal(self):
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         model.to(torch_device)
@@ -913,3 +925,24 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         expected_loss = 62.5170
 
         self.assertTrue(abs(outputs.loss.item() - expected_loss) < 1e-3)
+
+    def test_inference_emotion_recognition(self):
+        model = Wav2Vec2ForSequenceClassification.from_pretrained("../hf-models/wav2vec2-base-s3prl-superb-er").to(
+            torch_device
+        )
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("../hf-models/wav2vec2-base-s3prl-superb-er")
+        input_data = self._load_superb("er", 4)
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        with torch.no_grad():
+            outputs = model(input_values, attention_mask=attention_mask)
+        predicted_ids = torch.argmax(outputs.logits, dim=-1)
+
+        expected_labels = [1, 1, 2, 2]
+        # s3prl logits for "Ses01M_impro07_F012.wav"
+        expected_logits = torch.tensor([0.3055, 1.2254, -2.1298, -1.1464], device=torch_device)
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertTrue(torch.allclose(outputs.logits[0], expected_logits, atol=1e-2))
