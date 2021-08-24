@@ -46,7 +46,6 @@ from .configuration_deberta_v2 import DebertaV2Config
 
 logger = logging.get_logger(__name__)
 
-# tnp.experimental_enable_numpy_behavior()
 
 _CONFIG_FOR_DOC = "DebertaV2Config"
 _TOKENIZER_FOR_DOC = "DebertaV2Tokenizer"
@@ -54,7 +53,7 @@ _CHECKPOINT_FOR_DOC = "kamalkraj/deberta-v2-xlarge"
 
 TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "kamalkraj/deberta-v2-xlarge",
-    # See all DeBERTa models at https://huggingface.co/models?filter=DeBERTa
+    # See all DeBERTa models at https://huggingface.co/models?filter=deberta-v2
 ]
 
 
