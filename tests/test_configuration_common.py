@@ -46,14 +46,24 @@ class ConfigTester(object):
 
         # Test that config has the common properties as setter
         for idx, prop in enumerate(common_properties):
-            setattr(config, prop, idx)
-            self.parent.assertEqual(getattr(config, prop), idx)
+            try:
+                setattr(config, prop, idx)
+                self.parent.assertEqual(getattr(config, prop), idx)
+            except NotImplementedError:
+                # Some models might not be able to implement setters for common_properties
+                # In that case, a NotImplementedError is raised
+                pass
 
         # Test if config class can be called with Config(prop_name=..)
-        prop_values = {name: idx for idx, name in enumerate(common_properties)}
-        config = self.config_class(**prop_values)
-        for name, val in prop_values.items():
-            self.parent.assertEqual(getattr(config, name), val)
+        for idx, name in enumerate(common_properties):
+            try:
+                config = self.config_class(**{name: idx})
+                self.parent.assertEqual(getattr(config, name), idx)
+            except NotImplementedError:
+                # Some models might not be able to implement setters for common_properties
+                # In that case, a NotImplementedError is raised
+                pass
+
 
     def create_and_test_config_to_json_string(self):
         config = self.config_class(**self.inputs_dict)
