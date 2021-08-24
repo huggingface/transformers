@@ -138,19 +138,27 @@ def validate_model_outputs(
     reference_model: Union[PreTrainedModel, TFPreTrainedModel],
     onnx_model_path_or_bytes: Union[PathLike, bytes],
     onnx_named_outputs: List[str],
-    atol: float,
+    batch_size: int = -1,
+    seq_length: int = -1,
+    atol: float = 1e-5,
 ):
     from onnxruntime import InferenceSession, SessionOptions
 
     logger.info("Validating ONNX model...")
 
-    # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
-    # dynamic input shapes.
-    reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
-
     # Create ONNX Runtime session
     options = SessionOptions()
-    session = InferenceSession(onnx_model.as_posix(), options)
+    options.add_session_config_entry('session.load_model_format', 'ONNX')
+    session = InferenceSession(onnx_model_path_or_bytes, options)
+
+    # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
+    # dynamic input shapes.
+    reference_model_inputs = config.generate_dummy_inputs(
+        tokenizer=tokenizer,
+        batch_size=batch_size if batch_size > 0 else 3,
+        seq_length=seq_length if seq_length > 0 else 31,
+        framework=TensorType.PYTORCH
+    )
 
     # Compute outputs from the reference model
     ref_outputs = reference_model(**reference_model_inputs)

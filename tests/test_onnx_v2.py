@@ -237,13 +237,25 @@ class OnnxExportTestCaseV2(TestCase):
                 model = model_class(config_class.from_pretrained(model))
                 onnx_config = onnx_config_class.from_model_config(model.config)
 
-                with NamedTemporaryFile("w") as output:
+                with NamedTemporaryFile("wb+") as output:
                     onnx_inputs, onnx_outputs = export(
-                        tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, Path(output.name)
+                        tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, output
                     )
 
                     try:
-                        validate_model_outputs(onnx_config, tokenizer, model, Path(output.name), onnx_outputs, 1e-5)
+                        # Reset to the head of the file and read everything
+                        output.seek(0)
+                        model_bytes = output.read()
+                        validate_model_outputs(
+                            onnx_config,
+                            tokenizer,
+                            model,
+                            model_bytes,
+                            onnx_outputs,
+                            batch_size=-1,
+                            seq_length=-1,
+                            atol=1e-5
+                        )
                     except ValueError as ve:
                         self.fail(f"{name} -> {ve}")
 
@@ -265,11 +277,22 @@ class OnnxExportTestCaseV2(TestCase):
                     onnx_config.use_past, "OnnxConfigWithPast.use_past should be if called with with_past()"
                 )
 
-                with NamedTemporaryFile("w") as output:
-                    output = Path(output.name)
+                with NamedTemporaryFile("wb+") as output:
                     onnx_inputs, onnx_outputs = export(tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, output)
 
                     try:
-                        validate_model_outputs(onnx_config, tokenizer, model, output, onnx_outputs, 1e-5)
+                        # Reset to the head of the file and read everything
+                        output.seek(0)
+                        model_bytes = output.read()
+                        validate_model_outputs(
+                            onnx_config,
+                            tokenizer,
+                            model,
+                            model_bytes,
+                            onnx_outputs,
+                            batch_size=-1,
+                            seq_length=-1,
+                            atol=1e-5
+                        )
                     except ValueError as ve:
                         self.fail(f"{name} -> {ve}")
