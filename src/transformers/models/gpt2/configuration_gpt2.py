@@ -128,11 +128,12 @@ class GPT2Config(PretrainedConfig):
         >>> configuration = model.config
     """
 
-    attribute_map = {"hidden_size": "n_embd",
-                     "max_position_embeddings": "n_positions",
-                     "num_attention_heads": "n_head",
-                     "num_hidden_layers": "n_layer"
-                     }
+    attribute_map = {
+        "hidden_size": "n_embd",
+        "max_position_embeddings": "n_positions",
+        "num_attention_heads": "n_head",
+        "num_hidden_layers": "n_layer",
+    }
 
     model_type = "gpt2"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -190,10 +191,6 @@ class GPT2Config(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
-
-
-
 
 
 class GPT2OnnxConfig(OnnxConfigWithPast):
