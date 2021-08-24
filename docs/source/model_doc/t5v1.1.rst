@@ -47,16 +47,21 @@ T5 Version 1.1 includes the following improvements compared to the original T5 m
 - "xl" and "xxl" replace "3B" and "11B". The model shapes are a bit different - larger :obj:`d_model` and smaller
   :obj:`num_heads` and :obj:`d_ff`.
 
-Note: T5 Version 1.1 was only pre-trained on C4 excluding any supervised training. Therefore, this model has to be
-fine-tuned before it is useable on a downstream task, unlike the original T5 model.
+Note: T5 Version 1.1 was only pre-trained on `C4 <https://huggingface.co/datasets/c4>`__ excluding any supervised
+training. Therefore, this model has to be fine-tuned before it is useable on a downstream task, unlike the original T5
+model.
 
-Google has released 3 variants:
+Google has released the following variants:
 
 - `google/t5-v1_1-small <https://huggingface.co/google/t5-v1_1-small>`__
 
 - `google/t5-v1_1-base <https://huggingface.co/google/t5-v1_1-base>`__
 
-- `google/t5-v1_1-large <https://huggingface.co/google/t5-v1_1-large>`__.
+- `google/t5-v1_1-large <https://huggingface.co/google/t5-v1_1-large>`__
+
+- `google/t5-v1_1-xl <https://huggingface.co/google/t5-v1_1-xl>`__
+
+- `google/t5-v1_1-xxl <https://huggingface.co/google/t5-v1_1-xxl>`__.
 
 One can refer to :doc:`T5's documentation page <t5>` for all tips, code examples and notebooks.
 

@@ -37,12 +37,10 @@ Tips:
 - T5 is an encoder-decoder model pre-trained on a multi-task mixture of unsupervised and supervised tasks and for which
   each task is converted into a text-to-text format. T5 works well on a variety of tasks out-of-the-box by prepending a
   different prefix to the input corresponding to each task, e.g., for translation: *translate English to German: ...*,
-  for summarization: *summarize: ...*. According to `this forum post
-  <https://discuss.huggingface.co/t/t5-finetuning-tips/684>`__, task prefixes matter when (1) doing multi-task training
-  (2) your task is similar or related to one of the supervised tasks used in T5's pre-training mixture (see Appendix D
-  of the `paper <https://arxiv.org/pdf/1910.10683.pdf>`__ for the task prefixes used).
+  for summarization: *summarize: ...*.
 
-- T5 is trained using the :obj:`CrossEntropyLoss`. During training,
+- T5 is trained using the cross-entropy loss. One can use :class:`~transformers.T5ForConditionalGeneration` (or the
+  Tensorflow/Flax variant), which includes the language modeling head. During training,
   :meth:`~transformers.T5ForConditionalGeneration.forward` is used. At inference time, it is recommended to use
   :meth:`~transformers.generation_utils.GenerationMixin.generate`. This method takes care of feeding the encoded input
   via cross-attention layers to the decoder and auto-regressively generates the decoder output. Check out `this blog
@@ -51,14 +49,7 @@ Tips:
   generation without using :meth:`~transformers.generation_utils.GenerationMixin.generate`, make sure you start it with
   the :obj:`pad_token_id`.
 
-- T5 models need a slightly higher learning rate than the default one set in the :obj:`Trainer`. Typically, 1e-4 and
-  3e-4 work well for almost all problems (classification, summarization, translation, question answering, question
-  generation).
-
 - T5 uses relative scalar embeddings. Encoder input padding can be done on the left and on the right.
-
-- If training on TPU, it is recommended to pad all examples of the dataset to the same length. Trimming batches (i.e.
-  only padding up to the longest example in a batch) leads to very slow training on TPU.
 
 T5 comes in different sizes (`t5-small <https://huggingface.co/t5-small>`__, `t5-base
 <https://huggingface.co/t5-base>`__, `t5-large <https://huggingface.co/t5-large>`__, `t5-3b
@@ -146,9 +137,10 @@ start-sequence token. T5 can be trained / fine-tuned both in a supervised and un
   typically defines a :obj:`max_source_length` and :obj:`max_target_length`, which determine the length of the input
   and output sequences respectively. For summarization and translation, a good setting is setting
   :obj:`max_source_length` to 1024 and :obj:`max_target_length` to 128. In addition, we must make sure that padding
-  token id's of :obj:`labels` are replaced by -100, such that they are not taken into account by the loss function. We
-  also pass :obj:`attention_mask` as additional input to the model, which makes sure that padding tokens of the inputs
-  are ignored. The code example below illustrates all of this.
+  token id's of the :obj:`labels` are not taken into account by the loss function. In PyTorch, this can be done by
+  replacing them with -100, which is the :obj:`ignore_index` of the :obj:`CrossEntropyLoss`. We also pass
+  :obj:`attention_mask` as additional input to the model, which makes sure that padding tokens of the inputs are
+  ignored. The code example below illustrates all of this.
 
     .. code-block::
 
@@ -187,6 +179,28 @@ start-sequence token. T5 can be trained / fine-tuned both in a supervised and un
         # forward pass
         loss = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).loss
 
+Additional training tips:
+
+- T5 models need a slightly higher learning rate than the default one set in the :obj:`Trainer`. Typically, 1e-4 and
+  3e-4 work well for almost all problems (classification, summarization, translation, question answering, question
+  generation).
+
+- According to `this forum post <https://discuss.huggingface.co/t/t5-finetuning-tips/684>`__, task prefixes matter when
+  (1) doing multi-task training (2) your task is similar or related to one of the supervised tasks used in T5's
+  pre-training mixture (see Appendix D of the `paper <https://arxiv.org/pdf/1910.10683.pdf>`__ for the task prefixes
+  used).
+
+- If training on TPU, it is recommended to pad all examples of the dataset to the same length. Trimming batches (i.e.
+  only padding up to the longest example in a batch) leads to very slow training on TPU.
+
+
+Example scripts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:class:`~transformers.T5ForConditionalGeneration` is supported by the official `summarization
+<https://github.com/huggingface/transformers/tree/master/examples/pytorch/summarization>`__ and `translation
+<https://github.com/huggingface/transformers/tree/master/examples/pytorch/translation>`__ scripts, which allow you to
+easily fine-tune the model on custom data.
 
 T5Config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
