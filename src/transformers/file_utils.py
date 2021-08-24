@@ -1654,6 +1654,7 @@ def get_list_of_files(
     path_or_repo: Union[str, os.PathLike],
     revision: Optional[str] = None,
     use_auth_token: Optional[Union[bool, str]] = None,
+    local_files_only: bool = False,
 ) -> List[str]:
     """
     Gets the list of files inside :obj:`path_or_repo`.
@@ -1668,6 +1669,8 @@ def get_list_of_files(
         use_auth_token (:obj:`str` or `bool`, `optional`):
             The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
             generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to only rely on local files and not to attempt to download any files.
 
     Returns:
         :obj:`List[str]`: The list of files available in :obj:`path_or_repo`.
@@ -1681,7 +1684,7 @@ def get_list_of_files(
         return list_of_files
 
     # Can't grab the files if we are on offline mode.
-    if is_offline_mode():
+    if is_offline_mode() or local_files_only:
         return []
 
     # Otherwise we grab the token and use the model_info method.

@@ -1566,6 +1566,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             use_auth_token (:obj:`str` or `bool`, `optional`):
                 The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
                 generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+            local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to only rely on local files and not to attempt to download any files.
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -1645,7 +1647,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
             fast_tokenizer_file = get_fast_tokenizer_file(
-                pretrained_model_name_or_path, revision=revision, use_auth_token=use_auth_token
+                pretrained_model_name_or_path,
+                revision=revision,
+                use_auth_token=use_auth_token,
+                local_files_only=local_files_only,
             )
             additional_files_names = {
                 "added_tokens_file": ADDED_TOKENS_FILE,
@@ -3389,6 +3394,7 @@ def get_fast_tokenizer_file(
     path_or_repo: Union[str, os.PathLike],
     revision: Optional[str] = None,
     use_auth_token: Optional[Union[bool, str]] = None,
+    local_files_only: bool = False,
 ) -> str:
     """
     Get the tokenizer file to use for this version of transformers.
@@ -3403,12 +3409,16 @@ def get_fast_tokenizer_file(
         use_auth_token (:obj:`str` or `bool`, `optional`):
             The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
             generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to only rely on local files and not to attempt to download any files.
 
     Returns:
         :obj:`str`: The tokenizer file to use.
     """
     # Inspect all files from the repo/folder.
-    all_files = get_list_of_files(path_or_repo, revision=revision, use_auth_token=use_auth_token)
+    all_files = get_list_of_files(
+        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
+    )
     tokenizer_files_map = {}
     for file_name in all_files:
         search = _re_tokenizer_file.search(file_name)
