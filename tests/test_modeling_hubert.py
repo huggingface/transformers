@@ -673,30 +673,44 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
         expected_labels = [2, 6, 10, 9]
         # s3prl logits for the same batch
-        expected_logits = torch.tensor([ 7.6692, 17.7795, 11.1562, 11.8232], device=torch_device)
+        expected_logits = torch.tensor([7.6692, 17.7795, 11.1562, 11.8232], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_intent_classification(self):
-        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-s3prl-superb-ks").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-s3prl-superb-ks")
-        input_data = self._load_superb("ks", 4)
+        model = HubertForSequenceClassification.from_pretrained("../hf-models/hubert-base-s3prl-superb-ic").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("../hf-models/hubert-base-s3prl-superb-ic")
+        input_data = self._load_superb("ic", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask)
-        predicted_ids = torch.argmax(outputs.logits, dim=-1)
-        predicted_logits, _ = torch.max(outputs.logits, dim=-1)
 
-        expected_labels = [2, 6, 10, 9]
-        # s3prl logits for the same batch
-        expected_logits = torch.tensor([ 7.6692, 17.7795, 11.1562, 11.8232], device=torch_device)
+        predicted_ids_action = torch.argmax(outputs.logits[:, :6], dim=-1)
+        predicted_logits_action, _ = torch.max(outputs.logits[:, :6], dim=-1)
+        predicted_ids_object = torch.argmax(outputs.logits[:, 6:20], dim=-1)
+        predicted_logits_object, _ = torch.max(outputs.logits[:, 6:20], dim=-1)
+        predicted_ids_location = torch.argmax(outputs.logits[:, 20:24], dim=-1)
+        predicted_logits_location, _ = torch.max(outputs.logits[:, 20:24], dim=-1)
 
-        self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
+        expected_labels_action = [1, 0, 4, 3]
+        expected_logits_action = torch.tensor([5.9052, 12.5865,  4.4840, 10.0240], device=torch_device)
+        expected_labels_object = [1, 10, 3, 4]
+        expected_logits_object = torch.tensor([5.5316, 11.7946,  8.1672, 23.2415], device=torch_device)
+        expected_labels_location = [0, 0, 0, 1]
+        expected_logits_location = torch.tensor([5.2053,  8.9577, 10.0447,  8.1481], device=torch_device)
+
+        self.assertListEqual(predicted_ids_action.tolist(), expected_labels_action)
+        self.assertListEqual(predicted_ids_object.tolist(), expected_labels_object)
+        self.assertListEqual(predicted_ids_location.tolist(), expected_labels_location)
+
+        # higher tolerance due to different padding masking https://github.com/pytorch/fairseq/pull/3572
+        self.assertTrue(torch.allclose(predicted_logits_action, expected_logits_action, atol=3e-1))
+        self.assertTrue(torch.allclose(predicted_logits_object, expected_logits_object, atol=3e-1))
+        self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=3e-1))
 
     def test_inference_emotion_recognition(self):
         model = HubertForSequenceClassification.from_pretrained("../hf-models/hubert-base-s3prl-superb-er").to(
