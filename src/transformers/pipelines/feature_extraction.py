@@ -79,4 +79,10 @@ class FeatureExtractionPipeline(Pipeline):
         Return:
             A nested list of :obj:`float`: The features computed by the model.
         """
-        return super().__call__(*args, **kwargs).tolist()
+        results = super().__call__(*args, **kwargs)
+        if isinstance(results, list):
+            # Sequential run
+            results = [r.tolist() for r in results]
+        else:
+            results = results.tolist()
+        return results

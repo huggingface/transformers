@@ -65,8 +65,36 @@ Next, let's add a symbolic link to the `run_hybrid_clip.py`.
 
 ```bash
 export MODEL_DIR="./clip-roberta-base
-ln -s ~/transformers/examples/flax/summarization/run_hybrid_clip.py run_hybrid_clip.py
+ln -s ~/transformers/examples/research_projects/jax-projects/hybrid_clip/run_hybrid_clip.py run_hybrid_clip.py
 ```
+
+## How to use the `FlaxHybridCLIP` model:
+
+The `FlaxHybridCLIP` class let's you load any text and vision encoder model to create a dual encoder. 
+Here is an example of how to load the model using pre-trained text and vision models.
+
+```python
+from modeling_hybrid_clip import FlaxHybridCLIP
+
+model = FlaxHybridCLIP.from_text_vision_pretrained("bert-base-uncased", "openai/clip-vit-base-patch32")
+
+# save the model
+model.save_pretrained("bert-clip")
+
+# load the saved model
+model = FlaxHybridCLIP.from_pretrained("bert-clip")
+```
+
+If the checkpoints are in PyTorch then one could pass `text_from_pt=True` and `vision_from_pt=True`. This will load the model
+PyTorch checkpoints convert them to flax and load the model.
+
+```python
+model = FlaxHybridCLIP.from_text_vision_pretrained("bert-base-uncased", "openai/clip-vit-base-patch32", text_from_pt=True, vision_from_pt=True)
+```
+
+This loads both the text and vision encoders using pre-trained weights, the projection layers are randomly
+initialized except for CLIP's vision model. If you use CLIP to initialize the vision model then the vision projection weights are also
+loaded using the pre-trained weights.
 
 ## Prepare the dataset
 
@@ -124,7 +152,7 @@ with open("coco_dataset/valid_dataset.json", "w") as f:
 Next we can run the example script to train the model:
 
 ```bash
-python run_clip.py \
+python run_hybrid_clip.py \
     --output_dir ${MODEL_DIR} \
     --text_model_name_or_path="roberta-base" \
     --vision_model_name_or_path="openai/clip-vit-base-patch32" \

@@ -494,6 +494,7 @@ class AlbertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = AlbertConfig
+    load_tf_weights = load_tf_weights_in_albert
     base_model_prefix = "albert"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -623,7 +624,6 @@ ALBERT_INPUTS_DOCSTRING = r"""
 class AlbertModel(AlbertPreTrainedModel):
 
     config_class = AlbertConfig
-    load_tf_weights = load_tf_weights_in_albert
     base_model_prefix = "albert"
 
     def __init__(self, config, add_pooling_layer=True):
@@ -860,8 +860,6 @@ class AlbertMLMHead(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
         self.decoder = nn.Linear(config.embedding_size, config.vocab_size)
         self.activation = ACT2FN[config.hidden_act]
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
@@ -873,6 +871,10 @@ class AlbertMLMHead(nn.Module):
         prediction_scores = hidden_states
 
         return prediction_scores
+
+    def _tie_weights(self):
+        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+        self.bias = self.decoder.bias
 
 
 class AlbertSOPHead(nn.Module):
@@ -1088,7 +1090,12 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.albert = AlbertModel(config, add_pooling_layer=False)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout_prob = (
+            config.classifier_dropout_prob
+            if config.classifier_dropout_prob is not None
+            else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
 
         self.init_weights()
@@ -1275,7 +1282,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
         super().__init__(config)
 
         self.albert = AlbertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()

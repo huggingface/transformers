@@ -1170,6 +1170,23 @@ To start a debugger at the point of the warning, do this:
     pytest tests/test_logging.py -W error::UserWarning --pdb
 
 
+Working with github actions workflows
+-----------------------------------------------------------------------------------------------------------------------
+
+To trigger a self-push workflow CI job, you must:
+
+1. Create a new branch on ``transformers`` origin (not a fork!).
+2. The branch name has to start with either ``ci_`` or ``ci-`` (``master`` triggers it too, but we can't do PRs on
+   ``master``). It also gets triggered only for specific paths - you can find the up-to-date definition in case it
+   changed since this document has been written `here
+   <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__ under `push:`
+3. Create a PR from this branch.
+4. Then you can see the job appear `here
+   <https://github.com/huggingface/transformers/actions/workflows/self-push.yml>`__. It may not run right away if there
+   is a backlog.
+
+
+
 
 Testing Experimental CI Features
 -----------------------------------------------------------------------------------------------------------------------

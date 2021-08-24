@@ -19,6 +19,8 @@ import random
 from functools import partial
 from typing import Callable, Optional, Tuple
 
+import numpy as np
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -28,7 +30,7 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, replace_return_docstrings
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -212,15 +214,15 @@ BART_DECODE_INPUTS_DOCSTRING = r"""
 """
 
 
-def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
+def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
     """
     Shift input ids one token to the right.
     """
-    shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
-    shifted_input_ids = jax.ops.index_update(shifted_input_ids, (..., 0), decoder_start_token_id)
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    shifted_input_ids = np.zeros_like(input_ids)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1]
+    shifted_input_ids[:, 0] = decoder_start_token_id
 
+    shifted_input_ids = np.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
     return shifted_input_ids
 
 
@@ -1165,6 +1167,7 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -1332,7 +1335,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        deterministic: bool = True,
+        train: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -1424,7 +1427,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=deterministic,
+            deterministic=not train,
             rngs=rngs,
             mutable=mutable,
             method=_decoder_forward,
@@ -1518,7 +1521,7 @@ FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
         >>> input_ids = tokenizer([TXT], return_tensors='jax')['input_ids']
         >>> logits = model(input_ids).logits
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero()[0].item()
         >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
         >>> values, predictions = jax.lax.top_k(probs)
 

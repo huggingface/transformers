@@ -51,4 +51,4 @@ Special Properties
 Other Utilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.file_utils._BaseLazyModule
+.. autoclass:: transformers.file_utils._LazyModule

@@ -31,11 +31,11 @@ import random
 import datasets
 import torch
 from datasets import load_dataset
-from torch.utils.data.dataloader import DataLoader
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedType
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -253,6 +253,19 @@ def main():
         if extension == "txt":
             extension = "text"
         raw_datasets = load_dataset(extension, data_files=data_files)
+        # If no validation data is there, validation_split_percentage will be used to divide the dataset.
+        if "validation" not in raw_datasets.keys():
+            raw_datasets["validation"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[:{args.validation_split_percentage}%]",
+            )
+            raw_datasets["train"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[{args.validation_split_percentage}%:]",
+            )
+
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -330,7 +343,8 @@ def main():
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.
-        total_length = (total_length // block_size) * block_size
+        if total_length >= block_size:
+            total_length = (total_length // block_size) * block_size
         # Split by chunks of max_len.
         result = {
             k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
@@ -388,6 +402,10 @@ def main():
     model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader
     )
+
+    # On TPU, the tie weights in our model have been disconnected, so we need to restore the ties.
+    if accelerator.distributed_type == DistributedType.TPU:
+        model.tie_weights()
 
     # Note -> the training dataloader needs to be prepared before we grab his length below (cause its length will be
     # shorter in multiprocess)

@@ -712,7 +712,7 @@ class FlaxMLPModel(FlaxMLPPreTrainedModel):
 
 Now the `FlaxMLPModel` will have a similar interface as PyTorch or Tensorflow models and allows us to attach loaded or randomely initialized weights to the model instance.
 
-So the important point to remember is that the `model` is not an instance of `nn.Moudle`; it's an abstract class, like a container that holds a Flax module, its parameters and provides convenient methods for initialization and forward pass. The key take-away here is that an instance of `FlaxMLPModel` is very much stateful now since it holds all the model parameters, whereas the underlying Flax module `FlaxMLPModule` is still stateless. Now to make `FlaxMLPModel` fully compliant with JAX transformations, it is always possible to pass the parameters to `FlaxMLPModel` as well to make it stateless and easier to work with during training. Feel free to take a look at the code to see how exactly this is implemented for ex. [`modeling_flax_bert.py`](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bert/modeling_flax_bert.py#L536)
+So the important point to remember is that the `model` is not an instance of `nn.Module`; it's an abstract class, like a container that holds a Flax module, its parameters and provides convenient methods for initialization and forward pass. The key take-away here is that an instance of `FlaxMLPModel` is very much stateful now since it holds all the model parameters, whereas the underlying Flax module `FlaxMLPModule` is still stateless. Now to make `FlaxMLPModel` fully compliant with JAX transformations, it is always possible to pass the parameters to `FlaxMLPModel` as well to make it stateless and easier to work with during training. Feel free to take a look at the code to see how exactly this is implemented for ex. [`modeling_flax_bert.py`](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bert/modeling_flax_bert.py#L536)
 
 Another significant difference between Flax and PyTorch models is that, we can pass the `labels` directly to PyTorch's forward pass to compute the loss, whereas Flax models never accept `labels` as an input argument. In PyTorch, gradient backpropagation is performed by simply calling `.backward()` on the computed loss which makes it very handy for the user to be able to pass the `labels`. In Flax however, gradient backpropagation cannot be done by simply calling `.backward()` on the loss output, but the loss function itself has to be transformed by `jax.grad` or `jax.value_and_grad` to return the gradients of all parameters. This transformation cannot happen under-the-hood when one passes the `labels` to Flax's forward function, so that in Flax, we simply don't allow `labels` to be passed by design and force the user to implement the loss function her-/himself. As a conclusion, you will see that all training-related code is decoupled from the modeling code and always defined in the training scripts themselves.
 
@@ -841,40 +841,40 @@ To know more about how to train the Flax models on different devices (GPU, multi
 
 ## Talks
 
-Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large-scale language modeling and other great topics during our community event! Find the schedule, zoom links and calendar events below!
+3 days of talks around JAX / Flax, Transformers, large-scale language modeling and other great topics during our community event!
 
 ### Wednesday, June 30th
-- [Zoom link](https://us02web.zoom.us/j/89844071286?pwd=RzZaL1VPLzM0Um5kYzJRWVBFMmtRQT09)
-- [Add the event to your Gcal](https://bit.ly/2UTD5N2)
+- [Watch the talks on YouTube](https://www.youtube.com/watch?v=fuAyUQcVzTY)
+- [Chat history](https://docs.google.com/spreadsheets/d/1PZ5xYV2hVwlAVQSqDag65ympv5YNCSDmXyG-eWTaZ_o/edit?usp=sharing)
 
- Speaker        | Topic                           | Time                  | 
-|-------------|---------------------------------|------------------------|
-| Skye Wanderman-Milne, Google Brain | Intro to JAX on Cloud TPUs      | 6.00pm-6.45pm CEST / 9.00am-9.45am PST      | 
-| Marc van Zee, Google Brain | Introduction to Flax      | 6.45pm-7.30pm CEST / 9.45am-10.30am PST      | 
-| Pablo Castro, Google Brain | Using Jax & Flax for RL with the Dopamine library      | 7.30pm-8.00pm CEST / 10.30am-11.00am PST      | 
+ Speaker        | Topic                           | Time                  |  Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| Skye Wanderman-Milne, Google Brain | Intro to JAX on Cloud TPUs      | 6.00pm-6.45pm CEST / 9.00am-9.45am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=fuAyUQcVzTY) |
+| Marc van Zee, Google Brain | Introduction to Flax      | 6.45pm-7.30pm CEST / 9.45am-10.30am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/fuAyUQcVzTY?t=2569) |
+| Pablo Castro, Google Brain | Using Jax & Flax for RL with the Dopamine library      | 7.30pm-8.00pm CEST / 10.30am-11.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/fuAyUQcVzTY?t=5306) |
 
 ### Thursday, July 1st
-- [Zoom link](https://us02web.zoom.us/j/84443602508?pwd=NnZOMC84bXRBU3RaSHl3dTdBekIrZz09)
-- [Add the event to your Gcal](https://bit.ly/3x6vPM5)
+- [Watch the talks on YouTube](https://www.youtube.com/watch?v=__eG63ZP_5g)
+- [Chat history](https://docs.google.com/spreadsheets/d/1PZ5xYV2hVwlAVQSqDag65ympv5YNCSDmXyG-eWTaZ_o/edit#gid=1515796400)
 
- Speaker        | Topic                           | Time                  | 
-|-------------|---------------------------------|------------------------|
-| Suraj Patil & Patrick von Platen, Hugging Face | How to use JAX/Flax with Transformers      | 5.30pm-6.00pm CEST / 8.30am-9.00am PST      | 
-| Sabrina J. Mielke, Johns Hopkins University & HuggingFace | From stateful code to purified JAX: how to build your neural net framework | 6.00pm-6.30pm CEST / 9.00am-9.30am PST      | 
-| Mostafa Dehghani, Google Brain | Long Range Arena: Benchmarking Efficient Transformers      | 6.30pm-7.00pm CEST / 9.30am-10.00am PST      |
-| Rohan Anil, Google Brain | Scalable Second Order Optimization for Deep Learning      | 7.00pm-7.30pm CEST / 10.00am-10.30am PST      |
+ Speaker        | Topic                           | Time                  | Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| Suraj Patil & Patrick von Platen, Hugging Face | How to use JAX/Flax with Transformers      | 5.30pm-6.00pm CEST / 8.30am-9.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=__eG63ZP_5g) |
+| Sabrina J. Mielke, Johns Hopkins University & HuggingFace | From stateful code to purified JAX: how to build your neural net framework | 6.00pm-6.30pm CEST / 9.00am-9.30am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/__eG63ZP_5g?t=1576) |
+| Mostafa Dehghani, Google Brain | Long Range Arena: Benchmarking Efficient Transformers      | 6.30pm-7.00pm CEST / 9.30am-10.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/__eG63ZP_5g?t=3695) |
+| Rohan Anil, Google Brain | Scalable Second Order Optimization for Deep Learning      | 7.00pm-7.30pm CEST / 10.00am-10.30am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/__eG63ZP_5g?t=5285) |
 
 
 ### Friday, July 2nd
-- [Zoom link](https://us02web.zoom.us/j/83307589607?pwd=NnNCN1doQkZKcjVSMlZwVEc2aVgrZz09)
-- [Add the event to your Gcal](https://bit.ly/3y4pVLt)
+- [Watch the talks on YouTube](https://www.youtube.com/watch?v=ZCMOPkcTu3s)
+- [Chat history](https://docs.google.com/spreadsheets/d/1PZ5xYV2hVwlAVQSqDag65ympv5YNCSDmXyG-eWTaZ_o/edit#gid=1166061401)
 
- Speaker        | Topic                           | Time                  | 
-|-------------|---------------------------------|------------------------|
-| Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | 
-| Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 5.30pm-6.00 CEST / 8.30am-9.00 PST       | 
-| Iurii Kemaev, Soňa Mokrá, Junhyuk Oh, DeepMind | DeepMind JAX Ecosystem      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | 
-| Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | 
+ Speaker        | Topic                           | Time                  |  Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=ZCMOPkcTu3s) |
+| Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 5.30pm-6.00 CEST / 8.30am-9.00 PST       | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/ZCMOPkcTu3s?t=1803) |
+| Iurii Kemaev, Soňa Mokrá, Junhyuk Oh, DeepMind | DeepMind JAX Ecosystem      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/ZCMOPkcTu3s?t=3388) |
+| Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/ZCMOPkcTu3s?t=5095) |
 
 ### Talks & Speakers
 
@@ -1259,7 +1259,31 @@ More to come!
 
 ## Project evaluation
 
-TODO (should be filled by 5.07.)...
+For your project to be evaluated, please fill out [this google form](https://forms.gle/jQaMkj3JJdD4Xcwn9).
+Please make sure that your submitted project includes a demo as well as information about the model, data, training methods, etc.
+
+### Criteria
+
+* **Demo.** All projects are required to have a demo. It’s open ended, but we provide some ideas on how to build demos in the [How to build a demo](#how-to-build-a-demo) section.
+* **Technical difficulty.** Difficulty has different aspects, such as working with complex architectures, obtaining better evaluation metrics than existing models, or implementing models for low-resource languages. 
+* **Social impact.** The project is expected to have a positive social impact, e.g. by tackling under-explored area of practical interest for minorities or under-represented group (low-ressources languages, specific focus on bias, fairness or ethical issues in ML) or by tackling general societal challenges, e.g. health or climate related challenges.
+* **Innovativeness.** Projects that propose novel applications or bring new ideas will be rewarded more.
+
+### Jury
+
+* [Niki Parmar](https://research.google/people/NikiParmar/): Staff Research Scientist at Google.
+* [Ross Wightman](https://www.linkedin.com/in/wightmanr/): Angel Investor.
+* [Thomas Wolf](https://www.linkedin.com/in/thomas-wolf-a056857/): Co-founder and CSO at Hugging Face.
+* [Ashish Vaswani](https://research.google/people/AshishVaswani/): Staff Research Scientist at Google Brain.
+
+### Process
+
+* **July 17, 12h00 CEST**: TPU VM access closes.
+* **July 19, 12h00 CEST**: Project completition ends (including demo).
+* **July 19-21** A group of event organizers (Suraj, Patrick, Suzana, and Omar) will do an initial filter to find the top 15 projects.
+* **July 22-26** The jury will go over the 15 projects and pick the top three projects out of them.
+* **July 27.** Winner projects are announced
+
 
 ## General tips and tricks
 

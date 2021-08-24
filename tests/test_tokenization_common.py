@@ -16,6 +16,7 @@
 
 import inspect
 import itertools
+import json
 import os
 import pickle
 import re
@@ -29,7 +30,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
 from transformers import (
+    AlbertTokenizer,
+    AlbertTokenizerFast,
     BertTokenizer,
+    BertTokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
@@ -2462,6 +2466,10 @@ class TokenizerTesterMixin:
                 self.assertEqual(
                     tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
                 )
+                self.assertIn("<testtoken3>", tokenizer_r.special_tokens_map["additional_special_tokens"])
+                self.assertIsInstance(tokenizer_r.special_tokens_map["additional_special_tokens"], list)
+                self.assertGreaterEqual(len(tokenizer_r.special_tokens_map["additional_special_tokens"]), 2)
+
                 self.assertEqual(len(tokenizer_r), vocab_size + 8)
 
     def test_offsets_mapping(self):
@@ -3154,6 +3162,64 @@ class TokenizerTesterMixin:
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
 
+    def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
+        tokenizer_list = []
+        if self.test_slow_tokenizer:
+            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
+
+        if self.test_rust_tokenizer:
+            tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
+
+        for tokenizer_class, tokenizer_utils in tokenizer_list:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tokenizer_utils.save_pretrained(tmp_dir)
+
+                with open(os.path.join(tmp_dir, "special_tokens_map.json"), encoding="utf-8") as json_file:
+                    special_tokens_map = json.load(json_file)
+
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), encoding="utf-8") as json_file:
+                    tokenizer_config = json.load(json_file)
+
+                special_tokens_map["additional_special_tokens"] = ["an_additional_special_token"]
+                tokenizer_config["additional_special_tokens"] = ["an_additional_special_token"]
+
+                with open(os.path.join(tmp_dir, "special_tokens_map.json"), "w", encoding="utf-8") as outfile:
+                    json.dump(special_tokens_map, outfile)
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as outfile:
+                    json.dump(tokenizer_config, outfile)
+
+                # the following checks allow us to verify that our test works as expected, i.e. that the tokenizer takes
+                # into account the new value of additional_special_tokens given in the "tokenizer_config.json" and
+                # "special_tokens_map.json" files
+                tokenizer_without_change_in_init = tokenizer_class.from_pretrained(
+                    tmp_dir,
+                )
+                self.assertIn(
+                    "an_additional_special_token", tokenizer_without_change_in_init.additional_special_tokens
+                )
+                self.assertIn("an_additional_special_token", tokenizer_without_change_in_init.get_vocab())
+                self.assertEqual(
+                    ["an_additional_special_token"],
+                    tokenizer_without_change_in_init.convert_ids_to_tokens(
+                        tokenizer_without_change_in_init.convert_tokens_to_ids(["an_additional_special_token"])
+                    ),
+                )
+
+                # Now we test that we can change the value of additional_special_tokens in the from_pretrained
+                new_added_tokens = [AddedToken("a_new_additional_special_token", lstrip=True)]
+                tokenizer = tokenizer_class.from_pretrained(
+                    tmp_dir,
+                    additional_special_tokens=new_added_tokens,
+                )
+
+                self.assertIn("a_new_additional_special_token", tokenizer.additional_special_tokens)
+                self.assertEqual(
+                    ["a_new_additional_special_token"],
+                    tokenizer.convert_ids_to_tokens(
+                        tokenizer.convert_tokens_to_ids(["a_new_additional_special_token"])
+                    ),
+                )
+
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
@@ -3287,6 +3353,41 @@ class TokenizerTesterMixin:
         if tokenizer.backend_tokenizer.normalizer is not None:
             expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
         self.assertEqual(expected_result, decoded_input)
+
+    def test_tokenizer_mismatch_warning(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                with self.assertLogs("transformers", level="WARNING") as cm:
+                    try:
+                        if self.tokenizer_class == BertTokenizer:
+                            AlbertTokenizer.from_pretrained(pretrained_name)
+                        else:
+                            BertTokenizer.from_pretrained(pretrained_name)
+                    except (TypeError, AttributeError):
+                        # Some tokenizers cannot be loaded into the target tokenizer at all and errors are returned,
+                        # here we just check that the warning has been logged before the error is raised
+                        pass
+                    finally:
+                        self.assertTrue(
+                            cm.records[0].message.startswith(
+                                "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
+                            )
+                        )
+                    try:
+                        if self.rust_tokenizer_class == BertTokenizerFast:
+                            AlbertTokenizerFast.from_pretrained(pretrained_name)
+                        else:
+                            BertTokenizerFast.from_pretrained(pretrained_name)
+                    except (TypeError, AttributeError):
+                        # Some tokenizers cannot be loaded into the target tokenizer at all and errors are returned,
+                        # here we just check that the warning has been logged before the error is raised
+                        pass
+                    finally:
+                        self.assertTrue(
+                            cm.records[0].message.startswith(
+                                "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
+                            )
+                        )
 
 
 @is_staging_test

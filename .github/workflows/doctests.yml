@@ -1,0 +1,42 @@
+name: Doctests
+
+on:
+  push:
+    branches:
+      - doctest*
+  repository_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  RUN_SLOW: yes
+  OMP_NUM_THREADS: 16
+  MKL_NUM_THREADS: 16
+  PYTEST_TIMEOUT: 600
+
+jobs:
+  run_doctests:
+    runs-on: [self-hosted, docker-gpu, single-gpu]
+    container:
+      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Launcher docker
+        uses: actions/checkout@v2
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Install dependencies
+        run: |
+          apt -y update && apt install -y libsndfile1-dev
+          pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Run doctests
+        run: |
+          pytest --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure

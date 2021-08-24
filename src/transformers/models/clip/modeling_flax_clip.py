@@ -19,7 +19,6 @@ import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import jaxlib.xla_extension as jax_xla
 from flax.core.frozen_dict import FrozenDict
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
@@ -156,16 +155,16 @@ CLIP_INPUTS_DOCSTRING = r"""
 class FlaxCLIPOutput(ModelOutput):
     """
     Args:
-        logits_per_image:(:obj:`jax_xla.DeviceArray` of shape :obj:`(image_batch_size, text_batch_size)`):
+        logits_per_image:(:obj:`jnp.ndarray` of shape :obj:`(image_batch_size, text_batch_size)`):
             The scaled dot product scores between :obj:`image_embeds` and :obj:`text_embeds`. This represents the
             image-text similarity scores.
-        logits_per_text:(:obj:`jax_xla.DeviceArray` of shape :obj:`(text_batch_size, image_batch_size)`):
+        logits_per_text:(:obj:`jnp.ndarray` of shape :obj:`(text_batch_size, image_batch_size)`):
             The scaled dot product scores between :obj:`text_embeds` and :obj:`image_embeds`. This represents the
             text-image similarity scores.
-        text_embeds(:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`):
+        text_embeds(:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of
             :class:`~transformers.FlaxCLIPTextModel`.
-        image_embeds(:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`):
+        image_embeds(:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
             :class:`~transformers.FlaxCLIPVisionModel`.
         text_model_output(:obj:`FlaxBaseModelOutputWithPooling`):
@@ -174,10 +173,10 @@ class FlaxCLIPOutput(ModelOutput):
             The output of the :class:`~transformers.FlaxCLIPVisionModel`.
     """
 
-    logits_per_image: jax_xla.DeviceArray = None
-    logits_per_text: jax_xla.DeviceArray = None
-    text_embeds: jax_xla.DeviceArray = None
-    image_embeds: jax_xla.DeviceArray = None
+    logits_per_image: jnp.ndarray = None
+    logits_per_text: jnp.ndarray = None
+    text_embeds: jnp.ndarray = None
+    image_embeds: jnp.ndarray = None
     text_model_output: FlaxBaseModelOutputWithPooling = None
     vision_model_output: FlaxBaseModelOutputWithPooling = None
 
@@ -786,7 +785,13 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         )
 
     def get_text_features(
-        self, input_ids, attention_mask=None, position_ids=None, dropout_rng: jax.random.PRNGKey = None, train=False
+        self,
+        input_ids,
+        attention_mask=None,
+        position_ids=None,
+        params: dict = None,
+        dropout_rng: jax.random.PRNGKey = None,
+        train=False,
     ):
         r"""
         Args:
@@ -801,8 +806,18 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
                 `What are input IDs? <../glossary.html#input-ids>`__
 
         Returns:
-            text_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The text embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPTextModel`.
+            text_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPTextModel`.
+
+        Examples::
+
+            >>> from transformers import CLIPTokenizer, FlaxCLIPModel
+
+            >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+            >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+
+            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="np")
+            >>> text_features = model.get_text_features(**inputs)
         """
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
@@ -827,7 +842,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
             return text_features
 
         return self.module.apply(
-            {"params": self.params},
+            {"params": params or self.params},
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
@@ -836,7 +851,9 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
             rngs=rngs,
         )
 
-    def get_image_features(self, pixel_values, dropout_rng: jax.random.PRNGKey = None, train=False):
+    def get_image_features(
+        self, pixel_values, params: dict = None, dropout_rng: jax.random.PRNGKey = None, train=False
+    ):
         r"""
         Args:
             pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
@@ -845,9 +862,24 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
                 :meth:`transformers.CLIPFeatureExtractor.__call__` for details.
 
         Returns:
-            image_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The image embeddings
-            obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.FlaxCLIPVisionModel`
+            image_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The image embeddings obtained
+            by applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPVisionModel`
+
+        Examples::
+
+            >>> from PIL import Image
+            >>> import requests
+            >>> from transformers import CLIPProcessor, FlaxCLIPModel
+
+            >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+            >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> inputs = processor(images=image, return_tensors="np")
+
+            >>> image_features = model.get_image_features(**inputs)
         """
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
@@ -863,7 +895,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
             return image_features
 
         return self.module.apply(
-            {"params": self.params},
+            {"params": params or self.params},
             jnp.array(pixel_values, dtype=jnp.float32),
             not train,
             method=_get_features,
@@ -907,6 +939,7 @@ FLAX_CLIP_TEXT_MODEL_DOCSTRING = """
     Returns:
 
     Example::
+
         >>> from transformers import CLIPTokenizer, FlaxCLIPTextModel
 
         >>> model = FlaxCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
@@ -916,7 +949,7 @@ FLAX_CLIP_TEXT_MODEL_DOCSTRING = """
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooled_output # pooled (EOS token) states
+        >>> pooler_output = outputs.pooler_output # pooled (EOS token) states
 """
 
 overwrite_call_docstring(FlaxCLIPTextModel, CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_DOCSTRING)
@@ -957,9 +990,9 @@ FLAX_CLIP_VISION_MODEL_DOCSTRING = """
     Returns:
 
     Example::
+
         >>> from PIL import Image
         >>> import requests
-
         >>> from transformers import CLIPProcessor, FlaxCLIPVisionModel
 
         >>> model = FlaxCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
@@ -972,7 +1005,7 @@ FLAX_CLIP_VISION_MODEL_DOCSTRING = """
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooled_output # pooled CLS states
+        >>> pooler_output = outputs.pooler_output # pooled CLS states
 """
 
 overwrite_call_docstring(FlaxCLIPVisionModel, CLIP_VISION_INPUTS_DOCSTRING + FLAX_CLIP_VISION_MODEL_DOCSTRING)
@@ -1078,10 +1111,10 @@ FLAX_CLIP_MODEL_DOCSTRING = """
     Returns:
 
     Example::
+
         >>> import jax
         >>> from PIL import Image
         >>> import requests
-
         >>> from transformers import CLIPProcessor, FlaxCLIPModel
 
         >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
