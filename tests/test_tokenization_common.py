@@ -1081,7 +1081,7 @@ class TokenizerTesterMixin:
                     if longest_first_true:
                         self.assertEqual(overflowing_tokens, overflow_longest_sequence[: 2 + stride])
                     else:
-                        self.assertEqual(overflowing_tokens, overflow_longest_sequence[2 + stride :])
+                        self.assertEqual(overflowing_tokens, overflow_longest_sequence[-(2 + stride) :])
 
                 information = tokenizer.encode_plus(
                     seq_0,
@@ -1115,7 +1115,7 @@ class TokenizerTesterMixin:
                     if longest_first_true:
                         self.assertEqual(overflowing_tokens, overflow_longest_sequence[: 2 + stride])
                     else:
-                        self.assertEqual(overflowing_tokens, overflow_longest_sequence[2 + stride :])
+                        self.assertEqual(overflowing_tokens, overflow_longest_sequence[-(2 + stride) :])
 
                 information_first_truncated = tokenizer.encode_plus(
                     seq_0,
