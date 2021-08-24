@@ -736,6 +736,18 @@ class HubertPreTrainedModel(PreTrainedModel):
 
         return input_lengths
 
+    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
+        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+        batch_size = attention_mask.shape[0]
+
+        attention_mask = torch.zeros(
+            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        # these two operations makes sure that all values before the output lengths idxs are attended to
+        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        return attention_mask
+
 
 HUBERT_START_DOCSTRING = r"""
     Hubert was proposed in `HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units
@@ -905,19 +917,8 @@ class HubertModel(HubertPreTrainedModel):
         extract_features = extract_features.transpose(1, 2)
 
         if attention_mask is not None:
-            # compute real output lengths according to convolution formula
-            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-
-            attention_mask = torch.zeros(
-                extract_features.shape[:2], dtype=extract_features.dtype, device=extract_features.device
-            )
-
-            # these two operations makes sure that all values
-            # before the output lengths indices are attended to
-            attention_mask[
-                (torch.arange(attention_mask.shape[0], device=extract_features.device), output_lengths - 1)
-            ] = 1
-            attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+            # compute reduced attention_mask corresponding to feature vectors
+            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
         hidden_states = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
@@ -1141,6 +1142,8 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             return_dict=return_dict,
         )
 
+        last_hidden_state = outputs.last_hidden_state
+
         if self.config.use_weighted_layer_sum:
             hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
@@ -1153,8 +1156,9 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         if attention_mask is None:
             pooled_output = hidden_states.mean(dim=1)
         else:
-            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-            pooled_output = hidden_states.sum(dim=1) / output_lengths.view(-1, 1)
+            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
+            hidden_states[~padding_mask] = 0.0
+            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
 

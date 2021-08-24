@@ -1058,7 +1058,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         extract_features = extract_features.transpose(1, 2)
 
         if attention_mask is not None:
-            # compute reduced attention_mask correponding to feature vectors
+            # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
         hidden_states, extract_features = self.feature_projection(extract_features)
@@ -1565,6 +1565,17 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         for param in self.hubert.parameters():
             param.requires_grad = False
 
+    def _get_padding_mask(self, attention_mask: torch.LongTensor):
+        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+        batch_size = attention_mask.shape[0]
+
+        padding_mask = torch.zeros(
+            (batch_size, output_lengths.max()), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        padding_mask[(torch.arange(padding_mask.shape[0], device=padding_mask.device), output_lengths - 1)] = 1
+        padding_mask = padding_mask.flip([-1]).cumsum(-1).flip([-1])
+        return padding_mask
+
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1610,8 +1621,9 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         if attention_mask is None:
             pooled_output = hidden_states.mean(dim=1)
         else:
-            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-            pooled_output = hidden_states.sum(dim=1) / output_lengths.view(-1, 1)
+            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
+            hidden_states[~padding_mask] = 0.0
+            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
 

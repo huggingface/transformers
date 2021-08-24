@@ -26,7 +26,6 @@ from transformers.testing_utils import require_datasets, require_soundfile, requ
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, _config_zero_init
 
-
 if is_torch_available():
     import torch
 
@@ -42,31 +41,31 @@ if is_torch_available():
 
 class HubertModelTester:
     def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=1024,  # speech is longer
-        is_training=False,
-        hidden_size=16,
-        feat_extract_norm="group",
-        feat_extract_dropout=0.0,
-        feat_extract_activation="gelu",
-        conv_dim=(32, 32, 32),
-        conv_stride=(4, 4, 4),
-        conv_kernel=(8, 8, 8),
-        conv_bias=False,
-        num_conv_pos_embeddings=16,
-        num_conv_pos_embedding_groups=2,
-        num_hidden_layers=4,
-        num_attention_heads=2,
-        hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
-        intermediate_size=20,
-        layer_norm_eps=1e-5,
-        hidden_act="gelu",
-        initializer_range=0.02,
-        vocab_size=32,
-        do_stable_layer_norm=False,
-        scope=None,
+            self,
+            parent,
+            batch_size=13,
+            seq_length=1024,  # speech is longer
+            is_training=False,
+            hidden_size=16,
+            feat_extract_norm="group",
+            feat_extract_dropout=0.0,
+            feat_extract_activation="gelu",
+            conv_dim=(32, 32, 32),
+            conv_stride=(4, 4, 4),
+            conv_kernel=(8, 8, 8),
+            conv_bias=False,
+            num_conv_pos_embeddings=16,
+            num_conv_pos_embedding_groups=2,
+            num_hidden_layers=4,
+            num_attention_heads=2,
+            hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
+            intermediate_size=20,
+            layer_norm_eps=1e-5,
+            hidden_act="gelu",
+            initializer_range=0.02,
+            vocab_size=32,
+            do_stable_layer_norm=False,
+            scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -152,16 +151,16 @@ class HubertModelTester:
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0.0
+            input_values[i, input_lengths[i]:] = 0.0
+            attention_mask[i, input_lengths[i]:] = 0.0
 
         batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
 
         for i in range(input_values.shape[0]):
-            input_slice = input_values[i : i + 1, : input_lengths[i]]
+            input_slice = input_values[i: i + 1, : input_lengths[i]]
             output = model(input_slice).last_hidden_state
 
-            batch_output = batch_outputs[i : i + 1, : output.shape[1]]
+            batch_output = batch_outputs[i: i + 1, : output.shape[1]]
             if not torch.allclose(output, batch_output, atol=1e-3):
                 print(False)
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
@@ -182,8 +181,8 @@ class HubertModelTester:
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0
+            input_values[i, input_lengths[i]:] = 0.0
+            attention_mask[i, input_lengths[i]:] = 0
 
         model.config.ctc_loss_reduction = "sum"
         sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
@@ -209,8 +208,8 @@ class HubertModelTester:
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0
+            input_values[i, input_lengths[i]:] = 0.0
+            attention_mask[i, input_lengths[i]:] = 0
 
         masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
         unmasked_loss = model(input_values, labels=labels).loss.item()
@@ -236,12 +235,12 @@ class HubertModelTester:
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
+            input_values[i, input_lengths[i]:] = 0.0
 
             if max_length_labels[i] < labels.shape[-1]:
                 # it's important that we make sure that target lenghts are at least
                 # one shorter than logit lenghts to prevent -inf
-                labels[i, max_length_labels[i] - 1 :] = -100
+                labels[i, max_length_labels[i] - 1:] = -100
 
         loss = model(input_values, labels=labels).loss
         self.parent.assertFalse(torch.isinf(loss).item())
@@ -264,7 +263,7 @@ class HubertModelTester:
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
+            input_values[i, input_lengths[i]:] = 0.0
 
         loss = model(input_values, labels=labels).loss
         self.parent.assertFalse(torch.isinf(loss).item())
@@ -632,6 +631,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
         from datasets import load_dataset
 
         ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        ds.to_json("batch_hubert.json")
 
         return ds[:num_samples]
 
@@ -669,23 +669,19 @@ class HubertModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask)
         predicted_ids = torch.argmax(outputs.logits, dim=-1)
+        predicted_logits, _ = torch.max(outputs.logits, dim=-1)
 
         expected_labels = [2, 6, 10, 9]
-        # s3prl logits for "on/94de6a6a_nohash_2.wav"
-        expected_logits = torch.tensor(
-            [-4.5676, -3.1766, 7.6727, -5.5378, -5.2282, -4.8550, 0.6328, 5.5028, -1.0397, -2.2920, 3.0236, -7.1656],
-            device=torch_device,
-        )
+        # s3prl logits for the same batch
+        expected_logits = torch.tensor([ 7.6692, 17.7795, 11.1562, 11.8232], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(outputs.logits[0], expected_logits, atol=1e-2))
+        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
-    def test_inference_emotion_recognition(self):
-        model = HubertForSequenceClassification.from_pretrained("../hf-models/hubert-base-s3prl-superb-er").to(
-            torch_device
-        )
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("../hf-models/hubert-base-s3prl-superb-er")
-        input_data = self._load_superb("er", 1)
+    def test_inference_intent_classification(self):
+        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-s3prl-superb-ks").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-s3prl-superb-ks")
+        input_data = self._load_superb("ks", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
@@ -693,10 +689,34 @@ class HubertModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask)
         predicted_ids = torch.argmax(outputs.logits, dim=-1)
+        predicted_logits, _ = torch.max(outputs.logits, dim=-1)
 
-        expected_labels = [1, 1, 2, 2]
-        # s3prl logits for "Ses01M_impro07_F012.wav"
-        expected_logits = torch.tensor([-0.1465, 2.9692, -2.7046, -2.0135], device=torch_device)
+        expected_labels = [2, 6, 10, 9]
+        # s3prl logits for the same batch
+        expected_logits = torch.tensor([ 7.6692, 17.7795, 11.1562, 11.8232], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(outputs.logits[0], expected_logits, atol=1e-2))
+        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
+
+    def test_inference_emotion_recognition(self):
+        model = HubertForSequenceClassification.from_pretrained("../hf-models/hubert-base-s3prl-superb-er").to(
+            torch_device
+        )
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("../hf-models/hubert-base-s3prl-superb-er")
+        input_data = self._load_superb("er", 4)
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        with torch.no_grad():
+            outputs = model(input_values, attention_mask=attention_mask)
+        predicted_ids = torch.argmax(outputs.logits, dim=-1)
+        predicted_logits, _ = torch.max(outputs.logits, dim=-1)
+
+        expected_labels = [1, 1, 2, 2]
+        # s3prl logits for the same batch
+        expected_logits = torch.tensor([2.8384, 2.3389, 3.8564, 4.5558], device=torch_device)
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        # higher tolerance due to different padding masking https://github.com/pytorch/fairseq/pull/3572
+        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-1))
