@@ -772,6 +772,7 @@ class Speech2TextModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(generated_transcripts, EXPECTED_TRANSCRIPTIONS)
 
 
+@require_torch
 class Speech2TextStandaloneDecoderModelTester:
     def __init__(
         self,
