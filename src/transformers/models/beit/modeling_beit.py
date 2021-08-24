@@ -547,32 +547,6 @@ BEIT_INPUTS_DOCSTRING = r"""
 """
 
 
-BEIT_PRETRAIN_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.BeitFeatureExtractor`. See
-            :meth:`transformers.BeitFeatureExtractor.__call__` for details.
-
-        bool_masked_pos (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Boolean masked positions. Indicates which patches are masked.
-
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-"""
-
-
 @add_start_docstrings(
     "The bare Beit Model transformer outputting raw hidden-states without any specific head on top.",
     BEIT_START_DOCSTRING,
@@ -694,7 +668,7 @@ class BeitPooler(nn.Module):
 
 @add_start_docstrings(
     "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).",
-    BEIT_PRETRAIN_INPUTS_DOCSTRING,
+    BEIT_INPUTS_DOCSTRING,
 )
 class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def __init__(self, config):
@@ -722,6 +696,9 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         return_dict=None,
     ):
         r"""
+        bool_masked_pos (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, **patch_shape)`):
+            Boolean masked positions. Indicates which patches are masked.
+
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
