@@ -90,10 +90,10 @@ language modeling head on top of the decoder.
 
     .. code-block::
 
-        from transformers import T5ForConditionalGeneration, T5Tokenizer
+        from transformers import T5Tokenizer, T5ForConditionalGeneration
 
-        model = T5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
         input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
         labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='pt').input_ids
@@ -113,12 +113,12 @@ language modeling head on top of the decoder.
 
     .. code-block::
 
-        from transformers import T5ForConditionalGeneration, T5Tokenizer
+        from transformers import T5Tokenizer, T5ForConditionalGeneration
 
-        model = T5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
-        input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt')
+        input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids
         labels = tokenizer('Das Haus ist wunderbar.', return_tensors='pt').input_ids
         # the forward function automatically creates the correct decoder_input_ids
         loss = model(input_ids=input_ids, labels=labels).loss
@@ -144,11 +144,11 @@ language modeling head on top of the decoder.
 
     .. code-block::
 
-        from transformers import T5ForConditionalGeneration, T5Tokenizer
+        from transformers import T5Tokenizer, T5ForConditionalGeneration 
         import torch
 
-        model = T5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
         max_source_length = 1024
         max_target_length = 128
@@ -205,10 +205,10 @@ the details about generating text with Transformers.
 
 .. code-block::
 
-        from transformers import T5ForConditionalGeneration, T5Tokenizer
+        from transformers import T5Tokenizer, T5ForConditionalGeneration 
 
-        model = T5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
         input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids
         outputs = model.generate(input_ids)
@@ -222,20 +222,19 @@ The example above only shows a single example. You can also do batched inference
 
 .. code-block::
 
-        from transformers import T5ForConditionalGeneration, T5Tokenizer
+        from transformers import T5Tokenizer, T5ForConditionalGeneration
 
-        model = T5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
         # when generating, we will use the logits of right-most token to predict the next token
         # so the padding should be on the left
         tokenizer.padding_side = "left" 
         tokenizer.pad_token = tokenizer.eos_token # to avoid an error
 
-        sentences = ['translate English to German: The house is wonderful.',
-                    'translate English to German: I like to work in NYC.', # use different length sentences to test batching
-                    ]
-        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+        task_prefix = 'translate English to German: '
+        sentences = ['The house is wonderful.', 'I like to work in NYC.'] # use different length sentences to test batching
+        inputs = tokenizer([task_prefix + sentence for sentence in sentences], return_tensors="pt", padding=True)
 
         output_sequences = model.generate(
             input_ids=inputs['input_ids'],
@@ -243,11 +242,9 @@ The example above only shows a single example. You can also do batched inference
             do_sample=False, # disable sampling to test if batching affects output
         )
 
-        for i in range(len(sentences)):
-            print(tokenizer.decode(output_sequences[i], skip_special_tokens=True))
+        print(tokenizer.batch_decode(output_sequences, skip_special_tokens=True))
 
-        # Das Haus ist wunderbar.
-        # Ich arbeite gerne in NYC.
+        # ['Das Haus ist wunderbar.', 'Ich arbeite gerne in NYC.']
 
 .. _scripts:
 
