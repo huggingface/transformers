@@ -1799,7 +1799,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             break
 
                 if model_type is not None:
-                    config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING_NAMES[model_type]
+                    config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING_NAMES.get(
+                        model_type, (None, None)
+                    )
                     if config_tokenizer_class is None:
                         config_tokenizer_class = config_tokenizer_class_fast
 
