@@ -20,7 +20,7 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
+from torch.nn import CrossEntropyLoss
 
 from transformers.deepspeed import is_deepspeed_zero3_enabled
 
@@ -1142,15 +1142,13 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             return_dict=return_dict,
         )
 
-        last_hidden_state = outputs.last_hidden_state
-
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs.hidden_states
+            hidden_states = outputs[1]
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs.last_hidden_state
+            hidden_states = outputs[0]
 
         hidden_states = self.projector(hidden_states)
         if attention_mask is None:
@@ -1163,13 +1161,9 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         logits = self.classifier(pooled_output)
 
         loss = None
-        if labels is not None and self.config.problem_type is not None:
-            if self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]
