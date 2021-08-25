@@ -297,7 +297,7 @@ def booleans_processing(config, **kwargs):
 
         if "use_cache" in kwargs:
             final_booleans["use_cache"] = (
-                kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache  # getattr(config, "use_cache", None)
+                kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
             )
     else:
         if (
