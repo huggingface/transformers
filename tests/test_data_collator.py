@@ -743,76 +743,76 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         pad_features = [list(range(5)), list(range(10))]
         self._test_no_pad_and_pad(no_pad_features, pad_features)
 
-    # def test_plm(self):
-    #     tokenizer = BertTokenizer(self.vocab_file)
-    #     no_pad_features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
-    #     pad_features = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
-    #
-    #     data_collator = DataCollatorForPermutationLanguageModeling(tokenizer)
-    #
-    #     batch = data_collator(pad_features)
-    #     self.assertIsInstance(batch, dict)
-    #     self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
-    #     self.assertEqual(batch["perm_mask"].shape, torch.Size((2, 10, 10)))
-    #     self.assertEqual(batch["target_mapping"].shape, torch.Size((2, 10, 10)))
-    #     self.assertEqual(batch["labels"].shape, torch.Size((2, 10)))
-    #
-    #     batch = data_collator(no_pad_features)
-    #     self.assertIsInstance(batch, dict)
-    #     self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
-    #     self.assertEqual(batch["perm_mask"].shape, torch.Size((2, 10, 10)))
-    #     self.assertEqual(batch["target_mapping"].shape, torch.Size((2, 10, 10)))
-    #     self.assertEqual(batch["labels"].shape, torch.Size((2, 10)))
-    #
-    #     example = [np.random.randint(0, 5, [5])]
-    #     with self.assertRaises(ValueError):
-    #         # Expect error due to odd sequence length
-    #         data_collator(example)
-    #
-    # def test_nsp(self):
-    #     tokenizer = BertTokenizer(self.vocab_file)
-    #     features = [
-    #         {"input_ids": [0, 1, 2, 3, 4], "token_type_ids": [0, 1, 2, 3, 4], "next_sentence_label": i}
-    #         for i in range(2)
-    #     ]
-    #     data_collator = DataCollatorForLanguageModeling(tokenizer)
-    #     batch = data_collator(features)
-    #
-    #     self.assertEqual(batch["input_ids"].shape, torch.Size((2, 5)))
-    #     self.assertEqual(batch["token_type_ids"].shape, torch.Size((2, 5)))
-    #     self.assertEqual(batch["labels"].shape, torch.Size((2, 5)))
-    #     self.assertEqual(batch["next_sentence_label"].shape, torch.Size((2,)))
-    #
-    #     data_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
-    #     batch = data_collator(features)
-    #
-    #     self.assertEqual(batch["input_ids"].shape, torch.Size((2, 8)))
-    #     self.assertEqual(batch["token_type_ids"].shape, torch.Size((2, 8)))
-    #     self.assertEqual(batch["labels"].shape, torch.Size((2, 8)))
-    #     self.assertEqual(batch["next_sentence_label"].shape, torch.Size((2,)))
-    #
-    # def test_sop(self):
-    #     tokenizer = BertTokenizer(self.vocab_file)
-    #     features = [
-    #         {
-    #             "input_ids": np.array([0, 1, 2, 3, 4]),
-    #             "token_type_ids": np.array([0, 1, 2, 3, 4]),
-    #             "sentence_order_label": i,
-    #         }
-    #         for i in range(2)
-    #     ]
-    #     data_collator = DataCollatorForLanguageModeling(tokenizer)
-    #     batch = data_collator(features)
-    #
-    #     self.assertEqual(batch["input_ids"].shape, torch.Size((2, 5)))
-    #     self.assertEqual(batch["token_type_ids"].shape, torch.Size((2, 5)))
-    #     self.assertEqual(batch["labels"].shape, torch.Size((2, 5)))
-    #     self.assertEqual(batch["sentence_order_label"].shape, torch.Size((2,)))
-    #
-    #     data_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
-    #     batch = data_collator(features)
-    #
-    #     self.assertEqual(batch["input_ids"].shape, torch.Size((2, 8)))
-    #     self.assertEqual(batch["token_type_ids"].shape, torch.Size((2, 8)))
-    #     self.assertEqual(batch["labels"].shape, torch.Size((2, 8)))
-    #     self.assertEqual(batch["sentence_order_label"].shape, torch.Size((2,)))
+    def test_plm(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        no_pad_features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+        pad_features = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
+
+        data_collator = DataCollatorForPermutationLanguageModeling(tokenizer, return_tensors='np')
+
+        batch = data_collator(pad_features)
+        self.assertIsInstance(batch, dict)
+        self.assertEqual(batch["input_ids"].shape, (2, 10))
+        self.assertEqual(batch["perm_mask"].shape, (2, 10, 10))
+        self.assertEqual(batch["target_mapping"].shape, (2, 10, 10))
+        self.assertEqual(batch["labels"].shape, (2, 10))
+
+        batch = data_collator(no_pad_features)
+        self.assertIsInstance(batch, dict)
+        self.assertEqual(batch["input_ids"].shape, (2, 10))
+        self.assertEqual(batch["perm_mask"].shape, (2, 10, 10))
+        self.assertEqual(batch["target_mapping"].shape, (2, 10, 10))
+        self.assertEqual(batch["labels"].shape, (2, 10))
+
+        example = [np.random.randint(0, 5, [5])]
+        with self.assertRaises(ValueError):
+            # Expect error due to odd sequence length
+            data_collator(example)
+
+    def test_nsp(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [
+            {"input_ids": [0, 1, 2, 3, 4], "token_type_ids": [0, 1, 2, 3, 4], "next_sentence_label": i}
+            for i in range(2)
+        ]
+        data_collator = DataCollatorForLanguageModeling(tokenizer, return_tensors='np')
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, (2, 5))
+        self.assertEqual(batch["token_type_ids"].shape, (2, 5))
+        self.assertEqual(batch["labels"].shape, (2, 5))
+        self.assertEqual(batch["next_sentence_label"].shape, (2,))
+
+        data_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors='np')
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, (2, 8))
+        self.assertEqual(batch["token_type_ids"].shape, (2, 8))
+        self.assertEqual(batch["labels"].shape, (2, 8))
+        self.assertEqual(batch["next_sentence_label"].shape, (2,))
+
+    def test_sop(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [
+            {
+                "input_ids": np.array([0, 1, 2, 3, 4]),
+                "token_type_ids": np.array([0, 1, 2, 3, 4]),
+                "sentence_order_label": i,
+            }
+            for i in range(2)
+        ]
+        data_collator = DataCollatorForLanguageModeling(tokenizer, return_tensors='np')
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, (2, 5))
+        self.assertEqual(batch["token_type_ids"].shape, (2, 5))
+        self.assertEqual(batch["labels"].shape, (2, 5))
+        self.assertEqual(batch["sentence_order_label"].shape, (2,))
+
+        data_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors='np')
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, (2, 8))
+        self.assertEqual(batch["token_type_ids"].shape, (2, 8))
+        self.assertEqual(batch["labels"].shape, (2, 8))
+        self.assertEqual(batch["sentence_order_label"].shape, (2,))

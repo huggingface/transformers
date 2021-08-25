@@ -367,13 +367,16 @@ class DataCollatorForTokenClassification:
 def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
     import torch
+    import numpy as np
 
     # Tensorize if necessary.
-    if isinstance(examples[0], (list, tuple)):
+    if isinstance(examples[0], (list, tuple, np.ndarray)):
         examples = [torch.tensor(e, dtype=torch.long) for e in examples]
 
-    # Check if padding is necessary.
     length_of_first = examples[0].size(0)
+
+    # Check if padding is necessary.
+
     are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
     if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
         return torch.stack(examples, dim=0)
@@ -1429,7 +1432,7 @@ class DataCollatorForPermutationLanguageModeling:
                 "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
             )
 
-        if inputs.size(1) % 2 != 0:
+        if inputs.shape[1] % 2 != 0:
             raise ValueError(
                 "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
             )
@@ -1442,7 +1445,7 @@ class DataCollatorForPermutationLanguageModeling:
         for i in range(labels.shape[0]):
             # Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
             cur_len = 0
-            max_len = labels.size(1)
+            max_len = labels.shape[1]
 
             while cur_len < max_len:
                 # Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
