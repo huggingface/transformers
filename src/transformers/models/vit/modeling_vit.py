@@ -108,7 +108,6 @@ class ViTEmbeddings(nn.Module):
         
         # add positional encoding to each token
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, width, height)
-        embeddings = embeddings + self.position_embeddings
         
         embeddings = self.dropout(embeddings)
         
