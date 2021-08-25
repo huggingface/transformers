@@ -271,6 +271,8 @@ def convert_wav2vec2_checkpoint(
     config["pad_token_id"] = tokenizer.pad_token_id
     config["bos_token_id"] = tokenizer.bos_token_id
     config["eos_token_id"] = tokenizer.eos_token_id
+    config["tokenizer_class"] = "speech_to_text_2"
+    config["feature_extractor_type"] = "wav2vec2"
 
     hf_wav2vec.config = EncoderDecoderConfig.from_dict(config)
 
