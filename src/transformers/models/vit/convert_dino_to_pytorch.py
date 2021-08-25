@@ -16,6 +16,7 @@
 
 
 import argparse
+import json
 from pathlib import Path
 
 import torch
@@ -182,8 +183,6 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
 
     if base_model:
         final_hidden_state_cls_token = original_model(pixel_values)
-        print("Final hidden state original:", final_hidden_state_cls_token[0, :10])
-        print("Final hidden state ours:", outputs.last_hidden_state[:, 0][0, :10])
         assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
     else:
         logits = original_model(pixel_values)
