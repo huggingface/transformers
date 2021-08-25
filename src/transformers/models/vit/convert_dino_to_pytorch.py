@@ -22,10 +22,9 @@ import torch
 from PIL import Image
 
 import requests
-import torch
-from transformers import DeiTFeatureExtractor, ViTConfig, ViTFeatureExtractor, ViTForImageClassification, ViTModel
+from huggingface_hub import cached_download, hf_hub_url
+from transformers import ViTConfig, ViTFeatureExtractor, ViTForImageClassification, ViTModel
 from transformers.utils import logging
-from transformers.utils.imagenet_classes import id2label
 
 
 logging.set_verbosity_info()
@@ -142,11 +141,14 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
     # set labels if required
     if not base_model:
         config.num_labels = 1000
+        repo_id = "datasets/huggingface/label-files"
+        filename = "imagenet-1k-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
     # size of the architecture
-    if "deit" in model_name:
-        # there are only small sized DeiT checkpoints
+    if model_name == "dino_vits16":
         config.hidden_size = 384
         config.intermediate_size = 1536
         config.num_hidden_layers = 12
@@ -172,22 +174,18 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
         model = ViTForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by ViTFeatureExtractor/DeiTFeatureExtractor
-    if "deit" in model_name:
-        feature_extractor = DeiTFeatureExtractor()
-    else:
-        feature_extractor = ViTFeatureExtractor()
+    # Check outputs on an image, prepared by ViTFeatureExtractor
+    feature_extractor = ViTFeatureExtractor()
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
 
     if base_model:
-        final_hidden_state_cls_token = original_model.forward_features(pixel_values)
-        print(final_hidden_state_cls_token[0,:3])
-        print(outputs.last_hidden_state[0,0,:3])
+        final_hidden_state_cls_token = original_model(pixel_values)
+        print("Final hidden state original:", final_hidden_state_cls_token[0,:10])
+        print("Final hidden state ours:", outputs.last_hidden_state[:,0][0,:10])
         assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:,0,:], atol=1e-2)
     else:
-        # TODO
         logits = original_model(pixel_values)
         assert logits.shape == outputs.logits.shape
         assert torch.allclose(logits, outputs.logits, atol=1e-3)
