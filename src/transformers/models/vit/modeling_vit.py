@@ -74,67 +74,16 @@ class ViTEmbeddings(nn.Module):
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
 
-    def interpolate_pos_encoding(self, x, w, h):
-        npatch = x.shape[1] - 1
-        N = self.position_embeddings.shape[1] - 1
-        if npatch == N and w == h:
-            return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
-        dim = x.shape[-1]
-        w0 = w // self.config.patch_size
-        h0 = h // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        w0, h0 = w0 + 0.1, h0 + 0.1
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
-            scale_factor=(w0 / math.sqrt(N), h0 / math.sqrt(N)),
-            mode='bicubic',
-        )
-        assert int(w0) == patch_pos_embed.shape[-2] and int(h0) == patch_pos_embed.shape[-1]
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
-    
-    def forward(self, x, output_attentions=False):
-        
-        batch_size, nc, w, h = x.shape
-        N = self.position_embeddings.shape[1] - 1
-        x = self.patch_embeddings(x)
-
-        if output_attentions:
-            # interpolate patch embeddings
-            dim = x.shape[-1]
-            w0 = w // self.patch_embeddings.patch_size[0]
-            h0 = h // self.patch_embeddings.patch_size[0]
-            class_pos_embed = self.position_embeddings[:, 0]
-            patch_pos_embed = self.position_embeddings[:, 1:]
-            patch_pos_embed = nn.functional.interpolate(
-                patch_pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
-                scale_factor=(w0 / math.sqrt(N), h0 / math.sqrt(N)),
-                mode='bicubic',
-            )
-            if w0 != patch_pos_embed.shape[-2]:
-                helper = torch.zeros(h0)[None, None, None, :].repeat(1, dim, w0 - patch_pos_embed.shape[-2], 1).to(x.device)
-                patch_pos_embed = torch.cat((patch_pos_embed, helper), dim=-2)
-            if h0 != patch_pos_embed.shape[-1]:
-                helper = torch.zeros(w0)[None, None, :, None].repeat(1, dim, 1, h0 - patch_pos_embed.shape[-1]).to(x.device)
-                pos_embed = torch.cat((patch_pos_embed, helper), dim=-1)
-            patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-            position_embeddings = torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
-
-        else:
-            # interpolate position embeddings
-            position_embeddings = self.interpolate_pos_encoding(x, w, h)
+    def forward(self, pixel_values):
+        batch_size = pixel_values.shape[0]
+        embeddings = self.patch_embeddings(pixel_values)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
-        
-        x = x + position_embeddings
-        x = self.dropout(x)
-        return x
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        embeddings = embeddings + self.position_embeddings
+        embeddings = self.dropout(embeddings)
+        return embeddings
 
 
 # Based on timm implementation, which can be found here:
@@ -159,10 +108,10 @@ class PatchEmbeddings(nn.Module):
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
         # FIXME look at relaxing size constraints
-        # if height != self.image_size[0] or width != self.image_size[1]:
-        #     raise ValueError(
-        #         f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-        #     )
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
 
@@ -547,8 +496,8 @@ class ViTModel(ViTPreTrainedModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-        
-        embedding_output = self.embeddings(pixel_values, output_attentions)
+
+        embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
