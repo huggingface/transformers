@@ -542,7 +542,7 @@ class PretrainedConfig(PushToHubMixin):
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {CONFIG_NAME} file\n"
             )
 
-            if revision:
+            if revision is not None:
                 msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n"
 
             raise EnvironmentError(msg)
