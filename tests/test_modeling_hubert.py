@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Hubert model. """
 
+
 import math
 import unittest
 
@@ -162,8 +163,6 @@ class HubertModelTester:
             output = model(input_slice).last_hidden_state
 
             batch_output = batch_outputs[i : i + 1, : output.shape[1]]
-            if not torch.allclose(output, batch_output, atol=1e-3):
-                print(False)
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_values, *args):
