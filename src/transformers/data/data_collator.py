@@ -366,8 +366,8 @@ class DataCollatorForTokenClassification:
 
 def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
-    import torch
     import numpy as np
+    import torch
 
     # Tensorize if necessary.
     if isinstance(examples[0], (list, tuple, np.ndarray)):
@@ -742,6 +742,7 @@ class DataCollatorForLanguageModeling:
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         import numpy as np
+
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], (dict, BatchEncoding)):
             batch = self.tokenizer.pad(examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of)
