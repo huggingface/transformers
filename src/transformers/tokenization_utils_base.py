@@ -1720,12 +1720,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
             msg = (
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
             )
 
             if revision:
-                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n"
+                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
 
             raise EnvironmentError(msg)
 
