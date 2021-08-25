@@ -135,7 +135,7 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
 
     # define default ViT configuration
     config = ViTConfig()
-    # patch_size 
+    # patch_size
     if model_name[-1] == "8":
         config.patch_size = 8
     # set labels if required
@@ -148,16 +148,16 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
     # size of the architecture
-    if model_name == "dino_vits16":
+    if model_name in ["dino_vits8", "dino_vits16"]:
         config.hidden_size = 384
         config.intermediate_size = 1536
         config.num_hidden_layers = 12
         config.num_attention_heads = 6
 
     # load original model from torch hub
-    original_model = torch.hub.load('facebookresearch/dino:main', model_name)
+    original_model = torch.hub.load("facebookresearch/dino:main", model_name)
     original_model.eval()
-    
+
     # load state_dict of original model, remove and rename some keys
     state_dict = original_model.state_dict()
     if base_model:
@@ -182,9 +182,9 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
 
     if base_model:
         final_hidden_state_cls_token = original_model(pixel_values)
-        print("Final hidden state original:", final_hidden_state_cls_token[0,:10])
-        print("Final hidden state ours:", outputs.last_hidden_state[:,0][0,:10])
-        assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:,0,:], atol=1e-1)
+        print("Final hidden state original:", final_hidden_state_cls_token[0, :10])
+        print("Final hidden state ours:", outputs.last_hidden_state[:, 0][0, :10])
+        assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
     else:
         logits = original_model(pixel_values)
         assert logits.shape == outputs.logits.shape
@@ -210,7 +210,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--base_model", action="store_true", help="Whether to only convert the base model (no projection head weights)."
+        "--base_model",
+        action="store_true",
+        help="Whether to only convert the base model (no projection head weights).",
     )
 
     parser.set_defaults(base_model=True)
