@@ -39,17 +39,9 @@ Tips:
   different prefix to the input corresponding to each task, e.g., for translation: *translate English to German: ...*,
   for summarization: *summarize: ...*.
 
-- T5 is trained using the cross-entropy loss. One can use :class:`~transformers.T5ForConditionalGeneration` (or the
-  Tensorflow/Flax variant), which includes the language modeling head. During training,
-  :meth:`~transformers.T5ForConditionalGeneration.forward` is used. At inference time, it is recommended to use
-  :meth:`~transformers.generation_utils.GenerationMixin.generate`. This method takes care of feeding the encoded input
-  via cross-attention layers to the decoder and auto-regressively generates the decoder output. Check out `this blog
-  post <https://huggingface.co/blog/how-to-generate>`__ to know all the details about generating text with
-  Transformers. Note that T5 uses the :obj:`pad_token_id` as the :obj:`decoder_start_token_id`, so when doing
-  generation without using :meth:`~transformers.generation_utils.GenerationMixin.generate`, make sure you start it with
-  the :obj:`pad_token_id`.
-
 - T5 uses relative scalar embeddings. Encoder input padding can be done on the left and on the right.
+
+- See the :ref:`training` and :ref:`inference` sections below for all details regarding usage.
 
 T5 comes in different sizes (`t5-small <https://huggingface.co/t5-small>`__, `t5-base
 <https://huggingface.co/t5-base>`__, `t5-large <https://huggingface.co/t5-large>`__, `t5-3b
@@ -70,6 +62,8 @@ All checkpoints can be found on the `hub <https://huggingface.co/models?search=t
 This model was contributed by `thomwolf <https://huggingface.co/thomwolf>`__. The original code can be found `here
 <https://github.com/google-research/text-to-text-transfer-transformer>`__.
 
+.. _training:
+
 Training
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -79,6 +73,9 @@ sequence is fed to the model using :obj:`input_ids`. The target sequence is shif
 start-sequence token and fed to the decoder using the :obj:`decoder_input_ids`. In teacher-forcing style, the target
 sequence is then appended by the EOS token and corresponds to the :obj:`labels`. The PAD token is hereby used as the
 start-sequence token. T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
+
+One can use :class:`~transformers.T5ForConditionalGeneration` (or the Tensorflow/Flax variant), which includes the
+language modeling head on top of the decoder.
 
 - Unsupervised denoising training
 
@@ -94,6 +91,7 @@ start-sequence token. T5 can be trained / fine-tuned both in a supervised and un
     .. code-block::
 
         from transformers import T5ForConditionalGeneration, T5Tokenizer
+
         model = T5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
@@ -116,6 +114,7 @@ start-sequence token. T5 can be trained / fine-tuned both in a supervised and un
     .. code-block::
 
         from transformers import T5ForConditionalGeneration, T5Tokenizer
+
         model = T5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
@@ -193,6 +192,61 @@ Additional training tips:
 - If training on TPU, it is recommended to pad all examples of the dataset to the same length. Trimming batches (i.e.
   only padding up to the longest example in a batch) leads to very slow training on TPU.
 
+.. _inference:
+
+Inference
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+At inference time, it is recommended to use :meth:`~transformers.generation_utils.GenerationMixin.generate`. This
+method takes care of feeding the encoded input via cross-attention layers to the decoder and auto-regressively
+generates the decoder output. Check out `this blog post <https://huggingface.co/blog/how-to-generate>`__ to know all
+the details about generating text with Transformers.
+
+.. code-block::
+
+        from transformers import T5ForConditionalGeneration, T5Tokenizer
+
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids
+        outputs = model.generate(input_ids)
+        print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+        # Das Haus ist wunderbar.
+
+Note that T5 uses the :obj:`pad_token_id` as the :obj:`decoder_start_token_id`, so when doing generation without using
+:meth:`~transformers.generation_utils.GenerationMixin.generate`, make sure you start it with the :obj:`pad_token_id`.
+
+The example above only shows a single example. You can also do batched inference, like so:
+
+.. code-block::
+
+        from transformers import T5ForConditionalGeneration, T5Tokenizer
+
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        # when generating, we will use the logits of right-most token to predict the next token
+        # so the padding should be on the left
+        tokenizer.padding_side = "left" 
+        tokenizer.pad_token = tokenizer.eos_token # to avoid an error
+
+        sentences = ['translate English to German: The house is wonderful.',
+                    'translate English to German: I like to work in NYC.', # use different length sentences to test batching
+                    ]
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+
+        output_sequences = model.generate(
+            input_ids=inputs['input_ids'],
+            attention_mask=inputs['attention_mask'],
+            do_sample=False, # disable sampling to test if batching affects output
+        )
+
+        for i in range(len(sentences)):
+            print(tokenizer.decode(output_sequences[i], skip_special_tokens=True))
+
+        # Das Haus ist wunderbar.
+        # Ich arbeite gerne in NYC.
 
 Example scripts
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
