@@ -35,6 +35,7 @@ class TextGenerationPipeline(Pipeline):
         "TransfoXLLMHeadModel",
         "ReformerModelWithLMHead",
         "GPT2LMHeadModel",
+        "GPTJForCausalLM",
         "GPTNeoForCausalLM",
         "OpenAIGPTLMHeadModel",
         "CTRLLMHeadModel",
