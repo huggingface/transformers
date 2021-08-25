@@ -1724,7 +1724,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
             )
 
-            if revision:
+            if revision is not None:
                 msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
 
             raise EnvironmentError(msg)
