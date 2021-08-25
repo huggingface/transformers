@@ -127,6 +127,7 @@ def export(
     )
 
     config.restore_ops()
+    torch.set_grad_enabled(False)
 
     return matched_inputs, onnx_outputs
 
