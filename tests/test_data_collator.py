@@ -615,9 +615,9 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
 
     def test_default_with_no_labels(self):
         features = [{"label": None, "inputs": [0, 1, 2, 3, 4, 5]} for i in range(8)]
-        batch = default_data_collator(features)
+        batch = default_data_collator(features, return_tensors='np')
         self.assertTrue("labels" not in batch)
-        self.assertEqual(batch["inputs"].shape, torch.Size([8, 6]))
+        self.assertEqual(batch["inputs"].shape, (8, 6))
 
         # With label_ids
         features = [{"label_ids": None, "inputs": [0, 1, 2, 3, 4, 5]} for i in range(8)]
