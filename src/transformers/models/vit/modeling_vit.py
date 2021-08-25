@@ -107,11 +107,6 @@ class PatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
-        # FIXME look at relaxing size constraints
-        if height != self.image_size[0] or width != self.image_size[1]:
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-            )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
 
