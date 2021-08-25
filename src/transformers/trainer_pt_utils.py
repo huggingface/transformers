@@ -20,20 +20,26 @@ import datetime
 import json
 import math
 import os
+import sys
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
+from logging import StreamHandler
 from typing import Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
 from packaging import version
 from torch import nn
-from torch.utils.data.dataset import Dataset, IterableDataset
+from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data.sampler import RandomSampler, Sampler
 
-from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
+from .file_utils import (
+    is_sagemaker_dp_enabled,
+    is_sagemaker_mp_enabled,
+    is_torch_tpu_available,
+    is_training_run_on_sagemaker,
+)
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -43,6 +49,8 @@ if is_sagemaker_dp_enabled():
 else:
     import torch.distributed as dist
 
+if is_training_run_on_sagemaker():
+    logging.add_handler(StreamHandler(sys.stdout))
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
@@ -290,7 +298,7 @@ class SequentialDistributedSampler(Sampler):
         return self.num_samples
 
 
-def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset, bach_size: int):
+def get_tpu_sampler(dataset: torch.utils.data.Dataset, batch_size: int):
     if xm.xrt_world_size() <= 1:
         return RandomSampler(dataset)
     return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
@@ -690,7 +698,7 @@ class IterableDatasetShard(IterableDataset):
 
 
     Args:
-        dataset (:obj:`torch.utils.data.dataset.IterableDataset`):
+        dataset (:obj:`torch.utils.data.IterableDataset`):
             The batch sampler to split in several shards.
         batch_size (:obj:`int`, `optional`, defaults to 1):
             The size of the batches per shard.
