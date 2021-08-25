@@ -216,7 +216,7 @@ def tokenizer_class_from_name(class_name: str):
             break
 
     module = importlib.import_module(f".{module_name}", "transformers.models")
-    return getattr(module, class_name)
+    return getattr(module, class_name, None)
 
 
 def get_tokenizer_config(

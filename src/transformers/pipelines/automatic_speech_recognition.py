@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
+from ..models.auto.feature_extraction_auto import AutoFeatureExtractor
 from ..utils import logging
 from .base import Pipeline
 
@@ -70,7 +71,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
     to support multiple audio formats
     """
 
-    def __init__(self, feature_extractor: "SequenceFeatureExtractor", *args, **kwargs):
+    def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
         """
         Arguments:
             feature_extractor (:obj:`~transformers.SequenceFeatureExtractor`):
@@ -96,6 +97,10 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
                 model on the associated CUDA device id.
         """
         super().__init__(*args, **kwargs)
+
+        if isinstance(feature_extractor, str):
+            feature_extractor = AutoFeatureExtractor.from_pretrained(feature_extractor)
+
         self.feature_extractor = feature_extractor
 
         if self.framework == "tf":
@@ -140,8 +145,10 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
 
         name = self.model.__class__.__name__
         if name.endswith("ForConditionalGeneration") or name.endswith("DecoderModel"):
-            encoder_inputs = self.model.encoder(**processed)
-            tokens = self.model.generate(encoder_inputs=encoder_inputs)
+            encoder_outputs = self.model.encoder(**processed)
+            tokens = self.model.generate(
+                encoder_outputs=encoder_outputs, attention_mask=processed.get("attention_mask")
+            )
             tokens = tokens.squeeze(0)
         elif name.endswith("ForCTC"):
             outputs = self.model(**processed)
