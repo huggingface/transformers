@@ -16,19 +16,19 @@
 
 
 import argparse
+import json
+import os
 
 import fairseq
 import torch
-import os
-import json
 from torch import nn
 
 from transformers import (
     EncoderDecoderConfig,
     Speech2Text2Config,
     Speech2Text2ForCausalLM,
-    SpeechEncoderDecoderModel,
     Speech2Text2Tokenizer,
+    SpeechEncoderDecoderModel,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Model,
@@ -261,10 +261,10 @@ def convert_wav2vec2_checkpoint(
 
     vocab_dict = create_vocab_dict(dict_path)
 
-    with open(os.path.join(pytorch_dump_folder_path, 'vocab.json'), 'w') as fp:
+    with open(os.path.join(pytorch_dump_folder_path, "vocab.json"), "w") as fp:
         json.dump(vocab_dict, fp)
 
-    tokenizer = Speech2Text2Tokenizer(os.path.join(pytorch_dump_folder_path, 'vocab.json'))
+    tokenizer = Speech2Text2Tokenizer(os.path.join(pytorch_dump_folder_path, "vocab.json"))
     tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     config = hf_wav2vec.config.to_dict()

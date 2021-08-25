@@ -74,15 +74,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
-    def __init__(
-        self,
-        vocab_file,
-        bos_token="<s>",
-        pad_token="<pad>",
-        eos_token="</s>",
-        unk_token="<unk>",
-        **kwargs
-    ):
+    def __init__(self, vocab_file, bos_token="<s>", pad_token="<pad>", eos_token="</s>", unk_token="<unk>", **kwargs):
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,

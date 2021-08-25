@@ -17,25 +17,24 @@ Speech processor class for Speech2Text2
 """
 from contextlib import contextmanager
 
+from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ..auto.feature_extraction_auto import AutoFeatureExtractor
 from .tokenization_speech_to_text_2 import Speech2Text2Tokenizer
-from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 
 class Speech2Text2Processor:
     r"""
-    Constructs a Speech2Text2 processor which wraps a Speech2Text2 feature extractor and a Speech2Text2 tokenizer into a
-    single processor.
+    Constructs a Speech2Text2 processor which wraps a Speech2Text2 feature extractor and a Speech2Text2 tokenizer into
+    a single processor.
 
     :class:`~transformers.Speech2Text2Processor` offers all the functionalities of
     :class:`~transformers.AutoFeatureExtractor` and :class:`~transformers.Speech2Text2Tokenizer`. See the
-    :meth:`~transformers.Speech2Text2Processor.__call__` and :meth:`~transformers.Speech2Text2Processor.decode` for more
-    information.
+    :meth:`~transformers.Speech2Text2Processor.__call__` and :meth:`~transformers.Speech2Text2Processor.decode` for
+    more information.
 
     Args:
         feature_extractor (:obj:`AutoFeatureExtractor`):
-            An instance of :class:`~transformers.AutoFeatureExtractor`. The feature extractor is a required
-            input.
+            An instance of :class:`~transformers.AutoFeatureExtractor`. The feature extractor is a required input.
         tokenizer (:obj:`Speech2Text2Tokenizer`):
             An instance of :class:`~transformers.Speech2Text2Tokenizer`. The tokenizer is a required input.
     """
