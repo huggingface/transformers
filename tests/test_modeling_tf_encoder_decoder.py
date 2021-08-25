@@ -193,7 +193,7 @@ class TFEncoderDecoderMixin:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             enc_dec_model.save_pretrained(tmpdirname)
-            TFEncoderDecoderModel.from_pretrained(tmpdirname)
+            enc_dec_model = TFEncoderDecoderModel.from_pretrained(tmpdirname)
 
             after_outputs = enc_dec_model(
                 input_ids=input_ids,
@@ -232,7 +232,7 @@ class TFEncoderDecoderMixin:
         with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
             enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
             enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
-            TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+            enc_dec_model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
                 encoder_pretrained_model_name_or_path=encoder_tmp_dirname,
                 decoder_pretrained_model_name_or_path=decoder_tmp_dirname,
             )

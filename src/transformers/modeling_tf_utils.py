@@ -518,6 +518,10 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
                 symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
                 saved_weights = {}
 
+                # This is used to deal with the case where the model checkpoint is from a model
+                # where `load_weight_prefix` is already applied.
+                weight_name_map = {}
+
                 # Create a dict from the H5 saved model that looks like {"weight_name": weight_value}
                 # And a set with only the names
                 for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
@@ -527,6 +531,12 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
 
                     if _prefix is not None:
                         name = _prefix + "/" + name
+
+                        # If a checkpoint is obtained from a model with `load_weight_prefix` already applied,
+                        # we need to remove the same number of parts then add back `_prefix`.
+                        delimeter = len(_prefix.split("/"))
+                        _name = _prefix + "/" + "/".join(weight_name.split("/")[delimeter:])
+                        weight_name_map[_name] = name
 
                     saved_weights[name] = np.asarray(h5_layer_object[weight_name])
 
@@ -538,8 +548,10 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
                     # TF names always start with the model name so we ignore it
                     if _prefix is not None:
 
-                        if symbolic_weight.name in saved_weight_names_set:
-                            symbolic_weight_name = symbolic_weight.name
+                        if symbolic_weight.name in weight_name_map:
+                            # Deal with the case where the model checkpoint is from a model where `load_weight_prefix`
+                            # is already applied.
+                            symbolic_weight_name = weight_name_map[symbolic_weight.name]
                         else:
                             delimeter = len(_prefix.split("/"))
                             symbolic_weight_name = "/".join(
