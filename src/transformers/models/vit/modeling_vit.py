@@ -92,12 +92,13 @@ class ViTEmbeddings(nn.Module):
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
             scale_factor=(w0 / math.sqrt(N), h0 / math.sqrt(N)),
-            mode='bicubic',
+            mode="bicubic",
+            align_corners=False,
         )
         assert int(w0) == patch_pos_embed.shape[-2] and int(h0) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
-    
+
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
@@ -105,12 +106,12 @@ class ViTEmbeddings(nn.Module):
         # add the [CLS] token to the embedded patch tokens
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-        
+
         # add positional encoding to each token
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, width, height)
-        
+
         embeddings = self.dropout(embeddings)
-        
+
         return embeddings
 
 
@@ -132,7 +133,7 @@ class PatchEmbeddings(nn.Module):
         self.num_patches = num_patches
 
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
-    
+
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
