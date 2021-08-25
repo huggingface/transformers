@@ -41,7 +41,7 @@ Tips:
 
 - T5 uses relative scalar embeddings. Encoder input padding can be done on the left and on the right.
 
-- See the :ref:`training` and :ref:`inference` sections below for all details regarding usage.
+- See the :ref:`training`, :ref:`inference` and :ref:`scripts` sections below for all details regarding usage.
 
 T5 comes in different sizes (`t5-small <https://huggingface.co/t5-small>`__, `t5-base
 <https://huggingface.co/t5-base>`__, `t5-large <https://huggingface.co/t5-large>`__, `t5-3b
@@ -137,9 +137,10 @@ language modeling head on top of the decoder.
   and output sequences respectively. For summarization and translation, a good setting is setting
   :obj:`max_source_length` to 1024 and :obj:`max_target_length` to 128. In addition, we must make sure that padding
   token id's of the :obj:`labels` are not taken into account by the loss function. In PyTorch, this can be done by
-  replacing them with -100, which is the :obj:`ignore_index` of the :obj:`CrossEntropyLoss`. We also pass
-  :obj:`attention_mask` as additional input to the model, which makes sure that padding tokens of the inputs are
-  ignored. The code example below illustrates all of this.
+  replacing them with -100, which is the :obj:`ignore_index` of the :obj:`CrossEntropyLoss`. In Flax, one can use the
+  :obj:`decoder_attention_mask` to ignore padded tokens from the loss (see the summarization script for details). We
+  also pass :obj:`attention_mask` as additional input to the model, which makes sure that padding tokens of the inputs
+  are ignored. The code example below illustrates all of this.
 
     .. code-block::
 
@@ -248,13 +249,27 @@ The example above only shows a single example. You can also do batched inference
         # Das Haus ist wunderbar.
         # Ich arbeite gerne in NYC.
 
+.. _scripts:
+
 Example scripts
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:class:`~transformers.T5ForConditionalGeneration` is supported by the official `summarization
-<https://github.com/huggingface/transformers/tree/master/examples/pytorch/summarization>`__ and `translation
-<https://github.com/huggingface/transformers/tree/master/examples/pytorch/translation>`__ scripts, which allow you to
-easily fine-tune the model on custom data.
+T5 is supported by several example scripts, both for pre-training and fine-tuning.
+
+* pre-training: the `run_t5_mlm_flax.py
+  <https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_t5_mlm_flax.py>`__
+  script allows you to further pre-train T5 or pre-train T5 from scratch on your own data. The `t5_tokenizer_model.py
+  <https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/t5_tokenizer_model.py>`__
+  script allows you to further train a T5 tokenizer or train a T5 Tokenizer from scratch on your own data. Note that
+  Flax (a neural network library on top of JAX) is particularly useful to train on TPU hardware.
+
+* fine-tuning: T5 is supported by the official summarization scripts (`PyTorch
+  <https://github.com/huggingface/transformers/tree/master/examples/pytorch/summarization>`__, `Tensorflow
+  <https://github.com/huggingface/transformers/tree/master/examples/tensorflow/summarization>`__, and `Flax
+  <https://github.com/huggingface/transformers/tree/master/examples/flax/summarization>`__) and translation scripts
+  (`PyTorch <https://github.com/huggingface/transformers/tree/master/examples/pytorch/translation>`__ and `Tensorflow
+  <https://github.com/huggingface/transformers/tree/master/examples/tensorflow/translation>`__). These scripts allow
+  you to easily fine-tune T5 on custom data for summarization/translation.
 
 T5Config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
