@@ -67,6 +67,24 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
+    @require_datasets
+    @require_torch
+    @slow
+    def test_torch_speech_encoder_decoder(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/s2t-wav2vec2-large-en-de",
+            feature_extractor="facebook/s2t-wav2vec2-large-en-de",
+            framework="pt",
+        )
+
+        from datasets import load_dataset
+
+        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        filename = ds[0]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": 'Ein Mann sagte zum Universum : " Sir, ich existiert! "'})
+
     @slow
     @require_torch
     @require_datasets
