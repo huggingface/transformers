@@ -239,6 +239,10 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
 
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_roberta_for_causal_lm(*config_and_inputs)
+
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_roberta_for_token_classification(*config_and_inputs)
