@@ -20,6 +20,7 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
+from ...file_utils import CONFIG_NAME
 
 
 CONFIG_MAPPING_NAMES = OrderedDict(
@@ -88,6 +89,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("layoutlm", "LayoutLMConfig"),
         ("rag", "RagConfig"),
         ("tapas", "TapasConfig"),
+        ("splinter", "SplinterConfig"),
     ]
 )
 
@@ -149,6 +151,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("tapas", "TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
@@ -225,6 +228,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("bert-japanese", "BertJapanese"),
         ("byt5", "ByT5"),
         ("mbart50", "mBART-50"),
+        ("splinter", "Splinter"),
     ]
 )
 
@@ -520,6 +524,6 @@ class AutoConfig:
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "
-            "Should have a `model_type` key in its config.json, or contain one of the following strings "
+            f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
             f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
         )

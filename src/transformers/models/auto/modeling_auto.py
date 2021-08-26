@@ -88,6 +88,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mpnet", "MPNetModel"),
         ("tapas", "TapasModel"),
         ("ibert", "IBertModel"),
+        ("splinter", "SplinterModel"),
     ]
 )
 
@@ -357,6 +358,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaForQuestionAnswering"),
         ("deberta-v2", "DebertaV2ForQuestionAnswering"),
         ("ibert", "IBertForQuestionAnswering"),
+        ("splinter", "SplinterForQuestionAnswering"),
     ]
 )
 

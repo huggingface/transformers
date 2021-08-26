@@ -3130,7 +3130,10 @@ class Speech2TextPreTrainedModel:
         requires_backends(cls, ["torch"])
 
 
-class Speech2Text2ForCausalLM:
+SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SplinterForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -3139,7 +3142,21 @@ class Speech2Text2ForCausalLM:
         requires_backends(cls, ["torch"])
 
 
-class Speech2TextPreTrainedModel:
+class SplinterLayer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SplinterModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SplinterPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
