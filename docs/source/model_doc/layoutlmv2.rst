@@ -53,6 +53,10 @@ Tips:
 
 - The main difference between LayoutLMv1 and LayoutLMv2 is that the latter incorporates visual embeddings during
   pre-training (while LayoutLMv1 only adds visual embeddings during fine-tuning).
+- LayoutLMv2 adds both a relative 1D attention bias as well as a spatial 2D attention bias to the attention scores in
+  the self-attention layers. Details can be found on page 5 of the `paper <https://arxiv.org/abs/2012.14740>`__.
+- Demo notebooks on how to use the LayoutLMv2 model on RVL-CDIP, FUNSD, DocVQA, CORD can be found `here
+  <https://github.com/NielsRogge/Transformers-Tutorials>`__.
 - LayoutLMv2 uses Facebook AI's `Detectron2 <https://github.com/facebookresearch/detectron2/>`__ package for its visual
   backbone. See `this link <https://detectron2.readthedocs.io/en/latest/tutorials/install.html>`__ for installation
   instructions.
