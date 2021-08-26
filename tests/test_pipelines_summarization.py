@@ -14,84 +14,74 @@
 
 import unittest
 
-from transformers import AutoTokenizer, is_torch_available, pipeline
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers import (
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    LEDConfig,
+    SummarizationPipeline,
+    T5Config,
+    pipeline,
+)
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
-from .test_pipelines_common import MonoInputPipelineCommonMixin
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
-
-if is_torch_available():
-    import torch
-    from torch import nn
-
-    from transformers.models.bart import BartConfig, BartForConditionalGeneration
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 
 
-class SimpleSummarizationPipelineTests(unittest.TestCase):
-    @require_torch
-    def test_input_too_long(self):
-        torch.manual_seed(0)
-        config = BartConfig(
-            vocab_size=257,
-            d_model=32,
-            encoder_layers=1,
-            decoder_layers=1,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
-            # So any text > 4 should raise an exception
-            max_position_embeddings=4,
-            encoder_attention_heads=1,
-            decoder_attention_heads=1,
-            max_length=4,
-            min_length=1,
-            forced_eos_token_id=None,
+@is_pipeline_test
+class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+        summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer)
+
+        outputs = summarizer("(CNN)The Palestinian Authority officially became")
+        self.assertEqual(outputs, [{"summary_text": ANY(str)}])
+
+        outputs = summarizer(
+            "(CNN)The Palestinian Authority officially became ",
+            num_beams=2,
+            min_length=2,
+            max_length=5,
         )
-        model = BartForConditionalGeneration(config)
-        # Bias output towards L
-        V, C = model.lm_head.weight.shape
+        self.assertEqual(outputs, [{"summary_text": ANY(str)}])
 
-        bias = torch.zeros(V)
-        bias[76] = 10
+        if not isinstance(model.config, (T5Config, LEDConfig)):
+            # LED, T5 can handle it.
+            # Too long.
+            with self.assertRaises(Exception):
+                outputs = summarizer("This " * 1000)
+        outputs = summarizer("This " * 1000, truncation=TruncationStrategy.ONLY_FIRST)
 
-        model.lm_head.bias = nn.Parameter(bias)
+    @require_torch
+    def test_small_model_pt(self):
+        summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="pt")
+        outputs = summarizer("This is a small test")
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "summary_text": "เข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไป"
+                }
+            ],
+        )
 
-        # # Generated with:
-        # import tempfile
-        # from tokenizers import Tokenizer, models
-        # from transformers import PreTrainedTokenizerFast
-        # model_max_length = 4
-        # vocab = [(chr(i), i) for i in range(256)]
-        # tokenizer = Tokenizer(models.Unigram(vocab))
-        # with tempfile.NamedTemporaryFile() as f:
-        #     tokenizer.save(f.name)
-        #     real_tokenizer = PreTrainedTokenizerFast(tokenizer_file=f.name, model_max_length=model_max_length)
-        # real_tokenizer._tokenizer.save("tokenizer.json")
-        # # + add missing config.json with albert as model_type
-        tokenizer = AutoTokenizer.from_pretrained("Narsil/small_summarization_test")
-        summarizer = pipeline(task="summarization", model=model, tokenizer=tokenizer)
-
-        with self.assertLogs("transformers", level="WARNING"):
-            with self.assertRaises(IndexError):
-                _ = summarizer("This is a test")
-
-        output = summarizer("This is a test", truncation=TruncationStrategy.ONLY_FIRST)
-        # 2 is default BOS from Bart.
-        self.assertEqual(output, [{"summary_text": "\x02 L L L"}])
-
-
-class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
-    pipeline_task = "summarization"
-    pipeline_running_kwargs = {"num_beams": 2, "min_length": 2, "max_length": 5}
-    small_models = [
-        "patrickvonplaten/t5-tiny-random",
-        "sshleifer/bart-tiny-random",
-    ]  # Models tested without the @slow decorator
-    large_models = []  # Models tested with the @slow decorator
-    invalid_inputs = [4, "<mask>"]
-    mandatory_keys = ["summary_text"]
+    @require_tf
+    def test_small_model_tf(self):
+        summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="tf")
+        outputs = summarizer("This is a small test")
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "summary_text": "เข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไป"
+                }
+            ],
+        )
 
     @require_torch
     @slow
