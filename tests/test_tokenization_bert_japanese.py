@@ -131,6 +131,18 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ["アップル", "ストア", "で", "iPhone", "8", "が", "発売", "さ", "れ", "た", "。"],
         )
 
+    def test_mecab_tokenizer_unidic_lite_zenkaku(self):
+        try:
+            tokenizer = MecabTokenizer(mecab_dic="unidic_lite", do_zenkaku=True)
+        except ModuleNotFoundError:
+            return
+
+        # zenkaku conversion: iPhone --> ｉＰｈｏｎｅ
+        self.assertListEqual(
+            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
+            ["アップル", "ストア", "で", "ｉＰｈｏｎｅ", "８", "が", "発売", "さ", "れ", "た", "。"],
+        )
+
     def test_mecab_tokenizer_unidic(self):
         try:
             tokenizer = MecabTokenizer(mecab_dic="unidic")
