@@ -50,11 +50,6 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
         )
         self.assertEqual(outputs, [{"summary_text": ANY(str)}])
 
-        summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer, num_beams=2, min_length=2, max_length=5)
-        self.assertEqual(summarizer.num_beams, 2)
-        self.assertEqual(summarizer.min_length, 2)
-        self.assertEqual(summarizer.max_length, 5)
-
         if not isinstance(model.config, (T5Config, LEDConfig)):
             # LED, T5 can handle it.
             # Too long.
