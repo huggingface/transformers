@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers import MODEL_MAPPING, TF_MODEL_MAPPING, FeatureExtractionPipeline, LxmertConfig, pipeline
+from transformers import MODEL_MAPPING, TF_MODEL_MAPPING, CLIPConfig, FeatureExtractionPipeline, LxmertConfig, pipeline
 from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
 from .test_pipelines_common import PipelineTestCaseMeta
@@ -62,20 +62,29 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         return shape
 
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
-        if isinstance(model.config, LxmertConfig):
-            # This is an bimodal model, we need to find a more consistent way
-            # to switch on those models.
+        if tokenizer is None:
+            self.skipTest("No tokenizer")
+            return
+
+        elif isinstance(model.config, (LxmertConfig, CLIPConfig)):
+            self.skipTest(
+                "This is an Lxmert bimodal model, we need to find a more consistent way to switch on those models."
+            )
+            return
+        elif model.config.is_encoder_decoder:
+            self.skipTest(
+                """encoder_decoder models are trickier for this pipeline.
+                Do we want encoder + decoder inputs to get some featues?
+                Do we want encoder only features ?
+                For now ignore those.
+                """
+            )
+
             return
 
         feature_extractor = FeatureExtractionPipeline(
             model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
         )
-        if feature_extractor.model.config.is_encoder_decoder:
-            # encoder_decoder models are trickier for this pipeline.
-            # Do we want encoder + decoder inputs to get some featues?
-            # Do we want encoder only features ?
-            # For now ignore those.
-            return
 
         outputs = feature_extractor("This is a test")
 
