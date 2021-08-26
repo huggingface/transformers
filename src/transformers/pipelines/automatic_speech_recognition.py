@@ -145,7 +145,8 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
 
         name = self.model.__class__.__name__
         if name.endswith("ForConditionalGeneration") or name.endswith("DecoderModel"):
-            encoder_outputs = self.model.encoder(**processed)
+            encoder = self.model.get_encoder()
+            encoder_outputs = encoder(**processed)
             tokens = self.model.generate(
                 encoder_outputs=encoder_outputs, attention_mask=processed.get("attention_mask")
             )
