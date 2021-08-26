@@ -49,7 +49,8 @@ T5 Version 1.1 includes the following improvements compared to the original T5 m
 
 Note: T5 Version 1.1 was only pre-trained on `C4 <https://huggingface.co/datasets/c4>`__ excluding any supervised
 training. Therefore, this model has to be fine-tuned before it is useable on a downstream task, unlike the original T5
-model.
+model. Since t5v1.1 was pre-trained unsupervisedly, there's no real advantage to using a task prefix during single-task
+fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
 
 Google has released the following variants:
 
