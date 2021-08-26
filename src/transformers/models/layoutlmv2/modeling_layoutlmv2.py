@@ -160,8 +160,8 @@ class LayoutLMv2SelfAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
         output_attentions=False,
-        relative_position=None,
-        relative_2d_position=None,
+        rel_pos=None,
+        rel_2d_pos=None,
     ):
         q, k, v = self.compute_qkv(hidden_states)
 
@@ -174,9 +174,9 @@ class LayoutLMv2SelfAttention(nn.Module):
         # [BSZ, NAT, L, L]
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         if self.has_relative_attention_bias:
-            attention_scores += relative_position
+            attention_scores += rel_pos
         if self.has_spatial_attention_bias:
-            attention_scores += relative_2d_position
+            attention_scores += rel_2d_pos
         attention_scores = attention_scores.float().masked_fill_(attention_mask.to(torch.bool), float("-inf"))
         attention_probs = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).type_as(value_layer)
         # This is actually dropping out entire tokens to attend to, which might
@@ -208,16 +208,16 @@ class LayoutLMv2Attention(nn.Module):
         attention_mask=None,
         head_mask=None,
         output_attentions=False,
-        relative_position=None,
-        relative_2d_position=None,
+        rel_pos=None,
+        rel_2d_pos=None,
     ):
         self_outputs = self.self(
             hidden_states,
             attention_mask,
             head_mask,
             output_attentions,
-            relative_position=relative_position,
-            relative_2d_position=relative_2d_position,
+            rel_pos=rel_pos,
+            rel_2d_pos=rel_2d_pos,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -284,16 +284,16 @@ class LayoutLMv2Layer(nn.Module):
         attention_mask=None,
         head_mask=None,
         output_attentions=False,
-        relative_position=None,
-        relative_2d_position=None,
+        rel_pos=None,
+        rel_2d_pos=None,
     ):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
-            relative_position=relative_position,
-            relative_2d_position=relative_2d_position,
+            rel_pos=rel_pos,
+            rel_2d_pos=rel_2d_pos,
         )
         attention_output = self_attention_outputs[0]
 
@@ -313,26 +313,6 @@ class LayoutLMv2Layer(nn.Module):
 
 
 def relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
-    """
-    Adapted from Mesh Tensorflow:
-    https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
-    Translate relative position to a bucket number for relative attention. The relative position is defined as
-    memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
-    position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for small
-    absolute relative_position and larger buckets for larger absolute relative_positions. All relative positions
-    >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket. This should
-    allow for more graceful generalization to longer sequences than the model has been trained on.
-
-    Args:
-        relative_position: an int32 Tensor
-        bidirectional: a boolean - whether the attention is bidirectional
-        num_buckets: an integer
-        max_distance: an integer
-
-    Returns:
-        a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
-    """
-
     ret = 0
     if bidirectional:
         num_buckets //= 2
@@ -366,65 +346,53 @@ class LayoutLMv2Encoder(nn.Module):
         self.has_spatial_attention_bias = config.has_spatial_attention_bias
 
         if self.has_relative_attention_bias:
-            self.relative_position_bins = config.rel_pos_bins
-            self.max_relative_position = config.max_rel_pos
-            self.relative_position_onehot_size = config.rel_pos_bins
-            self.relative_position_bias = nn.Linear(
-                self.relative_position_onehot_size, config.num_attention_heads, bias=False
-            )
+            self.rel_pos_bins = config.rel_pos_bins
+            self.max_rel_pos = config.max_rel_pos
+            self.rel_pos_onehot_size = config.rel_pos_bins
+            self.rel_pos_bias = nn.Linear(self.rel_pos_onehot_size, config.num_attention_heads, bias=False)
 
         if self.has_spatial_attention_bias:
-            self.max_relative_2d_position = config.max_rel_2d_pos
-            self.relative_2d_position_bins = config.rel_2d_pos_bins
-            self.relative_2d_position_onehot_size = config.rel_2d_pos_bins
-            self.relative_position_x_bias = nn.Linear(
-                self.relative_2d_position_onehot_size, config.num_attention_heads, bias=False
-            )
-            self.relative_position_y_bias = nn.Linear(
-                self.relative_2d_position_onehot_size, config.num_attention_heads, bias=False
-            )
+            self.max_rel_2d_pos = config.max_rel_2d_pos
+            self.rel_2d_pos_bins = config.rel_2d_pos_bins
+            self.rel_2d_pos_onehot_size = config.rel_2d_pos_bins
+            self.rel_pos_x_bias = nn.Linear(self.rel_2d_pos_onehot_size, config.num_attention_heads, bias=False)
+            self.rel_pos_y_bias = nn.Linear(self.rel_2d_pos_onehot_size, config.num_attention_heads, bias=False)
 
     def _calculate_1d_position_embeddings(self, hidden_states, position_ids):
-        relative_position_mat = position_ids.unsqueeze(-2) - position_ids.unsqueeze(-1)
-        relative_position = relative_position_bucket(
-            relative_position_mat,
-            num_buckets=self.relative_position_bins,
-            max_distance=self.max_relative_position,
+        rel_pos_mat = position_ids.unsqueeze(-2) - position_ids.unsqueeze(-1)
+        rel_pos = relative_position_bucket(
+            rel_pos_mat,
+            num_buckets=self.rel_pos_bins,
+            max_distance=self.max_rel_pos,
         )
-        relative_position = nn.functional.one_hot(
-            relative_position, num_classes=self.relative_position_onehot_size
-        ).type_as(hidden_states)
-        relative_position = self.relative_position_bias(relative_position).permute(0, 3, 1, 2)
-        relative_position = relative_position.contiguous()
-        return relative_position
+        rel_pos = nn.functional.one_hot(rel_pos, num_classes=self.rel_pos_onehot_size).type_as(hidden_states)
+        rel_pos = self.rel_pos_bias(rel_pos).permute(0, 3, 1, 2)
+        rel_pos = rel_pos.contiguous()
+        return rel_pos
 
     def _calculate_2d_position_embeddings(self, hidden_states, bbox):
         position_coord_x = bbox[:, :, 0]
         position_coord_y = bbox[:, :, 3]
-        relative_position_x_2d_mat = position_coord_x.unsqueeze(-2) - position_coord_x.unsqueeze(-1)
-        relative_position_y_2d_mat = position_coord_y.unsqueeze(-2) - position_coord_y.unsqueeze(-1)
-        relative_position_x = relative_position_bucket(
-            relative_position_x_2d_mat,
-            num_buckets=self.relative_2d_position_bins,
-            max_distance=self.max_relative_2d_position,
+        rel_pos_x_2d_mat = position_coord_x.unsqueeze(-2) - position_coord_x.unsqueeze(-1)
+        rel_pos_y_2d_mat = position_coord_y.unsqueeze(-2) - position_coord_y.unsqueeze(-1)
+        rel_pos_x = relative_position_bucket(
+            rel_pos_x_2d_mat,
+            num_buckets=self.rel_2d_pos_bins,
+            max_distance=self.max_rel_2d_pos,
         )
-        relative_position_y = relative_position_bucket(
-            relative_position_y_2d_mat,
-            num_buckets=self.relative_2d_position_bins,
-            max_distance=self.max_relative_2d_position,
+        rel_pos_y = relative_position_bucket(
+            rel_pos_y_2d_mat,
+            num_buckets=self.rel_2d_pos_bins,
+            max_distance=self.max_rel_2d_pos,
         )
-        relative_position_x = nn.functional.one_hot(
-            relative_position_x, num_classes=self.relative_2d_position_onehot_size
-        ).type_as(hidden_states)
-        relative_position_y = nn.functional.one_hot(
-            relative_position_y, num_classes=self.relative_2d_position_onehot_size
-        ).type_as(hidden_states)
-        relative_position_x = self.relative_position_x_bias(relative_position_x).permute(0, 3, 1, 2)
-        relative_position_y = self.relative_position_y_bias(relative_position_y).permute(0, 3, 1, 2)
-        relative_position_x = relative_position_x.contiguous()
-        relative_position_y = relative_position_y.contiguous()
-        relative_2d_position = relative_position_x + relative_position_y
-        return relative_2d_position
+        rel_pos_x = nn.functional.one_hot(rel_pos_x, num_classes=self.rel_2d_pos_onehot_size).type_as(hidden_states)
+        rel_pos_y = nn.functional.one_hot(rel_pos_y, num_classes=self.rel_2d_pos_onehot_size).type_as(hidden_states)
+        rel_pos_x = self.rel_pos_x_bias(rel_pos_x).permute(0, 3, 1, 2)
+        rel_pos_y = self.rel_pos_y_bias(rel_pos_y).permute(0, 3, 1, 2)
+        rel_pos_x = rel_pos_x.contiguous()
+        rel_pos_y = rel_pos_y.contiguous()
+        rel_2d_pos = rel_pos_x + rel_pos_y
+        return rel_2d_pos
 
     def forward(
         self,
@@ -440,12 +408,12 @@ class LayoutLMv2Encoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        relative_position = (
+        rel_pos = (
             self._calculate_1d_position_embeddings(hidden_states, position_ids)
             if self.has_relative_attention_bias
             else None
         )
-        relative_2d_position = (
+        rel_2d_pos = (
             self._calculate_2d_position_embeddings(hidden_states, bbox) if self.has_spatial_attention_bias else None
         )
 
@@ -468,8 +436,8 @@ class LayoutLMv2Encoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    relative_position=relative_position,
-                    relative_2d_position=relative_2d_position,
+                    rel_pos=rel_pos,
+                    rel_2d_pos=rel_2d_pos,
                 )
             else:
                 layer_outputs = layer_module(
@@ -477,8 +445,8 @@ class LayoutLMv2Encoder(nn.Module):
                     attention_mask,
                     layer_head_mask,
                     output_attentions,
-                    relative_position=relative_position,
-                    relative_2d_position=relative_2d_position,
+                    rel_pos=rel_pos,
+                    rel_2d_pos=rel_2d_pos,
                 )
 
             hidden_states = layer_outputs[0]
