@@ -15,11 +15,20 @@
 import importlib
 import logging
 import string
+from abc import abstractmethod
 from functools import lru_cache
 from typing import List, Optional
 from unittest import mock, skipIf
 
-from transformers import TOKENIZER_MAPPING, AutoTokenizer, is_tf_available, is_torch_available, pipeline
+from transformers import (
+    FEATURE_EXTRACTOR_MAPPING,
+    TOKENIZER_MAPPING,
+    AutoFeatureExtractor,
+    AutoTokenizer,
+    is_tf_available,
+    is_torch_available,
+    pipeline,
+)
 from transformers.file_utils import to_py_obj
 from transformers.pipelines import Pipeline
 from transformers.testing_utils import _run_slow_tests, is_pipeline_test, require_tf, require_torch, slow
@@ -81,6 +90,16 @@ def get_tiny_tokenizer_from_checkpoint(checkpoint):
     return tokenizer
 
 
+def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config):
+    try:
+        feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
+    except Exception:
+        feature_extractor = None
+    if hasattr(tiny_config, "image_size") and feature_extractor:
+        feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
+    return feature_extractor
+
+
 class ANY:
     def __init__(self, _type):
         self._type = _type
@@ -94,23 +113,31 @@ class ANY:
 
 class PipelineTestCaseMeta(type):
     def __new__(mcs, name, bases, dct):
-        def gen_test(ModelClass, checkpoint, tiny_config, tokenizer_class):
+        def gen_test(ModelClass, checkpoint, tiny_config, tokenizer_class, feature_extractor_class):
             @skipIf(tiny_config is None, "TinyConfig does not exist")
             @skipIf(checkpoint is None, "checkpoint does not exist")
             def test(self):
+                if ModelClass.__name__.endswith("ForCausalLM"):
+                    tiny_config.is_encoder_decoder = False
+                if ModelClass.__name__.endswith("WithLMHead"):
+                    tiny_config.is_decoder = True
                 model = ModelClass(tiny_config)
                 if hasattr(model, "eval"):
                     model = model.eval()
-                try:
-                    tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
-                    if hasattr(model.config, "max_position_embeddings"):
-                        tokenizer.model_max_length = model.config.max_position_embeddings
-                # Rust Panic exception are NOT Exception subclass
-                # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
-                # provide some default tokenizer and hope for the best.
-                except:  # noqa: E722
-                    self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
-                self.run_pipeline_test(model, tokenizer)
+                if tokenizer_class is not None:
+                    try:
+                        tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
+                        if hasattr(model.config, "max_position_embeddings"):
+                            tokenizer.model_max_length = model.config.max_position_embeddings
+                    # Rust Panic exception are NOT Exception subclass
+                    # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
+                    # provide some default tokenizer and hope for the best.
+                    except:  # noqa: E722
+                        self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
+                else:
+                    tokenizer = None
+                feature_extractor = get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config)
+                self.run_pipeline_test(model, tokenizer, feature_extractor)
 
             return test
 
@@ -125,10 +152,37 @@ class PipelineTestCaseMeta(type):
                         checkpoint = get_checkpoint_from_architecture(model_architecture)
                         tiny_config = get_tiny_config_from_class(configuration)
                         tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
+                        feature_extractor_class = FEATURE_EXTRACTOR_MAPPING.get(configuration, None)
+                        feature_extractor_name = (
+                            feature_extractor_class.__name__ if feature_extractor_class else "nofeature_extractor"
+                        )
+                        if not tokenizer_classes:
+                            # We need to test even if there are no tokenizers.
+                            tokenizer_classes = [None]
                         for tokenizer_class in tokenizer_classes:
-                            if tokenizer_class is not None and tokenizer_class.__name__.endswith("Fast"):
-                                test_name = f"test_{prefix}_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_class.__name__}"
-                                dct[test_name] = gen_test(model_architecture, checkpoint, tiny_config, tokenizer_class)
+                            if tokenizer_class is not None:
+                                tokenizer_name = tokenizer_class.__name__
+                            else:
+                                tokenizer_name = "notokenizer"
+
+                            test_name = f"test_{prefix}_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_name}_{feature_extractor_name}"
+
+                            if tokenizer_class is not None or feature_extractor_class is not None:
+                                dct[test_name] = gen_test(
+                                    model_architecture,
+                                    checkpoint,
+                                    tiny_config,
+                                    tokenizer_class,
+                                    feature_extractor_class,
+                                )
+
+        @abstractmethod
+        def inner(self):
+            raise NotImplementedError("Not implemented test")
+
+        # Force these 2 methods to exist
+        dct["test_small_model_pt"] = dct.get("test_small_model_pt", inner)
+        dct["test_small_model_tf"] = dct.get("test_small_model_tf", inner)
 
         return type.__new__(mcs, name, bases, dct)
 
