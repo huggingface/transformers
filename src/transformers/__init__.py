@@ -1056,7 +1056,6 @@ if is_torch_available():
         ]
     )
     _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
-    _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
     _import_structure["models.splinter"].extend(
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
