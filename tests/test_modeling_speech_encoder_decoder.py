@@ -33,8 +33,8 @@ if is_torch_available():
 
     from transformers import (
         BertLMHeadModel,
-        SpeechEncoderDecoderConfig,
         Speech2Text2ForCausalLM,
+        SpeechEncoderDecoderConfig,
         SpeechEncoderDecoderModel,
         Wav2Vec2Model,
     )

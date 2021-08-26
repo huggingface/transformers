@@ -418,6 +418,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
             >>> # generation
             >>> generated = model.generate(input_values)
+            >>> translation = processor.batch_decode(generated)
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

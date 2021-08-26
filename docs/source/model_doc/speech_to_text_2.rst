@@ -56,11 +56,11 @@ predicted token ids.
 .. code-block::
 
         >>> import torch
-        >>> from transformers import Speech2Text2Processor, SpeechEncoderDecoder
+        >>> from transformers import Speech2Text2Processor, SpeechEncoderDecoderModel
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> model = SpeechEncoderDecoder.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
+        >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
         >>> processor = Speech2Text2Processor.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 
         >>> def map_to_array(batch):
@@ -72,7 +72,7 @@ predicted token ids.
         >>> ds = ds.map(map_to_array)
 
         >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
-        >>> generated_ids = model.generate(input_ids=inputs["input_features"], attention_mask=inputs["attention_mask"])
+        >>> generated_ids = model.generate(input_ids=inputs["input_values"], attention_mask=inputs["attention_mask"])
 
         >>> transcription = processor.batch_decode(generated_ids)
 
