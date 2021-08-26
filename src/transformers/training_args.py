@@ -1053,7 +1053,7 @@ class TrainingArguments:
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
                     elif is_sagemaker_dp_enabled():
-                        sm_dist.Barrier()
+                        sm_dist.barrier()
                     else:
                         torch.distributed.barrier()
                 yield
@@ -1064,7 +1064,7 @@ class TrainingArguments:
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
                     elif is_sagemaker_dp_enabled():
-                        sm_dist.Barrier()
+                        sm_dist.barrier()
                     else:
                         torch.distributed.barrier()
         else:
