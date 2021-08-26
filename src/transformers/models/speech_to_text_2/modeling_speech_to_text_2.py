@@ -419,33 +419,6 @@ class Speech2Text2PreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _get_subsampled_output_lengths(self, input_lengths: torch.LongTensor, kernel_size=1, stride=2):
-        """
-        Computes the output length of the convolutional layers
-        """
-        for i in range(self.config.num_conv_layers):
-            input_lengths = (input_lengths - 1) // 2 + 1
-
-        return input_lengths
-
-    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
-        # generate creates 3D attention mask, because of the shape of input_features
-        # convert it to 2D if thats the case
-        if len(attention_mask.shape) > 2:
-            attention_mask = attention_mask[:, :, -1]
-
-        subsampled_lengths = self._get_subsampled_output_lengths(attention_mask.sum(-1))
-        bsz = attention_mask.size()[0]
-        attention_mask = torch.zeros(
-            (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-
-        # these two operations makes sure that all values
-        # before the output lengths indices are attended to
-        attention_mask[(torch.arange(bsz, device=attention_mask.device), subsampled_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
-        return attention_mask
-
 
 SPEECH_TO_TEXT_2_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic

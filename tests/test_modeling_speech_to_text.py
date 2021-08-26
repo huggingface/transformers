@@ -357,7 +357,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             else:
                 seq_length = self.model_tester.seq_length
 
-            subsampled_seq_length = model._get_subsampled_output_lengths(seq_length)
+            subsampled_seq_length = model._get_feat_extract_output_lengths(seq_length)
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -407,8 +407,8 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             model.to(torch_device)
             model.eval()
 
-            subsampled_encoder_seq_length = model._get_subsampled_output_lengths(encoder_seq_length)
-            subsampled_encoder_key_length = model._get_subsampled_output_lengths(encoder_key_length)
+            subsampled_encoder_seq_length = model._get_feat_extract_output_lengths(encoder_seq_length)
+            subsampled_encoder_key_length = model._get_feat_extract_output_lengths(encoder_key_length)
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
