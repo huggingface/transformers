@@ -30,25 +30,9 @@ class TextGenerationPipeline(Pipeline):
     begging for his blessing. <eod> </s> <eos>
     """
 
-    ALLOWED_MODELS = [
-        "XLNetLMHeadModel",
-        "TransfoXLLMHeadModel",
-        "ReformerModelWithLMHead",
-        "GPT2LMHeadModel",
-        "GPTNeoForCausalLM",
-        "OpenAIGPTLMHeadModel",
-        "CTRLLMHeadModel",
-        "TFXLNetLMHeadModel",
-        "TFTransfoXLLMHeadModel",
-        "TFGPT2LMHeadModel",
-        "TFOpenAIGPTLMHeadModel",
-        "TFCTRLLMHeadModel",
-    ]
-
     def __init__(self, *args, return_full_text=True, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.check_model_type(self.ALLOWED_MODELS)
         self.return_full_text = return_full_text
 
     # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
@@ -124,6 +108,9 @@ class TextGenerationPipeline(Pipeline):
                     prefix_length = prefix_inputs["input_ids"].shape[-1]
                     if generate_kwargs.get("max_length", None) is not None:
                         generate_kwargs["max_length"] += prefix_length
+                    else:
+                        generate_kwargs["max_length"] = self.model.config.max_length + prefix_length
+
                     if generate_kwargs.get("min_length", None) is not None:
                         generate_kwargs["min_length"] += prefix_length
 
