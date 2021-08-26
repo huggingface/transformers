@@ -49,8 +49,8 @@ class Speech2Text2StandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=2,
-        decoder_attention_heads=2,
+        decoder_layers=4,
+        decoder_attention_heads=4,
         max_position_embeddings=30,
         pad_token_id=0,
         bos_token_id=1,
@@ -127,6 +127,9 @@ class Speech2Text2StandaloneDecoderModelTester:
     ):
         config.use_cache = True
         model = Speech2Text2Decoder(config=config).to(torch_device).eval()
+        input_ids = input_ids[:2]
+
+        input_ids[input_ids == 0] += 1
         # first forward pass
         outputs = model(input_ids, use_cache=True)
         outputs_use_cache_conf = model(input_ids)
@@ -138,10 +141,12 @@ class Speech2Text2StandaloneDecoderModelTester:
         past_key_values = outputs["past_key_values"]
 
         # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+        next_tokens = ids_tensor((2, 1), config.vocab_size - 1) + 1
 
         # append to next input_ids and
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+
+        print(next_input_ids)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
         output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]

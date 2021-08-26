@@ -16,14 +16,18 @@
 
 
 import argparse
+import json
+import os
 
 import fairseq
 import torch
 from torch import nn
 
 from transformers import (
-    Speech2TextConfig,
-    Speech2TextForCausalLM,
+    EncoderDecoderConfig,
+    Speech2Text2Config,
+    Speech2Text2ForCausalLM,
+    Speech2Text2Tokenizer,
     SpeechEncoderDecoderModel,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
@@ -184,6 +188,24 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
+def create_vocab_dict(dict_path):
+    with open(dict_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+        words = [line.split(" ")[0] for line in lines]
+
+    num_words = len(words)
+
+    vocab_dict = {
+        "<s>": 0,
+        "<pad>": 1,
+        "</s>": 2,
+        "<unk>": 3,
+    }
+
+    vocab_dict.update({k: v for k, v in zip(words, range(4, num_words + 4))})
+    return vocab_dict
+
+
 @torch.no_grad()
 def convert_wav2vec2_checkpoint(
     checkpoint_path,
@@ -198,7 +220,7 @@ def convert_wav2vec2_checkpoint(
     Copy/paste/tweak model's weights to transformers design.
     """
     encoder_config = Wav2Vec2Config.from_pretrained(encoder_config_path)
-    decoder_config = Speech2TextConfig.from_pretrained(
+    decoder_config = Speech2Text2Config.from_pretrained(
         decoder_config_path, vocab_size=vocab_size, decoder_layers=num_decoder_layers, do_stable_layer_norm=True
     )
 
@@ -219,7 +241,7 @@ def convert_wav2vec2_checkpoint(
     hf_encoder = Wav2Vec2Model(encoder_config)
     projection_layer = recursively_load_weights_wav2vec2(model.encoder, hf_encoder)
 
-    hf_decoder = Speech2TextForCausalLM(decoder_config)
+    hf_decoder = Speech2Text2ForCausalLM(decoder_config)
     missing_keys, unexpected_keys = hf_decoder.model.decoder.load_state_dict(model.decoder.state_dict(), strict=False)
 
     # set output linear layer
@@ -236,6 +258,23 @@ def convert_wav2vec2_checkpoint(
     # add projection layer
     hf_wav2vec.enc_to_dec_proj.weight = nn.Parameter(projection_layer.weight)
     hf_wav2vec.enc_to_dec_proj.bias = nn.Parameter(projection_layer.bias)
+
+    vocab_dict = create_vocab_dict(dict_path)
+
+    with open(os.path.join(pytorch_dump_folder_path, "vocab.json"), "w") as fp:
+        json.dump(vocab_dict, fp)
+
+    tokenizer = Speech2Text2Tokenizer(os.path.join(pytorch_dump_folder_path, "vocab.json"))
+    tokenizer.save_pretrained(pytorch_dump_folder_path)
+
+    config = hf_wav2vec.config.to_dict()
+    config["pad_token_id"] = tokenizer.pad_token_id
+    config["bos_token_id"] = tokenizer.bos_token_id
+    config["eos_token_id"] = tokenizer.eos_token_id
+    config["tokenizer_class"] = "speech_to_text_2"
+    config["feature_extractor_type"] = "wav2vec2"
+
+    hf_wav2vec.config = EncoderDecoderConfig.from_dict(config)
 
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
     feature_extractor.save_pretrained(pytorch_dump_folder_path)

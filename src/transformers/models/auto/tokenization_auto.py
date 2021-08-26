@@ -152,6 +152,7 @@ else:
             ("rag", ("RagTokenizer", None)),
             ("xlm-prophetnet", ("XLMProphetNetTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
+            ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
             ("m2m_100", ("M2M100Tokenizer" if is_sentencepiece_available() else None, None)),
             ("prophetnet", ("ProphetNetTokenizer", None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
@@ -233,7 +234,7 @@ def tokenizer_class_from_name(class_name: str):
         module_name = "openai"
 
     module = importlib.import_module(f".{module_name.replace('-', '_')}", "transformers.models")
-    return getattr(module, class_name)
+    return getattr(module, class_name, None)
 
 
 def get_tokenizer_config(

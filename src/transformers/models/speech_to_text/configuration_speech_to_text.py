@@ -94,10 +94,6 @@ class Speech2TextConfig(PretrainedConfig):
             features.
         input_channels (:obj:`int`, `optional`, defaults to 1):
             An integer specifying number of input channels of the input feature vector.
-        do_stable_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to apply `stable` layer norm architecture to the Transformer decoder. ``do_stable_layer_norm ==
-            True`` corresponds to applying layer norm before the attention layer, whereas ``do_stable_layer_norm ==
-            False`` corresponds to applying layer norm after the attention layer.
 
         Example::
 
@@ -145,8 +141,6 @@ class Speech2TextConfig(PretrainedConfig):
         max_target_positions=1024,
         num_conv_layers=2,
         conv_kernel_sizes=(5, 5),
-        subsample_kernels=None,
-        subsample_strides=None,
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
