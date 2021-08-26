@@ -147,3 +147,8 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     # currently tokenizer cannot do encoding, but just decoding
     def test_token_type_ids(self):
         pass
+
+    # currently tokenizer cannot do encoding, but just decoding
+    @is_pt_tf_cross_test
+    def test_batch_encode_plus_tensors(self):
+        pass

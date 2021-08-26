@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
     if is_torch_available():
         from .modeling_speech_to_text_2 import (
-            SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SPEECH_TO_TEXT_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Speech2Text2ForCausalLM,
             Speech2Text2PreTrainedModel,
         )

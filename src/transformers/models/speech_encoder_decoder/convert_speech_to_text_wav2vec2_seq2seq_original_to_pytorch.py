@@ -24,10 +24,10 @@ import torch
 from torch import nn
 
 from transformers import (
-    SpeechEncoderDecoderConfig,
     Speech2Text2Config,
     Speech2Text2ForCausalLM,
     Speech2Text2Tokenizer,
+    SpeechEncoderDecoderConfig,
     SpeechEncoderDecoderModel,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,

@@ -21,13 +21,16 @@ from typing import TYPE_CHECKING
 from ...file_utils import _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_speech_encoder_decoder": ["SpeechEncoderDecoderConfig"]}
+_import_structure = {
+    "configuration_speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
+}
 
 if is_torch_available():
     _import_structure["modeling_speech_encoder_decoder"] = ["SpeechEncoderDecoderModel"]
 
 if TYPE_CHECKING:
-        from .configuration_speech_encoder_decoder import SpeechEncoderDecoderConfig
+    from .configuration_speech_encoder_decoder import SpeechEncoderDecoderConfig
+
     if is_torch_available():
         from .modeling_speech_encoder_decoder import SpeechEncoderDecoderModel
 

@@ -26,8 +26,8 @@ logger = logging.get_logger(__name__)
 class SpeechEncoderDecoderConfig(PretrainedConfig):
     r"""
     :class:`~transformers.SpeechEncoderDecoderConfig` is the configuration class to store the configuration of a
-    :class:`~transformers.SpeechEncoderDecoderModel`. It is used to instantiate an Encoder Decoder model according to the
-    specified arguments, defining the encoder and decoder configs.
+    :class:`~transformers.SpeechEncoderDecoderModel`. It is used to instantiate an Encoder Decoder model according to
+    the specified arguments, defining the encoder and decoder configs.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -92,8 +92,8 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
         cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
     ) -> PretrainedConfig:
         r"""
-        Instantiate a :class:`~transformers.SpeechEncoderDecoderConfig` (or a derived class) from a pre-trained encoder model
-        configuration and decoder model configuration.
+        Instantiate a :class:`~transformers.SpeechEncoderDecoderConfig` (or a derived class) from a pre-trained encoder
+        model configuration and decoder model configuration.
 
         Returns:
             :class:`SpeechEncoderDecoderConfig`: An instance of a configuration object

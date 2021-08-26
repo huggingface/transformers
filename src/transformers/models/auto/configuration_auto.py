@@ -209,6 +209,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ctrl", "CTRL"),
         ("electra", "ELECTRA"),
         ("encoder-decoder", "Encoder decoder"),
+        ("speech-encoder-decoder", "Speech Encoder decoder"),
         ("funnel", "Funnel Transformer"),
         ("lxmert", "LXMERT"),
         ("deberta-v2", "DeBERTa-v2"),

@@ -26,6 +26,13 @@ An example of how to use a :class:`~transformers.SpeechEncoderDecoderModel` for 
 :doc:`Speech2Text2 <speech_to_text_2>`.
 
 
+SpeechEncoderDecoderConfig
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.SpeechEncoderDecoderConfig
+    :members:
+
+
 SpeechEncoderDecoderModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
