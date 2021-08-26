@@ -19,6 +19,7 @@ import unittest
 
 from transformers.models.speech_to_text_2 import Speech2Text2Tokenizer
 from transformers.models.speech_to_text_2.tokenization_speech_to_text_2 import VOCAB_FILES_NAMES
+from transformers.testing_utils import is_pt_tf_cross_test
 
 from .test_tokenization_common import TokenizerTesterMixin
 

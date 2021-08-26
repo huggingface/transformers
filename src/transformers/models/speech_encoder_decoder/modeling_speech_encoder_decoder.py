@@ -24,7 +24,7 @@ from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_fo
 from ...modeling_outputs import Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..encoder_decoder.configuration_encoder_decoder import SpeechEncoderDecoderConfig
+from .configuration_speech_encoder_decoder import SpeechEncoderDecoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -397,26 +397,27 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import SpeechEncoderDecoderModel, BertTokenizer
+            >>> from transformers import SpeechEncoderDecoderModel, Speech2Text2Processor
             >>> import torch
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
+            >>> processor = Speech2Text2Processor.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
+            >>> model = SpeechEncoderDecoderModel.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
 
-            >>> # forward
-            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+            >>> # process dataset
+            >>> def map_to_array(batch):
+            >>>     speech, _ = sf.read(batch["file"])
+            >>>     batch["speech"] = speech
+            >>>     return batch
 
-            >>> # training
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
-            >>> loss, logits = outputs.loss, outputs.logits
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
 
-            >>> # save and load from pretrained
-            >>> model.save_pretrained("bert2bert")
-            >>> model = SpeechEncoderDecoderModel.from_pretrained("bert2bert")
+            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
+            >>> outputs = model(input_values=input_values, decoder_input_ids=decoder_input_ids)
 
             >>> # generation
-            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
+            >>> generated = model.generate(input_values)
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
