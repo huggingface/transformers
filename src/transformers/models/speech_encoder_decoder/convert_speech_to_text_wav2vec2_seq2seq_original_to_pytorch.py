@@ -24,7 +24,7 @@ import torch
 from torch import nn
 
 from transformers import (
-    EncoderDecoderConfig,
+    SpeechEncoderDecoderConfig,
     Speech2Text2Config,
     Speech2Text2ForCausalLM,
     Speech2Text2Tokenizer,
@@ -274,7 +274,7 @@ def convert_wav2vec2_checkpoint(
     config["tokenizer_class"] = "speech_to_text_2"
     config["feature_extractor_type"] = "wav2vec2"
 
-    hf_wav2vec.config = EncoderDecoderConfig.from_dict(config)
+    hf_wav2vec.config = SpeechEncoderDecoderConfig.from_dict(config)
 
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
     feature_extractor.save_pretrained(pytorch_dump_folder_path)

@@ -83,6 +83,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("ctrl", "CTRLConfig"),
         ("electra", "ElectraConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
+        ("speech-encoder-decoder", "SpeechEncoderDecoderConfig"),
         ("funnel", "FunnelConfig"),
         ("lxmert", "LxmertConfig"),
         ("dpr", "DPRConfig"),

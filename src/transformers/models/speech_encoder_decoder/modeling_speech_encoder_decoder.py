@@ -24,12 +24,12 @@ from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_fo
 from ...modeling_outputs import Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..encoder_decoder.configuration_encoder_decoder import EncoderDecoderConfig
+from ..encoder_decoder.configuration_encoder_decoder import SpeechEncoderDecoderConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "EncoderDecoderConfig"
+_CONFIG_FOR_DOC = "SpeechEncoderDecoderConfig"
 
 SPEECH_ENCODER_DECODER_START_DOCSTRING = r"""
     This class can be used to initialize a speech-sequence-to-text-sequence model with any pretrained speech
@@ -155,7 +155,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
     :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
     """
-    config_class = EncoderDecoderConfig
+    config_class = SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
 
     def __init__(
@@ -168,7 +168,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             encoder is not None and decoder is not None
         ), "Either a configuration or an Encoder and a decoder has to be provided"
         if config is None:
-            config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
+            config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
             assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
 
@@ -367,7 +367,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+        config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
 
         # make sure input & output embeddings is not tied
         config.tie_word_embeddings = False
