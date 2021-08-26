@@ -504,6 +504,32 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         token_classifier = pipeline(task="ner", model=model_name)
         self.assertEqual(token_classifier.framework, "tf")
 
+    @require_tf
+    def test_small_model_tf(self):
+        model_name = "Narsil/small2"
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
+
+    @require_torch
+    def test_small_model_pt(self):
+        model_name = "Narsil/small2"
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
+
     @require_torch
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"

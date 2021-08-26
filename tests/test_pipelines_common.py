@@ -127,7 +127,11 @@ class PipelineTestCaseMeta(type):
                 if tokenizer_class is not None:
                     try:
                         tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
-                        if hasattr(model.config, "max_position_embeddings"):
+                        # XLNet actually defines it as -1.
+                        if (
+                            hasattr(model.config, "max_position_embeddings")
+                            and model.config.max_position_embeddings > 0
+                        ):
                             tokenizer.model_max_length = model.config.max_position_embeddings
                     # Rust Panic exception are NOT Exception subclass
                     # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
