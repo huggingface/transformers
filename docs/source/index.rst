@@ -577,7 +577,9 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/retribert
     model_doc/roberta
     model_doc/roformer
+    model_doc/speechencoderdecoder
     model_doc/speech_to_text
+    model_doc/speech_to_text_2
     model_doc/splinter
     model_doc/squeezebert
     model_doc/t5
