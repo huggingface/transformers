@@ -735,7 +735,7 @@ class Pipeline(_ScikitCompat):
                     supported_models_names.append(model.__name__)
             supported_models = supported_models_names
         if self.model.__class__.__name__ not in supported_models:
-            logger.warning(
+            logger.error(
                 f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}."
             )
 
