@@ -16,27 +16,32 @@
 
 import copy
 
+from ...utils import logging
 from ..bert_japanese.tokenization_bert_japanese import MecabTokenizer
 from ..xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
-from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
+PRETRAINED_INIT_CONFIGURATION = {
+    "cl-tohoku/roberta-base-japanese": {
+        "do_lower_case": False,
+        "do_zenkaku": True,
+        "word_tokenizer_type": "mecab",
+        "mecab_kwargs": {"mecab_dic": "unidic_lite"},
+    }
+}
+
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        # TODO: add vocab files once files are uploaded to huggingface hub
+        "cl-tohoku/roberta-japanese-base": "https://huggingface.co/cl-tohoku/roberta-base-japanese/resolve/main/sentencepiece.bpe.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    # "cl-tohoku/bert-base-japanese": 512,
-    # TODO: add Embedding sizes
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    # TODO: add config
+    "cl-tohoku/roberta-japanese-base": 512,
 }
 
 
@@ -49,24 +54,24 @@ class RobertaJapaneseTokenizer(XLMRobertaTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
-            self,
-            vocab_file,
-            do_lower_case=False,
-            do_word_tokenize=True,
-            do_subword_tokenize=True,
-            do_zenkaku=False,
-            word_tokenizer_type="mecab",
-            subword_tokenizer_type="bpe",
-            never_split=None,
-            unk_token="<unk>",
-            sep_token="</s>",
-            pad_token="<pad>",
-            cls_token="<s>",
-            bos_token="<s>",
-            eos_token="</s>",
-            mask_token="<mask>",
-            mecab_kwargs=None,
-            **kwargs
+        self,
+        vocab_file,
+        do_lower_case=False,
+        do_word_tokenize=True,
+        do_subword_tokenize=True,
+        do_zenkaku=False,
+        word_tokenizer_type="mecab",
+        subword_tokenizer_type="bpe",
+        never_split=None,
+        unk_token="<unk>",
+        sep_token="</s>",
+        pad_token="<pad>",
+        cls_token="<s>",
+        bos_token="<s>",
+        eos_token="</s>",
+        mask_token="<mask>",
+        mecab_kwargs=None,
+        **kwargs
     ):
         """
         Constructs a MecabBertTokenizer.
@@ -145,7 +150,7 @@ class RobertaJapaneseTokenizer(XLMRobertaTokenizer):
             tokens = [text]
 
         if self.do_subword_tokenize:
-            split_tokens = self.sp_model.EncodeAsPieces(' '.join(tokens))
+            split_tokens = self.sp_model.EncodeAsPieces(" ".join(tokens))
         else:
             split_tokens = tokens
 
