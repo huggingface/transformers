@@ -189,6 +189,7 @@ class ReformerModelTester:
     def get_pipeline_config(self):
         config = self.get_config()
         config.vocab_size = 100
+        config.axial_pos_shape = (4, 25)
         config.is_decoder = False
         return config
 

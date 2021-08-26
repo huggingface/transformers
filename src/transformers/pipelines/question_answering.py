@@ -202,7 +202,7 @@ class QuestionAnsweringPipeline(Pipeline):
             - **answer** (:obj:`str`) -- The answer to the question.
         """
         # Set defaults values
-        kwargs.setdefault("padding", "longest")
+        kwargs.setdefault("padding", "longest" if getattr(self.tokenizer, "pad_token", None) is not None else False)
         kwargs.setdefault("topk", 1)
         kwargs.setdefault("doc_stride", 128)
         kwargs.setdefault("max_answer_len", 15)
@@ -353,17 +353,17 @@ class QuestionAnsweringPipeline(Pipeline):
                     # Start: Index of the first character of the answer in the context string
                     # End: Index of the character following the last character of the answer in the context string
                     # Answer: Plain text of the answer
-                    answers += [
-                        {
-                            "score": score.item(),
-                            "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
-                            "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
-                            "answer": " ".join(
-                                example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
-                            ),
-                        }
-                        for s, e, score in zip(starts, ends, scores)
-                    ]
+                    for s, e, score in zip(starts, ends, scores):
+                        answers.append(
+                            {
+                                "score": score.item(),
+                                "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
+                                "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
+                                "answer": " ".join(
+                                    example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                                ),
+                            }
+                        )
                 else:
                     # Convert the answer (tokens) back to the original text
                     # Score: score from the model
@@ -376,25 +376,26 @@ class QuestionAnsweringPipeline(Pipeline):
                     # Sometimes the max probability token is in the middle of a word so:
                     # - we start by finding the right word containing the token with `token_to_word`
                     # - then we convert this word in a character span with `word_to_chars`
-                    answers += [
-                        {
-                            "score": score.item(),
-                            "start": enc.word_to_chars(
-                                enc.token_to_word(s), sequence_index=1 if question_first else 0
-                            )[0],
-                            "end": enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
-                                1
-                            ],
-                            "answer": example.context_text[
-                                enc.word_to_chars(enc.token_to_word(s), sequence_index=1 if question_first else 0)[
-                                    0
-                                ] : enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
-                                    1
-                                ]
-                            ],
-                        }
-                        for s, e, score in zip(starts, ends, scores)
-                    ]
+                    sequence_index = 1 if question_first else 0
+                    for s, e, score in zip(starts, ends, scores):
+                        try:
+                            start_word = enc.token_to_word(s)
+                            end_word = enc.token_to_word(e)
+                            start_index = enc.word_to_chars(start_word, sequence_index=sequence_index)[0]
+                            end_index = enc.word_to_chars(end_word, sequence_index=sequence_index)[1]
+                        except Exception:
+                            # Some tokenizers don't really handle words. Keep to offsets then.
+                            start_index = enc.offsets[s][0]
+                            end_index = enc.offsets[e][1]
+
+                        answers.append(
+                            {
+                                "score": score.item(),
+                                "start": start_index,
+                                "end": end_index,
+                                "answer": example.context_text[start_index:end_index],
+                            }
+                        )
 
             if kwargs["handle_impossible_answer"]:
                 answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
