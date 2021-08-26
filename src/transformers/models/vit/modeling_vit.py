@@ -77,6 +77,14 @@ class ViTEmbeddings(nn.Module):
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings, height, width):
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        resolution images.
+
+        Source:
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        """
+
         npatch = embeddings.shape[1] - 1
         N = self.position_embeddings.shape[1] - 1
         if npatch == N and height == width:
@@ -451,6 +459,8 @@ VIT_INPUTS_DOCSTRING = r"""
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail.
+        interpolate_pos_encoding (:obj:`bool`, `optional`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
@@ -597,6 +607,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        interpolate_pos_encoding=None,
         return_dict=None,
     ):
         r"""
@@ -633,6 +644,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
