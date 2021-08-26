@@ -401,9 +401,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
                 not_padded_sequence_length = len(not_padded_input_ids)
 
-                assert sequence_length == not_padded_sequence_length
-                assert input_ids == not_padded_input_ids
-                assert special_tokens_mask == not_padded_special_tokens_mask
+                self.assertTrue(sequence_length == not_padded_sequence_length)
+                self.assertTrue(input_ids == not_padded_input_ids)
+                self.assertTrue(special_tokens_mask == not_padded_special_tokens_mask)
 
                 not_padded_sequence = tokenizer.encode_plus(
                     words,
@@ -416,9 +416,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
                 not_padded_sequence_length = len(not_padded_input_ids)
 
-                assert sequence_length == not_padded_sequence_length
-                assert input_ids == not_padded_input_ids
-                assert special_tokens_mask == not_padded_special_tokens_mask
+                self.assertTrue(sequence_length == not_padded_sequence_length)
+                self.assertTrue(input_ids == not_padded_input_ids)
+                self.assertTrue(special_tokens_mask == not_padded_special_tokens_mask)
 
                 # Test right padding
                 tokenizer.padding_side = "right"
@@ -435,9 +435,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 right_padded_special_tokens_mask = right_padded_sequence["special_tokens_mask"]
                 right_padded_sequence_length = len(right_padded_input_ids)
 
-                assert sequence_length + padding_size == right_padded_sequence_length
-                assert input_ids + [padding_idx] * padding_size == right_padded_input_ids
-                assert special_tokens_mask + [1] * padding_size == right_padded_special_tokens_mask
+                self.assertTrue(sequence_length + padding_size == right_padded_sequence_length)
+                self.assertTrue(input_ids + [padding_idx] * padding_size == right_padded_input_ids)
+                self.assertTrue(special_tokens_mask + [1] * padding_size == right_padded_special_tokens_mask)
 
                 # Test left padding
                 tokenizer.padding_side = "left"
@@ -452,9 +452,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 left_padded_special_tokens_mask = left_padded_sequence["special_tokens_mask"]
                 left_padded_sequence_length = len(left_padded_input_ids)
 
-                assert sequence_length + padding_size == left_padded_sequence_length
-                assert [padding_idx] * padding_size + input_ids == left_padded_input_ids
-                assert [1] * padding_size + special_tokens_mask == left_padded_special_tokens_mask
+                self.assertTrue(sequence_length + padding_size == left_padded_sequence_length)
+                self.assertTrue([padding_idx] * padding_size + input_ids == left_padded_input_ids)
+                self.assertTrue([1] * padding_size + special_tokens_mask == left_padded_special_tokens_mask)
 
                 if "token_type_ids" in tokenizer.model_input_names:
                     token_type_ids = encoded_sequence["token_type_ids"]
@@ -469,8 +469,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     right_padded_attention_mask = right_padded_sequence["attention_mask"]
                     left_padded_attention_mask = left_padded_sequence["attention_mask"]
 
-                    assert attention_mask + [0] * padding_size == right_padded_attention_mask
-                    assert [0] * padding_size + attention_mask == left_padded_attention_mask
+                    self.assertTrue(attention_mask + [0] * padding_size == right_padded_attention_mask)
+                    self.assertTrue([0] * padding_size + attention_mask == left_padded_attention_mask)
 
     def test_internal_consistency(self):
         tokenizers = self.get_tokenizers()

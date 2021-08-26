@@ -596,24 +596,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-        # def get_input_ids(text):
-        #     if isinstance(text, str):
-        #         tokens = self.tokenize(text, **kwargs)
-        #         return self.convert_tokens_to_ids(tokens)
-        #     elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
-        #         if is_split_into_words:
-        #             tokens = list(
-        #                 itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
-        #             )
-        #             return self.convert_tokens_to_ids(tokens)
-        #         else:
-        #             return self.convert_tokens_to_ids(text)
-        #     elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
-        #         return text
-        #     else:
-        #         raise ValueError(
-        #             "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
-        #         )
 
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -621,19 +603,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
-
-        # input_ids = []
-        # for ids_or_pair_ids in batch_text_or_text_pairs:
-        #     if not isinstance(ids_or_pair_ids, (list, tuple)):
-        #         ids, pair_ids = ids_or_pair_ids, None
-        #     elif is_split_into_words and not isinstance(ids_or_pair_ids[0], (list, tuple)):
-        #         ids, pair_ids = ids_or_pair_ids, None
-        #     else:
-        #         ids, pair_ids = ids_or_pair_ids
-
-        #     first_ids = get_input_ids(ids)
-        #     second_ids = get_input_ids(pair_ids) if pair_ids is not None else None
-        #     input_ids.append((first_ids, second_ids))
 
         batch_outputs = self._batch_prepare_for_model(
             batch_text_or_text_pairs=batch_text_or_text_pairs,
@@ -867,30 +836,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-        # def get_input_ids(text):
-        #     if isinstance(text, str):
-        #         tokens = self.tokenize(text, **kwargs)
-        #         return self.convert_tokens_to_ids(tokens)
-        #     elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
-        #         if is_split_into_words:
-        #             tokens = list(
-        #                 itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
-        #             )
-        #             return self.convert_tokens_to_ids(tokens)
-        #         else:
-        #             return self.convert_tokens_to_ids(text)
-        #     elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
-        #         return text
-        #     else:
-        #         if is_split_into_words:
-        #             raise ValueError(
-        #                 f"Input {text} is not valid. Should be a string or a list/tuple of strings when `is_split_into_words=True`."
-        #             )
-        #         else:
-        #             raise ValueError(
-        #                 f"Input {text} is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
-        #             )
-
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers."
@@ -899,9 +844,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 "More information on available tokenizers at "
                 "https://github.com/huggingface/transformers/pull/2674"
             )
-
-        # first_ids = get_input_ids(text)
-        # second_ids = get_input_ids(text_pair) if text_pair is not None else None
 
         return self.prepare_for_model(
             text=text,
@@ -974,10 +916,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             verbose=verbose,
             **kwargs,
         )
-
-        # pair = bool(pair_ids is not None)
-        # len_ids = len(ids)
-        # len_pair_ids = len(pair_ids) if pair else 0
 
         tokens = []
         pair_tokens = []
