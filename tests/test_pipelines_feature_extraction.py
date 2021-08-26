@@ -61,13 +61,15 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             raise ValueError("We expect lists of floats, nothing else")
         return shape
 
-    def run_pipeline_test(self, model, tokenizer):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         if isinstance(model.config, LxmertConfig):
             # This is an bimodal model, we need to find a more consistent way
             # to switch on those models.
             return
 
-        feature_extractor = FeatureExtractionPipeline(model=model, tokenizer=tokenizer)
+        feature_extractor = FeatureExtractionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
         if feature_extractor.model.config.is_encoder_decoder:
             # encoder_decoder models are trickier for this pipeline.
             # Do we want encoder + decoder inputs to get some featues?

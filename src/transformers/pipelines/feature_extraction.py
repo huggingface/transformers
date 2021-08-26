@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Optional, Union
 
+from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
 from .base import ArgumentHandler, Pipeline
@@ -52,6 +53,7 @@ class FeatureExtractionPipeline(Pipeline):
         self,
         model: Union["PreTrainedModel", "TFPreTrainedModel"],
         tokenizer: PreTrainedTokenizer,
+        feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         args_parser: ArgumentHandler = None,
@@ -61,6 +63,7 @@ class FeatureExtractionPipeline(Pipeline):
         super().__init__(
             model=model,
             tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
             modelcard=modelcard,
             framework=framework,
             args_parser=args_parser,

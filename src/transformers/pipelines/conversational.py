@@ -159,6 +159,8 @@ class Conversation:
     r"""
         min_length_for_response (:obj:`int`, `optional`, defaults to 32):
             The minimum length (in number of tokens) for a response.
+        minimum_tokens (:obj:`int`, `optional`, defaults to 10):
+            The minimum length of tokens to leave for a response.
     """,
 )
 class ConversationalPipeline(Pipeline):
@@ -188,15 +190,16 @@ class ConversationalPipeline(Pipeline):
         conversational_pipeline([conversation_1, conversation_2])
     """
 
-    def __init__(self, min_length_for_response=32, *args, **kwargs):
+    def __init__(self, min_length_for_response=32, minimum_tokens=10, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # We need at least an eos_token
-        assert self.tokenizer.eos_token_id is not None, "ConversationalPipeline tokenizer should have an EOS token set"
+        # assert self.tokenizer.eos_token_id is not None, "ConversationalPipeline tokenizer should have an EOS token set"
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         self.min_length_for_response = min_length_for_response
+        self.minimum_tokens = minimum_tokens
 
     def __call__(
         self,
@@ -250,6 +253,16 @@ class ConversationalPipeline(Pipeline):
 
             elif self.framework == "tf":
                 input_length = tf.shape(inputs["input_ids"])[-1].numpy()
+
+            max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+            n = inputs["input_ids"].shape[1]
+            if max_length - self.minimum_tokens < n:
+                logger.warning(
+                    f"Conversation input is to long ({n}), trimming it to ({max_length} - {self.minimum_tokens})"
+                )
+                trim = max_length - self.minimum_tokens
+                inputs["input_ids"] = inputs["input_ids"][:, -trim:]
+                inputs["attention_mask"] = inputs["attention_mask"][:, -trim:]
 
             generated_responses = self.model.generate(
                 inputs["input_ids"],
@@ -324,10 +337,13 @@ class ConversationalPipeline(Pipeline):
         eos_token_id = self.tokenizer.eos_token_id
         input_ids = []
         for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False) + [eos_token_id])
+            if eos_token_id is not None:
+                input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False) + [eos_token_id])
+            else:
+                input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False))
 
         if len(input_ids) > self.tokenizer.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
+            input_ids = input_ids[-self.tokenizer.model_max_length :]
         return input_ids
 
     def _parse_and_tokenize(self, conversations: List[Conversation]) -> Dict[str, Any]:

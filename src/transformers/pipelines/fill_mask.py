@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_WITH_LM_HEAD_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_MASKED_LM_MAPPING
 
 if is_torch_available():
     import torch
@@ -81,7 +81,9 @@ class FillMaskPipeline(Pipeline):
             task=task,
         )
 
-        self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING)
+        self.check_model_type(
+            TF_MODEL_FOR_MASKED_LM_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING
+        )
         self.top_k = top_k
         self.targets = targets
         if self.tokenizer.mask_token_id is None:

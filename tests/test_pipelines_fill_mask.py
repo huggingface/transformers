@@ -159,16 +159,16 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", framework="pt")
         unmasker.tokenizer.pad_token_id = None
         unmasker.tokenizer.pad_token = None
-        self.run_pipeline_test(unmasker.model, unmasker.tokenizer)
+        self.run_pipeline_test(unmasker.model, unmasker.tokenizer, None)
 
     @require_tf
     def test_model_no_pad_tf(self):
         unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", framework="tf")
         unmasker.tokenizer.pad_token_id = None
         unmasker.tokenizer.pad_token = None
-        self.run_pipeline_test(unmasker.model, unmasker.tokenizer)
+        self.run_pipeline_test(unmasker.model, unmasker.tokenizer, None)
 
-    def run_pipeline_test(self, model, tokenizer):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         if tokenizer.mask_token_id is None:
             self.skipTest("The provided tokenizer has no mask token, (probably reformer)")
 
