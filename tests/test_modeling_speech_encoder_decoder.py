@@ -33,7 +33,7 @@ if is_torch_available():
 
     from transformers import (
         BertLMHeadModel,
-        EncoderDecoderConfig,
+        SpeechEncoderDecoderConfig,
         Speech2Text2ForCausalLM,
         SpeechEncoderDecoderModel,
         Wav2Vec2Model,
@@ -64,7 +64,7 @@ class EncoderDecoderMixin:
         input_features=None,
         **kwargs
     ):
-        encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
 
         enc_dec_model = SpeechEncoderDecoderModel(encoder_decoder_config)
