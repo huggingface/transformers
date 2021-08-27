@@ -2893,7 +2893,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         if return_overflowing_tokens:
-            if TruncationStrategy == TruncationStrategy.LONGEST_FIRST and pair_ids is not None:
+            if truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is not None:
                 encoded_inputs["overflowing_tokens"] = overflowing_tokens
                 encoded_inputs["num_truncated_tokens"] = total_len - max_length
                 logger.error(
