@@ -1078,6 +1078,14 @@ class LukeTokenizer(RobertaTokenizer):
                 "results in an undefined behavior. Please set add_special_tokens to True or "
                 "set return_token_type_ids to None."
             )
+        if (
+            return_overflowing_tokens
+            and truncation_strategy == TruncationStrategy.LONGEST_FIRST
+            and pair_ids is not None
+        ):
+            raise ValueError(
+                "Not possible to return overflowing tokens for pair of sequences with the 'longest_first'. Please select another truncation strategy than 'longest_first', for instance 'only_second' or 'only_first'."
+            )
 
         # Load from model defaults
         if return_token_type_ids is None:
