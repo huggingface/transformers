@@ -1781,7 +1781,7 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         if self.use_amp:
-            with autocast(fast_dtype=self.amp_dtype):
+            with autocast(dtype=self.amp_dtype):
                 loss = self.compute_loss(model, inputs)
         else:
             loss = self.compute_loss(model, inputs)
