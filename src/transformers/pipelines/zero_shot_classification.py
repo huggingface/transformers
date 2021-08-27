@@ -2,11 +2,14 @@ from typing import List, Union
 
 import numpy as np
 
-from ..file_utils import add_end_docstrings
+from ..file_utils import add_end_docstrings, is_torch_available
 from ..tokenization_utils import TruncationStrategy
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -85,22 +88,83 @@ class ZeroShotClassificationPipeline(Pipeline):
         hypothesis_template,
         padding=True,
         add_special_tokens=True,
-        truncation=TruncationStrategy.ONLY_FIRST,
+        truncation=TruncationStrategy.DO_NOT_TRUNCATE,
         **kwargs
     ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
         sequence_pairs = self._args_parser(sequences, candidate_labels, hypothesis_template)
-        inputs = self.tokenizer(
-            sequence_pairs,
-            add_special_tokens=add_special_tokens,
-            return_tensors=self.framework,
-            padding=padding,
-            truncation=truncation,
-        )
+        return_tensors = self.framework
+        if getattr(self.tokenizer, "pad_token", None) is None:
+            # XXX some tokenizers do not have a padding token, we use simple lists
+            # and no padding then
+            logger.warning("The tokenizer {self.tokenizer} does not have a pad token, we're not running it as a batch")
+            padding = False
+            inputs = []
+            for sequence_pair in sequence_pairs:
+                model_input = self.tokenizer(
+                    text=sequence_pair[0],
+                    text_pair=sequence_pair[1],
+                    add_special_tokens=add_special_tokens,
+                    return_tensors=return_tensors,
+                    padding=padding,
+                    truncation=truncation,
+                )
+                inputs.append(model_input)
+        else:
+            inputs = self.tokenizer(
+                sequence_pairs,
+                add_special_tokens=add_special_tokens,
+                return_tensors=return_tensors,
+                padding=padding,
+                truncation=truncation,
+            )
 
         return inputs
+
+    def _forward(self, inputs, return_tensors=False):
+        """
+        Internal framework specific forward dispatching
+
+        Args:
+            inputs: dict holding all the keyword arguments for required by the model forward method.
+            return_tensors: Whether to return native framework (pt/tf) tensors rather than numpy array
+
+        Returns:
+            Numpy array
+        """
+        # Encode for forward
+        with self.device_placement():
+            if self.framework == "tf":
+                if isinstance(inputs, list):
+                    predictions = []
+                    for input_ in inputs:
+                        prediction = self.model(input_.data, training=False)[0]
+                        predictions.append(prediction)
+                else:
+                    predictions = self.model(inputs.data, training=False)[0]
+            else:
+                with torch.no_grad():
+                    if isinstance(inputs, list):
+                        predictions = []
+                        for input_ in inputs:
+                            model_input = self.ensure_tensor_on_device(**input_)
+                            prediction = self.model(**model_input)[0].cpu()
+                            predictions.append(prediction)
+
+                    else:
+                        inputs = self.ensure_tensor_on_device(**inputs)
+                        predictions = self.model(**inputs)[0].cpu()
+
+        if return_tensors:
+            return predictions
+        else:
+            if isinstance(predictions, list):
+                predictions = np.array([p.numpy() for p in predictions])
+            else:
+                predictions = predictions.numpy()
+            return predictions
 
     def __call__(
         self,
@@ -151,6 +215,12 @@ class ZeroShotClassificationPipeline(Pipeline):
             sequences = [sequences]
 
         outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
+        if isinstance(outputs, list):
+            # XXX: Some tokenizers cannot handle batching because they don't
+            # have pad_token, so outputs will be a list, however, because outputs
+            # is only n logits and sequence_length is not present anymore, we
+            # can recreate a tensor out of outputs.
+            outputs = np.array(outputs)
         num_sequences = len(sequences)
         candidate_labels = self._args_parser._parse_labels(candidate_labels)
         reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))
