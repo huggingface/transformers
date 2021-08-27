@@ -428,11 +428,13 @@ class TrainingSummary:
             if len(metric_mapping) > 0:
                 result["metrics"] = []
                 for metric_tag, metric_name in metric_mapping.items():
-                    result["metrics"].append({
-                        "name": metric_name,
-                        "type": metric_tag,
-                        "value": self.eval_results[metric_name],
-                    })
+                    result["metrics"].append(
+                        {
+                            "name": metric_name,
+                            "type": metric_tag,
+                            "value": self.eval_results[metric_name],
+                        }
+                    )
 
             model_index["results"].append(result)
 
