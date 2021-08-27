@@ -16,15 +16,9 @@ T5v1.1
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-T5v1.1 was proposed in `GLU Variants Improve Transformer <https://arxiv.org/abs/2104.08836>`__ by Noam Shazeer. It's an
-improved version of the original T5 model.
-
-The abstract from the paper is the following:
-
-*Gated Linear Units consist of the component-wise product of two linear projections, one of which is first passed
-through a sigmoid function. Variations on GLU are possible, using different nonlinear (or even linear) functions in
-place of sigmoid. We test these variants in the feed-forward sublayers of the Transformer sequence-to-sequence model,
-and find that some of them yield quality improvements over the typically-used ReLU or GELU activations..*
+T5v1.1 was released in the `google-research/text-to-text-transfer-transformer
+<https://github.com/google-research/text-to-text-transfer-transformer/blob/main/released_checkpoints.md#t511>`__
+repository by Colin Raffel et al. It's an improved version of the original T5 model.
 
 One can directly plug in the weights of T5v1.1 into a T5 model, like so:
 
@@ -36,7 +30,8 @@ One can directly plug in the weights of T5v1.1 into a T5 model, like so:
 
 T5 Version 1.1 includes the following improvements compared to the original T5 model:
 
-- `GEGLU <https://arxiv.org/abs/1612.08083>`__ activation in the feed-forward hidden layer, rather than ReLU.
+- GEGLU activation in the feed-forward hidden layer, rather than ReLU. See `this paper
+  <https://arxiv.org/abs/2002.05202>`__.
 
 - Dropout was turned off in pre-training (quality win). Dropout should be re-enabled during fine-tuning.
 

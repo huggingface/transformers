@@ -282,8 +282,11 @@ Supported models
 62. :doc:`T5 <model_doc/t5>` (from Google AI) released with the paper `Exploring the Limits of Transfer Learning with a
     Unified Text-to-Text Transformer <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel and Noam Shazeer and Adam
     Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi Zhou and Wei Li and Peter J. Liu.
-57. :doc:`T5v1.1 <model_doc/t5v1.1>` (from Google AI) released with the paper `GLU Variants Improve Transformer
-    <https://arxiv.org/abs/2002.05202>`__ by Noam Shazeer.
+57. :doc:`T5v1.1 <model_doc/t5v1.1>` (from Google AI) released in the repository
+    `google-research/text-to-text-transfer-transformer
+    <https://github.com/google-research/text-to-text-transfer-transformer/blob/main/released_checkpoints.md#t511>`__ by
+    Colin Raffel and Noam Shazeer and Adam Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi
+    Zhou and Wei Li and Peter J. Liu.
 58. :doc:`TAPAS <model_doc/tapas>` (from Google AI) released with the paper `TAPAS: Weakly Supervised Table Parsing via
     Pre-training <https://arxiv.org/abs/2004.02349>`__ by Jonathan Herzig, Paweł Krzysztof Nowak, Thomas Müller,
     Francesco Piccinno and Julian Martin Eisenschlos.

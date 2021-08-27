@@ -49,13 +49,13 @@ T5 comes in different sizes (`t5-small <https://huggingface.co/t5-small>`__, `t5
 Google has released some follow-up works:
 
 - **T5v1.1**: T5v1.1 is an improved version of T5 with some architectural tweaks, and is pre-trained on C4 only without
-  mixing in the downstream tasks. Refer to the documentation of T5v1.1 which can be found :doc:`here <t5v1.1>`.
+  mixing in the supervised tasks. Refer to the documentation of T5v1.1 which can be found :doc:`here <t5v1.1>`.
 
 - **mT5**: mT5 is a multilingual T5 model. It is pre-trained on the mC4 corpus, which includes 101 languages. Refer to
   the documentation of mT5 which can be found :doc:`here <mt5>`.
 
-- **byT5**: byT5 is a T5 model pre-trained on byte sequences rather than SentencePiece subword tokens. Refer to the
-  documentation of byT5 which can be found :doc:`here <byt5>`.
+- **byT5**: byT5 is a T5 model pre-trained on byte sequences rather than SentencePiece subword token sequences. Refer
+  to the documentation of byT5 which can be found :doc:`here <byt5>`.
 
 All checkpoints can be found on the `hub <https://huggingface.co/models?search=t5>`__.
 
@@ -138,9 +138,10 @@ language modeling head on top of the decoder.
   :obj:`max_source_length` to 1024 and :obj:`max_target_length` to 128. In addition, we must make sure that padding
   token id's of the :obj:`labels` are not taken into account by the loss function. In PyTorch, this can be done by
   replacing them with -100, which is the :obj:`ignore_index` of the :obj:`CrossEntropyLoss`. In Flax, one can use the
-  :obj:`decoder_attention_mask` to ignore padded tokens from the loss (see the summarization script for details). We
-  also pass :obj:`attention_mask` as additional input to the model, which makes sure that padding tokens of the inputs
-  are ignored. The code example below illustrates all of this.
+  :obj:`decoder_attention_mask` to ignore padded tokens from the loss (see the `Flax summarization script
+  <https://github.com/huggingface/transformers/tree/master/examples/flax/summarization>`__ for details). We also pass
+  :obj:`attention_mask` as additional input to the model, which makes sure that padding tokens of the inputs are
+  ignored. The code example below illustrates all of this.
 
     .. code-block::
 

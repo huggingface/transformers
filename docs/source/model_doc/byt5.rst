@@ -39,10 +39,10 @@ experiments.*
 This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__. The original code can be
 found `here <https://github.com/google-research/byt5>`__.
 
-ByT5's architecture is based on the T5 model, so one can refer to :doc:`T5's documentation page <t5>`. They only differ
-in how inputs should be prepared for the model, see the code examples below.
+ByT5's architecture is based on the T5v1.1 model, so one can refer to :doc:`T5v1.1's documentation page <t5v1.1>`. They
+only differ in how inputs should be prepared for the model, see the code examples below.
 
-Since byT5 was pre-trained unsupervisedly, there's no real advantage to using a task prefix during single-task
+Since ByT5 was pre-trained unsupervisedly, there's no real advantage to using a task prefix during single-task
 fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
 
 
