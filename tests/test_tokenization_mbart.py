@@ -235,7 +235,9 @@ class MBartEnroIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_tokenizer_translation(self):
-        inputs = self.tokenizer._build_translation_inputs("A test", src_lang="en_XX", tgt_lang="ar_AR")
+        inputs = self.tokenizer._build_translation_inputs(
+            "A test", return_tensors="pt", src_lang="en_XX", tgt_lang="ar_AR"
+        )
 
         self.assertEqual(
             nested_simplify(inputs),
