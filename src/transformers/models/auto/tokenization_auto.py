@@ -206,6 +206,13 @@ else:
                     "RemBertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "clip",
+                (
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
         ]
     )
 
@@ -222,7 +229,10 @@ def tokenizer_class_from_name(class_name: str):
         if class_name in tokenizers:
             break
 
-    module = importlib.import_module(f".{module_name}", "transformers.models")
+    if module_name == "openai-gpt":
+        module_name = "openai"
+
+    module = importlib.import_module(f".{module_name.replace('-', '_')}", "transformers.models")
     return getattr(module, class_name)
 
 
