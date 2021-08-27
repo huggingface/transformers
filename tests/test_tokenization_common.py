@@ -1044,80 +1044,51 @@ class TokenizerTesterMixin:
                     tokenizer.encode(seq_0, add_special_tokens=False)
                     + tokenizer.encode(seq_1, add_special_tokens=False)[-(2 + stride) :]
                 )
-                # longest_first_true = len(seq0_tokens) > len(seq1_tokens)
                 overflow_longest_sequence = (
                     overflow_first_sequence if len(seq0_tokens) > len(seq1_tokens) else overflow_second_sequence
                 )
 
-                information = tokenizer.encode_plus(
-                    seq_0,
-                    seq_1,
-                    max_length=len(sequence) - 2,
-                    add_special_tokens=False,
-                    stride=stride,
-                    truncation="longest_first",
-                    return_overflowing_tokens=True,
-                    # add_prefix_space=False,
-                )
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, PreTrainedTokenizerFast):
-                    truncated_sequence = information["input_ids"][0]
-                    overflowing_tokens = information["input_ids"][1]
-                    self.assertEqual(len(information["input_ids"]), 2)
+                for strategy in ["longest_first", True]:
+                    if isinstance(tokenizer, PreTrainedTokenizerFast):
+                        information = tokenizer.encode_plus(
+                            seq_0,
+                            seq_1,
+                            max_length=len(sequence) - 2,
+                            add_special_tokens=False,
+                            stride=stride,
+                            truncation=strategy,
+                            return_overflowing_tokens=True,
+                            # add_prefix_space=False,
+                        )
+                        truncated_sequence = information["input_ids"][0]
+                        overflowing_tokens = information["input_ids"][1]
+                        self.assertEqual(len(information["input_ids"]), 2)
 
-                    self.assertEqual(len(truncated_sequence), len(sequence) - 2)
-                    self.assertEqual(truncated_sequence, truncated_longest_sequence)
+                        self.assertEqual(len(truncated_sequence), len(sequence) - 2)
+                        self.assertEqual(truncated_sequence, truncated_longest_sequence)
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
-                    self.assertEqual(overflowing_tokens, overflow_longest_sequence)
-                else:
-                    truncated_sequence = information["input_ids"]
-                    overflowing_tokens = information["overflowing_tokens"]
+                        self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
+                        self.assertEqual(overflowing_tokens, overflow_longest_sequence)
+                    else:
+                        # No overflowing tokens when using 'longest' in python tokenizers
+                        with self.assertRaises(ValueError) as context:
+                            information = tokenizer.encode_plus(
+                                seq_0,
+                                seq_1,
+                                max_length=len(sequence) - 2,
+                                add_special_tokens=False,
+                                stride=stride,
+                                truncation=strategy,
+                                return_overflowing_tokens=True,
+                                # add_prefix_space=False,
+                            )
 
-                    self.assertEqual(len(truncated_sequence), len(sequence) - 2)
-                    self.assertEqual(truncated_sequence, truncated_longest_sequence)
-
-                    self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    # No overflowing tokens when using 'longest' in python tokenizers
-                    # if longest_first_true:
-                    #     self.assertEqual(overflowing_tokens, overflow_longest_sequence[: 2 + stride])
-                    # else:
-                    #     self.assertEqual(overflowing_tokens, overflow_longest_sequence[-(2 + stride) :])
-
-                information = tokenizer.encode_plus(
-                    seq_0,
-                    seq_1,
-                    max_length=len(sequence) - 2,
-                    add_special_tokens=False,
-                    stride=stride,
-                    truncation=True,
-                    return_overflowing_tokens=True,
-                    # add_prefix_space=False,
-                )
-                # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, PreTrainedTokenizerFast):
-                    truncated_sequence = information["input_ids"][0]
-                    overflowing_tokens = information["input_ids"][1]
-                    self.assertEqual(len(information["input_ids"]), 2)
-
-                    self.assertEqual(len(truncated_sequence), len(sequence) - 2)
-                    self.assertEqual(truncated_sequence, truncated_longest_sequence)
-
-                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
-                    self.assertEqual(overflowing_tokens, overflow_longest_sequence)
-                else:
-                    truncated_sequence = information["input_ids"]
-                    overflowing_tokens = information["overflowing_tokens"]
-
-                    self.assertEqual(len(truncated_sequence), len(sequence) - 2)
-                    self.assertEqual(truncated_sequence, truncated_longest_sequence)
-
-                    self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    # No overflowing tokens when using 'longest' in python tokenizers
-                    # if longest_first_true:
-                    #     self.assertEqual(overflowing_tokens, overflow_longest_sequence[: 2 + stride])
-                    # else:
-                    #     self.assertEqual(overflowing_tokens, overflow_longest_sequence[-(2 + stride) :])
+                        self.assertTrue(
+                            context.exception.args[0].startswith(
+                                "Not possible to return overflowing tokens for pair of sequences with the 'longest_first'. Please select another truncation strategy than 'longest_first', for instance 'only_second' or 'only_first'."
+                            )
+                        )
 
                 information_first_truncated = tokenizer.encode_plus(
                     seq_0,
