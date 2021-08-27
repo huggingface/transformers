@@ -545,7 +545,7 @@ def my_convert_sync_batchnorm(module, process_group=None):
     return module_output
 
 
-class VisualBackbone(nn.Module):
+class LayoutLMv2VisualBackbone(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.cfg = config.get_detectron2_config()
@@ -708,7 +708,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         self.has_visual_segment_embedding = config.has_visual_segment_embedding
         self.embeddings = LayoutLMv2Embeddings(config)
 
-        self.visual = VisualBackbone(config)
+        self.visual = LayoutLMv2VisualBackbone(config)
         self.visual_proj = nn.Linear(config.image_feature_pool_shape[-1], config.hidden_size)
         if self.has_visual_segment_embedding:
             self.visual_segment_embedding = nn.Parameter(nn.Embedding(1, config.hidden_size).weight[0])
