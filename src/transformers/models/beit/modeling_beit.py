@@ -667,7 +667,8 @@ class BeitPooler(nn.Module):
 
 
 @add_start_docstrings(
-    "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).", BEIT_START_DOCSTRING
+    "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).",
+    BEIT_START_DOCSTRING,
 )
 class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def __init__(self, config):
@@ -695,6 +696,9 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         return_dict=None,
     ):
         r"""
+        bool_masked_pos (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, num_patches)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
@@ -722,6 +726,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
 
         outputs = self.beit(
             pixel_values,
+            bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
