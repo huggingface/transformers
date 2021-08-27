@@ -1863,6 +1863,15 @@ class HubertForCTC:
         requires_backends(self, ["torch"])
 
 
+class HubertForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class HubertModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3471,6 +3480,15 @@ class Wav2Vec2ForMaskedLM:
 class Wav2Vec2ForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+
+class Wav2Vec2ForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class Wav2Vec2Model:
