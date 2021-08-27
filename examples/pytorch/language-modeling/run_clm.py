@@ -172,6 +172,9 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
+    keep_linebreaks: bool = field(
+        default=True, metadata={"help": "Whether to keep line breaks when using CSV/JSON/TXT files or not."}
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
@@ -282,12 +285,14 @@ def main():
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 extension,
+                keep_linebreaks=data_args.keep_linebreaks,
                 data_files=data_files,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
             )
             raw_datasets["train"] = load_dataset(
                 extension,
+                keep_linebreaks=data_args.keep_linebreaks,
                 data_files=data_files,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,

@@ -110,7 +110,7 @@ def main():
         inputs = tokenizer(
             example["question"],
             example["context"],
-            return_tensors="jax",
+            return_tensors="np",
             max_length=4096,
             padding="max_length",
             truncation=True,
