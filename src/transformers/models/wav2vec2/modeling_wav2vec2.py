@@ -1533,7 +1533,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 @add_start_docstrings(
     """
     Wav2Vec2 Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB.
+    SUPERB Keyword Spotting.
     """,
     WAV_2_VEC_2_START_DOCSTRING,
 )
@@ -1552,29 +1552,18 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature extractor so that its parameters
         will not be updated during training.
         """
-        self.hubert.feature_extractor._freeze_parameters()
+        self.wav2vec2.feature_extractor._freeze_parameters()
 
     def freeze_base_model(self):
         """
-        Calling this function will disable the gradient computation for the base Hubert model so that its parameter
-        will not be updated during training. Only the classification head will be updated.
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
         """
-        for param in self.hubert.parameters():
+        for param in self.wav2vec2.parameters():
             param.requires_grad = False
-
-    def _get_padding_mask(self, attention_mask: torch.LongTensor):
-        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-        batch_size = attention_mask.shape[0]
-
-        padding_mask = torch.zeros(
-            (batch_size, output_lengths.max()), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        padding_mask[(torch.arange(padding_mask.shape[0], device=padding_mask.device), output_lengths - 1)] = 1
-        padding_mask = padding_mask.flip([-1]).cumsum(-1).flip([-1])
-        return padding_mask
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
@@ -1595,7 +1584,26 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
         Returns:
 
-        TODO: Usage example with Keyword Spotting
+        Example::
+
+            >>> import torch
+            >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
+            >>> from datasets import load_dataset
+
+            >>> processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-ks")
+            >>> model = Wav2Vec2ForSequenceClassification.from_pretrained("anton-l/wav2vec2-base-superb-ks")
+
+            >>> ds = load_dataset("anton-l/superb_dummy", "ks", split="test")
+
+            >>> input_values = processor(ds["speech"][4], return_tensors="pt").input_values  # Batch size 1
+            >>> logits = model(input_values).logits
+            >>> predicted_class_ids = torch.argmax(logits, dim=-1)
+
+            >>> # compute loss
+            >>> target_label = "down"
+            >>> labels = torch.tensor([model.config.label2id[target_label]])
+
+            >>> loss = model(input_values, labels=labels).loss
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1608,6 +1616,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        # End copy
 
         if self.config.use_weighted_layer_sum:
             hidden_states = outputs[2]
@@ -1633,7 +1642,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(

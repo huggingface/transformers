@@ -658,8 +658,8 @@ class HubertModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_keyword_spotting(self):
-        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-s3prl-superb-ks").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-s3prl-superb-ks")
+        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-superb-ks").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-superb-ks")
         input_data = self._load_superb("ks", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -667,8 +667,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask.to(torch_device)
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask)
-        predicted_ids = torch.argmax(outputs.logits, dim=-1)
-        predicted_logits, _ = torch.max(outputs.logits, dim=-1)
+        predicted_logits, predicted_ids = torch.max(outputs.logits, dim=-1)
 
         expected_labels = [2, 6, 10, 9]
         # s3prl logits for the same batch
@@ -678,8 +677,8 @@ class HubertModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_intent_classification(self):
-        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-s3prl-superb-ic").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-s3prl-superb-ic")
+        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-superb-ic").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-superb-ic")
         input_data = self._load_superb("ic", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -688,12 +687,9 @@ class HubertModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask)
 
-        predicted_ids_action = torch.argmax(outputs.logits[:, :6], dim=-1)
-        predicted_logits_action, _ = torch.max(outputs.logits[:, :6], dim=-1)
-        predicted_ids_object = torch.argmax(outputs.logits[:, 6:20], dim=-1)
-        predicted_logits_object, _ = torch.max(outputs.logits[:, 6:20], dim=-1)
-        predicted_ids_location = torch.argmax(outputs.logits[:, 20:24], dim=-1)
-        predicted_logits_location, _ = torch.max(outputs.logits[:, 20:24], dim=-1)
+        predicted_logits_action, predicted_ids_action = torch.max(outputs.logits[:, :6], dim=-1)
+        predicted_logits_object, predicted_ids_object = torch.max(outputs.logits[:, 6:20], dim=-1)
+        predicted_logits_location, predicted_ids_location = torch.max(outputs.logits[:, 20:24], dim=-1)
 
         expected_labels_action = [1, 0, 4, 3]
         expected_logits_action = torch.tensor([5.9052, 12.5865, 4.4840, 10.0240], device=torch_device)
@@ -706,16 +702,14 @@ class HubertModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_ids_object.tolist(), expected_labels_object)
         self.assertListEqual(predicted_ids_location.tolist(), expected_labels_location)
 
-        # higher tolerance due to different padding masking https://github.com/pytorch/fairseq/pull/3572
+        # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
         self.assertTrue(torch.allclose(predicted_logits_action, expected_logits_action, atol=3e-1))
         self.assertTrue(torch.allclose(predicted_logits_object, expected_logits_object, atol=3e-1))
         self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=3e-1))
 
     def test_inference_speaker_identification(self):
-        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-s3prl-superb-sid").to(
-            torch_device
-        )
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-s3prl-superb-sid")
+        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-superb-sid").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-superb-sid")
         input_data = self._load_superb("si", 4)
 
         output_logits = []
@@ -732,12 +726,12 @@ class HubertModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([78231.5547, 123166.6094, 122785.4141, 84851.2969], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        # higher tolerance due to different padding masking https://github.com/pytorch/fairseq/pull/3572
+        # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=10))
 
     def test_inference_emotion_recognition(self):
-        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-s3prl-superb-er").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-s3prl-superb-er")
+        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-superb-er").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-superb-er")
         input_data = self._load_superb("er", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -745,13 +739,12 @@ class HubertModelIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask.to(torch_device)
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask)
-        predicted_ids = torch.argmax(outputs.logits, dim=-1)
-        predicted_logits, _ = torch.max(outputs.logits, dim=-1)
+        predicted_logits, predicted_ids = torch.max(outputs.logits, dim=-1)
 
         expected_labels = [1, 1, 2, 2]
         # s3prl logits for the same batch
         expected_logits = torch.tensor([2.8384, 2.3389, 3.8564, 4.5558], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        # higher tolerance due to different padding masking https://github.com/pytorch/fairseq/pull/3572
+        # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-1))

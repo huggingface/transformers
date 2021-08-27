@@ -1077,11 +1077,12 @@ class HubertForCTC(HubertPreTrainedModel):
 @add_start_docstrings(
     """
     Hubert Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB.
+    SUPERB Keyword Spotting.
     """,
     HUBERT_START_DOCSTRING,
 )
 class HubertForSequenceClassification(HubertPreTrainedModel):
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.__init__ with Wav2Vec2->Hubert, wav2vec2->hubert
     def __init__(self, config):
         super().__init__(config)
 
@@ -1094,17 +1095,19 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
 
         self.init_weights()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_feature_extractor with wav2vec2->hubert
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature extractor so that its parameters
         will not be updated during training.
         """
         self.hubert.feature_extractor._freeze_parameters()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_base_model with wav2vec2->hubert
     def freeze_base_model(self):
         """
-        Calling this function will disable the gradient computation for the base Hubert model so that its parameter
-        will not be updated during training. Only the classification head will be updated.
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
         """
         for param in self.hubert.parameters():
             param.requires_grad = False
@@ -1128,7 +1131,26 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
 
         Returns:
 
-        TODO: Usage example with Keyword Spotting
+        Example::
+
+            >>> import torch
+            >>> from transformers import Wav2Vec2FeatureExtractor, HubertForSequenceClassification
+            >>> from datasets import load_dataset
+
+            >>> processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-superb-ks")
+            >>> model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-superb-ks")
+
+            >>> ds = load_dataset("anton-l/superb_dummy", "ks", split="test")
+
+            >>> input_values = processor(ds["speech"][4], return_tensors="pt").input_values  # Batch size 1
+            >>> logits = model(input_values).logits
+            >>> predicted_class_ids = torch.argmax(logits, dim=-1)
+
+            >>> # compute loss
+            >>> target_label = "down"
+            >>> labels = torch.tensor([model.config.label2id[target_label]])
+
+            >>> loss = model(input_values, labels=labels).loss
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
