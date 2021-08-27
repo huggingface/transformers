@@ -14,15 +14,18 @@
 
 import unittest
 
-from transformers import (
-    AutoConfig,
-    AutoFeatureExtractor,
-    AutoModelForImageClassification,
-    PreTrainedTokenizer,
-    is_vision_available,
-)
+from transformers import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, PreTrainedTokenizer, is_vision_available
 from transformers.pipelines import ImageClassificationPipeline, pipeline
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_datasets,
+    require_tf,
+    require_torch,
+    require_vision,
+)
+
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
 if is_vision_available():
@@ -35,127 +38,115 @@ else:
             pass
 
 
+@is_pipeline_test
 @require_vision
 @require_torch
-class ImageClassificationPipelineTests(unittest.TestCase):
-    pipeline_task = "image-classification"
-    small_models = ["lysandre/tiny-vit-random"]  # Models tested without the @slow decorator
-    valid_inputs = [
-        {"images": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-        {
-            "images": [
+class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+
+    @require_datasets
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+        image_classifier = ImageClassificationPipeline(model=model, feature_extractor=feature_extractor)
+        outputs = image_classifier("./tests/fixtures/tests_samples/COCO/000000039769.png")
+
+        self.assertEqual(
+            outputs,
+            [
+                {"score": ANY(float), "label": ANY(str)},
+                {"score": ANY(float), "label": ANY(str)},
+            ],
+        )
+
+        import datasets
+
+        dataset = datasets.load_dataset("Narsil/image_dummy", "image", split="test")
+
+        # Accepts URL + PIL.Image + lists
+        outputs = image_classifier(
+            [
+                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                # RGBA
+                dataset[0]["file"],
+                # LA
+                dataset[1]["file"],
+                # L
+                dataset[2]["file"],
+            ]
+        )
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+            ],
+        )
+
+    @require_torch
+    def test_small_model_pt(self):
+        small_model = "lysandre/tiny-vit-random"
+        image_classifier = pipeline("image-classification", model=small_model)
+
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
+                {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
+                {"score": 0.0014, "label": "trench coat"},
+                {"score": 0.0014, "label": "handkerchief, hankie, hanky, hankey"},
+                {"score": 0.0014, "label": "baboon"},
+            ],
+        )
+
+        outputs = image_classifier(
+            [
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
-            ]
-        },
-        {"images": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
-        {
-            "images": [
-                "./tests/fixtures/tests_samples/COCO/000000039769.png",
-                "./tests/fixtures/tests_samples/COCO/000000039769.png",
-            ]
-        },
-        {"images": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")},
-        {
-            "images": [
-                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-            ]
-        },
-        {
-            "images": [
-                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                "./tests/fixtures/tests_samples/COCO/000000039769.png",
-            ]
-        },
-    ]
+            ],
+            top_k=2,
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [
+                    {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
+                    {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
+                ],
+                [
+                    {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
+                    {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
+                ],
+            ],
+        )
 
-    def test_small_model_from_factory(self):
-        for small_model in self.small_models:
-
-            image_classifier = pipeline("image-classification", model=small_model)
-
-            for valid_input in self.valid_inputs:
-                output = image_classifier(**valid_input)
-                top_k = valid_input.get("top_k", 5)
-
-                def assert_valid_pipeline_output(pipeline_output):
-                    self.assertTrue(isinstance(pipeline_output, list))
-                    self.assertEqual(len(pipeline_output), top_k)
-                    for label_result in pipeline_output:
-                        self.assertTrue(isinstance(label_result, dict))
-                        self.assertIn("label", label_result)
-                        self.assertIn("score", label_result)
-
-                if isinstance(valid_input["images"], list):
-                    self.assertEqual(len(valid_input["images"]), len(output))
-                    for individual_output in output:
-                        assert_valid_pipeline_output(individual_output)
-                else:
-                    assert_valid_pipeline_output(output)
-
-    def test_small_model_from_pipeline(self):
-        for small_model in self.small_models:
-
-            model = AutoModelForImageClassification.from_pretrained(small_model)
-            feature_extractor = AutoFeatureExtractor.from_pretrained(small_model)
-            image_classifier = ImageClassificationPipeline(model=model, feature_extractor=feature_extractor)
-
-            for valid_input in self.valid_inputs:
-                output = image_classifier(**valid_input)
-                top_k = valid_input.get("top_k", 5)
-
-                def assert_valid_pipeline_output(pipeline_output):
-                    self.assertTrue(isinstance(pipeline_output, list))
-                    self.assertEqual(len(pipeline_output), top_k)
-                    for label_result in pipeline_output:
-                        self.assertTrue(isinstance(label_result, dict))
-                        self.assertIn("label", label_result)
-                        self.assertIn("score", label_result)
-
-                if isinstance(valid_input["images"], list):
-                    # When images are batched, pipeline output is a list of lists of dictionaries
-                    self.assertEqual(len(valid_input["images"]), len(output))
-                    for individual_output in output:
-                        assert_valid_pipeline_output(individual_output)
-                else:
-                    # When images are batched, pipeline output is a list of dictionaries
-                    assert_valid_pipeline_output(output)
+    @require_tf
+    @unittest.skip("Image classification is not implemented for TF")
+    def test_small_model_tf(self):
+        pass
 
     def test_custom_tokenizer(self):
         tokenizer = PreTrainedTokenizer()
 
         # Assert that the pipeline can be initialized with a feature extractor that is not in any mapping
-        image_classifier = pipeline("image-classification", model=self.small_models[0], tokenizer=tokenizer)
+        image_classifier = pipeline("image-classification", model="lysandre/tiny-vit-random", tokenizer=tokenizer)
 
         self.assertIs(image_classifier.tokenizer, tokenizer)
-
-    def test_num_labels_inferior_to_topk(self):
-        for small_model in self.small_models:
-
-            num_labels = 2
-            model = AutoModelForImageClassification.from_config(
-                AutoConfig.from_pretrained(small_model, num_labels=num_labels)
-            )
-            feature_extractor = AutoFeatureExtractor.from_pretrained(small_model)
-            image_classifier = ImageClassificationPipeline(model=model, feature_extractor=feature_extractor)
-
-            for valid_input in self.valid_inputs:
-                output = image_classifier(**valid_input)
-
-                def assert_valid_pipeline_output(pipeline_output):
-                    self.assertTrue(isinstance(pipeline_output, list))
-                    self.assertEqual(len(pipeline_output), num_labels)
-                    for label_result in pipeline_output:
-                        self.assertTrue(isinstance(label_result, dict))
-                        self.assertIn("label", label_result)
-                        self.assertIn("score", label_result)
-
-                if isinstance(valid_input["images"], list):
-                    # When images are batched, pipeline output is a list of lists of dictionaries
-                    self.assertEqual(len(valid_input["images"]), len(output))
-                    for individual_output in output:
-                        assert_valid_pipeline_output(individual_output)
-                else:
-                    # When images are batched, pipeline output is a list of dictionaries
-                    assert_valid_pipeline_output(output)

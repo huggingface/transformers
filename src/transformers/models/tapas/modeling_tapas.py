@@ -62,6 +62,7 @@ if is_scatter_available():
 _CONFIG_FOR_DOC = "TapasConfig"
 _TOKENIZER_FOR_DOC = "TapasTokenizer"
 _TOKENIZER_FOR_DOC = "google/tapas-base"
+_CHECKPOINT_FOR_DOC = "google/tapas-base"
 
 TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # large models
