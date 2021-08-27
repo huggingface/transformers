@@ -668,7 +668,7 @@ class BeitPooler(nn.Module):
 
 @add_start_docstrings(
     "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).",
-    BEIT_INPUTS_DOCSTRING,
+    BEIT_START_DOCSTRING,
 )
 class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def __init__(self, config):
