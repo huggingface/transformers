@@ -1642,6 +1642,18 @@ if is_flax_available():
         "FlaxTopPLogitsWarper",
     ]
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
+    _import_structure["models.albert"].extend(
+        [
+            "FlaxAlbertForMaskedLM",
+            "FlaxAlbertForMultipleChoice",
+            "FlaxAlbertForPreTraining",
+            "FlaxAlbertForQuestionAnswering",
+            "FlaxAlbertForSequenceClassification",
+            "FlaxAlbertForTokenClassification",
+            "FlaxAlbertModel",
+            "FlaxAlbertPreTrainedModel",
+        ]
+    )
     _import_structure["models.auto"].extend(
         [
             "FLAX_MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -3152,6 +3164,16 @@ if TYPE_CHECKING:
             FlaxTopPLogitsWarper,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
+        from .models.albert import (
+            FlaxAlbertForMaskedLM,
+            FlaxAlbertForMultipleChoice,
+            FlaxAlbertForPreTraining,
+            FlaxAlbertForQuestionAnswering,
+            FlaxAlbertForSequenceClassification,
+            FlaxAlbertForTokenClassification,
+            FlaxAlbertModel,
+            FlaxAlbertPreTrainedModel,
+        )
         from .models.auto import (
             FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
