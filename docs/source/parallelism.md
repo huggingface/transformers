@@ -58,7 +58,7 @@ a0 | b0 | c0
 a1 | b1 | c1
 a2 | b2 | c2
 ```
-Layer La has weights a0, at and a2.
+Layer La has weights a0, a1 and a2.
 
 If we have 3 GPUs, the Sharded DDP (= Zero-DP) splits the model onto 3 GPUs like so:
 
