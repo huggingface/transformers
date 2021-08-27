@@ -2870,6 +2870,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "set return_token_type_ids to None."
             )
 
+        if (
+            return_overflowing_tokens
+            and truncation_strategy == TruncationStrategy.LONGEST_FIRST
+            and pair_ids is not None
+        ):
+            raise ValueError(
+                f"Not possible to return overflowing tokens for pair of sequences with the"
+                f"{truncation_strategy.value}."
+                f"Please select another truncation strategy than {truncation_strategy.value}, "
+                f"for instance 'only_second' or 'only_first'."
+            )
+
         # Load from model defaults
         if return_token_type_ids is None:
             return_token_type_ids = "token_type_ids" in self.model_input_names
@@ -2893,18 +2905,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         if return_overflowing_tokens:
-            if truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is not None:
-                encoded_inputs["overflowing_tokens"] = overflowing_tokens
-                encoded_inputs["num_truncated_tokens"] = total_len - max_length
-                logger.error(
-                    f"Not possible to return overflowing tokens for pair of sequences with the"
-                    f"{truncation_strategy}."
-                    f"Please select another truncation strategy than {truncation_strategy}, "
-                    f"for instance 'only_second' or 'only_first'."
-                )
-            else:
-                encoded_inputs["overflowing_tokens"] = overflowing_tokens
-                encoded_inputs["num_truncated_tokens"] = total_len - max_length
+            encoded_inputs["overflowing_tokens"] = overflowing_tokens
+            encoded_inputs["num_truncated_tokens"] = total_len - max_length
 
         # Add special tokens
         if add_special_tokens:
@@ -2996,41 +2998,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation_strategy = TruncationStrategy(truncation_strategy)
 
         overflowing_tokens = []
-        temp_ids = ids[:]
-        temp_pair_ids = None
-        if pair_ids is not None:
-            temp_pair_ids = pair_ids[:]
-        if truncation_strategy == TruncationStrategy.LONGEST_FIRST:
-            overflowing_tokens_ids = []
-            overflowing_tokens_pair_ids = []
-            for _ in range(num_tokens_to_remove):
-                if pair_ids is None or len(ids) > len(pair_ids):
-                    if not overflowing_tokens_ids:
-                        window_len = min(len(ids), stride + 1)
-                    else:
-                        window_len = 1
-                    ct = 0
-                    for __ in temp_ids[-window_len:]:
-                        overflowing_tokens_ids.insert(ct, __)
-                        ct = ct + 1
-                    ids = ids[:-1]
-                    temp_ids = temp_ids[:-window_len]
-                else:
-                    if not overflowing_tokens_pair_ids:
-                        window_len = min(len(pair_ids), stride + 1)
-                    else:
-                        window_len = 1
-                    ct = 0
-                    for __ in temp_pair_ids[-window_len:]:
-                        overflowing_tokens_pair_ids.insert(ct, __)
-                        ct = ct + 1
-                    pair_ids = pair_ids[:-1]
-                    temp_pair_ids = temp_pair_ids[:-window_len]
-            if len(overflowing_tokens_ids) != 0:
-                overflowing_tokens.extend(overflowing_tokens_ids)
-            if len(overflowing_tokens_pair_ids) != 0:
-                overflowing_tokens.extend(overflowing_tokens_pair_ids)
-        elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
+        if truncation_strategy == TruncationStrategy.ONLY_FIRST or (
+            truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is None
+        ):
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
                 overflowing_tokens = ids[-window_len:]
@@ -3039,9 +3009,27 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 logger.error(
                     f"We need to remove {num_tokens_to_remove} to truncate the input"
                     f"but the first sequence has a length {len(ids)}. "
-                    f"Please select another truncation strategy than {truncation_strategy}, "
-                    f"for instance 'longest_first' or 'only_second'."
+                    + (
+                        (
+                            f"Please select another truncation strategy than {truncation_strategy}, "
+                            f"for instance 'longest_first' or 'only_second'."
+                        )
+                        if truncation_strategy == TruncationStrategy.ONLY_FIRST
+                        else ""
+                    )
                 )
+        elif truncation_strategy == TruncationStrategy.LONGEST_FIRST:
+            logger.warning(
+                f"Be aware, overflowing tokens are not returned for the setting you have chosen,"
+                f" i.e. sequence pairs with the '{TruncationStrategy.LONGEST_FIRST.value}' "
+                f"truncation strategy. So the returned list will always be empty even if some "
+                f"tokens have been removed."
+            )
+            for _ in range(num_tokens_to_remove):
+                if pair_ids is None or len(ids) > len(pair_ids):
+                    ids = ids[:-1]
+                else:
+                    pair_ids = pair_ids[:-1]
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
