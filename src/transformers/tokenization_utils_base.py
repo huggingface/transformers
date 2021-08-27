@@ -2893,8 +2893,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         if return_overflowing_tokens:
-            encoded_inputs["overflowing_tokens"] = overflowing_tokens
-            encoded_inputs["num_truncated_tokens"] = total_len - max_length
+            if TruncationStrategy == TruncationStrategy.LONGEST_FIRST and pair_ids is not None:
+                encoded_inputs["overflowing_tokens"] = overflowing_tokens
+                encoded_inputs["num_truncated_tokens"] = total_len - max_length
+                logger.error(
+                    f"Not possible to return overflowing tokens for pair of sequences with the"
+                    f"{truncation_strategy}."
+                    f"Please select another truncation strategy than {truncation_strategy}, "
+                    f"for instance 'longest_first' or 'only_first'."
+                )
+            else:
+                encoded_inputs["overflowing_tokens"] = overflowing_tokens
+                encoded_inputs["num_truncated_tokens"] = total_len - max_length
 
         # Add special tokens
         if add_special_tokens:
