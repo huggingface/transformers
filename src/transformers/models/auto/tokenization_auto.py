@@ -174,6 +174,7 @@ else:
             ("canine", ("CanineTokenizer", None)),
             ("bertweet", ("BertweetTokenizer", None)),
             ("bert-japanese", ("BertJapaneseTokenizer", None)),
+            ("splinter", ("SplinterTokenizer", "SplinterTokenizerFast")),
             ("byt5", ("ByT5Tokenizer", None)),
             (
                 "cpm",
@@ -198,6 +199,20 @@ else:
                     "MBart50TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "rembert",
+                (
+                    "RemBertTokenizer" if is_sentencepiece_available() else None,
+                    "RemBertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "clip",
+                (
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
         ]
     )
 
@@ -214,7 +229,10 @@ def tokenizer_class_from_name(class_name: str):
         if class_name in tokenizers:
             break
 
-    module = importlib.import_module(f".{module_name}", "transformers.models")
+    if module_name == "openai-gpt":
+        module_name = "openai"
+
+    module = importlib.import_module(f".{module_name.replace('-', '_')}", "transformers.models")
     return getattr(module, class_name)
 
 
