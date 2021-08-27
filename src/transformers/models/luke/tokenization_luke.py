@@ -210,8 +210,8 @@ class LukeTokenizer(RobertaTokenizer):
             if isinstance(entity_token_2, str)
             else entity_token_2
         )
-        kwargs["additional_special_tokens"] = [entity_token_1, entity_token_2]
-        kwargs["additional_special_tokens"] += kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] += [entity_token_1, entity_token_2]
 
         super().__init__(
             vocab_file=vocab_file,

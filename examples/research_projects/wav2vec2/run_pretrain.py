@@ -51,7 +51,10 @@ class ModelArguments:
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
     gradient_checkpointing: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
     )
     verbose_logging: Optional[bool] = field(
         default=False,
@@ -70,7 +73,7 @@ class ModelArguments:
 
 def configure_logger(model_args: ModelArguments, training_args: TrainingArguments):
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
@@ -172,12 +175,33 @@ class DataCollatorForWav2Vec2Pretraining:
         )
         mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
 
+        batch_size = batch["input_values"].shape[0]
+
+        # make sure that no loss is computed on padded inputs
+        if batch["attention_mask"] is not None:
+            # compute real output lengths according to convolution formula
+            output_lengths = self.model._get_feat_extract_output_lengths(batch["attention_mask"].sum(-1)).to(
+                torch.long
+            )
+
+            attention_mask = torch.zeros(
+                (batch_size, mask_indices_seq_length), dtype=torch.long, device=batch["input_values"].device
+            )
+
+            # these two operations makes sure that all values
+            # before the output lengths indices are attended to
+            attention_mask[
+                (torch.arange(attention_mask.shape[0], device=batch["input_values"].device), output_lengths - 1)
+            ] = 1
+            attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+
         # sample randomly masked indices
         batch["mask_time_indices"] = _compute_mask_indices(
-            (batch["input_values"].shape[0], mask_indices_seq_length),
+            (batch_size, mask_indices_seq_length),
             self.model.config.mask_time_prob,
             self.model.config.mask_time_length,
             device=batch["input_values"].device,
+            attention_mask=attention_mask,
             min_masks=2,
         )
 

@@ -18,8 +18,10 @@
 import math
 import unittest
 
+import pytest
+
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
-from transformers import is_torch_available
+from transformers import HubertConfig, is_torch_available
 from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -29,7 +31,7 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import HubertConfig, HubertForCTC, HubertModel, Wav2Vec2Processor
+    from transformers import HubertForCTC, HubertModel, Wav2Vec2Processor
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
 
 
@@ -96,7 +98,12 @@ class HubertModelTester:
         input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        config = HubertConfig(
+        config = self.get_config()
+
+        return config, input_values, attention_mask
+
+    def get_config(self):
+        return HubertConfig(
             hidden_size=self.hidden_size,
             feat_extract_norm=self.feat_extract_norm,
             feat_extract_dropout=self.feat_extract_dropout,
@@ -116,8 +123,6 @@ class HubertModelTester:
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
         )
-
-        return config, input_values, attention_mask
 
     def create_and_check_model(self, config, input_values, attention_mask):
         model = HubertModel(config=config)
@@ -174,12 +179,13 @@ class HubertModelTester:
             attention_mask[i, input_lengths[i] :] = 0
 
         model.config.ctc_loss_reduction = "sum"
-        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
 
         model.config.ctc_loss_reduction = "mean"
-        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
 
-        self.parent.assertTrue(abs(labels.shape[0] * labels.shape[1] * mean_loss.item() - sum_loss.item()) < 1e-3)
+        self.parent.assertTrue(isinstance(sum_loss, float))
+        self.parent.assertTrue(isinstance(mean_loss, float))
 
     def check_training(self, config, input_values, *args):
         config.ctc_zero_infinity = True
@@ -209,6 +215,20 @@ class HubertModelTester:
         self.parent.assertFalse(torch.isinf(loss).item())
 
         loss.backward()
+
+    def check_labels_out_of_vocab(self, config, input_values, *args):
+        model = HubertForCTC(config)
+        model.to(torch_device)
+        model.train()
+
+        input_values = input_values[:3]
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
+
+        with pytest.raises(ValueError):
+            model(input_values, labels=labels)
 
     def prepare_config_and_inputs_for_common(self):
         config, input_values, attention_mask = self.prepare_config_and_inputs()
@@ -241,6 +261,10 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_training(*config_and_inputs)
+
+    def test_labels_out_of_vocab(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
     # Hubert has no inputs_embeds
     def test_inputs_embeds(self):
@@ -376,6 +400,10 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_training(*config_and_inputs)
+
+    def test_labels_out_of_vocab(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
     # Hubert has no inputs_embeds
     def test_inputs_embeds(self):
@@ -535,7 +563,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(2)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True, truncation=True)
+        inputs = processor(input_speech, return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)

@@ -28,7 +28,7 @@ import datasets
 import numpy as np
 import torch
 from datasets import load_dataset, load_metric
-from torch.utils.data.dataloader import DataLoader
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
@@ -51,7 +51,8 @@ from utils_qa import postprocess_qa_predictions_with_beam_search
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.8.0.dev0")
+check_min_version("4.10.0.dev0")
+
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
 logger = logging.getLogger(__name__)
@@ -237,7 +238,7 @@ def main():
     accelerator = Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
@@ -314,6 +315,11 @@ def main():
 
     # Training preprocessing
     def prepare_train_features(examples):
+        # Some of the questions have lots of whitespace on the left, which is not useful and will make the
+        # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
+        # left whitespace
+        examples[question_column_name] = [q.lstrip() for q in examples[question_column_name]]
+
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
         # context that overlaps a bit the context of the previous feature.
@@ -429,6 +435,11 @@ def main():
 
     # Validation preprocessing
     def prepare_validation_features(examples):
+        # Some of the questions have lots of whitespace on the left, which is not useful and will make the
+        # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
+        # left whitespace
+        examples[question_column_name] = [q.lstrip() for q in examples[question_column_name]]
+
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
         # context that overlaps a bit the context of the previous feature.

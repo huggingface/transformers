@@ -27,7 +27,7 @@ import random
 import datasets
 import torch
 from datasets import ClassLabel, load_dataset, load_metric
-from torch.utils.data.dataloader import DataLoader
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
@@ -221,7 +221,7 @@ def main():
     accelerator = Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
@@ -344,7 +344,7 @@ def main():
 
     model.resize_token_embeddings(len(tokenizer))
 
-    # Preprocessing the raw_datasets.
+    # Preprocessing the datasets.
     # First we tokenize all the texts.
     padding = "max_length" if args.pad_to_max_length else False
 

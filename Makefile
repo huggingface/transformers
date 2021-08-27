@@ -21,10 +21,15 @@ modified_only_fixup:
 deps_table_update:
 	@python setup.py deps_table_update
 
+deps_table_check_updated:
+	@md5sum src/transformers/dependency_versions_table.py > md5sum.saved
+	@python setup.py deps_table_update
+	@md5sum -c --quiet md5sum.saved || (printf "\nError: the version dependency table is outdated.\nPlease run 'make fixup' or 'make style' and commit the changes.\n\n" && exit 1)
+	@rm md5sum.saved
+
 # autogenerating code
 
 autogenerate_code: deps_table_update
-	python utils/class_mapping_update.py
 
 # Check that source code meets quality standards
 
@@ -34,6 +39,7 @@ extra_quality_checks:
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/check_inits.py
+	python utils/tests_fetcher.py --sanity_check
 
 # this target runs checks on all files
 quality:

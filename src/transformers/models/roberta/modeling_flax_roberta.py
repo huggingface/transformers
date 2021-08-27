@@ -498,7 +498,12 @@ class FlaxRobertaClassificationHead(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
-        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        classifier_dropout = (
+            self.config.classifier_dropout
+            if self.config.classifier_dropout is not None
+            else self.config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(rate=classifier_dropout)
         self.out_proj = nn.Dense(
             self.config.num_labels,
             dtype=self.dtype,
@@ -615,13 +620,21 @@ class FlaxRobertaModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        token_type_ids,
-        position_ids,
+        token_type_ids: Optional[np.ndarray] = None,
+        position_ids: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+        # make sure `token_type_ids` is correctly initialized when not passed
+        if token_type_ids is None:
+            token_type_ids = jnp.zeros_like(input_ids)
+
+        # make sure `position_ids` is correctly initialized when not passed
+        if position_ids is None:
+            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
@@ -877,7 +890,12 @@ class FlaxRobertaForTokenClassificationModule(nn.Module):
 
     def setup(self):
         self.roberta = FlaxRobertaModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
-        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        classifier_dropout = (
+            self.config.classifier_dropout
+            if self.config.classifier_dropout is not None
+            else self.config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(rate=classifier_dropout)
         self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(

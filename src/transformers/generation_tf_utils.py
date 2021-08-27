@@ -400,8 +400,8 @@ class TFGenerationMixin:
         Parameters:
 
             input_ids (:obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
-                :obj:`tf.Tensor` of shape :obj:`(1,)`.
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it with
+                :obj:`bos_token_id` and a batch size of 1.
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             min_length (:obj:`int`, `optional`, defaults to 10):
@@ -1571,9 +1571,8 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
             )
 
         # Shift the indices to the right to keep also the first token above the threshold
-        sorted_indices_to_remove = tf.roll(sorted_indices_to_remove, 1, axis=-1)
         sorted_indices_to_remove = tf.concat(
-            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, 1:]],
+            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, :-1]],
             -1,
         )
         # scatter sorted tensors to original indexing

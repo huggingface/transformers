@@ -18,7 +18,7 @@
 import unittest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import ConvBertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -31,7 +31,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        ConvBertConfig,
         ConvBertForMaskedLM,
         ConvBertForMultipleChoice,
         ConvBertForQuestionAnswering,
@@ -110,7 +109,12 @@ class ConvBertModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = ConvBertConfig(
+        config = self.get_config()
+
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        return ConvBertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -124,8 +128,6 @@ class ConvBertModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def prepare_config_and_inputs_for_decoder(self):
         (

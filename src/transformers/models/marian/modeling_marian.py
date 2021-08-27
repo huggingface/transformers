@@ -49,6 +49,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MarianConfig"
 _TOKENIZER_FOR_DOC = "MarianTokenizer"
+_CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 
 
 MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [

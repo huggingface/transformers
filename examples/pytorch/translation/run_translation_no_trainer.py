@@ -28,7 +28,7 @@ import datasets
 import numpy as np
 import torch
 from datasets import load_dataset, load_metric
-from torch.utils.data.dataloader import DataLoader
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
@@ -264,7 +264,7 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )

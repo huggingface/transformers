@@ -25,6 +25,7 @@ from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 from typing import Iterator, Union
+from unittest import mock
 
 from transformers import logging as transformers_logging
 
@@ -33,8 +34,10 @@ from .file_utils import (
     is_datasets_available,
     is_faiss_available,
     is_flax_available,
+    is_keras2onnx_available,
     is_onnx_available,
     is_pandas_available,
+    is_rjieba_available,
     is_scatter_available,
     is_sentencepiece_available,
     is_soundfile_availble,
@@ -219,6 +222,23 @@ def require_git_lfs(test_case):
     """
     if not _run_git_lfs_tests:
         return unittest.skip("test of git lfs workflow")(test_case)
+    else:
+        return test_case
+
+
+def require_rjieba(test_case):
+    """
+    Decorator marking a test that requires rjieba. These tests are skipped when rjieba isn't installed.
+    """
+    if not is_rjieba_available():
+        return unittest.skip("test requires rjieba")(test_case)
+    else:
+        return test_case
+
+
+def require_keras2onnx(test_case):
+    if not is_keras2onnx_available():
+        return unittest.skip("test requires keras2onnx")(test_case)
     else:
         return test_case
 
@@ -988,7 +1008,7 @@ def mockenv(**kwargs):
         use_tf = os.getenv("USE_TF", False)
 
     """
-    return unittest.mock.patch.dict(os.environ, kwargs)
+    return mock.patch.dict(os.environ, kwargs)
 
 
 # from https://stackoverflow.com/a/34333710/9201239

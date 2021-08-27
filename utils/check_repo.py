@@ -31,9 +31,16 @@ PATH_TO_TRANSFORMERS = "src/transformers"
 PATH_TO_TESTS = "tests"
 PATH_TO_DOC = "docs/source"
 
+# Update this list with models that are supposed to be private.
+PRIVATE_MODELS = [
+    "DPRSpanPredictor",
+    "T5Stack",
+    "TFDPRSpanPredictor",
+]
+
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
 # Being in this list is an exception and should **not** be the rule.
-IGNORE_NON_TESTED = [
+IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
     "BigBirdPegasusEncoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoder",  # Building part of bigger (tested) model.
@@ -63,12 +70,9 @@ IGNORE_NON_TESTED = [
     "PegasusEncoder",  # Building part of bigger (tested) model.
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
-    "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
-    "T5Stack",  # Building part of bigger (tested) model.
     "TFDPREncoder",  # Building part of bigger (tested) model.
-    "TFDPRSpanPredictor",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
     "SeparableConv1D",  # Building part of bigger (tested) model.
@@ -78,8 +82,7 @@ IGNORE_NON_TESTED = [
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_camembert.py",
-    "test_modeling_flax_bert.py",
-    "test_modeling_flax_roberta.py",
+    "test_modeling_flax_mt5.py",
     "test_modeling_mbart.py",
     "test_modeling_mt5.py",
     "test_modeling_pegasus.py",
@@ -92,15 +95,16 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
-IGNORE_NON_AUTO_CONFIGURED = [
+IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "BeitForMaskedImageModeling",
     "CLIPTextModel",
     "CLIPVisionModel",
     "FlaxCLIPTextModel",
     "FlaxCLIPVisionModel",
+    "FlaxWav2Vec2ForCTC",
     "DetrForSegmentation",
     "DPRReader",
-    "DPRSpanPredictor",
     "FlaubertForQuestionAnswering",
     "GPT2DoubleHeadsModel",
     "LukeForEntityClassification",
@@ -110,9 +114,7 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
-    "T5Stack",
     "TFDPRReader",
-    "TFDPRSpanPredictor",
     "TFGPT2DoubleHeadsModel",
     "TFOpenAIGPTDoubleHeadsModel",
     "TFRagModel",
@@ -128,6 +130,7 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "VisualBertForQuestionAnswering",
     "VisualBertForMultipleChoice",
     "TFWav2Vec2ForCTC",
+    "TFHubertForCTC",
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -152,6 +155,7 @@ def get_model_modules():
         "modeling_retribert",
         "modeling_utils",
         "modeling_flax_auto",
+        "modeling_flax_encoder_decoder",
         "modeling_flax_utils",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
@@ -173,17 +177,47 @@ def get_model_modules():
     return modules
 
 
-def get_models(module):
+def get_models(module, include_pretrained=False):
     """Get the objects in module that are models."""
     models = []
     model_classes = (transformers.PreTrainedModel, transformers.TFPreTrainedModel, transformers.FlaxPreTrainedModel)
     for attr_name in dir(module):
-        if "Pretrained" in attr_name or "PreTrained" in attr_name:
+        if not include_pretrained and ("Pretrained" in attr_name or "PreTrained" in attr_name):
             continue
         attr = getattr(module, attr_name)
         if isinstance(attr, type) and issubclass(attr, model_classes) and attr.__module__ == module.__name__:
             models.append((attr_name, attr))
     return models
+
+
+def is_a_private_model(model):
+    """Returns True if the model should not be in the main init."""
+    if model in PRIVATE_MODELS:
+        return True
+
+    # Wrapper, Encoder and Decoder are all privates
+    if model.endswith("Wrapper"):
+        return True
+    if model.endswith("Encoder"):
+        return True
+    if model.endswith("Decoder"):
+        return True
+    return False
+
+
+def check_models_are_in_init():
+    """Checks all models defined in the library are in the main init."""
+    models_not_in_init = []
+    dir_transformers = dir(transformers)
+    for module in get_model_modules():
+        models_not_in_init += [
+            model[0] for model in get_models(module, include_pretrained=True) if model[0] not in dir_transformers
+        ]
+
+    # Remove private models
+    models_not_in_init = [model for model in models_not_in_init if not is_a_private_model(model)]
+    if len(models_not_in_init) > 0:
+        raise Exception(f"The following models should be in the main init: {','.join(models_not_in_init)}.")
 
 
 # If some test_modeling files should be ignored when checking models are all tested, they should be added in the
@@ -193,6 +227,7 @@ def get_model_test_files():
     _ignore_files = [
         "test_modeling_common",
         "test_modeling_encoder_decoder",
+        "test_modeling_flax_encoder_decoder",
         "test_modeling_marian",
         "test_modeling_tf_common",
     ]
@@ -229,6 +264,7 @@ def find_tested_models(test_file):
 
 def check_models_are_tested(module, test_file):
     """Check models defined in module are tested in test_file."""
+    # XxxPreTrainedModel are not tested
     defined_models = get_models(module)
     tested_models = find_tested_models(test_file)
     if tested_models is None:
@@ -272,17 +308,17 @@ def get_all_auto_configured_models():
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
     if is_torch_available():
         for attr_name in dir(transformers.models.auto.modeling_auto):
-            if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING"):
+            if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_auto, attr_name)))
     if is_tf_available():
         for attr_name in dir(transformers.models.auto.modeling_tf_auto):
-            if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING"):
+            if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_tf_auto, attr_name)))
     if is_flax_available():
         for attr_name in dir(transformers.models.auto.modeling_flax_auto):
-            if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING"):
+            if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_flax_auto, attr_name)))
-    return [cls.__name__ for cls in result]
+    return [cls for cls in result]
 
 
 def ignore_unautoclassed(model_name):
@@ -515,6 +551,8 @@ def check_all_objects_are_documented():
 
 def check_repo_quality():
     """Check all models are properly tested and documented."""
+    print("Checking all models are public.")
+    check_models_are_in_init()
     print("Checking all models are properly tested.")
     check_all_decorator_order()
     check_all_models_are_tested()
