@@ -1121,7 +1121,7 @@ FLAX_CAUSAL_LM_SAMPLE = r"""
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
         >>> outputs = model(**inputs)
 
         >>> # retrieve logts for next token

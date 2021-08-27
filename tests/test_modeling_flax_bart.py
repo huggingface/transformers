@@ -453,7 +453,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
             padding="max_length",
             truncation_strategy="only_first",
             truncation=True,
-            return_tensors="jax",
+            return_tensors="np",
         )
 
         self.assertEqual(1024, dct["input_ids"].shape[1])

@@ -761,7 +761,7 @@ FLAX_ELECTRA_FOR_PRETRAINING_DOCSTRING = """
         >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
         >>> model = FlaxElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
