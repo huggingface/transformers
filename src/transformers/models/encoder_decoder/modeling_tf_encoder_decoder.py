@@ -496,13 +496,35 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         decoder_inputs = input_processing(**decoder_processing_inputs)
         decoder_outputs = self.decoder(**decoder_inputs)
 
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
+        loss = None if decoder_inputs["labels"] is None else decoder_outputs[0]
+        logits = decoder_outputs[0] if decoder_inputs["labels"] is None else decoder_outputs[1]
+        past_key_values = None
+        if decoder_inputs["use_cache"]:
+            past_key_values = decoder_outputs[1] if decoder_inputs["labels"] is None else decoder_outputs[2]
+        # The starting index of the remaining elements in `decoder_outputs`
+        start_index = sum([1 if x is not None else 0 for x in (loss, logits, past_key_values)])
+
+        past = (encoder_outputs[0], past_key_values) if past_key_values else None
+
+        if not decoder_inputs["return_dict"]:
+            if not isinstance(encoder_outputs, tuple):
+                encoder_outputs = encoder_outputs.to_tuple()
+            output = (loss, logits, past) + decoder_outputs[start_index:] + encoder_outputs
+            output = tuple([x for x in output if x is not None])
+            return output
+
+        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
+        if not isinstance(encoder_outputs, TFBaseModelOutput):
+            encoder_outputs = TFBaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
 
         return TFSeq2SeqLMOutput(
             loss=decoder_outputs.loss,
             logits=decoder_outputs.logits,
-            past_key_values=decoder_outputs.past_key_values,
+            past_key_values=past,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -512,7 +534,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
@@ -534,40 +556,46 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             cross_attentions=cross_attns,
         )
 
-    # Copied from `modeling_tf_t5.py` with a change (`tuple` -> `TFBaseModelOutput`)
     def prepare_inputs_for_generation(
         self,
-        inputs,
+        decoder_input_ids,
         past,
         attention_mask,
         use_cache=None,
         **kwargs,
     ):
-        assert past is not None, "past has to be defined for encoder_outputs"
-
-        # first step
-        if len(past) < 2:
-            encoder_outputs, past_key_values = past, None
+        assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
+        if len(past) == 1:
+            assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
+            encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
+            past_key_values = None
         else:
-            encoder_outputs, past_key_values = past[0], past[1]
+            assert (
+                len(past) == 2
+            ), "`past` has to be of length 2 with the encoder_outputs at the first position and past_key_values at the second position."
+            encoder_outputs, past_key_values = past
+            if isinstance(encoder_outputs, tuple):
+                assert isinstance(
+                    encoder_outputs[0], tf.Tensor
+                ), f"`encoder_outputs[0]` has to be of type `tf.Tensor`, but is {type(encoder_outputs[0])}"
+                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
+            elif isinstance(encoder_outputs, tf.Tensor):
+                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
+            assert (
+                past_key_values
+            ), f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
+            decoder_input_ids = decoder_input_ids[:, -1:]
 
-        # Use `TFBaseModelOutput` is easier & more clear than using tuple.
-        encoder_hidden_states = kwargs["encoder_hidden_states"] if "encoder_hidden_states" in kwargs else None
-        encoder_attentions = kwargs["encoder_attentions"] if "encoder_attentions" in kwargs else None
-        encoder_outputs = (*encoder_outputs, encoder_hidden_states, encoder_attentions)
-        encoder_outputs = TFBaseModelOutput(*encoder_outputs)
-
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            inputs = inputs[:, -1:]
-
+        assert isinstance(
+            encoder_outputs, TFBaseModelOutput
+        ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
         return {
-            "input_ids": None,  # inputs don't have to be defined, but still need to be passed to make Keras.layer.__call__ happy
-            "decoder_input_ids": inputs,  # inputs are the decoder_input_ids
-            "past_key_values": past_key_values,
+            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "attention_mask": attention_mask,  # attention_mask is encoder's attention_mask
-            "use_cache": use_cache,
+            "past_key_values": past_key_values,
+            "decoder_input_ids": decoder_input_ids,
+            "attention_mask": attention_mask,
+            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
     def resize_token_embeddings(self, *args, **kwargs):
