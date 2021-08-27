@@ -1,0 +1,8 @@
+timestamp,experiment_id,project_name,duration,emissions,energy_consumed,country_name,country_iso_code,region,on_cloud,cloud_provider,cloud_region
+2021-08-25T17:59:10,383467b3-bcf8-48eb-9e4f-0ee817e92fb0,codecarbon,3.032003879547119,0.0,0.0,India,IND,karnataka,N,,
+2021-08-25T17:59:13,bc6b3ccb-0276-47b1-b531-884f63eb26db,codecarbon,3.031128168106079,0.0,0.0,India,IND,karnataka,N,,
+2021-08-25T17:59:18,fcef7c4e-8957-4735-a5aa-b2a16b6347cc,codecarbon,3.0340213775634766,0.0,0.0,India,IND,karnataka,N,,
+2021-08-25T17:59:22,7fed9397-fc79-4038-a461-7fba1acef697,codecarbon,3.042166233062744,0.0,0.0,India,IND,karnataka,N,,
+2021-08-25T17:59:27,e95a7cba-4b0b-4806-b41d-d866a1908876,codecarbon,3.106830358505249,0.0,0.0,India,IND,karnataka,N,,
+2021-08-25T17:59:34,2bbf2312-13bf-4522-88f7-76f047fab681,codecarbon,3.0424857139587402,0.0,0.0,India,IND,karnataka,N,,
+2021-08-25T17:59:49,317c3abf-74ae-4dfb-965e-0f482e1ea641,codecarbon,3.0327703952789307,0.0,0.0,India,IND,karnataka,N,,
