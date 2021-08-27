@@ -99,6 +99,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         if getattr(self.tokenizer, "pad_token", None) is None:
             # XXX some tokenizers do not have a padding token, we use simple lists
             # and no padding then
+            logger.warning("The tokenizer {self.tokenizer} does not have a pad token, we're not running it as a batch")
             padding = False
             inputs = []
             for sequence_pair in sequence_pairs:
