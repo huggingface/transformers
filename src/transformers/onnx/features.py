@@ -8,6 +8,7 @@ from ..models.bert import BertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
+from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.longformer import LongformerOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
@@ -78,6 +79,7 @@ class FeaturesManager:
             "sequence-classification-with-past",
             onnx_config_cls=GPTNeoOnnxConfig,
         ),
+        "layoutlm": supported_features_mapping("default", onnx_config_cls=LayoutLMOnnxConfig),
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_KIND.values())))
