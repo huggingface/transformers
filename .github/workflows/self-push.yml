@@ -89,7 +89,7 @@ jobs:
 #        run: |
 #          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
 #          pip install --upgrade pip
-#          pip install .[sklearn,testing,onnxruntime,sentencepiece]
+#          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-flax-speech]
 #
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
@@ -206,7 +206,7 @@ jobs:
 #        run: |
 #          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
 #          pip install --upgrade pip
-#          pip install .[sklearn,testing,onnxruntime,sentencepiece]
+#          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-flax-speech]
 #
 #      - name: Launcher docker
 #        uses: actions/checkout@v2

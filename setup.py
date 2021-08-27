@@ -254,6 +254,7 @@ extras["integrations"] = extras["optuna"] + extras["ray"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
+extras["tf-flax-speech"] = deps_list("soundfile")
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["codecarbon"] = deps_list("codecarbon")
