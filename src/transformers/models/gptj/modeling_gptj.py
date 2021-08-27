@@ -23,15 +23,10 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gptj import GPTJConfig
 
 
@@ -43,7 +38,7 @@ _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-j-6B",
-    # See all gptj models at https://huggingface.co/models?filter=gptj
+    # See all GPT-J models at https://huggingface.co/models?filter=gptj
 ]
 
 
@@ -307,6 +302,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
 
     config_class = GPTJConfig
     base_model_prefix = "transformer"
+    is_parallelizable = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -390,9 +386,47 @@ GPTJ_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
+PARALLELIZE_DOCSTRING = r"""
+    This is an experimental feature and is a subject to change at a moment's notice. Uses a device map to distribute
+    attention modules of the model across several devices. If no device map is given, it will evenly distribute blocks
+    across all devices.
+
+    Args:
+        device_map (:obj:`Dict[int, list]`, optional, defaults to None):
+            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
+            automatically mapped to the first device (for esoteric reasons). That means that the first device should
+            have fewer attention modules mapped to it than other devices. For reference, the GPT-J models have the
+            following number of attention modules:
+
+                - gpt-j-6B: 28
+
+    Example::
+        # Here is an example of a device map on a machine with 4 GPUs using gpt-j-6B, which has a total of 28 attention modules:
+        model = GPTJForCausalLM.from_pretrained('EleutherAI/gpt-j-6B')
+        device_map = {0: [0, 1, 2, 3, 4, 5, 6],
+                      1: [7, 8, 9, 10, 11, 12, 13],
+                      2: [14, 15, 16, 17, 18, 19, 20],
+                      3: [21, 22, 23, 24, 25, 26, 27]}
+        model.parallelize(device_map)
+"""
+
+DEPARALLELIZE_DOCSTRING = r"""
+    Moves the model to CPU from a model parallel state.
+
+    Example::
+        # On a 4 GPU machine with gpt-j-6B:
+        model = GPTJForCausalLM.from_pretrained('EleutherAI/gpt-j-6B')
+        device_map = {0: [0, 1, 2, 3, 4, 5, 6],
+                      1: [7, 8, 9, 10, 11, 12, 13],
+                      2: [14, 15, 16, 17, 18, 19, 20],
+                      3: [21, 22, 23, 24, 25, 26, 27]}
+        model.parallelize(device_map) # Splits the model across several devices
+        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+"""
+
 
 @add_start_docstrings(
-    "The bare gptj Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare GPT-J Model transformer outputting raw hidden-states without any specific head on top.",
     GPTJ_START_DOCSTRING,
 )
 class GPTJModel(GPTJPreTrainedModel):
@@ -408,6 +442,41 @@ class GPTJModel(GPTJPreTrainedModel):
         self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
         self.init_weights()
 
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+
+    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    def parallelize(self, device_map=None):
+        # Check validity of device_map
+        self.device_map = (
+            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
+        )
+        assert_device_map(self.device_map, len(self.h))
+        self.model_parallel = True
+        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
+        self.last_device = "cuda:" + str(max(self.device_map.keys()))
+        self.wte = self.wte.to(self.first_device)
+        # Load onto devices
+        for k, v in self.device_map.items():
+            for block in v:
+                cuda_device = "cuda:" + str(k)
+                self.h[block] = self.h[block].to(cuda_device)
+        # ln_f to last
+        self.ln_f = self.ln_f.to(self.last_device)
+
+    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
+    def deparallelize(self):
+        self.model_parallel = False
+        self.device_map = None
+        self.first_device = "cpu"
+        self.last_device = "cpu"
+        self.wte = self.wte.to("cpu")
+        for index in range(len(self.h)):
+            self.h[index] = self.h[index].to("cpu")
+        self.ln_f = self.ln_f.to("cpu")
+        torch.cuda.empty_cache()
+
     def get_input_embeddings(self):
         return self.wte
 
@@ -418,7 +487,7 @@ class GPTJModel(GPTJPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -518,6 +587,17 @@ class GPTJModel(GPTJPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
 
+            # Model parallel
+            if self.model_parallel:
+                torch.cuda.set_device(hidden_states.device)
+                # Ensure layer_past is on same device as hidden_states (might not be correct)
+                if layer_past is not None:
+                    layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
+                # Ensure that attention_mask is always on the same device as hidden_states
+                if attention_mask is not None:
+                    attention_mask = attention_mask.to(hidden_states.device)
+                if isinstance(head_mask, torch.Tensor):
+                    head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -561,6 +641,12 @@ class GPTJModel(GPTJPreTrainedModel):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
+            # Model Parallel: If it's the last layer for that device, put things on the next device
+            if self.model_parallel:
+                for k, v in self.device_map.items():
+                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
+                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
+
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(*output_shape)
@@ -579,13 +665,15 @@ class GPTJModel(GPTJPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    The GPT-J Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """,
+    GPTJ_START_DOCSTRING,
+)
 class GPTJForCausalLM(GPTJPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"h\.\d+\.attn\.masked_bias",
-        r"h\.\d+\.attn\.attention\.scale_attn",
-        r"lm_head\.weight",
-        r"h\.\d+\.attn\.attention\.bias",
-    ]
+    _keys_to_ignore_on_load_missing = []
     _keys_to_ignore_on_save = []
 
     def __init__(self, config):
@@ -593,6 +681,30 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         self.transformer = GPTJModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
         self.init_weights()
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+
+    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    def parallelize(self, device_map=None):
+        self.device_map = (
+            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
+            if device_map is None
+            else device_map
+        )
+        assert_device_map(self.device_map, len(self.transformer.h))
+        self.transformer.parallelize(self.device_map)
+        self.lm_head = self.lm_head.to(self.transformer.first_device)
+        self.model_parallel = True
+
+    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
+    def deparallelize(self):
+        self.transformer.deparallelize()
+        self.transformer = self.transformer.to("cpu")
+        self.lm_head = self.lm_head.to("cpu")
+        self.model_parallel = False
+        torch.cuda.empty_cache()
 
     def get_output_embeddings(self):
         return None
@@ -632,7 +744,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithCrossAttentions,
+        output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -672,6 +784,11 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
+
+        # Set device for model parallelism
+        if self.model_parallel:
+            torch.cuda.set_device(self.transformer.first_device)
+            hidden_states = hidden_states.to(self.lm_head.weight.device)
 
         # make sure sampling in fp16 works correctly and
         # compute loss in fp32 to match with mesh-tf version
@@ -716,13 +833,16 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The GPTJ Model transformer with a sequence classification head on top (linear layer).
+    The GPT-J Model transformer with a sequence classification head on top (linear layer).
+
     :class:`~transformers.GPTJForSequenceClassification` uses the last token in order to do the classification, as
-    other causal models (e.g. GPT-1) do. Since it does classification on the last token, it requires to know the
-    position of the last token. If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that
-    is not a padding token in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each
-    row of the batch. Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of
-    :obj:`input_ids`, it does the same (take the last value in each row of the batch).
+    other causal models (e.g. GPT, GPT-2, GPT-Neo) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
+    row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
+    guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
+    the last value in each row of the batch).
     """,
     GPTJ_START_DOCSTRING,
 )
@@ -736,6 +856,10 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         self.score = nn.Linear(config.n_ctx, self.num_labels, bias=False)
 
         self.init_weights()
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -784,9 +908,9 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         logits = self.score(hidden_states)
 
         if input_ids is not None:
-            batch_size, sequence_length = input_ids.shape[:2]
+            batch_size = input_ids.shape[0]
         else:
-            batch_size, sequence_length = inputs_embeds.shape[:2]
+            batch_size = inputs_embeds.shape[0]
 
         assert (
             self.config.pad_token_id is not None or batch_size == 1
