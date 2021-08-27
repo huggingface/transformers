@@ -1063,7 +1063,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
             >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, return_tensors='jax')
+            >>> inputs = tokenizer(text, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1124,7 +1124,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
             >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, return_tensors='jax')
+            >>> inputs = tokenizer(text, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
 
             >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1477,7 +1477,7 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
             >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> text = "summarize: My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, return_tensors='jax')
+            >>> inputs = tokenizer(text, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
 
             >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1624,7 +1624,7 @@ FLAX_T5_CONDITIONAL_GENERATION_DOCSTRING = """
         >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
         >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors='jax')
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors='np')
 
         >>> # Generate Summary
         >>> summary_ids = model.generate(inputs['input_ids']).sequences

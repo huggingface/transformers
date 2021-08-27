@@ -191,7 +191,7 @@ Additional training tips:
   pre-training mixture (see Appendix D of the `paper <https://arxiv.org/pdf/1910.10683.pdf>`__ for the task prefixes
   used).
 
-- If training on TPU, it is recommended to pad all examples of the dataset to the same length. Trimming batches (i.e.
+- If training on TPU, it is recommended to pad all examples of the dataset to the same length or make use of `pad_to_multiple_of` to have a small number of predefined bucket sizes to fit all examples in. Dynamically padding batches to the longest example is not recommended on TPU as it triggers a recompilation for every batch shape that is encountered during training thus significantly slowing down the training.
   only padding up to the longest example in a batch) leads to very slow training on TPU.
 
 .. _inference:
@@ -200,7 +200,7 @@ Inference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 At inference time, it is recommended to use :meth:`~transformers.generation_utils.GenerationMixin.generate`. This
-method takes care of feeding the encoded input via cross-attention layers to the decoder and auto-regressively
+method takes care of encoding the input and feeding the encoded hidden states via cross-attention layers to the decoder and auto-regressively
 generates the decoder output. Check out `this blog post <https://huggingface.co/blog/how-to-generate>`__ to know all
 the details about generating text with Transformers.
 
