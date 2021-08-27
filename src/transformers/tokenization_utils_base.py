@@ -2876,10 +2876,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             and pair_ids is not None
         ):
             raise ValueError(
-                f"Not possible to return overflowing tokens for pair of sequences with the"
-                f"{truncation_strategy.value}."
-                f"Please select another truncation strategy than {truncation_strategy.value}, "
-                f"for instance 'only_second' or 'only_first'."
+                "Not possible to return overflowing tokens for pair of sequences with the 'longest_first'. Please select another truncation strategy than 'longest_first', for instance 'only_second' or 'only_first'."
             )
 
         # Load from model defaults
