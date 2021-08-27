@@ -606,4 +606,9 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
     def _reorder_cache(self, past, beam_idx):
         # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past, beam_idx)
+        if len(past) == 1:
+            return past
+
+        encoder_outputs, past_key_values = past
+
+        return (encoder_outputs, self.decoder._reorder_cache(past_key_values, beam_idx))
