@@ -109,7 +109,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     def test_small_model_pt(self):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
-            model="sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
             framework="pt",
         )
         outputs = zero_shot_classifier(
@@ -129,7 +129,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     def test_small_model_tf(self):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
-            model="sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
             framework="tf",
         )
         outputs = zero_shot_classifier(
