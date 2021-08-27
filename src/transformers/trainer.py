@@ -815,8 +815,8 @@ class Trainer:
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
-            if is_sagemaker_mp_enabled():
-                self.optimizer = smp.DistributedOptimizer(self.optimizer)
+        if is_sagemaker_mp_enabled():
+            self.optimizer = smp.DistributedOptimizer(self.optimizer)
 
         return self.optimizer
 
