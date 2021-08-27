@@ -60,6 +60,8 @@ class ElectraModelTester:
         self.hidden_act = "gelu"
         self.hidden_dropout_prob = 0.1
         self.attention_probs_dropout_prob = 0.1
+        self.use_sen = False
+        self.ratio = 3
         self.max_position_embeddings = 512
         self.type_vocab_size = 16
         self.type_sequence_label_size = 2
@@ -111,6 +113,8 @@ class ElectraModelTester:
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            use_sen=self.use_sen,
+            ratio=self.ratio,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
@@ -128,13 +132,17 @@ class ElectraModelTester:
         choice_labels,
         fake_token_labels,
     ):
-        model = ElectraModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        for use_sen in [False, True]:
+            config.use_sen = use_sen
+            model = ElectraModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+            result = model(input_ids, token_type_ids=token_type_ids)
+            result = model(input_ids)
+            self.parent.assertEqual(
+                result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
+            )
 
     def create_and_check_electra_for_masked_lm(
         self,
@@ -147,11 +155,13 @@ class ElectraModelTester:
         choice_labels,
         fake_token_labels,
     ):
-        model = ElectraForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            model = ElectraForMaskedLM(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_electra_for_token_classification(
         self,
@@ -164,12 +174,14 @@ class ElectraModelTester:
         choice_labels,
         fake_token_labels,
     ):
-        config.num_labels = self.num_labels
-        model = ElectraForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            config.num_labels = self.num_labels
+            model = ElectraForTokenClassification(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_electra_for_pretraining(
         self,
@@ -182,12 +194,16 @@ class ElectraModelTester:
         choice_labels,
         fake_token_labels,
     ):
-        config.num_labels = self.num_labels
-        model = ElectraForPreTraining(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=fake_token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            config.num_labels = self.num_labels
+            model = ElectraForPreTraining(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=fake_token_labels
+            )
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_electra_for_sequence_classification(
         self,
@@ -200,12 +216,14 @@ class ElectraModelTester:
         choice_labels,
         fake_token_labels,
     ):
-        config.num_labels = self.num_labels
-        model = ElectraForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            config.num_labels = self.num_labels
+            model = ElectraForSequenceClassification(config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_electra_for_question_answering(
         self,
@@ -218,18 +236,20 @@ class ElectraModelTester:
         choice_labels,
         fake_token_labels,
     ):
-        model = ElectraForQuestionAnswering(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            model = ElectraForQuestionAnswering(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+            )
+            self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+            self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_electra_for_multiple_choice(
         self,
@@ -242,20 +262,22 @@ class ElectraModelTester:
         choice_labels,
         fake_token_labels,
     ):
-        config.num_choices = self.num_choices
-        model = ElectraForMultipleChoice(config=config)
-        model.to(torch_device)
-        model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        result = model(
-            multiple_choice_inputs_ids,
-            attention_mask=multiple_choice_input_mask,
-            token_type_ids=multiple_choice_token_type_ids,
-            labels=choice_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            config.num_choices = self.num_choices
+            model = ElectraForMultipleChoice(config=config)
+            model.to(torch_device)
+            model.eval()
+            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            result = model(
+                multiple_choice_inputs_ids,
+                attention_mask=multiple_choice_input_mask,
+                token_type_ids=multiple_choice_token_type_ids,
+                labels=choice_labels,
+            )
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

@@ -61,6 +61,8 @@ class BertModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
+        use_sen=False,
+        ratio=3,
         max_position_embeddings=512,
         type_vocab_size=16,
         type_sequence_label_size=2,
@@ -84,6 +86,8 @@ class BertModelTester:
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.use_sen = use_sen
+        self.ratio = ratio
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
@@ -128,6 +132,8 @@ class BertModelTester:
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            use_sen=self.use_sen,
+            ratio=self.ratio,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
@@ -146,6 +152,7 @@ class BertModelTester:
         ) = self.prepare_config_and_inputs()
 
         config.is_decoder = True
+        config.use_sen = False
         encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
         encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
@@ -164,14 +171,18 @@ class BertModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BertModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            model = BertModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+            result = model(input_ids, token_type_ids=token_type_ids)
+            result = model(input_ids)
+            self.parent.assertEqual(
+                result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
+            )
+            self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_as_decoder(
         self,
@@ -227,11 +238,13 @@ class BertModelTester:
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BertForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            model = BertForMaskedLM(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_model_for_causal_lm_as_decoder(
         self,
@@ -329,86 +342,100 @@ class BertModelTester:
     def create_and_check_for_next_sequence_prediction(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BertForNextSentencePrediction(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            labels=sequence_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            model = BertForNextSentencePrediction(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                labels=sequence_labels,
+            )
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_pretraining(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BertForPreTraining(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            labels=token_labels,
-            next_sentence_label=sequence_labels,
-        )
-        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            model = BertForPreTraining(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                labels=token_labels,
+                next_sentence_label=sequence_labels,
+            )
+            self.parent.assertEqual(
+                result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+            )
+            self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BertForQuestionAnswering(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            model = BertForQuestionAnswering(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+            )
+            self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+            self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_sequence_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        config.num_labels = self.num_labels
-        model = BertForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            config.num_labels = self.num_labels
+            model = BertForSequenceClassification(config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        config.num_labels = self.num_labels
-        model = BertForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            config.num_labels = self.num_labels
+            model = BertForTokenClassification(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_multiple_choice(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        config.num_choices = self.num_choices
-        model = BertForMultipleChoice(config=config)
-        model.to(torch_device)
-        model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        result = model(
-            multiple_choice_inputs_ids,
-            attention_mask=multiple_choice_input_mask,
-            token_type_ids=multiple_choice_token_type_ids,
-            labels=choice_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        for use_sen in [True, False]:
+            config.use_sen = use_sen
+            config.num_choices = self.num_choices
+            model = BertForMultipleChoice(config=config)
+            model.to(torch_device)
+            model.eval()
+            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            result = model(
+                multiple_choice_inputs_ids,
+                attention_mask=multiple_choice_input_mask,
+                token_type_ids=multiple_choice_token_type_ids,
+                labels=choice_labels,
+            )
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

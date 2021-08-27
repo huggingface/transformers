@@ -65,6 +65,12 @@ class ElectraConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
+        use_sen (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use Squeeze and Excitation Network block or just return the last hidden state. To be used only
+            as encoder. Note: This extra block is not pretrained, must be trained with a downstream task.
+        ratio (:obj:`int`, `optional`, defaults to 3):
+            The bottleneck ratio in the SENetwork. Must be less than or equal to num_hidden_layers. Irrelevant if
+            use_sen = False.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -133,6 +139,8 @@ class ElectraConfig(PretrainedConfig):
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
+        use_sen=False,
+        ratio=3,
         max_position_embeddings=512,
         type_vocab_size=2,
         initializer_range=0.02,
@@ -157,6 +165,8 @@ class ElectraConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.use_sen = use_sen
+        self.ratio = ratio
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range

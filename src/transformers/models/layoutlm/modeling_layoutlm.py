@@ -436,12 +436,47 @@ class LayoutLMLayer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.models.bert.modeling_bert.SENetwork
+class SENetwork(nn.Module):
+    def __init__(
+        self,
+        config,
+    ):
+        super().__init__()
+        self.config = config
+        assert (
+            self.config.ratio <= self.config.num_hidden_layers
+        ), "Bottleneck Ratio must be less than or equal to number of hidden layers."
+        self.squeeze = nn.AdaptiveAvgPool2d((1, 1))
+        self.excite = nn.Sequential(
+            nn.Linear(self.config.num_hidden_layers, self.config.num_hidden_layers // config.ratio),
+            nn.ReLU(),
+            nn.Linear(self.config.num_hidden_layers // config.ratio, self.config.num_hidden_layers),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, hidden_states):  # shape batch_size*config.num_hidden_layers*seq_len*config.hidden_size
+        b, h, x, y = hidden_states.size()
+        z = self.squeeze(hidden_states).view(b, h)
+        s = self.excite(z)
+        den = torch.sum(s, dim=1, keepdim=False).view(b, 1, 1).expand(b, x, y)
+        s = s.view(b, h, 1, 1).expand(b, h, x, y)
+
+        output_state = torch.sum(hidden_states * s, dim=1, keepdim=False) / den
+        return output_state
+
+
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->LayoutLM
 class LayoutLMEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([LayoutLMLayer(config) for _ in range(config.num_hidden_layers)])
+        if self.config.use_sen:
+            assert (
+                self.config.is_decoder is False
+            ), "You cannot use the Squeeze and Excite architecture while using bert as a decoder. Please set use_sen = False"
+            self.sen = SENetwork(config)
 
     def forward(
         self,
@@ -456,13 +491,13 @@ class LayoutLMEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-        all_hidden_states = () if output_hidden_states else None
+        all_hidden_states = () if output_hidden_states or self.config.use_sen else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
+            if output_hidden_states or self.config.use_sen:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
@@ -510,8 +545,11 @@ class LayoutLMEncoder(nn.Module):
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
-        if output_hidden_states:
+        if output_hidden_states or self.config.use_sen:
             all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if self.config.use_sen:
+            hidden_states = self.sen(torch.stack(all_hidden_states[1:], dim=1))
 
         if not return_dict:
             return tuple(
