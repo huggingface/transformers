@@ -1137,8 +1137,8 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             >>> from transformers import Wav2Vec2FeatureExtractor, HubertForSequenceClassification
             >>> from datasets import load_dataset
 
-            >>> processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-superb-ks")
-            >>> model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-superb-ks")
+            >>> processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ks")
+            >>> model = HubertForSequenceClassification.from_pretrained("superb/hubert-base-superb-ks")
 
             >>> ds = load_dataset("anton-l/superb_dummy", "ks", split="test")
 

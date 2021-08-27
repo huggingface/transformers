@@ -1590,8 +1590,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
             >>> from datasets import load_dataset
 
-            >>> processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-ks")
-            >>> model = Wav2Vec2ForSequenceClassification.from_pretrained("anton-l/wav2vec2-base-superb-ks")
+            >>> processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ks")
+            >>> model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ks")
 
             >>> ds = load_dataset("anton-l/superb_dummy", "ks", split="test")
 

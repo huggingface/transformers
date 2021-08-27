@@ -993,8 +993,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(abs(outputs.loss.item() - expected_loss) < 1e-3)
 
     def test_inference_keyword_spotting(self):
-        model = Wav2Vec2ForSequenceClassification.from_pretrained("anton-l/wav2vec2-base-superb-ks").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-ks")
+        model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ks").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ks")
         input_data = self._load_superb("ks", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -1012,8 +1012,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_intent_classification(self):
-        model = Wav2Vec2ForSequenceClassification.from_pretrained("anton-l/wav2vec2-base-superb-ic").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-ic")
+        model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ic").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ic")
         input_data = self._load_superb("ic", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -1042,8 +1042,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=1e-2))
 
     def test_inference_speaker_identification(self):
-        model = Wav2Vec2ForSequenceClassification.from_pretrained("anton-l/wav2vec2-base-superb-sid").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-sid")
+        model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-sid").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-sid")
         input_data = self._load_superb("si", 4)
 
         output_logits = []
@@ -1063,8 +1063,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_emotion_recognition(self):
-        model = Wav2Vec2ForSequenceClassification.from_pretrained("anton-l/wav2vec2-base-superb-er").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-er")
+        model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-er").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-er")
         input_data = self._load_superb("er", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 

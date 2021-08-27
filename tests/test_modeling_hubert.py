@@ -658,8 +658,8 @@ class HubertModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_keyword_spotting(self):
-        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-superb-ks").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-superb-ks")
+        model = HubertForSequenceClassification.from_pretrained("superb/hubert-base-superb-ks").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ks")
         input_data = self._load_superb("ks", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -677,8 +677,8 @@ class HubertModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_intent_classification(self):
-        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-superb-ic").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-superb-ic")
+        model = HubertForSequenceClassification.from_pretrained("superb/hubert-base-superb-ic").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ic")
         input_data = self._load_superb("ic", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -708,8 +708,8 @@ class HubertModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=3e-1))
 
     def test_inference_speaker_identification(self):
-        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-superb-sid").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-superb-sid")
+        model = HubertForSequenceClassification.from_pretrained("superb/hubert-base-superb-sid").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-sid")
         input_data = self._load_superb("si", 4)
 
         output_logits = []
@@ -730,8 +730,8 @@ class HubertModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=10))
 
     def test_inference_emotion_recognition(self):
-        model = HubertForSequenceClassification.from_pretrained("anton-l/hubert-base-superb-er").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/hubert-base-superb-er")
+        model = HubertForSequenceClassification.from_pretrained("superb/hubert-base-superb-er").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-er")
         input_data = self._load_superb("er", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
