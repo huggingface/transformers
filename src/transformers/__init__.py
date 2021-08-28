@@ -2411,6 +2411,7 @@ if TYPE_CHECKING:
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPT2DoubleHeadsModel,
             GPT2ForSequenceClassification,
+            GPT2ForTokenClassification,
             GPT2LMHeadModel,
             GPT2Model,
             GPT2PreTrainedModel,

@@ -388,7 +388,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("bert", "BertForTokenClassification"),
         ("megatron-bert", "MegatronBertForTokenClassification"),
         ("mobilebert", "MobileBertForTokenClassification"),
-        ("gpt2", "GPT2ForTokenClassification"),
         ("xlnet", "XLNetForTokenClassification"),
         ("albert", "AlbertForTokenClassification"),
         ("electra", "ElectraForTokenClassification"),
@@ -396,6 +395,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mpnet", "MPNetForTokenClassification"),
         ("deberta", "DebertaForTokenClassification"),
         ("deberta-v2", "DebertaV2ForTokenClassification"),
+        ("gpt2", "GPT2ForTokenClassification"),
         ("ibert", "IBertForTokenClassification"),
     ]
 )
