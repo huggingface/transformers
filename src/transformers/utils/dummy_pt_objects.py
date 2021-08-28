@@ -1781,15 +1781,6 @@ class GPT2ForSequenceClassification:
         requires_backends(cls, ["torch"])
 
 
-class GPT2ForTokenClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
 class GPT2LMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
