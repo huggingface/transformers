@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
+    TokenClassifierOutputWithPast,
 )
 from ...modeling_utils import (
     Conv1D,
@@ -1366,7 +1366,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="microsoft/DialogRPT-updown",
-        output_type=TokenClassifierOutput,
+        output_type=TokenClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1428,9 +1428,10 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
             output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return TokenClassifierOutput(
+        return TokenClassifierOutputWithPast(
             loss=loss,
             logits=logits,
+            past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
