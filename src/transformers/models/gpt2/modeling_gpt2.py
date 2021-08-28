@@ -1347,9 +1347,12 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         self.num_labels = config.num_labels
         
         self.transformer = GPT2Model(config)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
+        if hasattr(config, 'classifier_dropout') and config.classifier_dropout is not None:
+            classifier_dropout = config.classifier_dropout
+        elif hasattr(config, 'hidden_dropout') and config.hidden_dropout is not None:
+            classifier_dropout = config.hidden_dropout
+        else:
+            classifier_dropout = 0.1
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
