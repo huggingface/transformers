@@ -173,6 +173,9 @@ def parse_args():
     parser.add_argument(
         "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
     )
+    parser.add_argument(
+        "--no_keep_linebreaks", action="store_true", help="Do not keep line breaks when using CSV/JSON/TXT files."
+    )
 
     args = parser.parse_args()
 
@@ -257,11 +260,13 @@ def main():
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 extension,
+                keep_linebreaks=not args.no_keep_linebreaks,
                 data_files=data_files,
                 split=f"train[:{args.validation_split_percentage}%]",
             )
             raw_datasets["train"] = load_dataset(
                 extension,
+                keep_linebreaks=not args.no_keep_linebreaks,
                 data_files=data_files,
                 split=f"train[{args.validation_split_percentage}%:]",
             )

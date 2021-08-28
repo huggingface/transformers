@@ -1567,7 +1567,7 @@ FLAX_BIG_BIRD_FOR_PRETRAINING_DOCSTRING = """
         >>> tokenizer = BigBirdTokenizer.from_pretrained('google/bigbird-roberta-base')
         >>> model = FlaxBigBirdForPreTraining.from_pretrained('google/bigbird-roberta-base')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.prediction_logits
