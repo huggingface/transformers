@@ -246,7 +246,7 @@ class T5LayerNorm(nn.Module):
         # hidden_states = hidden_states.to(torch.float16)
         if self.weight.dtype == torch.float16:
             hidden_states = hidden_states.to(torch.float16)
-        
+
         return self.weight * hidden_states
 
 
@@ -649,9 +649,9 @@ class T5Block(nn.Module):
         )
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
-        
+
         # clamp inf values to enable fp16 training
-        #TODO
+        # TODO
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
