@@ -3214,7 +3214,11 @@ else:
     import sys
 
     sys.modules[__name__] = _LazyModule(
-        __name__, globals()["__file__"], _import_structure, extra_objects={"__version__": __version__}
+        __name__,
+        globals()["__file__"],
+        __spec__,
+        _import_structure,
+        extra_objects={"__version__": __version__},
     )
 
 
