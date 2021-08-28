@@ -1779,7 +1779,7 @@ class GPT2ForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
-        
+
 
 class GPT2ForTokenClassification:
     def __init__(self, *args, **kwargs):

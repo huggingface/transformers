@@ -1345,11 +1345,11 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        
+
         self.transformer = GPT2Model(config)
-        if hasattr(config, 'classifier_dropout') and config.classifier_dropout is not None:
+        if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
             classifier_dropout = config.classifier_dropout
-        elif hasattr(config, 'hidden_dropout') and config.hidden_dropout is not None:
+        elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
             classifier_dropout = config.hidden_dropout
         else:
             classifier_dropout = 0.1
@@ -1405,7 +1405,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
+
         hidden_states = transformer_outputs[0]
         hidden_states = self.dropout(hidden_states)
         logits = self.classifier(hidden_states)
@@ -1435,4 +1435,3 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-

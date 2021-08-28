@@ -366,7 +366,7 @@ class GPT2ModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-        
+
     def create_and_check_gpt2_for_token_classification(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
@@ -472,7 +472,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_gpt2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
-        
+
     def test_gpt2_token_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_for_token_classification(*config_and_inputs)
