@@ -87,7 +87,6 @@ jobs:
       - name: Install dependencies
         run: |
           apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
-          apt install -y libsndfile1-dev
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,flax,tf-flax-speech,vision]
@@ -259,7 +258,6 @@ jobs:
       - name: Install dependencies
         run: |
           apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
-          apt install -y libsndfile1-dev
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,flax,tf-flax-speech,vision]

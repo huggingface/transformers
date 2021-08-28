@@ -100,7 +100,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install .[flax,integrations,sklearn,testing,onnxruntime,sentencepiece,tf-flax-speech,vision]
@@ -306,7 +305,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install .[flax,integrations,sklearn,testing,onnxruntime,sentencepiece,tf-flax-speech,vision]
