@@ -187,7 +187,7 @@ class DataTrainingArguments:
         },
     )
     keep_linebreaks: bool = field(
-        default=True, metadata={"help": "Whether to keep line breaks when using CSV/JSON/TXT files or not."}
+        default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
     )
 
     def __post_init__(self):

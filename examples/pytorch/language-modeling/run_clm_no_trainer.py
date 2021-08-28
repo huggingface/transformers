@@ -174,7 +174,7 @@ def parse_args():
         "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
-        "--no_keep_linebreaks", action="store_true", help="Do not keep line breaks when using CSV/JSON/TXT files."
+        "--no_keep_linebreaks", action="store_true", help="Do not keep line breaks when using TXT files."
     )
 
     args = parser.parse_args()
