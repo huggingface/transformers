@@ -2838,7 +2838,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
         adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
-        manages a moving window (with user defined stride) for overflowing tokens
+        manages a moving window (with user defined stride) for overflowing tokens. Except for the longest_first
+        strategy, all truncation strategies function the same for sequences of input ids or a pair of sequences of
+        input ids. The longest_first strategy produces an error instead of returning overflowing_tokens for a pair of
+        input id sequences
 
         Args:
             ids (:obj:`List[int]`):
@@ -2986,7 +2989,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         Returns:
             :obj:`Tuple[List[int], List[int], List[int]]`: The truncated ``ids``, the truncated ``pair_ids`` and the
-            list of overflowing tokens.
+            list of overflowing tokens. Note: The longest_first strategy returns empty list of overflowing_tokens if a
+            pair of sequences ( or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:
             return ids, pair_ids, []
