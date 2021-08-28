@@ -26,7 +26,7 @@ from ...file_utils import CONFIG_NAME
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("realm", "REALMConfig"),
+        ("realm", "RealmConfig"),
         ("beit", "BeitConfig"),
         ("rembert", "RemBertConfig"),
         ("visual_bert", "VisualBertConfig"),
@@ -158,7 +158,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("realm", "REALM"),
+        ("realm", "Realm"),
         ("beit", "BeiT"),
         ("rembert", "RemBERT"),
         ("visual_bert", "VisualBert"),

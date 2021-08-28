@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,25 +23,25 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "realm-cc-news": "https://huggingface.co/realm-cc-news/resolve/main/vocab.txt",
+        "realm-cc-news-pretrained": "https://huggingface.co/realm-cc-news-pretrained/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "realm-cc-news": 512,
+    "realm-cc-news-pretrained": 512,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "realm-cc-news": {"do_lower_case": False},
+    "realm-cc-news-pretrained": {"do_lower_case": False},
 }
 
 
-class REALMTokenizer(BertTokenizer):
+class RealmTokenizer(BertTokenizer):
     r"""
     Construct a REALM tokenizer.
 
-    :class:`~transformers.REALMTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    :class:`~transformers.RealmTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning

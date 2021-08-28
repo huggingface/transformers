@@ -133,7 +133,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "REALMConfig", "REALMTokenizer"],
+    "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig", "RealmTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -338,7 +338,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.realm"].append("REALMTokenizerFast")
+    _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -507,15 +507,10 @@ if is_torch_available():
     _import_structure["models.realm"].extend(
         [
             "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "REALMForMaskedLM",
-            "REALMForCausalLM",
-            "REALMForMultipleChoice",
-            "REALMForQuestionAnswering",
-            "REALMForSequenceClassification",
-            "REALMForTokenClassification",
-            "REALMLayer",
-            "REALMModel",
-            "REALMPreTrainedModel",
+            "RealmForMaskedLM",
+            "RealmLayer",
+            "RealmModel",
+            "RealmPreTrainedModel",
             "load_tf_weights_in_realm",
         ]
     )
@@ -1854,7 +1849,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, REALMConfig, REALMTokenizer
+    from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig, RealmTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2046,7 +2041,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.realm import REALMTokenizerFast
+        from .models.realm import RealmTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2127,20 +2122,6 @@ if TYPE_CHECKING:
         from .utils.dummy_timm_objects import *
 
     if is_torch_available():
-
-        from .models.realm import (
-            REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            REALMForMaskedLM,
-            REALMForCausalLM,
-            REALMForMultipleChoice,
-            REALMForQuestionAnswering,
-            REALMForSequenceClassification,
-            REALMForTokenClassification,
-            REALMLayer,
-            REALMModel,
-            REALMPreTrainedModel,
-            load_tf_weights_in_realm,
-        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2595,6 +2576,14 @@ if TYPE_CHECKING:
             ProphetNetPreTrainedModel,
         )
         from .models.rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
+        from .models.realm import (
+            REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RealmForMaskedLM,
+            RealmLayer,
+            RealmModel,
+            RealmPreTrainedModel,
+            load_tf_weights_in_realm,
+        )
         from .models.reformer import (
             REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             ReformerAttention,

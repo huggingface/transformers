@@ -18,25 +18,20 @@
 from typing import TYPE_CHECKING
 from ...file_utils import _LazyModule, is_torch_available, is_tokenizers_available
 _import_structure = {
-    "configuration_realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "REALMConfig"],
-    "tokenization_realm": ["REALMTokenizer"],
+    "configuration_realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig"],
+    "tokenization_realm": ["RealmTokenizer"],
 }
 
 if is_tokenizers_available():
-    _import_structure["tokenization_realm_fast"] = ["REALMTokenizerFast"]
+    _import_structure["tokenization_realm_fast"] = ["RealmTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_realm"] = [
         "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "REALMForMaskedLM",
-        "REALMForCausalLM",
-        "REALMForMultipleChoice",
-        "REALMForQuestionAnswering",
-        "REALMForSequenceClassification",
-        "REALMForTokenClassification",
-        "REALMLayer",
-        "REALMModel",
-        "REALMPreTrainedModel",
+        "RealmForMaskedLM",
+        "RealmLayer",
+        "RealmModel",
+        "RealmPreTrainedModel",
         "load_tf_weights_in_realm",
     ]
 
@@ -44,24 +39,19 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, REALMConfig
-    from .tokenization_realm import REALMTokenizer
+    from .configuration_realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig
+    from .tokenization_realm import RealmTokenizer
 
     if is_tokenizers_available():
-        from .tokenization_realm_fast import REALMTokenizerFast
+        from .tokenization_realm_fast import RealmTokenizerFast
 
     if is_torch_available():
         from .modeling_realm import (
             REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            REALMForMaskedLM,
-            REALMForCausalLM,
-            REALMForMultipleChoice,
-            REALMForQuestionAnswering,
-            REALMForSequenceClassification,
-            REALMForTokenClassification,
-            REALMLayer,
-            REALMModel,
-            REALMPreTrainedModel,
+            RealmForMaskedLM,
+            RealmLayer,
+            RealmModel,
+            RealmPreTrainedModel,
             load_tf_weights_in_realm,
         )
 
