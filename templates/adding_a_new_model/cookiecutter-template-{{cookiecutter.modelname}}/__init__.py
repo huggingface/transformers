@@ -179,6 +179,31 @@ if TYPE_CHECKING:
         )
 {% endif %}
 {% endif %}
+{%- if "Flax" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
+    if is_flax_available():
+        _import_structure["modeling_flax_{{cookiecutter.lowercase_modelname}}"] = [
+            "Flax_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM",
+            "Flax{{cookiecutter.camelcase_modelname}}ForCausalLM",
+            "Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
+            "Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
+            "Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
+            "Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification",
+            "Flax{{cookiecutter.camelcase_modelname}}Layer",
+            "Flax{{cookiecutter.camelcase_modelname}}Model",
+            "Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel",
+        ]
+{% else %}
+    if is_flax_available():
+        _import_structure["modeling_flax_{{cookiecutter.lowercase_modelname}}"] = [
+            "Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
+            "Flax{{cookiecutter.camelcase_modelname}}Model",
+            "Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel",
+        ]
+{% endif %}
+{% endif %}
+
 else:
     import importlib
     import os
