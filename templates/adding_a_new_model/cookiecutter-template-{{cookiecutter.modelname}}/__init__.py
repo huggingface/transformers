@@ -18,15 +18,15 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports, TODO: refactor other lines below
-{%- if cookiecutter.generate_flax == "True" %}
-from ...file_utils import is_flax_available
+from ...file_utils import _BaseLazyModule, is_tokenizers_available
+{%- if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
+from ...file_utils import is_tf_available
 {% endif %}
-{%- if cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" %}
-from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available, is_tokenizers_available
-{%- elif cookiecutter.generate_tensorflow_and_pytorch == "PyTorch" %}
-from ...file_utils import _BaseLazyModule, is_torch_available, is_tokenizers_available
-{%- elif cookiecutter.generate_tensorflow_and_pytorch == "TensorFlow" %}
-from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available
+{%- if "PyTorch" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
+from ...file_utils import is_torch_available
+{% endif %}
+{%- if "Flax" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
+from ...file_utils import is_flax_available
 {% endif %}
 _import_structure = {
     "configuration_{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP", "{{cookiecutter.camelcase_modelname}}Config"],
@@ -36,7 +36,7 @@ _import_structure = {
 if is_tokenizers_available():
     _import_structure["tokenization_{{cookiecutter.lowercase_modelname}}_fast"] = ["{{cookiecutter.camelcase_modelname}}TokenizerFast"]
 
-{%- if (cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" or cookiecutter.generate_tensorflow_and_pytorch == "PyTorch") %}
+{%- if "PyTorch" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
 if is_torch_available():
     _import_structure["modeling_{{cookiecutter.lowercase_modelname}}"] = [
@@ -67,7 +67,7 @@ if is_torch_available():
 {% endif %}
 
 
-{%- if (cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" or cookiecutter.generate_tensorflow_and_pytorch == "TensorFlow") %}
+{%- if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
 if is_tf_available():
     _import_structure["modeling_tf_{{cookiecutter.lowercase_modelname}}"] = [
@@ -93,7 +93,7 @@ if is_tf_available():
 {% endif %}
 
 
-{%- if cookiecutter.generate_flax == "True" %}
+{%- if "Flax" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
 if is_flax_available():
     _import_structure["modeling_flax_{{cookiecutter.lowercase_modelname}}"] = [
@@ -126,7 +126,7 @@ if TYPE_CHECKING:
     if is_tokenizers_available():
         from .tokenization_{{cookiecutter.lowercase_modelname}}_fast import {{cookiecutter.camelcase_modelname}}TokenizerFast
 
-{%- if (cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" or cookiecutter.generate_tensorflow_and_pytorch == "PyTorch") %}
+{%- if "PyTorch" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
     if is_torch_available():
         from .modeling_{{cookiecutter.lowercase_modelname}} import (
@@ -155,7 +155,7 @@ if TYPE_CHECKING:
         )
 {% endif %}
 {% endif %}
-{%- if (cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" or cookiecutter.generate_tensorflow_and_pytorch == "TensorFlow") %}
+{%- if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
     if is_tf_available():
         from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (

@@ -93,13 +93,12 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             configuration = json.load(configuration_file)
 
         lowercase_model_name = configuration["lowercase_modelname"]
-        pytorch_or_tensorflow = configuration["generate_tensorflow_and_pytorch"]
-        generate_flax = configuration["generate_flax"]
+        generate_tensorflow_pytorch_and_flax = configuration["generate_tensorflow_pytorch_and_flax"]
         os.remove(f"{directory}/configuration.json")
 
-        output_pytorch = "PyTorch" in pytorch_or_tensorflow
-        output_tensorflow = "TensorFlow" in pytorch_or_tensorflow
-        output_flax = "True" in generate_flax
+        output_pytorch = "PyTorch" in generate_tensorflow_pytorch_and_flax
+        output_tensorflow = "TensorFlow" in generate_tensorflow_pytorch_and_flax
+        output_flax = "Flax" in generate_tensorflow_pytorch_and_flax
 
         model_dir = f"{path_to_transformer_root}/src/transformers/models/{lowercase_model_name}"
         os.makedirs(model_dir, exist_ok=True)
