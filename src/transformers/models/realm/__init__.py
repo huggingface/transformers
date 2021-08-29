@@ -28,10 +28,10 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_realm"] = [
         "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "RealmForMaskedLM",
-        "RealmLayer",
+        "RealmEncoder",
         "RealmModel",
         "RealmPreTrainedModel",
+        "RealmRetriever",
         "load_tf_weights_in_realm",
     ]
 
@@ -48,10 +48,10 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_realm import (
             REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RealmForMaskedLM,
-            RealmLayer,
+            RealmEncoder,
             RealmModel,
             RealmPreTrainedModel,
+            RealmRetriever,
             load_tf_weights_in_realm,
         )
 

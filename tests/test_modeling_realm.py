@@ -30,8 +30,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        RealmForMaskedLM,
-        RealmModel,
+        RealmEncoder,
+        RealmRetriever,
     )
     from transformers.models.realm.modeling_realm import (
         REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -153,6 +153,16 @@ class RealmModelTester:
             encoder_attention_mask,
         )
 
+    def create_and_check_encoder(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = RealmEncoder(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    """
     def create_and_check_model(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -163,43 +173,12 @@ class RealmModelTester:
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+    """
 
-    def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = RealmModel(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_masked_lm(
+    def create_and_check_retriever(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = RealmForMaskedLM(config=config)
+        model = RealmRetriever(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -225,8 +204,8 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            RealmModel,
-            RealmForMaskedLM,
+            RealmEncoder,
+            RealmRetriever,
         )
         if is_torch_available()
         else ()
@@ -240,9 +219,15 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_encoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_encoder(*config_and_inputs)
+    
+    """
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+    """
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -250,27 +235,31 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_lm(self):
+    def test_retriever(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+        self.model_tester.create_and_check_retriever(*config_and_inputs)
 
     @slow
-    def test_model_from_pretrained(self):
+    def test_encoder_from_pretrained(self):
         for model_name in REALM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RealmModel.from_pretrained(model_name)
+            model = RealmEncoder.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
+    def test_retriever_from_pretrained(self):
+        for model_name in REALM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = RealmRetriever.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 @require_torch
 class RealmModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = RealmForMaskedLM.from_pretrained("realm-cc-news-pretrained")
+        model = RealmRetriever.from_pretrained("realm-cc-news-pretrained-embedder")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+        vocab_size = 30522
 
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
