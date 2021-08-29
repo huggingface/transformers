@@ -1035,15 +1035,15 @@ class RealmRetriever(RealmPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # [batch_size, query_seq_len, hidden_size]
+        # [batch_size, hidden_size]
         query_output = query_outputs.pooler_output
         # [batch_size, retriever_proj_size]
         query_score = self.query_cls(query_output)
-        # [batch_size * num_candidates, candidate_seq_len, hidden_size]
+        # [batch_size * num_candidates, hidden_size]
         candidate_output = candidate_outputs.pooler_output
-        # [batch_size * num_candidates, candidate_seq_len, retriever_proj_size]
+        # [batch_size * num_candidates, retriever_proj_size]
         candidate_score = self.cls(candidate_output)
-        # [batch_size, num_candidates, candidate_seq_len, retriever_proj_size]
+        # [batch_size, num_candidates, retriever_proj_size]
         candidate_score = candidate_score.view(-1, self.config.num_candidates, self.config.retriever_proj_size)
         # [batch_size, num_candidates]
         relevance_score = torch.einsum("BD,BND->BN", query_score, candidate_score)
