@@ -186,7 +186,7 @@ class BaseModelOutput(ModelOutput):
 @dataclass
 class RealmEmbedderOutput(ModelOutput):
     """
-    Outputs of embedder models.
+    Outputs of RealmEmbedder models.
 
     Args:
         projected_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.retriever_proj_size)`):
@@ -207,6 +207,25 @@ class RealmEmbedderOutput(ModelOutput):
     projected_score: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class RealmRetrieverOutput(ModelOutput):
+    """
+    Outputs of RealmRetriever models.
+
+    Args:
+        relevance_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_candidates)`):
+            Relevance score.
+        query_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.retriever_proj_size)`):
+            Query score.
+        candidate_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_candidates, config.retriever_proj_size)`):
+            Candidate score.
+    """
+
+    relevance_score: torch.FloatTensor = None
+    query_score: torch.FloatTensor = None
+    candidate_score: torch.FloatTensor = None
 
 
 class RealmPredictionHeadTransform(nn.Module):
@@ -508,7 +527,14 @@ class RealmRetriever(RealmPreTrainedModel):
         # [batch_size, num_candidates]
         relevance_score = torch.einsum("BD,BND->BN", query_score, candidate_score)
 
-        return relevance_score, query_score, candidate_score
+        if not return_dict:
+            return relevance_score, query_score, candidate_score
+        else:
+            return RealmRetrieverOutput(
+                relevance_score = relevance_score,
+                query_score = query_score,
+                candidate_score = candidate_score
+            )
 
 
 @add_start_docstrings(
