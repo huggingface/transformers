@@ -1039,17 +1039,14 @@ class RealmRetriever(RealmPreTrainedModel):
         query_output = query_outputs.pooler_output
         # [batch_size, retriever_proj_size]
         query_score = self.query_cls(query_output)
-        #print('query_score', query_score, query_score.shape)
         # [batch_size * num_candidates, candidate_seq_len, hidden_size]
         candidate_output = candidate_outputs.pooler_output
         # [batch_size * num_candidates, candidate_seq_len, retriever_proj_size]
         candidate_score = self.cls(candidate_output)
-        #print('candidate_score', candidate_score[0], candidate_score.shape)
         # [batch_size, num_candidates, candidate_seq_len, retriever_proj_size]
-        candidate_score = candidate_score.view((candidate_input_ids.shape[0], self.config.num_candidates, -1))
+        candidate_score = candidate_score.view(-1, self.config.num_candidates, self.config.retriever_proj_size)
         # [batch_size, num_candidates]
         relevance_score = torch.einsum("BD,BND->BN", query_score, candidate_score)
-        #print('relevance_score', relevance_score[0], relevance_score.shape)
 
         return relevance_score, query_score, candidate_score
 
@@ -1085,6 +1082,7 @@ class RealmEncoder(RealmPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         labels=None,
+        mlm_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1115,51 +1113,48 @@ class RealmEncoder(RealmPreTrainedModel):
 
         # [batch_size * num_candidates, joint_seq_len, hidden_size]
         joint_output = joint_outputs[0]
-        print("joint_output", joint_output[0], joint_output.shape)
-        
         # [batch_size * num_candidates, joint_seq_len, vocab_size]
         prediction_scores = self.cls(joint_output)
-        print("prediction_scores", prediction_scores[0], prediction_scores.shape)
-
-        
-        # TODO: Complete loss fn.
         # [batch_size, num_candidates]
         candidate_score = relevance_score
-        # [batch_size * num_candidates, 1]
-        candidate_score = candidate_score.view(-1, 1)
-        # [batch_siZe, num_candidates]
-        candidate_log_probs = torch.log_softmax(candidate_score)
 
         masked_lm_loss = None
         if labels is not None:
+            if mlm_mask is None:
+                mlm_mask = torch.ones_like(labels, dtype=torch.float32)
+            else:
+                mlm_mask = mlm_mask.type(torch.float32)
+
             # Compute marginal log-likelihood
-            # [batch_size * num_candidates, joint_seq_len, vocab_size]
-            mlm_logits = prediction_scores
-            mlm_log_probs = torch.log_softmax(mlm_logits)
-        
-            # [batch_size, joint_seq_len]
-            mlm_targets = labels
+            loss_fct = CrossEntropyLoss(reduction='none')  # -100 index = padding token
+            
+            # [batch_size * num_candidates * joint_seq_len, vocab_size]
+            mlm_logits = prediction_scores.view(-1, self.config.vocab_size)
+            # [batch_size * num_candidates * joint_seq_len]
+            mlm_targets = labels.tile(1, self.config.num_candidates).view(-1)
             # [batch_size, num_candidates, joint_seq_len]
-            tiled_mlm_targets = torch.tile(mlm_targets.unsequeeze(1), (1, self.config.num_candidate, 1))
-            ## [batch_size, num_candidates, joint_seq_len, 1]
-            #tiled_mlm_targets = tiled_mlm_targets.unsqueeze(-1)
-            candidate_log_probs = candidate_log_probs.unsequeeze(-1)
-            joint_gold_log_probs = candidate_log_probs + mlm_log_probs
-
-
-
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            #masked_lm_loss = loss_fct(, labels.view(-1))
+            masked_lm_log_prob = -loss_fct(mlm_logits, mlm_targets).view_as(input_ids)
+            # [batch_size, num_candidates, 1]
+            candidate_log_prob = candidate_score.log_softmax(-1).unsqueeze(-1)
+            # [batch_size, num_candidates, joint_seq_len]
+            joint_gold_log_prob = candidate_log_prob + masked_lm_log_prob
+            # [batch_size, joint_seq_len]
+            marginal_gold_log_probs = joint_gold_log_prob.logsumexp(1)
+            # []
+            masked_lm_loss = -torch.nansum(
+                torch.sum(marginal_gold_log_probs * mlm_mask) / 
+                torch.sum(mlm_mask)
+            )
 
         if not return_dict:
-            output = (prediction_scores,) + joint_output[1:]
+            output = (prediction_scores,) + joint_outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
             logits=prediction_scores,
-            hidden_states=joint_output.hidden_states,
-            attentions=joint_output.attentions,
+            hidden_states=joint_outputs.hidden_states,
+            attentions=joint_outputs.attentions,
         )
 
 
