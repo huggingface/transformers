@@ -418,18 +418,15 @@ class FlaxTransformerEncoder(nn.Module):
 
 
 class FlaxDistilBertLMDecoder(nn.Module):
-    features: int
     config: DistilBertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    kernel_init: Callable[..., np.ndarray] = jax.nn.initializers.normal()
     bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
 
     def setup(self):
-        self.kernel = self.param("kernel", self.kernel_init, (self.config.dim, self.features))
-        self.bias = self.param("bias", self.bias_init, (self.features,))
+        self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
 
-    def __call__(self, inputs):
-        y = lax.dot_general(inputs, self.kernel, (((inputs.ndim - 1,), (0,)), ((), ())))
+    def __call__(self, inputs, kernel):
+        y = lax.dot_general(inputs, kernel, (((inputs.ndim - 1,), (0,)), ((), ())))
         y = y + self.bias
         return y
 
@@ -569,12 +566,17 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
             kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
         self.vocab_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
-        self.vocab_projector = FlaxDistilBertLMDecoder(
-            self.config.vocab_size,
-            self.config,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-        )
+        if self.config.tie_word_embeddings:
+            self.vocab_projector = FlaxDistilBertLMDecoder(
+                self.config,
+                dtype=self.dtype,
+            )
+        else:
+            self.vocab_projector = nn.Dense(
+                self.config.vocab_size,
+                dtype=self.dtype,
+                kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            )
 
     def __call__(
         self,
@@ -604,10 +606,7 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
 
         if self.config.tie_word_embeddings:
             shared_embedding = self.distilbert.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
-            bias = self.vocab_projector.bias
-            prediction_logits = self.vocab_projector.apply(
-                {"params": {"kernel": shared_embedding.T, "bias": bias}}, prediction_logits
-            )
+            prediction_logits = self.vocab_projector(prediction_logits, shared_embedding.T)
         else:
             prediction_logits = self.vocab_projector(prediction_logits)
 
