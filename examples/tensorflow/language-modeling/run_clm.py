@@ -187,7 +187,7 @@ class DataTrainingArguments:
         },
     )
     keep_linebreaks: bool = field(
-        default=True, metadata={"help": "Whether to keep line breaks when using CSV/JSON/TXT files or not."}
+        default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
     )
 
     def __post_init__(self):
@@ -321,6 +321,7 @@ def main():
             )
     else:
         data_files = {}
+        dataset_args = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
@@ -328,7 +329,8 @@ def main():
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        raw_datasets = load_dataset(extension, keep_linebreaks=data_args.keep_linebreaks, data_files=data_files)
+            dataset_args["keep_linebreaks"] = data_args.keep_linebreaks
+        raw_datasets = load_dataset(extension, data_files=data_files, **dataset_args)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
     # endregion
