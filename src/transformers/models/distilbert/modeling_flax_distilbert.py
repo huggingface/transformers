@@ -275,7 +275,7 @@ class FlaxFFN(nn.Module):
         assert self.config.activation in [
             "relu",
             "gelu",
-        ], f"activation ({config.activation}) must be in ['relu', 'gelu']"
+        ], f"activation ({self.config.activation}) must be in ['relu', 'gelu']"
         self.activation = ACT2FN[self.config.activation]
 
     def __call__(self, inputs, deterministic: bool = True):
