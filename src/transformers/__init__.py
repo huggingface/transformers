@@ -1693,6 +1693,17 @@ if is_flax_available():
             "FlaxCLIPVisionPreTrainedModel",
         ]
     )
+    _import_structure["models.distilbert"].extend(
+        [
+            "FlaxDistilBertForMaskedLM",
+            "FlaxDistilBertForMultipleChoice",
+            "FlaxDistilBertForQuestionAnswering",
+            "FlaxDistilBertForSequenceClassification",
+            "FlaxDistilBertForTokenClassification",
+            "FlaxDistilBertModel",
+            "FlaxDistilBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "FlaxElectraForMaskedLM",
@@ -3165,6 +3176,15 @@ if TYPE_CHECKING:
             FlaxCLIPTextPreTrainedModel,
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
+        )
+        from .models.distilbert import (
+            FlaxDistilBertForMaskedLM,
+            FlaxDistilBertForMultipleChoice,
+            FlaxDistilBertForQuestionAnswering,
+            FlaxDistilBertForSequenceClassification,
+            FlaxDistilBertForTokenClassification,
+            FlaxDistilBertModel,
+            FlaxDistilBertPreTrainedModel,
         )
         from .models.electra import (
             FlaxElectraForMaskedLM,
