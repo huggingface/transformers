@@ -20,6 +20,8 @@ import os
 
 import torch
 import torch.utils.checkpoint
+from typing import Optional, Tuple
+from dataclasses import dataclass
 from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
@@ -39,6 +41,7 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
+    ModelOutput
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -93,13 +96,12 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
     for name, array in zip(names, arrays):
         original_name = name
 
-        name = name.replace("module/module/module/bert/", "embedder/")
-        name = name.replace("module/module/module/cls/predictions/", "cls/predictions/")
-        name = name.replace("module/module/LayerNorm/", "cls/LayerNorm/")
-        name = name.replace("module/module/dense/", "cls/dense/")
-
-        #if "cls/predictions/output_bias" in name:
-        #    continue
+        # embedder
+        embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
+        name = name.replace("module/module/module/bert/", f"{embedder_prefix}bert/")
+        name = name.replace("module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
+        name = name.replace("module/module/dense/", f"{embedder_prefix}cls/dense/")
+        name = name.replace("module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
 
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
@@ -154,6 +156,7 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         pointer.data = torch.from_numpy(array)
     return model
 
+
 @dataclass
 class BaseModelOutput(ModelOutput):
     """
@@ -176,6 +179,32 @@ class BaseModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class RealmEmbedderOutput(ModelOutput):
+    """
+    Outputs of embedder models.
+
+    Args:
+        projected_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.retriever_proj_size)`):
+            Projected scores.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    projected_score: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -274,11 +303,7 @@ class RealmPreTrainedModel(PreTrainedModel):
             input_shape = tensor.shape
             if len(input_shape) > 2:
                 tensor = tensor.view((-1, input_shape[-1]))
-            def _unflatten(flat):
-                if len(input_shape) > 2:
-                    flat = flat.view(input_shape + (-1,))
-                return flat
-            flattened_inputs.append((tensor, _unflatten))
+            flattened_inputs.append(tensor)
         return flattened_inputs
             
             
@@ -345,25 +370,75 @@ REALM_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
+    "The embedder of REALM outputting raw hidden-states without any specific head on top.",
+    REALM_START_DOCSTRING,
+)
+class RealmEmbedder(RealmPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.bert = BertModel(self.config)
+        self.cls = RealmRetrieverProjection(self.config)
+        self.init_weights()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+
+        bert_outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        # [batch_size, hidden_size]
+        pooler_output = bert_outputs.pooler_output
+        # [batch_size, retriever_proj_size]
+        projected_score = self.cls(pooler_output)
+        
+        if not return_dict:
+            return (projected_score,) + bert_outputs[1:]
+        else:
+            return RealmEmbedderOutput(
+                projected_score = projected_score,
+                hidden_states = bert_outputs.hidden_states,
+                attentions = bert_outputs.attentions,
+            )
+
+
+@add_start_docstrings(
     "The retriever of REALM outputting raw hidden-states without any specific head on top.",
     REALM_START_DOCSTRING,
 )
 class RealmRetriever(RealmPreTrainedModel):
-    def __init__(self, config, query_embedder=None, query_predictions=None):
+    def __init__(self, config, query_embedder=None):
         super().__init__(config)
 
-        self.embedder = BertModel(self.config)
+        self.embedder = RealmEmbedder(self.config)
+        
         if query_embedder:
             self.query_embedder = query_embedder
         else:
             self.query_embedder = self.embedder
-        
-        self.cls = RealmRetrieverProjection(self.config)
-
-        if query_predictions:
-            self.query_cls = query_predictions
-        else:
-            self.query_cls = self.cls
         
         self.init_weights()
 
@@ -401,9 +476,9 @@ class RealmRetriever(RealmPreTrainedModel):
 
         # [batch_size * num_candidates, candidate_seq_len]
         (
-            (flattened_input_ids, unflatten), 
-            (flattened_attention_mask, _), 
-            (flattened_token_type_ids, _)
+            flattened_input_ids, 
+            flattened_attention_mask,
+            flattened_token_type_ids
         ) = self._flatten_inputs(
             candidate_input_ids, 
             candidate_attention_mask, 
@@ -424,14 +499,10 @@ class RealmRetriever(RealmPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # [batch_size, hidden_size]
-        query_output = query_outputs.pooler_output
         # [batch_size, retriever_proj_size]
-        query_score = self.query_cls(query_output)
-        # [batch_size * num_candidates, hidden_size]
-        candidate_output = candidate_outputs.pooler_output
+        query_score = query_outputs[0]
         # [batch_size * num_candidates, retriever_proj_size]
-        candidate_score = self.cls(candidate_output)
+        candidate_score = candidate_outputs[0]
         # [batch_size, num_candidates, retriever_proj_size]
         candidate_score = candidate_score.view(-1, self.config.num_candidates, self.config.retriever_proj_size)
         # [batch_size, num_candidates]
@@ -481,9 +552,9 @@ class RealmEncoder(RealmPreTrainedModel):
         return_dict=None,
     ):
         (
-            (flattened_input_ids, unflatten), 
-            (flattened_attention_mask, _), 
-            (flattened_token_type_ids, _)
+            flattened_input_ids, 
+            flattened_attention_mask, 
+            flattened_token_type_ids
         ) = self._flatten_inputs(
             input_ids, 
             attention_mask, 

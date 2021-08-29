@@ -507,6 +507,7 @@ if is_torch_available():
     _import_structure["models.realm"].extend(
         [
             "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RealmEmbedder",
             "RealmEncoder",
             "RealmModel",
             "RealmPreTrainedModel",
@@ -2578,6 +2579,7 @@ if TYPE_CHECKING:
         from .models.rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
         from .models.realm import (
             REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RealmEmbedder,
             RealmEncoder,
             RealmModel,
             RealmPreTrainedModel,
