@@ -99,8 +99,8 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         name = name.replace("module/module/LayerNorm/", "cls/LayerNorm/")
         name = name.replace("module/module/dense/", "cls/dense/")
 
-        if "cls/predictions/output_bias" in name:
-            continue
+        #if "cls/predictions/output_bias" in name:
+        #    continue
 
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
@@ -517,7 +517,7 @@ class RealmLayer(nn.Module):
         return layer_output
 
 
-class RealmEncoder(nn.Module):
+class RealmEncoderLegacy(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -626,7 +626,7 @@ class RealmPredictionHeadTransform(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
-        #hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
 
@@ -975,6 +975,8 @@ class RealmRetriever(RealmPreTrainedModel):
             self.query_cls = query_predictions
         else:
             self.query_cls = self.cls
+        
+        self.init_weights()
 
     def forward(
         self,
@@ -1054,13 +1056,22 @@ class RealmRetriever(RealmPreTrainedModel):
 
 class RealmEncoder(RealmPreTrainedModel):
     def __init__(self, config):
-        super().__init__()
-        self.config = config
-
+        super().__init__(config)
         self.bert = BertModel(self.config)
-
-        
         self.cls = RealmOnlyMLMHead(self.config)
+        self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.bert.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.bert.embeddings.word_embeddings = value
+
+    def get_output_embeddings(self):
+        return self.cls.predictions.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.cls.predictions.decoder = new_embeddings
 
     def forward(
         self,
@@ -1088,7 +1099,7 @@ class RealmEncoder(RealmPreTrainedModel):
             token_type_ids
         )
 
-        joint_outpus = self.bert(
+        joint_outputs = self.bert(
             flattened_input_ids,
             attention_mask=flattened_attention_mask,
             token_type_ids=flattened_token_type_ids,
@@ -1103,11 +1114,19 @@ class RealmEncoder(RealmPreTrainedModel):
         )
 
         # [batch_size * num_candidates, joint_seq_len, hidden_size]
-        joint_output = joint_outpus[0]
+        joint_output = joint_outputs[0]
+        print("joint_output", joint_output[0], joint_output.shape)
+        
         # [batch_size * num_candidates, joint_seq_len, vocab_size]
         prediction_scores = self.cls(joint_output)
+        print("prediction_scores", prediction_scores[0], prediction_scores.shape)
 
+        
+        # TODO: Complete loss fn.
+        # [batch_size, num_candidates]
         candidate_score = relevance_score
+        # [batch_size * num_candidates, 1]
+        candidate_score = candidate_score.view(-1, 1)
         # [batch_siZe, num_candidates]
         candidate_log_probs = torch.log_softmax(candidate_score)
 
@@ -1133,14 +1152,14 @@ class RealmEncoder(RealmPreTrainedModel):
             #masked_lm_loss = loss_fct(, labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + joint_outpus[1:]
+            output = (prediction_scores,) + joint_output[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
             logits=prediction_scores,
-            hidden_states=joint_outpus.hidden_states,
-            attentions=joint_outpus.attentions,
+            hidden_states=joint_output.hidden_states,
+            attentions=joint_output.attentions,
         )
 
 
