@@ -238,9 +238,7 @@ class OnnxExportTestCaseV2(TestCase):
                 onnx_config = onnx_config_class.from_model_config(model.config)
 
                 with NamedTemporaryFile("wb+") as output:
-                    onnx_inputs, onnx_outputs = export(
-                        tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, output
-                    )
+                    onnx_inputs, onnx_outputs = export(tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, output)
 
                     try:
                         # Reset to the head of the file and read everything
@@ -254,7 +252,7 @@ class OnnxExportTestCaseV2(TestCase):
                             onnx_outputs,
                             batch_size=-1,
                             seq_length=-1,
-                            atol=1e-5
+                            atol=1e-5,
                         )
                     except ValueError as ve:
                         self.fail(f"{name} -> {ve}")
@@ -292,7 +290,7 @@ class OnnxExportTestCaseV2(TestCase):
                             onnx_outputs,
                             batch_size=-1,
                             seq_length=-1,
-                            atol=1e-5
+                            atol=1e-5,
                         )
                     except ValueError as ve:
                         self.fail(f"{name} -> {ve}")

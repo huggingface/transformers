@@ -148,7 +148,7 @@ def validate_model_outputs(
 
     # Create ONNX Runtime session
     options = SessionOptions()
-    options.add_session_config_entry('session.load_model_format', 'ONNX')
+    options.add_session_config_entry("session.load_model_format", "ONNX")
     session = InferenceSession(onnx_model_path_or_bytes, options)
 
     # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
@@ -157,7 +157,7 @@ def validate_model_outputs(
         tokenizer=tokenizer,
         batch_size=batch_size if batch_size > 0 else 3,
         seq_length=seq_length if seq_length > 0 else 31,
-        framework=TensorType.PYTORCH
+        framework=TensorType.PYTORCH,
     )
 
     # Compute outputs from the reference model
