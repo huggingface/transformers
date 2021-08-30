@@ -1,8 +1,8 @@
 {
-  "modelname": "TemplatePT",
-  "uppercase_modelname": "TEMPLATE_PT",
-  "lowercase_modelname": "template_pt",
-  "camelcase_modelname": "TemplatePt",
+  "modelname": "TemplateFLAX",
+  "uppercase_modelname": "TEMPLATE_FLAX",
+  "lowercase_modelname": "template_flax",
+  "camelcase_modelname": "TemplateFlax",
   "authors": "The HuggingFace Team",
   "checkpoint_identifier": "brand-new-bert-base-cased",
   "tokenizer_type": "Based on BERT",
