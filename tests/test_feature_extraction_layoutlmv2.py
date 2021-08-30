@@ -185,7 +185,11 @@ class LayoutLMv2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         # with apply_OCR = True
         feature_extractor = LayoutLMv2FeatureExtractor()
 
-        image = Image.open("tests/fixtures/tests_samples/DocVQA/document.png").convert("RGB")
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+
+        image = Image.open(ds[0]["file"]).convert("RGB")
 
         encoding = feature_extractor(image, return_tensors="pt")
 

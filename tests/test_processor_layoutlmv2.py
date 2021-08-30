@@ -141,8 +141,12 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
     @cached_property
     def get_images(self):
         # we verify our implementation on 2 document images from the DocVQA dataset
-        image_1 = Image.open("tests/fixtures/tests_samples/DocVQA/document.png").convert("RGB")
-        image_2 = Image.open("tests/fixtures/tests_samples/DocVQA/document_2.png").convert("RGB")
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+
+        image_1 = Image.open(ds[0]["file"]).convert("RGB")
+        image_2 = Image.open(ds[1]["file"]).convert("RGB")
 
         return image_1, image_2
 
