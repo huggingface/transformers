@@ -1,5 +1,7 @@
-import transformers
 import importlib
+
+import transformers
+
 
 def test_module_spec():
     assert transformers.__spec__ is not None
