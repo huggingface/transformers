@@ -37,7 +37,7 @@ class CallMethodMixin:
             return_tensors = self.return_tensors
         if return_tensors == "tf":
             return tf_default_data_collator(features)
-        elif return_tensors == "torch":
+        elif return_tensors == "pt":
             return torch_default_data_collator(features)
         elif return_tensors == "np":
             return numpy_default_data_collator(features)
