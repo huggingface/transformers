@@ -407,7 +407,6 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
 
     # Create the map that will give us all impacted modules.
     impacted_modules_map = create_reverse_dependency_map()
-    print(impacted_modules_map["tests/test_modeling_common.py"])
     impacted_files = modified_files.copy()
     for f in modified_files:
         if f in impacted_modules_map:
