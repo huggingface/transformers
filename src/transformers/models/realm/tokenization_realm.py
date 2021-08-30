@@ -23,17 +23,23 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "realm-cc-news-pretrained": "https://huggingface.co/realm-cc-news-pretrained/resolve/main/vocab.txt",
+        "realm-cc-news-pretrained-embedder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder/resolve/main/vocab.txt",
+        "realm-cc-news-pretrained-retriever": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-retriever/resolve/main/vocab.txt",
+        "realm-cc-news-pretrained-encoder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-encoder/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "realm-cc-news-pretrained": 512,
+    "realm-cc-news-pretrained-embedder": 512,
+    "realm-cc-news-pretrained-retriever": 512,
+    "realm-cc-news-pretrained-encoder": 512
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "realm-cc-news-pretrained": {"do_lower_case": False},
+    "realm-cc-news-pretrained-embedder": {"do_lower_case": True},
+    "realm-cc-news-pretrained-retriever": {"do_lower_case": True},
+    "realm-cc-news-pretrained-encoder": {"do_lower_case": True},
 }
 
 
