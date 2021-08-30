@@ -140,7 +140,7 @@ _deps = [
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
-    "sphinx==3.2.1",
+    "sphinx==3.5.4",
     "sphinxext-opengraph==0.4.1",
     "sphinx-intl",
     "starlette",

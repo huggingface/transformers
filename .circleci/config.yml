@@ -711,7 +711,7 @@ jobs:
     build_doc:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7.11
         resource_class: large
         steps:
             - checkout
@@ -733,7 +733,7 @@ jobs:
     deploy_doc:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7.11
         resource_class: large
         steps:
             - add_ssh_keys:
