@@ -132,16 +132,16 @@ class FlaxDistilBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("distilbert-base-uncased", from_pt=True)
+            model = model_class_name.from_pretrained("distilbert-base-uncased")
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
 
 @require_flax
-class DistilBertModelIntegrationTest(unittest.TestCase):
+class FlaxDistilBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = FlaxDistilBertModel.from_pretrained("distilbert-base-uncased", from_pt=True)
+        model = FlaxDistilBertModel.from_pretrained("distilbert-base-uncased")
         input_ids = np.array([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = np.array([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         output = model(input_ids, attention_mask=attention_mask)[0]
