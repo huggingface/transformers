@@ -537,12 +537,12 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, un
         self.config_tester.run_common_tests()
 
     def test_use_cache_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             self.model_tester.check_use_cache_forward(model_class, config, inputs_dict)
 
     def test_use_cache_forward_with_attn_mask(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
 
