@@ -408,6 +408,7 @@ def pipeline(
     if model is None:
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
+        logger.warning(f"No model was supplied, defaulted to {model} (https://huggingface.co/{model})")
 
     # Config is the primordial information item.
     # Instantiate config if needed
