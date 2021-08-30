@@ -288,6 +288,9 @@ def main():
     if label_to_id is not None:
         model.config.label2id = label_to_id
         model.config.id2label = {id: label for label, id in config.label2id.items()}
+    elif args.task_name is not None and not is_regression:
+        model.config.label2id = {l: i for i, l in enumerate(label_list)}
+        model.config.id2label = {id: label for label, id in config.label2id.items()}
 
     padding = "max_length" if args.pad_to_max_length else False
 
