@@ -200,7 +200,7 @@ class TransfoXLConfig(PretrainedConfig):
     @property
     def num_hidden_layers(self):
         return self.n_layer
-
+        
 
 class TransfoXLOnnxConfig(OnnxConfig):
     @property
@@ -208,14 +208,6 @@ class TransfoXLOnnxConfig(OnnxConfig):
         return OrderedDict(
             [
                 ("input_ids", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("last_hidden_state", {0: "batch", 1: "sequence"}),
             ]
         )
 
