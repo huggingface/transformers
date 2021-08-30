@@ -413,40 +413,91 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTester:
         inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
 
-    def check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = Flax{{cookiecutter.camelcase_modelname}}Model(config=config).get_decoder()
-        input_ids = inputs_dict["input_ids"]
+    def check_use_cache_forward(self, model_class_name, config, inputs_dict):
+        max_decoder_length = 20
+        model = model_class_name(config)
 
-        input_ids = input_ids[:1, :]
-        attention_mask = inputs_dict["attention_mask"][:1, :]
-        self.batch_size = 1
+        encoder_outputs = model.encode(inputs_dict["input_ids"])
 
-        # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+        decoder_input_ids, decoder_attention_mask = (
+            inputs_dict["decoder_input_ids"],
+            inputs_dict["decoder_attention_mask"],
+        )
 
-        output, past_key_values = outputs.to_tuple()
-        past_key_values = past_key_values[1]
+        past_key_values = model.init_cache(decoder_input_ids.shape[0], max_decoder_length, encoder_outputs)
+        decoder_attention_mask = jnp.ones((decoder_input_ids.shape[0], max_decoder_length), dtype="i4")
 
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_attn_mask = ids_tensor((self.batch_size, 3), 2).astype(np.int8)
+        decoder_position_ids = jnp.broadcast_to(
+            jnp.arange(decoder_input_ids.shape[-1] - 1)[None, :],
+            (decoder_input_ids.shape[0], decoder_input_ids.shape[-1] - 1),
+        )
+        outputs_cache = model.decode(
+            decoder_input_ids[:, :-1],
+            encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=past_key_values,
+            decoder_position_ids=decoder_position_ids,
+        )
 
-        # append to next input_ids and
-        next_input_ids = np.concatenate([input_ids, next_tokens], axis=-1)
-        next_attention_mask = np.concatenate([attention_mask, next_attn_mask], axis=-1)
+        decoder_position_ids = jnp.array(decoder_input_ids.shape[0] * [[decoder_input_ids.shape[-1] - 1]], dtype="i4")
+        outputs_cache_next = model.decode(
+            decoder_input_ids[:, -1:],
+            encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=outputs_cache.past_key_values,
+            decoder_position_ids=decoder_position_ids,
+        )
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[0]
+        outputs = model.decode(decoder_input_ids, encoder_outputs)
 
-        self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
+        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-        # select random slice
-        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
-        output_from_past_slice = output_from_past[:, :, random_slice_idx]
+    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
+        max_decoder_length = 20
+        model = model_class_name(config)
 
-        # test that outputs are equal for slice
-        _assert_tensors_equal(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+        encoder_outputs = model.encode(inputs_dict["input_ids"])
+
+        decoder_input_ids, decoder_attention_mask = (
+            inputs_dict["decoder_input_ids"],
+            inputs_dict["decoder_attention_mask"],
+        )
+
+        decoder_attention_mask_cache = jnp.concatenate(
+            [
+                decoder_attention_mask,
+                jnp.zeros((decoder_attention_mask.shape[0], max_decoder_length - decoder_attention_mask.shape[1])),
+            ],
+            axis=-1,
+        )
+
+        past_key_values = model.init_cache(decoder_input_ids.shape[0], max_decoder_length, encoder_outputs)
+        decoder_position_ids = jnp.broadcast_to(
+            jnp.arange(decoder_input_ids.shape[-1] - 1)[None, :],
+            (decoder_input_ids.shape[0], decoder_input_ids.shape[-1] - 1),
+        )
+
+        outputs_cache = model.decode(
+            decoder_input_ids[:, :-1],
+            encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask_cache,
+            past_key_values=past_key_values,
+            decoder_position_ids=decoder_position_ids,
+        )
+        decoder_position_ids = jnp.array(decoder_input_ids.shape[0] * [[decoder_input_ids.shape[-1] - 1]], dtype="i4")
+        outputs_cache_next = model.decode(
+            decoder_input_ids[:, -1:],
+            encoder_outputs,
+            past_key_values=outputs_cache.past_key_values,
+            decoder_attention_mask=decoder_attention_mask_cache,
+            decoder_position_ids=decoder_position_ids,
+        )
+
+        outputs = model.decode(decoder_input_ids, encoder_outputs, decoder_attention_mask=decoder_attention_mask)
+
+        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
@@ -484,72 +535,15 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, un
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_decoder_model_past_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_resize_token_embeddings(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def _get_word_embedding_weight(model, embedding_layer):
-            if hasattr(embedding_layer, "weight"):
-                return embedding_layer.weight
-            else:
-                # Here we build the word embeddings weights if not exists.
-                # And then we retry to get the attribute once built.
-                model(model.dummy_inputs)
-                if hasattr(embedding_layer, "weight"):
-                    return embedding_layer.weight
-                else:
-                    return None
-
+    def test_use_cache_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
-            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
-                # build the embeddings
-                model = model_class(config=config)
-                old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-                old_final_logits_bias = model.get_bias()
+            self.model_tester.check_use_cache_forward(model_class, config, inputs_dict)
 
-                # reshape the embeddings
-                model.resize_token_embeddings(size)
-                new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-                new_final_logits_bias = model.get_bias()
-
-                # check that the resized embeddings size matches the desired size.
-                assert_size = size if size is not None else config.vocab_size
-
-                self.assertEqual(new_input_embeddings.shape[0], assert_size)
-
-                # check that weights remain the same after resizing
-                models_equal = True
-                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
-                    if np.sum(np.abs(p1 - p2)) > 0:
-                        models_equal = False
-                self.assertTrue(models_equal)
-
-                if old_output_embeddings is not None and new_output_embeddings is not None:
-                    self.assertEqual(new_output_embeddings.shape[0], assert_size)
-
-                    models_equal = True
-                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
-                        if np.sum(np.abs(p1 - p2)) > 0:
-                            models_equal = False
-                    self.assertTrue(models_equal)
-
-                if old_final_logits_bias is not None and new_final_logits_bias is not None:
-                    old_final_logits_bias = old_final_logits_bias["final_logits_bias"]
-                    new_final_logits_bias = new_final_logits_bias["final_logits_bias"]
-                    self.assertEqual(new_final_logits_bias.shape[0], 1)
-                    self.assertEqual(new_final_logits_bias.shape[1], assert_size)
-
-                    models_equal = True
-                    for old, new in zip(old_final_logits_bias.value(), new_final_logits_bias.value()):
-                        for p1, p2 in zip(old, new):
-                            if np.sum(np.abs(p1 - p2)) > 0:
-                                models_equal = False
-                    self.assertTrue(models_equal)
+    def test_use_cache_forward_with_attn_mask(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
