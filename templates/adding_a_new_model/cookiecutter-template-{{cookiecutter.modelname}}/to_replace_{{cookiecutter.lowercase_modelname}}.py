@@ -373,11 +373,6 @@
 # End.
 
 # To replace in: "src/transformers/models/auto/modeling_flax_auto.py" if generating Flax
-# Below: "from .configuration_auto import ("
-# Replace with:
-    {{cookiecutter.camelcase_modelname}}Config,
-# End.
-
 # Below: "# Add modeling imports here"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
