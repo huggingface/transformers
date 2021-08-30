@@ -42,7 +42,7 @@ class ConfigTester(object):
 
         # Test that config has the common properties as getters
         for prop in common_properties:
-            self.parent.assertTrue(hasattr(config, prop))
+            self.parent.assertTrue(hasattr(config, prop), f"`{prop}` does not exist")
 
         # Test that config has the common properties as setter
         for idx, prop in enumerate(common_properties):

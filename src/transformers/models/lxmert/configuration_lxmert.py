@@ -113,6 +113,8 @@ class LxmertConfig(PretrainedConfig):
     """
 
     model_type = "lxmert"
+    attribute_map = {
+    }
 
     def __init__(
         self,
@@ -149,7 +151,6 @@ class LxmertConfig(PretrainedConfig):
         output_hidden_states=False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -181,3 +182,4 @@ class LxmertConfig(PretrainedConfig):
         self.output_hidden_states = output_hidden_states
         self.output_attentions = self.output_attentions
         self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
+        super().__init__(**kwargs)
