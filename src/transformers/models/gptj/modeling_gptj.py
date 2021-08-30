@@ -291,7 +291,7 @@ class GPTJBlock(nn.Module):
         else:
             outputs = (hidden_states,) + outputs[1:]
 
-        return outputs  # hidden_states, present, (attentions, cross_attentions)
+        return outputs  # hidden_states, present, (attentions)
 
 
 class GPTJPreTrainedModel(PreTrainedModel):
@@ -310,7 +310,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear,)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
+            # Slightly different from Mesh Transformer JAX which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -527,6 +527,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
+
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
 
@@ -536,7 +537,6 @@ class GPTJModel(GPTJPreTrainedModel):
         else:
             past_length = past_key_values[0][0].size(-2)
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
@@ -559,9 +559,6 @@ class GPTJModel(GPTJPreTrainedModel):
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * -10000.0
-
-        # Local causal attention mask
-        batch_size, seq_length = input_shape
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -673,8 +670,7 @@ class GPTJModel(GPTJPreTrainedModel):
     GPTJ_START_DOCSTRING,
 )
 class GPTJForCausalLM(GPTJPreTrainedModel):
-    _keys_to_ignore_on_load_missing = []
-    _keys_to_ignore_on_save = []
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head\.weight"]
 
     def __init__(self, config):
         super().__init__(config)
