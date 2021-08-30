@@ -119,7 +119,7 @@ class OpenAIGPTConfig(PretrainedConfig):
         "max_position_embeddings": "n_positions",
         "hidden_size": "n_embd",
         "num_attention_heads": "n_head",
-        "num_hidden_layers": "n_layer"
+        "num_hidden_layers": "n_layer",
     }
 
     def __init__(
@@ -163,4 +163,3 @@ class OpenAIGPTConfig(PretrainedConfig):
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
         super().__init__(**kwargs)
-

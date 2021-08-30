@@ -96,10 +96,7 @@ class GPTNeoConfig(PretrainedConfig):
             >>> configuration = model.config
     """
     model_type = "gpt_neo"
-    attribute_map = {
-        "num_attention_heads": "num_heads",
-        "num_hidden_layers": "num_layers"
-    }
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
@@ -174,7 +171,6 @@ class GPTNeoConfig(PretrainedConfig):
             for _ in range(item[1]):
                 attentions.extend(item[0])
         return attentions
-
 
 
 def custom_unfold(input, dimension, size, step):

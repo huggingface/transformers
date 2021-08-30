@@ -110,7 +110,7 @@ class TransfoXLConfig(PretrainedConfig):
         "n_token": "vocab_size",
         "hidden_size": "d_model",
         "num_attention_heads": "n_head",
-        "num_hidden_layers": "n_layer"
+        "num_hidden_layers": "n_layer",
     }
 
     def __init__(
@@ -183,6 +183,6 @@ class TransfoXLConfig(PretrainedConfig):
     @max_position_embeddings.setter
     def max_position_embeddings(self, value):
         # Message copied from Transformer-XL documentation
-        raise NotImplementedError(f"The model {self.model_type} is one of the few models that has no sequence length limit.")
-
-
+        raise NotImplementedError(
+            f"The model {self.model_type} is one of the few models that has no sequence length limit."
+        )

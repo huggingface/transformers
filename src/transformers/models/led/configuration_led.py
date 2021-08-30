@@ -103,7 +103,7 @@ class LEDConfig(PretrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
         "attention_probs_dropout_prob": "attention_dropout",
-        "initializer_range": "init_std"
+        "initializer_range": "init_std",
     }
 
     def __init__(
@@ -167,4 +167,3 @@ class LEDConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
-

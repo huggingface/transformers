@@ -158,8 +158,7 @@ class ReformerConfig(PretrainedConfig):
     """
     model_type = "reformer"
     keys_to_ignore_at_inference = ["past_buckets_states"]
-    attribute_map = {
-    }
+    attribute_map = {}
 
     def __init__(
         self,

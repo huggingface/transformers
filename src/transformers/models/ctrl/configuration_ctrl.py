@@ -85,7 +85,7 @@ class CTRLConfig(PretrainedConfig):
         "max_position_embeddings": "n_positions",
         "hidden_size": "n_embd",
         "num_attention_heads": "n_head",
-        "num_hidden_layers": "n_layer"
+        "num_hidden_layers": "n_layer",
     }
 
     def __init__(
@@ -131,4 +131,3 @@ class CTRLConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         super().__init__(**kwargs)
-

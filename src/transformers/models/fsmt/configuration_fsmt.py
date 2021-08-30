@@ -124,10 +124,7 @@ class FSMTConfig(PretrainedConfig):
 
     """
     model_type = "fsmt"
-    attribute_map = {
-        "num_attention_heads": "encoder_attention_heads",
-        "hidden_size": "d_model"
-    }
+    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     # update the defaults from config file
     def __init__(
@@ -188,8 +185,8 @@ class FSMTConfig(PretrainedConfig):
         self.early_stopping = early_stopping
 
         self.decoder = DecoderConfig(vocab_size=tgt_vocab_size, bos_token_id=eos_token_id)
-        if 'decoder' in common_kwargs:
-            del common_kwargs['decoder']
+        if "decoder" in common_kwargs:
+            del common_kwargs["decoder"]
 
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
@@ -209,7 +206,6 @@ class FSMTConfig(PretrainedConfig):
             forced_eos_token_id=forced_eos_token_id,
             **common_kwargs,
         )
-
 
     def to_dict(self):
         """

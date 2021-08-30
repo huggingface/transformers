@@ -113,8 +113,7 @@ class LxmertConfig(PretrainedConfig):
     """
 
     model_type = "lxmert"
-    attribute_map = {
-    }
+    attribute_map = {}
 
     def __init__(
         self,

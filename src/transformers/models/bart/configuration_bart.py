@@ -109,10 +109,7 @@ class BartConfig(PretrainedConfig):
     """
     model_type = "bart"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {
-        "num_attention_heads": "encoder_attention_heads",
-        "hidden_size": "d_model"
-    }
+    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
@@ -167,7 +164,6 @@ class BartConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
-
         super().__init__(
             num_labels=num_labels,
             pad_token_id=pad_token_id,
@@ -186,8 +182,6 @@ class BartConfig(PretrainedConfig):
                 f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions."
                 "The config can simply be saved and uploaded again to be fixed."
             )
-
-
 
 
 class BartOnnxConfig(OnnxConfigWithPast):

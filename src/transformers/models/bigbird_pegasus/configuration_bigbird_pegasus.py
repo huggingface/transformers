@@ -115,7 +115,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
-        "attention_probs_dropout_prob": "attention_dropout"
+        "attention_probs_dropout_prob": "attention_dropout",
     }
 
     def __init__(
@@ -187,4 +187,3 @@ class BigBirdPegasusConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
-

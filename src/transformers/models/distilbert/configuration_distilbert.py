@@ -133,7 +133,6 @@ class DistilBertConfig(PretrainedConfig):
         super().__init__(**kwargs, pad_token_id=pad_token_id)
 
 
-
 class DistilBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:

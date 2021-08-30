@@ -150,7 +150,7 @@ class XLMConfig(PretrainedConfig):
         "hidden_size": "emb_dim",
         "num_attention_heads": "n_heads",
         "num_hidden_layers": "n_layers",
-        "n_words": "vocab_size" # For backward compatibility
+        "n_words": "vocab_size",  # For backward compatibility
     }
 
     def __init__(
@@ -227,7 +227,3 @@ class XLMConfig(PretrainedConfig):
             self.n_words = kwargs["n_words"]
 
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)
-
-
-
-

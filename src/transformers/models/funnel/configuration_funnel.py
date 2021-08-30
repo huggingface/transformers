@@ -169,14 +169,15 @@ class FunnelConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-
     @property
     def num_hidden_layers(self):
         return sum(self.block_sizes)
 
     @num_hidden_layers.setter
     def num_hidden_layers(self, value):
-        raise NotImplementedError("This model does not support the setting of `num_hidden_layers`. Please set `block_sizes`.")
+        raise NotImplementedError(
+            "This model does not support the setting of `num_hidden_layers`. Please set `block_sizes`."
+        )
 
     @property
     def num_blocks(self):
