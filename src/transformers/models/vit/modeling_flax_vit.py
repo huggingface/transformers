@@ -512,7 +512,7 @@ FLAX_VISION_MODEL_DOCSTRING = """
         >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
         >>> model = FlaxViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
 
-        >>> inputs = feature_extractor(images=image, return_tensors="jax")
+        >>> inputs = feature_extractor(images=image, return_tensors="np")
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
 """
@@ -592,7 +592,7 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
         >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
         >>> model = FlaxViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
 
-        >>> inputs = feature_extractor(images=image, return_tensors="jax")
+        >>> inputs = feature_extractor(images=image, return_tensors="np")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
 
