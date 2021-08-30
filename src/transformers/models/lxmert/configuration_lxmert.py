@@ -121,7 +121,6 @@ class LxmertConfig(PretrainedConfig):
         vocab_size=30522,
         hidden_size=768,
         num_attention_heads=12,
-        num_labels=2,
         num_qa_labels=9500,
         num_object_labels=1600,
         num_attr_labels=400,
@@ -154,7 +153,6 @@ class LxmertConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
-        self.num_labels = num_labels
         self.hidden_act = hidden_act
         self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
