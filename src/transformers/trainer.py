@@ -768,7 +768,7 @@ class Trainer:
         and/or :obj:`create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        self.create_scheduler(num_training_steps)
+        self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer)
 
     def create_optimizer(self):
         """
@@ -813,9 +813,12 @@ class Trainer:
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
 
-    def create_scheduler(self, num_training_steps: int):
+        return self.optimizer
+
+    def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
         """
-        Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
+        Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
+        passed as an argument.
 
         Args:
             num_training_steps (int): The number of training steps to do.
@@ -823,10 +826,11 @@ class Trainer:
         if self.lr_scheduler is None:
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
-                self.optimizer,
+                optimizer=self.optimizer if optimizer is None else optimizer,
                 num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
             )
+        return self.lr_scheduler
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """

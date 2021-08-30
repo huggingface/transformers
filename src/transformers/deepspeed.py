@@ -311,13 +311,13 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: Yes
     # 3. DS scheduler + HF optimizer: Yes
-    # 4. HF scheduler + DS optimizer: No
+    # 4. HF scheduler + DS optimizer: Yes
     #
     # Unless Offload is enabled in which case it's:
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: Mostly*
     # 3. DS scheduler + HF optimizer: Mostly*
-    # 4. HF scheduler + DS optimizer: No
+    # 4. HF scheduler + DS optimizer: Yes
     #
     # Mostly*: All non-native DeepSpeed optimizers that have both CPU and GPU implementation should work (except LAMB)
 
@@ -336,28 +336,20 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
 
         # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
         # But trainer uses AdamW by default.
-        trainer.create_optimizer()
-        optimizer = trainer.optimizer
+        optimizer = trainer.create_optimizer()
         # To use other optimizers requires voiding warranty with: `zero_allow_untested_optimizer`
         config["zero_allow_untested_optimizer"] = True
 
-    # DS schedulers (deepspeed/runtime/lr_schedules.py):
-    #
-    # DS name      | --lr_scheduler_type  | HF func                           | Notes
-    # -------------| ---------------------|-----------------------------------|--------------------
-    # LRRangeTest  | na                   | na                                | LRRT
-    # OneCycle     | na                   | na                                | 1CLR
-    # WarmupLR     | constant_with_warmup | get_constant_schedule_with_warmup | w/ warmup_min_lr=0
-    # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
+    def _lr_scheduler_callable(optimizer):
+        return trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
+
     lr_scheduler = None
     if "scheduler" not in config:
-        if "optimizer" in config:
-            # to make this option work, we need to init DS optimizer first, then init HS scheduler,
-            # then pass the HS scheduler to DS init, which is not possible at the moment
-            raise ValueError("At the moment HF scheduler + DeepSpeed optimizer combination is not possible")
+        if optimizer is None:
+            # Optimizer is not available, so use callable to defer lr_scheduler creation to DS init
+            lr_scheduler = _lr_scheduler_callable
         else:
-            trainer.create_scheduler(num_training_steps=num_training_steps)
-            lr_scheduler = trainer.lr_scheduler
+            lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
