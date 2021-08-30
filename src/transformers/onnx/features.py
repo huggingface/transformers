@@ -41,7 +41,7 @@ def supported_features_mapping(*supported_features, onnx_config_cls=None):
             mapping[feature] = partial(onnx_config_cls.with_past, task=task)
         else:
             mapping[feature] = partial(onnx_config_cls.from_model_config, task=feature)
-
+            
     return mapping
 
 
@@ -69,7 +69,7 @@ class FeaturesManager:
         "t5": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=T5OnnxConfig
         ),
-        "transfo-xl": supported_features_mapping("default", onnx_config_cls=TransfoXLOnnxConfig),
+        "transfo-xl": supported_features_mapping("default", "causal-lm", onnx_config_cls=TransfoXLOnnxConfig),
         "xlm-roberta": supported_features_mapping("default", onnx_config_cls=XLMRobertaOnnxConfig),
         "gpt-neo": supported_features_mapping(
             "default",
@@ -103,8 +103,8 @@ class FeaturesManager:
         task = FeaturesManager.feature_to_task(feature)
         if task not in FeaturesManager._TASKS_TO_AUTOMODELS:
             raise KeyError(
-                f"Unknown task: {feature}."
-                f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
+                f"Unknown task: {feature}. "
+                f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.keys())}"
             )
 
         return FeaturesManager._TASKS_TO_AUTOMODELS[task].from_pretrained(model)
