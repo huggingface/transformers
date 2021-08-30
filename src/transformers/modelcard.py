@@ -468,7 +468,7 @@ class TrainingSummary:
             model_card += f"This model is a fine-tuned version of [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
 
         if self.dataset is None:
-            model_card += "an unkown dataset."
+            model_card += "an unknown dataset."
         else:
             if isinstance(self.dataset, str):
                 model_card += f"the {self.dataset} dataset."
