@@ -65,13 +65,13 @@ class FlaxAlbertForPreTrainingOutput(ModelOutput):
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
             before SoftMax).
         hidden_states (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`jnp.ndarray` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+            Tuple of :obj:`jnp.ndarray` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -170,7 +170,7 @@ class FlaxAlbertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbeddings.__call__
-    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
+    def __call__(self, input_ids, token_type_ids, position_ids, deterministic: bool = True):
         # Embed
         inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
         position_embeds = self.position_embeddings(position_ids.astype("i4"))
@@ -219,7 +219,7 @@ class FlaxAlbertSelfAttention(nn.Module):
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
-    def __call__(self, hidden_states, attention_mask, head_mask, deterministic=True, output_attentions: bool = False):
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
         head_dim = self.config.hidden_size // self.config.num_attention_heads
 
         query_states = self.query(hidden_states).reshape(
@@ -260,10 +260,6 @@ class FlaxAlbertSelfAttention(nn.Module):
             precision=None,
         )
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
-
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
         attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
 
@@ -298,12 +294,11 @@ class FlaxAlbertLayer(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask=None,
         deterministic: bool = True,
         output_attentions: bool = False,
     ):
         attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, deterministic=deterministic, output_attentions=output_attentions
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
         )
         attention_output = attention_outputs[0]
         ffn_output = self.ffn(attention_output)
@@ -331,12 +326,11 @@ class FlaxAlbertLayers(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask=None,
         deterministic: bool = True,
         output_attentions: bool = False,
     ):
         outputs = self.albert_layers(
-            hidden_states, attention_mask, head_mask, deterministic=deterministic, output_attentions=output_attentions
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
         )
         return outputs
 
@@ -355,7 +349,6 @@ class FlaxAlbertLayerCollection(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -367,7 +360,6 @@ class FlaxAlbertLayerCollection(nn.Module):
             layer_output = albert_layer(
                 hidden_states,
                 attention_mask,
-                head_mask[layer_index],
                 deterministic=deterministic,
                 output_attentions=output_attentions,
             )
@@ -399,7 +391,6 @@ class FlaxAlbertLayerCollections(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -407,7 +398,6 @@ class FlaxAlbertLayerCollections(nn.Module):
         outputs = self.albert_layer_groups(
             hidden_states,
             attention_mask,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -435,7 +425,6 @@ class FlaxAlbertEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -451,7 +440,6 @@ class FlaxAlbertEncoder(nn.Module):
             layer_group_output = self.layers[group_idx](
                 hidden_states,
                 attention_mask,
-                head_mask[group_idx * self.layers_per_group : (group_idx + 1) * self.layers_per_group],
                 deterministic=deterministic,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -553,7 +541,6 @@ class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
-        head_mask=None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
@@ -588,7 +575,6 @@ class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
-            head_mask,
             not train,
             output_attentions,
             output_hidden_states,
@@ -623,7 +609,6 @@ class FlaxAlbertModule(nn.Module):
         attention_mask,
         token_type_ids: Optional[np.ndarray] = None,
         position_ids: Optional[np.ndarray] = None,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -641,15 +626,9 @@ class FlaxAlbertModule(nn.Module):
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
 
-        if head_mask is not None:
-            raise NotImplementedError
-        else:
-            head_mask = [None] * self.config.num_hidden_layers
-
         outputs = self.encoder(
             hidden_states,
             attention_mask,
-            head_mask=head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -704,7 +683,6 @@ class FlaxAlbertForPreTrainingModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -717,7 +695,6 @@ class FlaxAlbertForPreTrainingModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -797,7 +774,6 @@ class FlaxAlbertForMaskedLMModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -809,7 +785,6 @@ class FlaxAlbertForMaskedLMModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -868,7 +843,6 @@ class FlaxAlbertForSequenceClassificationModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -880,7 +854,6 @@ class FlaxAlbertForSequenceClassificationModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -936,7 +909,6 @@ class FlaxAlbertForMultipleChoiceModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -954,7 +926,6 @@ class FlaxAlbertForMultipleChoiceModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1020,7 +991,6 @@ class FlaxAlbertForTokenClassificationModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1032,7 +1002,6 @@ class FlaxAlbertForTokenClassificationModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1087,7 +1056,6 @@ class FlaxAlbertForQuestionAnsweringModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1099,7 +1067,6 @@ class FlaxAlbertForQuestionAnsweringModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
