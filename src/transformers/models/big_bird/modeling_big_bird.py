@@ -1138,7 +1138,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             from_block_size: int. size of block in from sequence.
             to_block_size: int. size of block in to sequence.
             num_heads: int. total number of heads.
-            plan_from_length: list. plan from length where num_random_blocks are choosen from.
+            plan_from_length: list. plan from length where num_random_blocks are chosen from.
             plan_num_rand_blocks: list. number of rand blocks within the plan.
             window_block_left: int. number of blocks of window to left of a block.
             window_block_right: int. number of blocks of window to right of a block.
