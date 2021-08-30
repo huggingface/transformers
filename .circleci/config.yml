@@ -277,7 +277,7 @@ jobs:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-flax-speech]
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech]
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -310,7 +310,7 @@ jobs:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-flax-speech]
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech]
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -338,7 +338,7 @@ jobs:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,testing,sentencepiece,tf-flax-speech,vision]
+            - run: sudo pip install .[flax,testing,sentencepiece,flax-speech,vision]
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
@@ -371,7 +371,7 @@ jobs:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,testing,sentencepiece,vision,tf-flax-speech]
+            - run: sudo pip install .[flax,testing,sentencepiece,vision,flax-speech]
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
