@@ -71,7 +71,7 @@ def default_data_collator(features: List[InputDataClass], return_tensors="pt") -
 
 
 @dataclass
-class DefaultDataCollator(CallMethodMixin):
+class DefaultDataCollator(DataCollatorMixin):
     return_tensors: str = "pt"
 
 
@@ -235,7 +235,7 @@ class DataCollatorWithPadding:
 
 
 @dataclass
-class DataCollatorForTokenClassification(CallMethodMixin):
+class DataCollatorForTokenClassification(DataCollatorMixin):
     """
     Data collator that will dynamically pad the inputs received, as well as the labels.
 
@@ -548,7 +548,7 @@ class DataCollatorForSeq2Seq:
 
 
 @dataclass
-class DataCollatorForLanguageModeling(CallMethodMixin):
+class DataCollatorForLanguageModeling(DataCollatorMixin):
     """
     Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
     are not all of the same length.
@@ -1137,7 +1137,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 
 
 @dataclass
-class DataCollatorForPermutationLanguageModeling(CallMethodMixin):
+class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
     """
     Data collator used for permutation language modeling.
 
