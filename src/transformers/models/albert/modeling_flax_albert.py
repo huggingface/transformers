@@ -622,9 +622,7 @@ class FlaxAlbertModule(nn.Module):
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
-        hidden_states = self.embeddings(
-            input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
-        )
+        hidden_states = self.embeddings(input_ids, token_type_ids, position_ids, deterministic=deterministic)
 
         outputs = self.encoder(
             hidden_states,
