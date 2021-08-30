@@ -129,7 +129,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTester:
 
         inputs = [input_ids, input_mask]
 
-        result = model(**inputs)
+        result = model(*inputs)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
