@@ -53,7 +53,7 @@ This model was contributed by `<INSERT YOUR HF USERNAME HERE>
     :members:
 
 
-{% if "PyTorch" in cookiecutter.cookiecutter.generate_tensorflow_pytorch_and_flax -%}
+{% if "PyTorch" in cookiecutter.generate_tensorflow_pytorch_and_flax -%}
 {{cookiecutter.camelcase_modelname}}Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -133,7 +133,7 @@ This model was contributed by `<INSERT YOUR HF USERNAME HERE>
 
 {% endif -%}
 {% endif -%}
-{% if "TensorFlow" in cookiecutter.cookiecutter.generate_tensorflow_pytorch_and_flax -%}
+{% if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax -%}
 
 TF{{cookiecutter.camelcase_modelname}}Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -195,7 +195,7 @@ TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 {% endif -%}
 {% endif -%}
 
-{% if "Flax" in cookiecutter.cookiecutter.generate_tensorflow_pytorch_and_flax -%}
+{% if "Flax" in cookiecutter.generate_tensorflow_pytorch_and_flax -%}
 
 Flax{{cookiecutter.camelcase_modelname}}Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
