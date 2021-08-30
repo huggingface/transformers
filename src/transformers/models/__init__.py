@@ -55,6 +55,7 @@ from . import (
     hubert,
     ibert,
     layoutlm,
+    layoutlmv2,
     led,
     longformer,
     luke,
