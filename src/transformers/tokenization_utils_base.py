@@ -2881,9 +2881,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             and pair_ids is not None
         ):
             raise ValueError(
-                "Not possible to return overflowing tokens for pair of sequences with the `longest_first`. "
-                "Please select another truncation strategy than `longest_first`, for instance `only_second` or "
-                "`only_first`."
+                "Not possible to return overflowing tokens for pair of sequences with the "
+                "`longest_first`.Please select another truncation strategy than `longest_first`, "
+                "for instance `only_second` or `only_first`."
             )
 
         # Load from model defaults
@@ -3011,18 +3011,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 overflowing_tokens = ids[-window_len:]
                 ids = ids[:-num_tokens_to_remove]
             else:
-                logger.error(
-                    f"We need to remove {num_tokens_to_remove} to truncate the input"
+                error_msg = (
+                    f"We need to remove {num_tokens_to_remove} to truncate the input "
                     f"but the first sequence has a length {len(ids)}. "
-                    + (
-                        (
-                            f"Please select another truncation strategy than {truncation_strategy}, "
-                            f"for instance 'longest_first' or 'only_second'."
-                        )
-                        if truncation_strategy == TruncationStrategy.ONLY_FIRST
-                        else ""
-                    )
                 )
+                if truncation_strategy == TruncationStrategy.ONLY_FIRST:
+                    error_msg = (
+                        error_msg + "Please select another truncation strategy than "
+                        f"{truncation_strategy}, for instance 'longest_first' or 'only_second'."
+                    )
+                logger.error(error_msg)
         elif truncation_strategy == TruncationStrategy.LONGEST_FIRST:
             logger.warning(
                 f"Be aware, overflowing tokens are not returned for the setting you have chosen,"

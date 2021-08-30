@@ -1088,9 +1088,9 @@ class LukeTokenizer(RobertaTokenizer):
             and pair_ids is not None
         ):
             raise ValueError(
-                "Not possible to return overflowing tokens for pair of sequences with the `longest_first`. "
-                "Please select another truncation strategy than `longest_first`, for instance `only_second` or "
-                "`only_first`."
+                "Not possible to return overflowing tokens for pair of sequences with the "
+                "`longest_first`.Please select another truncation strategy than `longest_first`, "
+                "for instance `only_second` or `only_first`."
             )
 
         # Load from model defaults
