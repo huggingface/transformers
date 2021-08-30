@@ -151,7 +151,7 @@ class DetrObjectDetectionOutput(ModelOutput):
             unnormalized bounding boxes.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
             Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
-            `True`) and labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits`
+            `True`) and labels are provided. It is a list of dictionaries containing the two above keys (:obj:`logits`
             and :obj:`pred_boxes`) for each decoder layer.
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
@@ -218,8 +218,8 @@ class DetrSegmentationOutput(ModelOutput):
             :meth:`~transformers.DetrFeatureExtractor.post_process_panoptic` to evaluate instance and panoptic
             segmentation masks respectively.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
-            Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
-            `True`) and labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits`
+            Optional, only returned when auxiliary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
+            `True`) and labels are provided. It is a list of dictionaries containing the two above keys (:obj:`logits`
             and :obj:`pred_boxes`) for each decoder layer.
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.

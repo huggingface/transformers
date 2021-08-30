@@ -158,7 +158,7 @@ def validate_model_outputs(
 
     # We flatten potential collection of outputs (i.e. past_keys) to a flat structure
     for name, value in ref_outputs.items():
-        # Overwriting the output name as "present" since it is the name used for the ONNX ouputs
+        # Overwriting the output name as "present" since it is the name used for the ONNX outputs
         # ("past_key_values" being taken for the ONNX inputs)
         if name == "past_key_values":
             name = "present"

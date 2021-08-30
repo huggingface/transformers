@@ -798,6 +798,44 @@ jobs:
             - run: pip install requests
             - run: python ./utils/link_tester.py
 
+    run_tests_layoutlmv2:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-torch-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: pip install --upgrade pip
+            - run: pip install .[torch,testing,vision]
+            - run: pip install torchvision
+            - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+            - run: sudo apt install tesseract-ocr
+            - run: pip install pytesseract
+            - save_cache:
+                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 1 tests/*layoutlmv2* --dist=loadfile -s --make-reports=tests_layoutlmv2 --durations=100
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
 # TPU JOBS
     run_examples_tpu:
         docker:
@@ -852,6 +890,7 @@ workflows:
             - run_tests_onnxruntime
             - run_tests_hub
             - build_doc
+            - run_tests_layoutlmv2
             - deploy_doc: *workflow_filters
     nightly:
         triggers:

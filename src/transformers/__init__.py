@@ -207,6 +207,13 @@ _import_structure = {
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
+    "models.layoutlmv2": [
+        "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LayoutLMv2Config",
+        "LayoutLMv2FeatureExtractor",
+        "LayoutLMv2Processor",
+        "LayoutLMv2Tokenizer",
+    ],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -358,6 +365,7 @@ if is_tokenizers_available():
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
+    _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
@@ -398,7 +406,6 @@ else:
 # Speech-specific objects
 if is_speech_available():
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
-
 else:
     from .utils import dummy_speech_objects
 
@@ -423,6 +430,8 @@ if is_vision_available():
     _import_structure["models.clip"].append("CLIPProcessor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
+    _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
+    _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
@@ -835,6 +844,7 @@ if is_torch_available():
         [
             "HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "HubertForCTC",
+            "HubertForSequenceClassification",
             "HubertModel",
             "HubertPreTrainedModel",
         ]
@@ -859,6 +869,16 @@ if is_torch_available():
             "LayoutLMForTokenClassification",
             "LayoutLMModel",
             "LayoutLMPreTrainedModel",
+        ]
+    )
+    _import_structure["models.layoutlmv2"].extend(
+        [
+            "LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LayoutLMv2ForQuestionAnswering",
+            "LayoutLMv2ForSequenceClassification",
+            "LayoutLMv2ForTokenClassification",
+            "LayoutLMv2Model",
+            "LayoutLMv2PreTrainedModel",
         ]
     )
     _import_structure["models.led"].extend(
@@ -1145,6 +1165,7 @@ if is_torch_available():
             "Wav2Vec2ForCTC",
             "Wav2Vec2ForMaskedLM",
             "Wav2Vec2ForPreTraining",
+            "Wav2Vec2ForSequenceClassification",
             "Wav2Vec2Model",
             "Wav2Vec2PreTrainedModel",
         ]
@@ -1708,6 +1729,17 @@ if is_flax_available():
             "FlaxCLIPVisionPreTrainedModel",
         ]
     )
+    _import_structure["models.distilbert"].extend(
+        [
+            "FlaxDistilBertForMaskedLM",
+            "FlaxDistilBertForMultipleChoice",
+            "FlaxDistilBertForQuestionAnswering",
+            "FlaxDistilBertForSequenceClassification",
+            "FlaxDistilBertForTokenClassification",
+            "FlaxDistilBertModel",
+            "FlaxDistilBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "FlaxElectraForMaskedLM",
@@ -1921,6 +1953,13 @@ if TYPE_CHECKING:
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
+    from .models.layoutlmv2 import (
+        LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LayoutLMv2Config,
+        LayoutLMv2FeatureExtractor,
+        LayoutLMv2Processor,
+        LayoutLMv2Tokenizer,
+    )
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
@@ -2062,6 +2101,7 @@ if TYPE_CHECKING:
         from .models.gpt2 import GPT2TokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
+        from .models.layoutlmv2 import LayoutLMv2TokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
@@ -2094,7 +2134,6 @@ if TYPE_CHECKING:
 
     if is_speech_available():
         from .models.speech_to_text import Speech2TextFeatureExtractor
-
     else:
         from .utils.dummy_speech_objects import *
 
@@ -2109,6 +2148,7 @@ if TYPE_CHECKING:
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
+        from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
@@ -2456,6 +2496,7 @@ if TYPE_CHECKING:
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             HubertForCTC,
+            HubertForSequenceClassification,
             HubertModel,
             HubertPreTrainedModel,
         )
@@ -2476,6 +2517,14 @@ if TYPE_CHECKING:
             LayoutLMForTokenClassification,
             LayoutLMModel,
             LayoutLMPreTrainedModel,
+        )
+        from .models.layoutlmv2 import (
+            LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LayoutLMv2ForQuestionAnswering,
+            LayoutLMv2ForSequenceClassification,
+            LayoutLMv2ForTokenClassification,
+            LayoutLMv2Model,
+            LayoutLMv2PreTrainedModel,
         )
         from .models.led import (
             LED_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2713,6 +2762,7 @@ if TYPE_CHECKING:
             Wav2Vec2ForCTC,
             Wav2Vec2ForMaskedLM,
             Wav2Vec2ForPreTraining,
+            Wav2Vec2ForSequenceClassification,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
         )
@@ -3193,6 +3243,15 @@ if TYPE_CHECKING:
             FlaxCLIPTextPreTrainedModel,
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
+        )
+        from .models.distilbert import (
+            FlaxDistilBertForMaskedLM,
+            FlaxDistilBertForMultipleChoice,
+            FlaxDistilBertForQuestionAnswering,
+            FlaxDistilBertForSequenceClassification,
+            FlaxDistilBertForTokenClassification,
+            FlaxDistilBertModel,
+            FlaxDistilBertPreTrainedModel,
         )
         from .models.electra import (
             FlaxElectraForMaskedLM,

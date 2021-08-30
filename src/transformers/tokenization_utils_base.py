@@ -1375,7 +1375,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
           high-level keys being the ``__init__`` keyword name of each vocabulary file required by the model, the
           low-level being the :obj:`short-cut-names` of the pretrained models with, as associated values, the
           :obj:`url` to the associated pretrained vocabulary file.
-        - **max_model_input_sizes** (:obj:`Dict[str, Optinal[int]]`) -- A dictionary with, as keys, the
+        - **max_model_input_sizes** (:obj:`Dict[str, Optional[int]]`) -- A dictionary with, as keys, the
           :obj:`short-cut-names` of the pretrained models, and as associated values, the maximum length of the sequence
           inputs of this model, or :obj:`None` if the model has no maximum input size.
         - **pretrained_init_configuration** (:obj:`Dict[str, Dict[str, Any]]`) -- A dictionary with, as keys, the
@@ -1723,6 +1723,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
             )
+
+            if revision is not None:
+                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
+
             raise EnvironmentError(msg)
 
         for file_id, file_path in vocab_files.items():
@@ -1781,7 +1785,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
                 config_tokenizer_class = config.tokenizer_class
             except (OSError, ValueError, KeyError):
-                # skip if an error occured.
+                # skip if an error occurred.
                 config = None
             if config_tokenizer_class is None:
                 # Third attempt. If we have not yet found the original type of the tokenizer,
@@ -1799,7 +1803,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             break
 
                 if model_type is not None:
-                    config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING_NAMES[model_type]
+                    config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING_NAMES.get(
+                        model_type, (None, None)
+                    )
                     if config_tokenizer_class is None:
                         config_tokenizer_class = config_tokenizer_class_fast
 

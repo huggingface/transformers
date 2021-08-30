@@ -37,6 +37,7 @@ from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     config_class_to_model_type,
+    model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
 
@@ -121,6 +122,7 @@ else:
             ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
+            ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "dpr",
                 (
@@ -207,6 +209,13 @@ else:
                     "RemBertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "clip",
+                (
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
         ]
     )
 
@@ -222,6 +231,8 @@ def tokenizer_class_from_name(class_name: str):
     for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
         if class_name in tokenizers:
             break
+
+    module_name = model_type_to_module_name(module_name)
 
     module = importlib.import_module(f".{module_name}", "transformers.models")
     return getattr(module, class_name)
