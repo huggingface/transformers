@@ -283,7 +283,7 @@ class RagPreTrainedModel(PreTrainedModel):
                       a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args (remaining positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             retriever (:class:`~transformers.RagRetriever`, `optional`):
                 The retriever to use.
             kwwargs (remaining dictionary of keyword arguments, `optional`):

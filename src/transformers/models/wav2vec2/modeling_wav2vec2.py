@@ -308,7 +308,7 @@ class Wav2Vec2SamePadLayer(nn.Module):
 
 
 class Wav2Vec2FeatureExtractor(nn.Module):
-    """Construct the featurs from raw audio waveform"""
+    """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
         super().__init__()

@@ -707,7 +707,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
                 special_token_full = getattr(self, f"_{token}")
                 if isinstance(special_token_full, AddedToken):
-                    # Create an added token with the same paramters except the content
+                    # Create an added token with the same parameters except the content
                     kwargs[token] = AddedToken(
                         special_token,
                         single_word=special_token_full.single_word,

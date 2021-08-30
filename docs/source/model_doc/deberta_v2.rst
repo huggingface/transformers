@@ -53,7 +53,7 @@ New in v2:
   transformer layer to better learn the local dependency of input tokens.
 - **Sharing position projection matrix with content projection matrix in attention layer** Based on previous
   experiments, this can save parameters without affecting the performance.
-- **Apply bucket to encode relative postions** The DeBERTa-v2 model uses log bucket to encode relative positions
+- **Apply bucket to encode relative positions** The DeBERTa-v2 model uses log bucket to encode relative positions
   similar to T5.
 - **900M model & 1.5B model** Two additional model sizes are available: 900M and 1.5B, which significantly improves the
   performance of downstream tasks.

@@ -114,7 +114,7 @@ class FeaturesManager:
 
         Args:
             model: The model to export
-            feature: The name of the feature to check if it is avaiable
+            feature: The name of the feature to check if it is available
 
         Returns:
             (str) The type of the model (OnnxConfig) The OnnxConfig instance holding the model export properties
