@@ -201,7 +201,6 @@ class FlaxMultiHeadSelfAttention(nn.Module):
         key,
         value,
         mask,
-        head_mask: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
     ):
@@ -236,10 +235,6 @@ class FlaxMultiHeadSelfAttention(nn.Module):
 
         weights = nn.softmax(scores, axis=-1)  # (bs, n_heads, q_len, k_len)
         weights = self.dropout(weights, deterministic=deterministic)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            weights = weights * head_mask
 
         context = jnp.matmul(weights, v)  # (bs, n_heads, q_len, dim_per_head)
         context = unshape(context)  # (bs, q_len, dim)
@@ -302,7 +297,6 @@ class FlaxTransformerBlock(nn.Module):
         self,
         hidden_states,
         attn_mask,
-        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
         deterministic: bool = True,
     ):
@@ -312,7 +306,6 @@ class FlaxTransformerBlock(nn.Module):
             key=hidden_states,
             value=hidden_states,
             mask=attn_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             deterministic=deterministic,
         )
@@ -345,7 +338,6 @@ class FlaxTransformer(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         deterministic: bool = True,
@@ -354,14 +346,13 @@ class FlaxTransformer(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        for i, layer_module in enumerate(self.layers):
+        for layer_module in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
                 hidden_states=hidden_states,
                 attn_mask=attention_mask,
-                head_mask=head_mask[i],
                 output_attentions=output_attentions,
                 deterministic=deterministic,
             )
@@ -396,7 +387,6 @@ class FlaxTransformerEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         deterministic: bool = True,
@@ -405,7 +395,6 @@ class FlaxTransformerEncoder(nn.Module):
         return self.layer(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             deterministic=deterministic,
@@ -489,7 +478,6 @@ class FlaxDistilBertPreTrainedModel(FlaxPreTrainedModel):
             {"params": params or self.params},
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
-            head_mask,
             not train,
             output_attentions,
             output_hidden_states,
@@ -510,7 +498,6 @@ class FlaxDistilBertModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -522,16 +509,10 @@ class FlaxDistilBertModule(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        if head_mask is not None:
-            raise NotImplementedError
-        else:
-            head_mask = [None] * self.config.num_hidden_layers
-
         input_embeds = self.embeddings(input_ids, deterministic=deterministic)
         return self.transformer(
             hidden_states=input_embeds,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -578,7 +559,6 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -589,7 +569,6 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             deterministic=deterministic,
@@ -648,7 +627,6 @@ class FlaxDistilBertForSequenceClassificationModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -659,7 +637,6 @@ class FlaxDistilBertForSequenceClassificationModule(nn.Module):
         distilbert_output = self.distilbert(
             input_ids,
             attention_mask,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -723,7 +700,6 @@ class FlaxDistilBertForMultipleChoiceModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -738,7 +714,6 @@ class FlaxDistilBertForMultipleChoiceModule(nn.Module):
         outputs = self.distilbert(
             input_ids,
             attention_mask,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -800,7 +775,6 @@ class FlaxDistilBertForTokenClassificationModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -811,7 +785,6 @@ class FlaxDistilBertForTokenClassificationModule(nn.Module):
         outputs = self.distilbert(
             input_ids,
             attention_mask,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -866,7 +839,6 @@ class FlaxDistilBertForQuestionAnsweringModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -878,7 +850,6 @@ class FlaxDistilBertForQuestionAnsweringModule(nn.Module):
         distilbert_output = self.distilbert(
             input_ids,
             attention_mask,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
