@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -58,6 +58,17 @@ if is_tf_available():
         "TFDistilBertPreTrainedModel",
     ]
 
+if is_flax_available():
+    _import_structure["modeling_flax_distilbert"] = [
+        "FlaxDistilBertForMaskedLM",
+        "FlaxDistilBertForMultipleChoice",
+        "FlaxDistilBertForQuestionAnswering",
+        "FlaxDistilBertForSequenceClassification",
+        "FlaxDistilBertForTokenClassification",
+        "FlaxDistilBertModel",
+        "FlaxDistilBertPreTrainedModel",
+    ]
+
 
 if TYPE_CHECKING:
     from .configuration_distilbert import (
@@ -93,6 +104,17 @@ if TYPE_CHECKING:
             TFDistilBertMainLayer,
             TFDistilBertModel,
             TFDistilBertPreTrainedModel,
+        )
+
+    if is_flax_available():
+        from .modeling_flax_distilbert import (
+            FlaxDistilBertForMaskedLM,
+            FlaxDistilBertForMultipleChoice,
+            FlaxDistilBertForQuestionAnswering,
+            FlaxDistilBertForSequenceClassification,
+            FlaxDistilBertForTokenClassification,
+            FlaxDistilBertModel,
+            FlaxDistilBertPreTrainedModel,
         )
 
 else:
