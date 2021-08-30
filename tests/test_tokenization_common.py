@@ -1050,7 +1050,7 @@ class TokenizerTesterMixin:
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
                 if isinstance(tokenizer, PreTrainedTokenizerFast):
-                    information = tokenizer.encode_plus(
+                    information = tokenizer(
                         seq_0,
                         seq_1,
                         max_length=len(sequence) - 2,
@@ -1072,7 +1072,7 @@ class TokenizerTesterMixin:
                 else:
                     # No overflowing tokens when using 'longest' in python tokenizers
                     with self.assertRaises(ValueError) as context:
-                        information = tokenizer.encode_plus(
+                        information = tokenizer(
                             seq_0,
                             seq_1,
                             max_length=len(sequence) - 2,
@@ -1093,7 +1093,7 @@ class TokenizerTesterMixin:
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
                 if isinstance(tokenizer, PreTrainedTokenizerFast):
-                    information = tokenizer.encode_plus(
+                    information = tokenizer(
                         seq_0,
                         seq_1,
                         max_length=len(sequence) - 2,
@@ -1115,7 +1115,7 @@ class TokenizerTesterMixin:
                 else:
                     # No overflowing tokens when using 'longest' in python tokenizers
                     with self.assertRaises(ValueError) as context:
-                        information = tokenizer.encode_plus(
+                        information = tokenizer(
                             seq_0,
                             seq_1,
                             max_length=len(sequence) - 2,
@@ -1134,7 +1134,7 @@ class TokenizerTesterMixin:
                         )
                     )
 
-                information_first_truncated = tokenizer.encode_plus(
+                information_first_truncated = tokenizer(
                     seq_0,
                     seq_1,
                     max_length=len(sequence) - 2,
@@ -1165,7 +1165,7 @@ class TokenizerTesterMixin:
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq0_tokens[-(2 + stride) :])
 
-                information_second_truncated = tokenizer.encode_plus(
+                information_second_truncated = tokenizer(
                     seq_0,
                     seq_1,
                     max_length=len(sequence) - 2,
