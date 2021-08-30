@@ -31,7 +31,7 @@ of PyTorch/TensorFlow tensors or NumPy arrays.
 DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, Any]])
 
 
-class CallMethodMixin:
+class DataCollatorMixin:
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
