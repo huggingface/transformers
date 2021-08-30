@@ -102,7 +102,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
-          pip install .[flax,integrations,sklearn,testing,onnxruntime,sentencepiece,tf-flax-speech,vision]
+          pip install .[flax,integrations,sklearn,testing,sentencepiece,flax-speech,vision]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -141,7 +141,7 @@ jobs:
         run: |
           apt -y update && apt install -y git
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece,tf-flax-speech]
+          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -252,7 +252,7 @@ jobs:
         run: |
           apt -y update && apt install -y git
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece,tf-flax-speech]
+          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -307,7 +307,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
-          pip install .[flax,integrations,sklearn,testing,onnxruntime,sentencepiece,tf-flax-speech,vision]
+          pip install .[flax,integrations,sklearn,testing,sentencepiece,flax-speech,vision]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |

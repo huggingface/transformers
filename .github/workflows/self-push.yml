@@ -89,7 +89,7 @@ jobs:
           apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,flax,tf-flax-speech,vision]
+          pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
 
       - name: Launcher docker
         uses: actions/checkout@v2
@@ -105,9 +105,9 @@ jobs:
           python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
           python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
       
-      - name: Fetch the tests to run
-        run: |
-          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
+#      - name: Fetch the tests to run
+#        run: |
+#          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
 
       - name: Report fetched tests
         uses: actions/upload-artifact@v2
@@ -117,9 +117,10 @@ jobs:
 
       - name: Run all non-slow tests on GPU
         run: |
-          if [ -f test_list.txt ]; then
-            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_gpu $(cat test_list.txt)
-          fi
+          python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_gpu
+#          if [ -f test_list.txt ]; then
+#            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_gpu $(cat test_list.txt)
+#          fi
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -143,7 +144,7 @@ jobs:
 #        run: |
 #          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
 #          pip install --upgrade pip
-#          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-flax-speech]
+#          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-speech]
 #
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
@@ -260,7 +261,7 @@ jobs:
           apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,flax,tf-flax-speech,vision]
+          pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
 
       - name: Launcher docker
         uses: actions/checkout@v2
@@ -276,9 +277,9 @@ jobs:
           python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
           python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
       
-      - name: Fetch the tests to run
-        run: |
-          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
+#      - name: Fetch the tests to run
+#        run: |
+#          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
 
       - name: Report fetched tests
         uses: actions/upload-artifact@v2
@@ -288,9 +289,10 @@ jobs:
 
       - name: Run all non-slow tests on GPU
         run: |
-          if [ -f test_list.txt ]; then
-            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_multi_gpu $(cat test_list.txt)
-          fi
+          python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_multi_gpu
+#          if [ -f test_list.txt ]; then
+#            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_multi_gpu $(cat test_list.txt)
+#          fi
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -314,7 +316,7 @@ jobs:
 #        run: |
 #          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
 #          pip install --upgrade pip
-#          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-flax-speech]
+#          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-speech]
 #
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
