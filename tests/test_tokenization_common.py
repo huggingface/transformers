@@ -1085,7 +1085,9 @@ class TokenizerTesterMixin:
 
                     self.assertTrue(
                         context.exception.args[0].startswith(
-                            "Not possible to return overflowing tokens for pair of sequences with the 'longest_first'. Please select another truncation strategy than 'longest_first', for instance 'only_second' or 'only_first'."
+                            "Not possible to return overflowing tokens for pair of sequences with the "
+                            "`longest_first`.Please select another truncation strategy than `longest_first`, "
+                            "for instance `only_second` or `only_first`."
                         )
                     )
 
@@ -1126,7 +1128,9 @@ class TokenizerTesterMixin:
 
                     self.assertTrue(
                         context.exception.args[0].startswith(
-                            "Not possible to return overflowing tokens for pair of sequences with the 'longest_first'. Please select another truncation strategy than 'longest_first', for instance 'only_second' or 'only_first'."
+                            "Not possible to return overflowing tokens for pair of sequences with the "
+                            "`longest_first`.Please select another truncation strategy than `longest_first`, "
+                            "for instance `only_second` or `only_first`."
                         )
                     )
 
