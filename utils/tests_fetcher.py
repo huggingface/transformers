@@ -216,11 +216,13 @@ def create_reverse_dependency_map():
     tests = [str(f.relative_to(PATH_TO_TRANFORMERS)) for f in (Path(PATH_TO_TRANFORMERS) / "tests").glob("**/*.py")]
     direct_deps.update({t: get_test_dependencies(t) for t in tests})
 
+    all_files = modules + tests
+
     # This recurses the dependencies
     something_changed = True
     while something_changed:
         something_changed = False
-        for m in modules:
+        for m in all_files:
             for d in direct_deps[m]:
                 for dep in direct_deps[d]:
                     if dep not in direct_deps[m]:
