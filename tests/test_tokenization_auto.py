@@ -22,6 +22,7 @@ from transformers import (
     AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
+    CTRLTokenizer,
     GPT2Tokenizer,
     GPT2TokenizerFast,
     PreTrainedTokenizerFast,
@@ -161,6 +162,11 @@ class AutoTokenizerTest(unittest.TestCase):
 
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertEqual(tokenizer2.vocab_size, 12)
+
+    def test_auto_tokenizer_fast_no_slow(self):
+        tokenizer = AutoTokenizer.from_pretrained("ctrl")
+        # There is no fast CTRL so this always gives us a slow tokenizer.
+        self.assertIsInstance(tokenizer, CTRLTokenizer)
 
     def test_get_tokenizer_config(self):
         # Check we can load the tokenizer config of an online model.

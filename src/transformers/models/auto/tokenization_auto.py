@@ -229,12 +229,12 @@ def tokenizer_class_from_name(class_name: str):
 
     for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
         if class_name in tokenizers:
-            break
+            module_name = model_type_to_module_name(module_name)
 
-    module_name = model_type_to_module_name(module_name)
+            module = importlib.import_module(f".{module_name}", "transformers.models")
+            return getattr(module, class_name)
 
-    module = importlib.import_module(f".{module_name}", "transformers.models")
-    return getattr(module, class_name)
+    return None
 
 
 def get_tokenizer_config(
