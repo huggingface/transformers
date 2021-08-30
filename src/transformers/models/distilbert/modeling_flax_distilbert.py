@@ -45,15 +45,22 @@ _CONFIG_FOR_DOC = "DistilBertConfig"
 _TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 
-DISTILBERT_START_DOCSTRING = r"""
+FLAX_DISTILBERT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading, saving and converting weights from
+    PyTorch models)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a Flax Linen `flax.linen.Module
+    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
+    and refer to the Flax documentation for all matter related to general usage and behavior.
+
+    Finally, this model supports inherent JAX features such as:
+
+    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
+    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
+    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
+    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
 
     Parameters:
         config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
@@ -64,31 +71,21 @@ DISTILBERT_START_DOCSTRING = r"""
 
 DISTILBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
+        input_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.DistilBertTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
+        attention_mask (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -142,7 +139,7 @@ class FlaxEmbeddings(nn.Module):
                 dtype=self.dtype,
             )
         else:
-            self.pos_encoding = positional_encoding(self.config.max_position_embeddings, self.config.dim)
+            self.pos_encoding = positional_encoding(self.config.max_position_embeddings, self.config.dim, self.dtype)
         self.LayerNorm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.dropout)
 
@@ -545,7 +542,7 @@ class FlaxDistilBertModule(nn.Module):
 
 @add_start_docstrings(
     "The bare DistilBert Model transformer outputting raw hidden-states without any specific head on top.",
-    DISTILBERT_START_DOCSTRING,
+    FLAX_DISTILBERT_START_DOCSTRING,
 )
 class FlaxDistilBertModel(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertModule
@@ -621,7 +618,7 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         )
 
 
-@add_start_docstrings("""DistilBert Model with a `language modeling` head on top. """, DISTILBERT_START_DOCSTRING)
+@add_start_docstrings("""DistilBert Model with a `language modeling` head on top. """, FLAX_DISTILBERT_START_DOCSTRING)
 class FlaxDistilBertForMaskedLM(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForMaskedLMModule
 
@@ -691,7 +688,7 @@ class FlaxDistilBertForSequenceClassificationModule(nn.Module):
     DistilBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """,
-    DISTILBERT_START_DOCSTRING,
+    FLAX_DISTILBERT_START_DOCSTRING,
 )
 class FlaxDistilBertForSequenceClassification(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForSequenceClassificationModule
@@ -773,7 +770,7 @@ class FlaxDistilBertForMultipleChoiceModule(nn.Module):
     DistilBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
     a softmax) e.g. for RocStories/SWAG tasks.
     """,
-    DISTILBERT_START_DOCSTRING,
+    FLAX_DISTILBERT_START_DOCSTRING,
 )
 class FlaxDistilBertForMultipleChoice(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForMultipleChoiceModule
@@ -841,7 +838,7 @@ class FlaxDistilBertForTokenClassificationModule(nn.Module):
     DistilBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
     for Named-Entity-Recognition (NER) tasks.
     """,
-    DISTILBERT_START_DOCSTRING,
+    FLAX_DISTILBERT_START_DOCSTRING,
 )
 class FlaxDistilBertForTokenClassification(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForTokenClassificationModule
@@ -913,7 +910,7 @@ class FlaxDistilBertForQuestionAnsweringModule(nn.Module):
     DistilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
     linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    DISTILBERT_START_DOCSTRING,
+    FLAX_DISTILBERT_START_DOCSTRING,
 )
 class FlaxDistilBertForQuestionAnswering(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForQuestionAnsweringModule
