@@ -30,7 +30,6 @@ deps_table_check_updated:
 # autogenerating code
 
 autogenerate_code: deps_table_update
-	python utils/class_mapping_update.py
 
 # Check that source code meets quality standards
 
@@ -40,6 +39,7 @@ extra_quality_checks:
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/check_inits.py
+	python utils/tests_fetcher.py --sanity_check
 
 # this target runs checks on all files
 quality:

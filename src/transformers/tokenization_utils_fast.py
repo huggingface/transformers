@@ -59,6 +59,9 @@ INIT_TOKENIZER_DOCSTRING += """
         tokenizer_object (:class:`tokenizers.Tokenizer`):
             A :class:`tokenizers.Tokenizer` object from 🤗 tokenizers to instantiate from. See :doc:`Using tokenizers
             from 🤗 tokenizers <../fast_tokenizers>` for more information.
+        tokenizer_file (:class:`str`):
+            A path to a local JSON file representing a previously serialized :class:`tokenizers.Tokenizer` object from
+            🤗 tokenizers.
 """
 
 MODEL_TO_TRAINER_MAPPING = {
@@ -338,23 +341,32 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
         """
+        _truncation = self._tokenizer.truncation
+        _padding = self._tokenizer.padding
         # Set truncation and padding on the backend tokenizer
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
-            self._tokenizer.enable_truncation(max_length, stride=stride, strategy=truncation_strategy.value)
+        if truncation_strategy == TruncationStrategy.DO_NOT_TRUNCATE:
+            if _truncation is not None:
+                self._tokenizer.no_truncation()
         else:
-            self._tokenizer.no_truncation()
+            target = {"max_length": max_length, "stride": stride, "strategy": truncation_strategy.value}
+            if _truncation != target:
+                self._tokenizer.enable_truncation(**target)
 
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD:
-            self._tokenizer.enable_padding(
-                length=max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None,
-                direction=self.padding_side,
-                pad_id=self.pad_token_id,
-                pad_type_id=self.pad_token_type_id,
-                pad_token=self.pad_token,
-                pad_to_multiple_of=pad_to_multiple_of,
-            )
+        if padding_strategy == PaddingStrategy.DO_NOT_PAD:
+            if _padding is not None:
+                self._tokenizer.no_padding()
         else:
-            self._tokenizer.no_padding()
+            length = max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None
+            target = {
+                "length": length,
+                "direction": self.padding_side,
+                "pad_id": self.pad_token_id,
+                "pad_token": self.pad_token,
+                "pad_type_id": self.pad_token_type_id,
+                "pad_to_multiple_of": pad_to_multiple_of,
+            }
+            if _padding != target:
+                self._tokenizer.enable_padding(**target)
 
     def _batch_encode_plus(
         self,
@@ -575,7 +587,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             text_iterator (generator of :obj:`List[str]`):
                 The training corpus. Should be a generator of batches of texts, for instance a list of lists of texts
                 if you have everything in memory.
-            vocab_size (obj:`int`):
+            vocab_size (:obj:`int`):
                 The size of the vocabulary you want for your tokenizer.
             new_special_tokens (list of :obj:`str` or :obj:`AddedToken`, `optional`):
                 A list of new special tokens to add to the tokenizer you are training.
@@ -653,21 +665,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             and tokenizer_json["model"]["end_of_word_suffix"] is not None
         ):
             kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
+        if tokenizer_json["model"]["type"] == "Unigram" and unk_token is not None:
+            kwargs["unk_token"] = unk_token
 
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
         tokenizer.train_from_iterator(text_iterator, trainer=trainer)
-
-        if unk_token is not None:
-            # For Unigram tokenizers we need to set back the unk id of the model (bug in Tokenizers?)
-            trained_tokenizer_json = json.loads(tokenizer.to_str())
-            vocab = trained_tokenizer_json["model"]["vocab"]
-            unk_id = 0
-            while unk_id < len(vocab) and vocab[unk_id][0] != unk_token:
-                unk_id += 1
-            if unk_id < len(vocab):
-                trained_tokenizer_json["model"]["unk_id"] = unk_id
-                tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
         if post_processor is not None:
             trained_tokenizer_json = json.loads(tokenizer.to_str())
@@ -704,7 +707,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
                 special_token_full = getattr(self, f"_{token}")
                 if isinstance(special_token_full, AddedToken):
-                    # Create an added token with the same paramters except the content
+                    # Create an added token with the same parameters except the content
                     kwargs[token] = AddedToken(
                         special_token,
                         single_word=special_token_full.single_word,

@@ -87,6 +87,9 @@ class DebugUnderflowOverflow:
 
         debug_overflow = DebugUnderflowOverflow(model, max_frames_to_save=100)
 
+    To validate that you have set up this debugging feature correctly, and you intend to use it in a training that may
+    take hours to complete, first run it with normal tracing enabled for one of a few batches as explained in the next
+    section.
 
 
     Mode 2. Specific batch absolute min/max tracing without detection
@@ -104,12 +107,19 @@ class DebugUnderflowOverflow:
     fast-forward right to that area.
 
 
+    Early stopping:
 
     You can also specify the batch number after which to stop the training, with ::
 
         debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1,3], abort_after_batch_num=3)
 
-    This feature is mainly useful in the tracing mode, but you can use it for any more.
+    This feature is mainly useful in the tracing mode, but you can use it for any mode.
+
+
+    **Performance**:
+
+    As this module measures absolute ``min``/``max`` of each weight of the model on every forward it'll slow the
+    training down. Therefore remember to turn it off once the debugging needs have been met.
 
     Args:
         model (:obj:`nn.Module`):
@@ -277,20 +287,20 @@ def get_abs_min_max(var, ctx):
 
 def detect_overflow(var, ctx):
     """
-    Report of the tensor contains any ``nan`` and ``inf`` entries.
+    Report whether the tensor contains any ``nan`` or ``inf`` entries.
 
     This is useful for detecting overflows/underflows and best to call right after the function that did some math that
-    modified the variable in question.
+    modified the tensor in question.
 
-    The function contains a few other helper features that you can enable and tweak directly if you want to track
+    This function contains a few other helper features that you can enable and tweak directly if you want to track
     various other things.
 
     Args:
-        var: tensor variable to check
+        var: the tensor variable to check
         ctx: the message to print as a context
 
     Return:
-        True if ``inf`` or ``nan`` was detected, False otherwise
+        :obj:`True` if ``inf`` or ``nan`` was detected, :obj:`False` otherwise
     """
     detected = False
     if torch.isnan(var).any().item():

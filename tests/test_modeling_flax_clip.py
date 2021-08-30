@@ -213,7 +213,18 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_save_load_from_base(self):
         pass
 
+    # FlaxCLIPVisionModel does not have any base model
     def test_save_load_to_base(self):
+        pass
+
+    # FlaxCLIPVisionModel does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_from_base_pt(self):
+        pass
+
+    # FlaxCLIPVisionModel does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_to_base_pt(self):
         pass
 
     @slow
@@ -307,7 +318,18 @@ class FlaxCLIPTextModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_save_load_from_base(self):
         pass
 
+    # FlaxCLIPVisionModel does not have any base model
     def test_save_load_to_base(self):
+        pass
+
+    # FlaxCLIPVisionModel does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_from_base_pt(self):
+        pass
+
+    # FlaxCLIPVisionModel does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_to_base_pt(self):
         pass
 
     @slow
@@ -356,7 +378,6 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @slow
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

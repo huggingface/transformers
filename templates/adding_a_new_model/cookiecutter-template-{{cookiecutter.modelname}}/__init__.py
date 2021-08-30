@@ -17,8 +17,8 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports, TODO: refactor other lines below
-from ...file_utils import _BaseLazyModule, is_tokenizers_available
+# rely on isort to merge the imports
+from ...file_utils import _LazyModule, is_tokenizers_available
 {%- if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 from ...file_utils import is_tf_available
 {% endif %}
@@ -28,6 +28,7 @@ from ...file_utils import is_torch_available
 {%- if "Flax" in cookiecutter.generate_tensorflow_pytorch_and_flax %}
 from ...file_utils import is_flax_available
 {% endif %}
+
 _import_structure = {
     "configuration_{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP", "{{cookiecutter.camelcase_modelname}}Config"],
     "tokenization_{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.camelcase_modelname}}Tokenizer"],
@@ -205,19 +206,6 @@ if TYPE_CHECKING:
 {% endif %}
 
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)

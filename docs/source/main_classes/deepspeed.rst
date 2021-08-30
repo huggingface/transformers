@@ -1061,7 +1061,8 @@ optimizers, with the exception of using the combination of HuggingFace scheduler
 | DS Optimizer | No           | Yes          |
 +--------------+--------------+--------------+
 
-If ``offload_optimizer`` is enabled you must use both DeepSpeed scheduler and DeepSpeed optimizer.
+It is possible to use a non-DeepSpeed optimizer when ``offload_optimizer`` is enabled, as long as it has both CPU and
+GPU implementation (except LAMB).
 
 
 
@@ -1155,8 +1156,8 @@ Here is where the schedulers overlap between 🤗 Transformers and DeepSpeed:
   therefore, if you don't configure the scheduler this is scheduler that will get configured by default.
 
 If you don't configure the ``scheduler`` entry in the configuration file, the :class:`~transformers.Trainer` will use
-the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` to configure a 🤗 Transformers version
-of it.
+the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` or ``--warmup_ratio`` to configure a
+🤗 Transformers version of it.
 
 Here is an example of the auto-configured ``scheduler`` entry for ``WarmupLR``:
 
@@ -1177,9 +1178,10 @@ Since `"auto"` is used the :class:`~transformers.Trainer` arguments will set the
 file. This is so that there is one definitive source of the values and to avoid hard to find errors when, for example,
 the learning rate is set to different values in different places. Command line rules. The values that get set are:
 
-- ``warmup_min_lr`` with the value of ``0``
-- ``warmup_max_lr`` with the value of ``--learning_rate``
-- ``warmup_num_steps`` with the value of ``--warmup_steps``
+- ``warmup_min_lr`` with the value of ``0``.
+- ``warmup_max_lr`` with the value of ``--learning_rate``.
+- ``warmup_num_steps`` with the value of ``--warmup_steps`` if provided. Otherwise will use ``--warmup_ratio``
+  multiplied by the number of training steps and rounded up.
 - ``total_num_steps`` with either the value of ``--max_steps`` or if it is not provided, derived automatically at run
   time based on the environment and the size of the dataset and other command line arguments (needed for
   ``WarmupDecayLR``).
@@ -1456,8 +1458,56 @@ won't be possible to load it back.
 
 While the fp16 weights are fine for resuming training, if you finished finetuning your model and want to upload it to
 the `models hub <https://huggingface.co/models>`__ or pass it to someone else you most likely will want to get the fp32
-weights. This cannot be done during training since this is a process that requires a lot of memory, and therefore this
-is performed offline.
+weights. This ideally shouldn't be done during training since this is a process that requires a lot of memory, and
+therefore best to be performed offline after the training is complete. But if desired and you have plenty of free CPU
+memory it can be done in the same training script. The following sections will discuss both approaches.
+
+
+**Live FP32 Weights Recovery:**
+
+This approach may not work if you model is large and you have little free CPU memory left, at the end of the training.
+
+If you have saved at least one checkpoint, and you want to use the latest one, you can do the following:
+
+.. code-block:: python
+
+    from transformers.trainer_utils import get_last_checkpoint
+    from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+    checkpoint_dir = get_last_checkpoint(trainer.args.output_dir)
+    fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
+
+If you're using the ``--load_best_model_at_end`` class:`~transformers.TrainingArguments` argument (to track the best
+checkpoint), then you can finish the training by first saving the final model explicitly and then do the same as above:
+
+.. code-block:: python
+
+    from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+    checkpoint_dir = os.path.join(trainer.args.output_dir, "checkpoint-final")
+    trainer.deepspeed.save_checkpoint(checkpoint_dir)
+    fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
+
+.. note::
+
+    Note, that once ``load_state_dict_from_zero_checkpoint`` was run, the ``model`` will no longer be useable in the
+    DeepSpeed context of the same application. i.e. you will need to re-initialize the deepspeed engine, since
+    ``model.load_state_dict(state_dict)`` will remove all the DeepSpeed magic from it. So do this only at the very end
+    of the training.
+
+Of course, you don't have to use class:`~transformers.Trainer` and you can adjust the examples above to your own
+trainer.
+
+If for some reason you want more refinement, you can also extract the fp32 ``state_dict`` of the weights and apply
+these yourself as is shown in the following example:
+
+.. code-block:: python
+
+    from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
+    state_dict = get_fp32_state_dict_from_zero_checkpoint(checkpoint_dir) # already on cpu
+    model = model.cpu()
+    model.load_state_dict(state_dict)
+
+
+**Offline FP32 Weights Recovery:**
 
 DeepSpeed creates a special conversion script ``zero_to_fp32.py`` which it places in the top-level of the checkpoint
 folder. Using this script you can extract the weights at any point. The script is standalone and you no longer need to
@@ -1486,15 +1536,16 @@ weights just run:
 
 .. code-block:: bash
 
-    python zero_to_fp32.py global_step1 pytorch_model.bin
+    python zero_to_fp32.py . pytorch_model.bin
 
-The script will automatically handle either ZeRO-2 or ZeRO-3 checkpoint.
+This is it. ``pytorch_model.bin`` will now contain the full fp32 model weights consolidated from multiple GPUs.
+
+The script will automatically be able to handle either a ZeRO-2 or ZeRO-3 checkpoint.
 
 ``python zero_to_fp32.py -h`` will give you usage details.
 
-If you have multiple DeepSpeed checkpoint sub-folders, pick the one you know to have the desired weights.
-
-This is it. ``pytorch_model.bin`` will now contain the full fp32 model weights consolidated from multiple GPUs.
+The script will auto-discover the deepspeed sub-folder using the contents of the file ``latest``, which in the current
+example will contain ``global_step1``.
 
 Note: currently the script requires 2x general RAM of the final fp32 model weights.
 

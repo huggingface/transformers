@@ -46,6 +46,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "M2M100Config"
 _TOKENIZER_FOR_DOC = "M2M100Tokenizer"
+_CHECKPOINT_FOR_DOC = "facebook/m2m100_418M"
 
 
 M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1117,7 +1118,7 @@ class M2M100Model(M2M100PreTrainedModel):
     @add_start_docstrings_to_model_forward(M2M_100_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/m2m100_418M",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

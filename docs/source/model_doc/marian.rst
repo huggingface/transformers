@@ -103,8 +103,8 @@ Here is the code to see all available pretrained models on the hub:
 
 .. code-block:: python
 
-    from transformers.hf_api import HfApi
-    model_list = HfApi().model_list()
+    from huggingface_hub.hf_api import HfApi
+    model_list = HfApi().list_models()
     org = "Helsinki-NLP"
     model_ids = [x.modelId for x in model_list if x.modelId.startswith(org)]
     suffix = [x.split('/')[1] for x in model_ids]
@@ -216,3 +216,17 @@ TFMarianMTModel
 
 .. autoclass:: transformers.TFMarianMTModel
     :members: call
+
+
+FlaxMarianModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxMarianModel
+    :members: __call__
+
+
+FlaxMarianMTModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxMarianMTModel
+    :members: __call__
