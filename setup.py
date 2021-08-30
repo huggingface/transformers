@@ -91,7 +91,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.4.3",
+    "deepspeed>=0.5.1",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
