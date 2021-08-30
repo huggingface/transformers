@@ -36,11 +36,11 @@ class CallMethodMixin:
         if return_tensors is None:
             return_tensors = self.return_tensors
         if return_tensors == "tf":
-            return tf_default_data_collator(features)
+            return self.tf_call(features)
         elif return_tensors == "pt":
-            return torch_default_data_collator(features)
+            return self.torch_call(features)
         elif return_tensors == "np":
-            return numpy_default_data_collator(features)
+            return self.numpy_call(features)
         else:
             raise ValueError(f"Framework '{return_tensors}' not recognized!")
 
