@@ -161,6 +161,9 @@ def validate_model_outputs(
         # ("past_key_values" being taken for the ONNX inputs)
         if name == "past_key_values":
             name = "present"
+        # Overwriting the output name as "logits" since it is the proper prediction scores key
+        if name == "prediction_scores":
+            name = "logits"
         if isinstance(value, (list, tuple)):
             value = config.flatten_output_collection_property(name, value)
             ref_outputs_dict.update(value)
