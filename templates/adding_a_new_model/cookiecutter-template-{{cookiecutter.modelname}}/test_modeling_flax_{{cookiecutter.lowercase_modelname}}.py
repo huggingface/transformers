@@ -429,7 +429,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTester:
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_attn_mask = np.astype(ids_tensor((self.batch_size, 3), 2), np.int8)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2).astype(np.int8)
 
         # append to next input_ids and
         next_input_ids = np.concatenate([input_ids, next_tokens], axis=-1)
@@ -457,9 +457,9 @@ def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
     decoder_attention_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = np.astype(np.not_equal(input_ids, config.pad_token_id), np.int8)
+        attention_mask = np.not_equal(input_ids, config.pad_token_id).astype(np.int8)
     if decoder_attention_mask is None:
-        decoder_attention_mask = np.concatenate([np.ones(decoder_input_ids[:, :1].shape, dtype=np.int8), np.astype(np.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), np.int8)], axis=-1)
+        decoder_attention_mask = np.concatenate([np.ones(decoder_input_ids[:, :1].shape, dtype=np.int8), np.not_equal(decoder_input_ids[:, 1:], config.pad_token_id).astype(np.int8)], axis=-1)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
