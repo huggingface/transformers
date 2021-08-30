@@ -373,26 +373,6 @@
 # End.
 
 # To replace in: "src/transformers/models/auto/modeling_flax_auto.py" if generating Flax
-# Below: "# Add modeling imports here"
-# Replace with:
-{% if cookiecutter.is_encoder_decoder_model == "False" -%}
-from ..{{cookiecutter.lowercase_modelname}}.modeling_flax_{{cookiecutter.lowercase_modelname}} import (
-    Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM,
-    Flax{{cookiecutter.camelcase_modelname}}ForCausalLM,
-    Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
-    Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
-    Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
-    Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification,
-    Flax{{cookiecutter.camelcase_modelname}}Model,
-)
-{% else -%}
-from ..{{cookiecutter.lowercase_modelname}}.modeling_flax_{{cookiecutter.lowercase_modelname}} import (
-    Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
-    Flax{{cookiecutter.camelcase_modelname}}Model,
-)
-{% endif -%}
-# End.
-
 # Below: "# Base model mapping"
 # Replace with:
         ({{cookiecutter.camelcase_modelname}}Config, Flax{{cookiecutter.camelcase_modelname}}Model),
