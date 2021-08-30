@@ -31,6 +31,20 @@ of PyTorch/TensorFlow tensors or NumPy arrays.
 DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, Any]])
 
 
+class CallMethodMixin:
+    def __call__(self, features, return_tensors=None):
+        if return_tensors is None:
+            return_tensors = self.return_tensors
+        if return_tensors == "tf":
+            return tf_default_data_collator(features)
+        elif return_tensors == "torch":
+            return torch_default_data_collator(features)
+        elif return_tensors == "np":
+            return numpy_default_data_collator(features)
+        else:
+            raise ValueError(f"Framework '{return_tensors}' not recognized!")
+
+
 def default_data_collator(features: List[InputDataClass], return_tensors="pt") -> Dict[str, Any]:
     """
     Very simple data collator that simply collates batches of dict-like objects and performs special handling for
@@ -57,18 +71,8 @@ def default_data_collator(features: List[InputDataClass], return_tensors="pt") -
 
 
 @dataclass
-class DefaultDataCollator:
+class DefaultDataCollator(CallMethodMixin):
     return_tensors: str = "pt"
-
-    def __call__(self, features, return_tensors=None):
-        if return_tensors is None:
-            return_tensors = self.return_tensors
-        if return_tensors == "tf":
-            return tf_default_data_collator(features)
-        elif return_tensors == "torch":
-            return torch_default_data_collator(features)
-        elif return_tensors == "np":
-            return numpy_default_data_collator(features)
 
 
 def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
@@ -231,7 +235,7 @@ class DataCollatorWithPadding:
 
 
 @dataclass
-class DataCollatorForTokenClassification:
+class DataCollatorForTokenClassification(CallMethodMixin):
     """
     Data collator that will dynamically pad the inputs received, as well as the labels.
 
@@ -265,18 +269,6 @@ class DataCollatorForTokenClassification:
     pad_to_multiple_of: Optional[int] = None
     label_pad_token_id: int = -100
     return_tensors: str = "pt"
-
-    def __call__(self, features, return_tensors=None):
-        if return_tensors is None:
-            return_tensors = self.return_tensors
-        if return_tensors == "pt":
-            return self.torch_call(features)
-        elif return_tensors == "tf":
-            return self.tf_call(features)
-        elif return_tensors == "np":
-            return self.numpy_call(features)
-        else:
-            raise ValueError(f"Framework '{return_tensors}' not recognized!")
 
     def torch_call(self, features):
         import torch
@@ -556,7 +548,7 @@ class DataCollatorForSeq2Seq:
 
 
 @dataclass
-class DataCollatorForLanguageModeling:
+class DataCollatorForLanguageModeling(CallMethodMixin):
     """
     Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
     are not all of the same length.
@@ -598,18 +590,6 @@ class DataCollatorForLanguageModeling:
             import tensorflow as tf
 
             self.tf_mask_tokens = tf.function(self.tf_mask_tokens, jit_compile=True)
-
-    def __call__(self, features, return_tensors=None):
-        if return_tensors is None:
-            return_tensors = self.return_tensors
-        if return_tensors == "pt":
-            return self.torch_call(features)
-        elif return_tensors == "tf":
-            return self.tf_call(features)
-        elif return_tensors == "np":
-            return self.numpy_call(features)
-        else:
-            raise ValueError(f"Framework '{return_tensors}' not recognized!")
 
     @staticmethod
     def tf_bernoulli(shape, probability):
@@ -1157,7 +1137,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 
 
 @dataclass
-class DataCollatorForPermutationLanguageModeling:
+class DataCollatorForPermutationLanguageModeling(CallMethodMixin):
     """
     Data collator used for permutation language modeling.
 
@@ -1169,18 +1149,6 @@ class DataCollatorForPermutationLanguageModeling:
     plm_probability: float = 1 / 6
     max_span_length: int = 5  # maximum length of a span of masked tokens
     return_tensors: str = "pt"
-
-    def __call__(self, features, return_tensors=None):
-        if return_tensors is None:
-            return_tensors = self.return_tensors
-        if return_tensors == "pt":
-            return self.torch_call(features)
-        elif return_tensors == "tf":
-            return self.tf_call(features)
-        elif return_tensors == "np":
-            return self.numpy_call(features)
-        else:
-            raise ValueError(f"Framework '{return_tensors}' not recognized!")
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         if isinstance(examples[0], (dict, BatchEncoding)):
