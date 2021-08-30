@@ -32,11 +32,13 @@ from transformers import logging as transformers_logging
 from .deepspeed import is_deepspeed_available
 from .file_utils import (
     is_datasets_available,
+    is_detectron2_available,
     is_faiss_available,
     is_flax_available,
     is_keras2onnx_available,
     is_onnx_available,
     is_pandas_available,
+    is_pytesseract_available,
     is_rjieba_available,
     is_scatter_available,
     is_sentencepiece_available,
@@ -348,6 +350,16 @@ def require_pandas(test_case):
         return test_case
 
 
+def require_pytesseract(test_case):
+    """
+    Decorator marking a test that requires PyTesseract. These tests are skipped when PyTesseract isn't installed.
+    """
+    if not is_pytesseract_available():
+        return unittest.skip("test requires PyTesseract")(test_case)
+    else:
+        return test_case
+
+
 def require_scatter(test_case):
     """
     Decorator marking a test that requires PyTorch Scatter. These tests are skipped when PyTorch Scatter isn't
@@ -453,6 +465,14 @@ def require_datasets(test_case):
 
     if not is_datasets_available():
         return unittest.skip("test requires `datasets`")(test_case)
+    else:
+        return test_case
+
+
+def require_detectron2(test_case):
+    """Decorator marking a test that requires detectron2."""
+    if not is_detectron2_available():
+        return unittest.skip("test requires `detectron2`")(test_case)
     else:
         return test_case
 

@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("layoutlmv2", "LayoutLMv2Model"),
         ("beit", "BeitModel"),
         ("rembert", "RemBertModel"),
         ("visual_bert", "VisualBertModel"),
@@ -285,6 +286,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("layoutlmv2", "LayoutLMv2ForSequenceClassification"),
         ("rembert", "RemBertForSequenceClassification"),
         ("canine", "CanineForSequenceClassification"),
         ("roformer", "RoFormerForSequenceClassification"),
@@ -327,6 +329,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("rembert", "RemBertForQuestionAnswering"),
         ("canine", "CanineForQuestionAnswering"),
         ("roformer", "RoFormerForQuestionAnswering"),
@@ -371,6 +374,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+        ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
         ("rembert", "RemBertForTokenClassification"),
         ("canine", "CanineForTokenClassification"),
         ("roformer", "RoFormerForTokenClassification"),
