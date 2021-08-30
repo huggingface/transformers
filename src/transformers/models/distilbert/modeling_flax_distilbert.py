@@ -275,12 +275,12 @@ class FlaxFFN(nn.Module):
         ], f"activation ({self.config.activation}) must be in ['relu', 'gelu']"
         self.activation = ACT2FN[self.config.activation]
 
-    def __call__(self, inputs, deterministic: bool = True):
-        x = self.lin1(inputs)
-        x = self.activation(x)
-        x = self.lin2(x)
-        x = self.dropout(x, deterministic=deterministic)
-        return x
+    def __call__(self, hidden_states, deterministic: bool = True):
+        hidden_states = self.lin1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.lin2(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        return hidden_states
 
 
 class FlaxTransformerBlock(nn.Module):
@@ -300,7 +300,7 @@ class FlaxTransformerBlock(nn.Module):
 
     def __call__(
         self,
-        x,
+        hidden_states,
         attn_mask,
         head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
@@ -308,9 +308,9 @@ class FlaxTransformerBlock(nn.Module):
     ):
         # Self-Attention
         sa_output = self.attention(
-            query=x,
-            key=x,
-            value=x,
+            query=hidden_states,
+            key=hidden_states,
+            value=hidden_states,
             mask=attn_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -321,7 +321,7 @@ class FlaxTransformerBlock(nn.Module):
         else:
             assert type(sa_output) == tuple
             sa_output = sa_output[0]
-        sa_output = self.sa_layer_norm(sa_output + x)
+        sa_output = self.sa_layer_norm(sa_output + hidden_states)
 
         # Feed Forward Network
         ffn_output = self.ffn(sa_output, deterministic=deterministic)
@@ -343,7 +343,7 @@ class FlaxTransformer(nn.Module):
 
     def __call__(
         self,
-        x,
+        hidden_states,
         attention_mask,
         head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
@@ -354,19 +354,18 @@ class FlaxTransformer(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        hidden_state = x
         for i, layer_module in enumerate(self.layers):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_state,)
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                x=hidden_state,
+                hidden_states=hidden_states,
                 attn_mask=attention_mask,
                 head_mask=head_mask[i],
                 output_attentions=output_attentions,
                 deterministic=deterministic,
             )
-            hidden_state = layer_outputs[-1]
+            hidden_states = layer_outputs[-1]
 
             if output_attentions:
                 assert len(layer_outputs) == 2
@@ -377,12 +376,12 @@ class FlaxTransformer(nn.Module):
 
         # Add last layer
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_state,)
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_state, all_attentions, all_hidden_states] if v is not None)
+            return tuple(v for v in [hidden_states, all_attentions, all_hidden_states] if v is not None)
         return FlaxBaseModelOutput(
-            last_hidden_state=hidden_state, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
 
@@ -395,7 +394,7 @@ class FlaxTransformerEncoder(nn.Module):
 
     def __call__(
         self,
-        x,
+        hidden_states,
         attention_mask,
         head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
@@ -404,7 +403,7 @@ class FlaxTransformerEncoder(nn.Module):
         return_dict: bool = False,
     ):
         return self.layer(
-            x=x,
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -530,7 +529,7 @@ class FlaxDistilBertModule(nn.Module):
 
         input_embeds = self.embeddings(input_ids, deterministic=deterministic)
         return self.transformer(
-            x=input_embeds,
+            hidden_states=input_embeds,
             attention_mask=attention_mask,
             head_mask=head_mask,
             deterministic=deterministic,
