@@ -426,12 +426,15 @@ class TrainingSummary:
                     result["dataset"]["args"] = dataset_arg_mapping[ds_tag]
 
             if len(metric_mapping) > 0:
+                result["metrics"] = []
                 for metric_tag, metric_name in metric_mapping.items():
-                    result["metric"] = {
-                        "name": metric_name,
-                        "type": metric_tag,
-                        "value": self.eval_results[metric_name],
-                    }
+                    result["metrics"].append(
+                        {
+                            "name": metric_name,
+                            "type": metric_tag,
+                            "value": self.eval_results[metric_name],
+                        }
+                    )
 
             model_index["results"].append(result)
 
@@ -446,7 +449,7 @@ class TrainingSummary:
         metadata = _insert_values_as_list(metadata, "tags", self.tags)
         metadata = _insert_values_as_list(metadata, "datasets", self.dataset_tags)
         metadata = _insert_values_as_list(metadata, "metrics", list(metric_mapping.keys()))
-        metadata["model_index"] = self.create_model_index(metric_mapping)
+        metadata["model-index"] = self.create_model_index(metric_mapping)
 
         return metadata
 
