@@ -43,7 +43,6 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     )
     generate_max_length: Optional[int] = field(
         default=None,
-        type=int,
         metadata={
             "help": "The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default "
             "to the `max_length` value of the model configuration."
@@ -51,7 +50,6 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     )
     generate_num_beams: Optional[int] = field(
         default=None,
-        type=int,
         metadata={
             "help": "The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default "
             "to the `num_beams` value of the model configuration."
