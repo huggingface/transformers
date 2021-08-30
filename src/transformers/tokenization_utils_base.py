@@ -1324,9 +1324,9 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
             return_overflowing_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to return overflowing token sequences.If a pair of sequences of input ids (or a batch
-                of pairs) is provided with :obj:`truncation_strategy = longest_first` or :obj:`True`, an error is 
-                raised instead of returning overflowing tokens.
+                Whether or not to return overflowing token sequences.If a pair of sequences of input ids (or a batch of
+                pairs) is provided with :obj:`truncation_strategy = longest_first` or :obj:`True`, an error is raised
+                instead of returning overflowing tokens.
             return_special_tokens_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return special tokens mask information.
             return_offsets_mapping (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -2842,8 +2842,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
         manages a moving window (with user defined stride) for overflowing tokens. Except for the `longest_first`
         strategy, all truncation strategies function the same for sequences of input ids or a pair of sequences of
-        input ids. The `longest_first` strategy produces an error instead of returning overflowing_tokens for a
-        pair of sequences of input ids
+        input ids. The `longest_first` strategy produces an error instead of returning overflowing_tokens for a pair of
+        sequences of input ids
 
         Args:
             ids (:obj:`List[int]`):
@@ -2993,8 +2993,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         Returns:
             :obj:`Tuple[List[int], List[int], List[int]]`: The truncated ``ids``, the truncated ``pair_ids`` and the
-            list of overflowing tokens. Note: The `longest_first` strategy returns empty list of overflowing_tokens
-            if a pair of sequences (or a batch of pairs) is provided.
+            list of overflowing tokens. Note: The `longest_first` strategy returns empty list of overflowing_tokens if
+            a pair of sequences (or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:
             return ids, pair_ids, []
