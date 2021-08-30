@@ -336,6 +336,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 if is_flax_available():
     import numpy as np
+    import jax.numpy as jnp
     from transformers import (
         Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
         Flax{{cookiecutter.camelcase_modelname}}Model,
