@@ -728,6 +728,7 @@ class NeptuneCallback(TrainerCallback):
                 api_token=os.getenv("NEPTUNE_API_TOKEN"),
                 mode=os.getenv("NEPTUNE_CONNECTION_MODE", "async"),
                 name=os.getenv("NEPTUNE_RUN_NAME", None),
+                run=os.getenv("NEPTUNE_RUN_ID", None),
             )
             combined_dict = args.to_dict()
             if hasattr(model, "config") and model.config is not None:
