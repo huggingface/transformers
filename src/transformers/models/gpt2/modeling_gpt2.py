@@ -1425,7 +1425,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
+            output = (logits,) + transformer_outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
