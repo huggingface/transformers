@@ -16,6 +16,8 @@
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
+import torch
+
 from transformers import PreTrainedTokenizer, TensorType
 
 from ...onnx import OnnxConfig, compute_effective_axis_dimension
