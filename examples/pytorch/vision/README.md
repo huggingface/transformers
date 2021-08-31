@@ -22,13 +22,55 @@ The following example showcases how to fine-tune a `ViT` for image-classificatio
 
 Here we show how to fine-tune a `ViT` on the [beans](https://huggingface.co/datasets/beans) dataset.
 
+👀 See the results here: [nateraw/vit-base-beans](https://huggingface.co/nateraw/vit-base-beans).
+
 ```bash
 python run_image_classification.py \
     --dataset_name beans \
     --output_dir ./beans_outputs/ \
     --remove_unused_columns False \
     --do_train \
-    --do_eval
+    --do_eval \
+    --push_to_hub \
+    --push_to_hub_model_id vit-base-beans \
+    --learning_rate 2e-5 \
+    --num_train_epochs 5 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
+    --logging_strategy steps \
+    --logging_steps 10 \
+    --evaluation_strategy epoch \
+    --save_strategy epoch \
+    --load_best_model_at_end True \
+    --save_total_limit 3 \
+    --seed 1337
+```
+
+Here we show how to fine-tune a `ViT` on the [cats_vs_dogs](https://huggingface.co/datasets/cats_vs_dogs) dataset.
+
+👀 See the results here: [nateraw/vit-base-cats-vs-dogs](https://huggingface.co/nateraw/vit-base-cats-vs-dogs).
+
+```bash
+python run_image_classification.py \
+    --dataset_name cats_vs_dogs \
+    --output_dir ./cats_vs_dogs_outputs/ \
+    --remove_unused_columns False \
+    --do_train \
+    --do_eval \
+    --push_to_hub \
+    --push_to_hub_model_id vit-base-cats-vs-dogs \
+    --fp16 True \
+    --learning_rate 2e-4 \
+    --num_train_epochs 5 \
+    --per_device_train_batch_size 32 \
+    --per_device_eval_batch_size 32 \
+    --logging_strategy steps \
+    --logging_steps 10 \
+    --evaluation_strategy epoch \
+    --save_strategy epoch \
+    --load_best_model_at_end True \
+    --save_total_limit 3 \
+    --seed 1337
 ```
 
 ## Using your own data
