@@ -22,6 +22,7 @@ from .utils import ParameterFormat, compute_effective_axis_dimension, compute_se
 
 
 DEFAULT_ONNX_OPSET = 11
+DYNAMIC_AXIS = -1
 
 # 2 Gb
 EXTERNAL_DATA_FORMAT_SIZE_LIMIT = 2 * 1024 * 1024 * 1024

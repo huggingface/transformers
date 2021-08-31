@@ -23,8 +23,7 @@ from packaging.version import Version, parse
 from .. import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
 from ..file_utils import is_torch_onnx_dict_inputs_support_available
 from ..utils import logging
-from .config import OnnxConfig
-
+from .config import OnnxConfig, DYNAMIC_AXIS
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -138,8 +137,8 @@ def validate_model_outputs(
     reference_model: Union[PreTrainedModel, TFPreTrainedModel],
     onnx_model_path_or_bytes: Union[PathLike, bytes],
     onnx_named_outputs: List[str],
-    batch_size: int = -1,
-    seq_length: int = -1,
+    batch_size: int = DYNAMIC_AXIS,
+    seq_length: int = DYNAMIC_AXIS,
     atol: float = 1e-5,
 ):
     from onnxruntime import InferenceSession, SessionOptions
