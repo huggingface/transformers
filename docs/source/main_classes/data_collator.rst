@@ -54,18 +54,18 @@ DataCollatorForLanguageModeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForLanguageModeling
-    :members: mask_tokens
+    :members: numpy_mask_tokens, tf_mask_tokens, torch_mask_tokens
 
 
 DataCollatorForWholeWordMask
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForWholeWordMask
-    :members: mask_tokens
+    :members: numpy_mask_tokens, tf_mask_tokens, torch_mask_tokens
 
 
 DataCollatorForPermutationLanguageModeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForPermutationLanguageModeling
-    :members: mask_tokens
+    :members: numpy_mask_tokens, tf_mask_tokens, torch_mask_tokens

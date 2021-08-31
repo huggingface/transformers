@@ -17,11 +17,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
-import torch
-from torch.nn.utils.rnn import pad_sequence
-
 from ..file_utils import PaddingStrategy
-from ..modeling_utils import PreTrainedModel
 from ..models.bert import BertTokenizer, BertTokenizerFast
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
@@ -30,12 +26,26 @@ InputDataClass = NewType("InputDataClass", Any)
 
 """
 A DataCollator is a function that takes a list of samples from a Dataset and collate them into a batch, as a dictionary
-of Tensors.
+of PyTorch/TensorFlow tensors or NumPy arrays.
 """
-DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, torch.Tensor]])
+DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, Any]])
 
 
-def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Tensor]:
+class DataCollatorMixin:
+    def __call__(self, features, return_tensors=None):
+        if return_tensors is None:
+            return_tensors = self.return_tensors
+        if return_tensors == "tf":
+            return self.tf_call(features)
+        elif return_tensors == "pt":
+            return self.torch_call(features)
+        elif return_tensors == "np":
+            return self.numpy_call(features)
+        else:
+            raise ValueError(f"Framework '{return_tensors}' not recognized!")
+
+
+def default_data_collator(features: List[InputDataClass], return_tensors="pt") -> Dict[str, Any]:
     """
     Very simple data collator that simply collates batches of dict-like objects and performs special handling for
     potential keys named:
@@ -51,9 +61,25 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
     # have the same attributes.
     # So we will look at the first element as a proxy for what attributes exist
     # on the whole batch.
+
+    if return_tensors == "pt":
+        return torch_default_data_collator(features)
+    elif return_tensors == "tf":
+        return tf_default_data_collator(features)
+    elif return_tensors == "np":
+        return numpy_default_data_collator(features)
+
+
+@dataclass
+class DefaultDataCollator(DataCollatorMixin):
+    return_tensors: str = "pt"
+
+
+def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+    import torch
+
     if not isinstance(features[0], (dict, BatchEncoding)):
         features = [vars(f) for f in features]
-
     first = features[0]
     batch = {}
 
@@ -79,6 +105,81 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
                 batch[k] = torch.stack([f[k] for f in features])
             else:
                 batch[k] = torch.tensor([f[k] for f in features])
+
+    return batch
+
+
+def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+    import numpy as np
+    import tensorflow as tf
+
+    if not isinstance(features[0], (dict, BatchEncoding)):
+        features = [vars(f) for f in features]
+    first = features[0]
+    batch = {}
+
+    # Special handling for labels.
+    # Ensure that tensor is created with the correct type
+    # (it should be automatically the case, but let's make sure of it.)
+    if "label" in first and first["label"] is not None:
+        if isinstance(first["label"], tf.Tensor):
+            dtype = tf.int64 if first["label"].dtype.is_integer() else tf.float32
+        elif isinstance(first["label"], np.ndarray):
+            dtype = tf.int64 if np.issubdtype(first["label"].dtype, np.integer) else tf.float32
+        elif isinstance(first["label"], (tuple, list)):
+            dtype = tf.int64 if isinstance(first["label"][0], int) else tf.float32
+        else:
+            dtype = tf.int64 if isinstance(first["label"], int) else tf.float32
+        batch["labels"] = tf.convert_to_tensor([f["label"] for f in features], dtype=dtype)
+    elif "label_ids" in first and first["label_ids"] is not None:
+        if isinstance(first["label_ids"], tf.Tensor):
+            batch["labels"] = tf.stack([f["label_ids"] for f in features])
+        else:
+            dtype = tf.int64 if type(first["label_ids"][0]) is int else tf.float32
+            batch["labels"] = tf.convert_to_tensor([f["label_ids"] for f in features], dtype=dtype)
+
+    # Handling of all other possible keys.
+    # Again, we will use the first element to figure out which key/values are not None for this model.
+    for k, v in first.items():
+        if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+            if isinstance(v, (tf.Tensor, np.ndarray)):
+                batch[k] = tf.stack([f[k] for f in features])
+            else:
+                batch[k] = tf.convert_to_tensor([f[k] for f in features])
+
+    return batch
+
+
+def numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+    import numpy as np
+
+    if not isinstance(features[0], (dict, BatchEncoding)):
+        features = [vars(f) for f in features]
+    first = features[0]
+    batch = {}
+
+    # Special handling for labels.
+    # Ensure that tensor is created with the correct type
+    # (it should be automatically the case, but let's make sure of it.)
+    if "label" in first and first["label"] is not None:
+        label = first["label"].item() if isinstance(first["label"], np.ndarray) else first["label"]
+        dtype = np.int64 if isinstance(label, int) else np.float32
+        batch["labels"] = np.array([f["label"] for f in features], dtype=dtype)
+    elif "label_ids" in first and first["label_ids"] is not None:
+        if isinstance(first["label_ids"], np.ndarray):
+            batch["labels"] = np.stack([f["label_ids"] for f in features])
+        else:
+            dtype = np.int64 if type(first["label_ids"][0]) is int else np.float32
+            batch["labels"] = np.array([f["label_ids"] for f in features], dtype=dtype)
+
+    # Handling of all other possible keys.
+    # Again, we will use the first element to figure out which key/values are not None for this model.
+    for k, v in first.items():
+        if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+            if isinstance(v, np.ndarray):
+                batch[k] = np.stack([f[k] for f in features])
+            else:
+                batch[k] = np.array([f[k] for f in features])
 
     return batch
 
@@ -114,14 +215,15 @@ class DataCollatorWithPadding:
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
+    return_tensors: str = "pt"
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
         batch = self.tokenizer.pad(
             features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
+            return_tensors=self.return_tensors,
         )
         if "label" in batch:
             batch["labels"] = batch["label"]
@@ -133,7 +235,7 @@ class DataCollatorWithPadding:
 
 
 @dataclass
-class DataCollatorForTokenClassification:
+class DataCollatorForTokenClassification(DataCollatorMixin):
     """
     Data collator that will dynamically pad the inputs received, as well as the labels.
 
@@ -166,8 +268,11 @@ class DataCollatorForTokenClassification:
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     label_pad_token_id: int = -100
+    return_tensors: str = "pt"
 
-    def __call__(self, features):
+    def torch_call(self, features):
+        import torch
+
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
         batch = self.tokenizer.pad(
@@ -196,15 +301,74 @@ class DataCollatorForTokenClassification:
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
         return batch
 
+    def tf_call(self, features):
+        import tensorflow as tf
 
-def _collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
+        label_name = "label" if "label" in features[0].keys() else "labels"
+        labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+        batch = self.tokenizer.pad(
+            features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            # Conversion to tensors will fail if we have labels as they are not of the same length yet.
+            return_tensors="tf" if labels is None else None,
+        )
+
+        if labels is None:
+            return batch
+
+        sequence_length = tf.convert_to_tensor(batch["input_ids"]).shape[1]
+        padding_side = self.tokenizer.padding_side
+        if padding_side == "right":
+            batch["labels"] = [label + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels]
+        else:
+            batch["labels"] = [[self.label_pad_token_id] * (sequence_length - len(label)) + label for label in labels]
+
+        batch = {k: tf.convert_to_tensor(v, dtype=tf.int64) for k, v in batch.items()}
+        return batch
+
+    def numpy_call(self, features):
+        import numpy as np
+
+        label_name = "label" if "label" in features[0].keys() else "labels"
+        labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+        batch = self.tokenizer.pad(
+            features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            # Conversion to tensors will fail if we have labels as they are not of the same length yet.
+            return_tensors="np" if labels is None else None,
+        )
+
+        if labels is None:
+            return batch
+
+        sequence_length = np.array(batch["input_ids"]).shape[1]
+        padding_side = self.tokenizer.padding_side
+        if padding_side == "right":
+            batch["labels"] = [label + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels]
+        else:
+            batch["labels"] = [[self.label_pad_token_id] * (sequence_length - len(label)) + label for label in labels]
+
+        batch = {k: np.array(v, dtype=np.int64) for k, v in batch.items()}
+        return batch
+
+
+def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
+    import numpy as np
+    import torch
+
     # Tensorize if necessary.
-    if isinstance(examples[0], (list, tuple)):
+    if isinstance(examples[0], (list, tuple, np.ndarray)):
         examples = [torch.tensor(e, dtype=torch.long) for e in examples]
 
-    # Check if padding is necessary.
     length_of_first = examples[0].size(0)
+
+    # Check if padding is necessary.
+
     are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
     if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
         return torch.stack(examples, dim=0)
@@ -229,8 +393,85 @@ def _collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None
     return result
 
 
-def tolist(x: Union[List[Any], torch.Tensor]):
-    return x.tolist() if isinstance(x, torch.Tensor) else x
+def _tf_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
+    import numpy as np
+    import tensorflow as tf
+
+    """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
+    # Tensorize if necessary.
+    if isinstance(examples[0], (list, tuple)):
+        examples = [tf.convert_to_tensor(e, dtype=tf.int64) for e in examples]
+
+    # Check if padding is necessary.
+    length_of_first = len(examples[0])
+    are_tensors_same_length = all(len(x) == length_of_first for x in examples)
+    if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
+        return tf.stack(examples, axis=0)
+
+    # If yes, check if we have a `pad_token`.
+    if tokenizer._pad_token is None:
+        raise ValueError(
+            "You are attempting to pad samples but the tokenizer you are using"
+            f" ({tokenizer.__class__.__name__}) does not have a pad token."
+        )
+
+    # Creating the full tensor and filling it with our data.
+    max_length = max(len(x) for x in examples)
+    if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+    # result = examples[0].new_full([len(examples), max_length], tokenizer.pad_token_id)
+    result = []
+    rank = tf.rank(examples[0])
+    paddings = np.zeros((rank, 2), dtype=np.int32)
+    for example in examples:
+        if tokenizer.padding_side == "right":
+            paddings[0, 1] = max_length - len(example)
+        else:
+            paddings[0, 0] = max_length - len(example)
+        result.append(tf.pad(example, paddings, constant_values=tokenizer.pad_token_id))
+    return tf.stack(result, axis=0)
+
+
+def _numpy_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
+    import numpy as np
+
+    """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
+    # Tensorize if necessary.
+    if isinstance(examples[0], (list, tuple)):
+        examples = [np.array(e, dtype=np.int64) for e in examples]
+
+    # Check if padding is necessary.
+    length_of_first = len(examples[0])
+    are_tensors_same_length = all(len(x) == length_of_first for x in examples)
+    if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
+        return np.stack(examples, axis=0)
+
+    # If yes, check if we have a `pad_token`.
+    if tokenizer._pad_token is None:
+        raise ValueError(
+            "You are attempting to pad samples but the tokenizer you are using"
+            f" ({tokenizer.__class__.__name__}) does not have a pad token."
+        )
+
+    # Creating the full tensor and filling it with our data.
+    max_length = max(len(x) for x in examples)
+    if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+    result = np.full(shape=(len(examples), max_length), fill_value=tokenizer.pad_token_id, dtype=examples[0].dtype)
+    for i, example in enumerate(examples):
+        if tokenizer.padding_side == "right":
+            result[i, : example.shape[0]] = example
+        else:
+            result[i, -example.shape[0] :] = example
+    return result
+
+
+def tolist(x):
+    if isinstance(x, list):
+        return x
+    elif hasattr(x, "numpy"):  # Checks for TF tensors without needing the import
+        x = x.numpy()
+    return x.tolist()
 
 
 @dataclass
@@ -268,13 +509,16 @@ class DataCollatorForSeq2Seq:
     """
 
     tokenizer: PreTrainedTokenizerBase
-    model: Optional[PreTrainedModel] = None
+    model: Optional[Any] = None
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     label_pad_token_id: int = -100
+    return_tensors: str = "pt"
 
-    def __call__(self, features):
+    def __call__(self, features, return_tensors=None):
+        if return_tensors is None:
+            return_tensors = self.return_tensors
         labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
         # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
         # same length to return tensors.
@@ -292,7 +536,7 @@ class DataCollatorForSeq2Seq:
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
+            return_tensors=return_tensors,
         )
 
         # prepare decoder_input_ids
@@ -304,7 +548,7 @@ class DataCollatorForSeq2Seq:
 
 
 @dataclass
-class DataCollatorForLanguageModeling:
+class DataCollatorForLanguageModeling(DataCollatorMixin):
     """
     Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
     are not all of the same length.
@@ -333,6 +577,8 @@ class DataCollatorForLanguageModeling:
     mlm: bool = True
     mlm_probability: float = 0.15
     pad_to_multiple_of: Optional[int] = None
+    tf_experimental_compile: bool = False
+    return_tensors: str = "pt"
 
     def __post_init__(self):
         if self.mlm and self.tokenizer.mask_token is None:
@@ -340,20 +586,98 @@ class DataCollatorForLanguageModeling:
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. "
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
+        if self.tf_experimental_compile:
+            import tensorflow as tf
 
-    def __call__(
-        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
-    ) -> Dict[str, torch.Tensor]:
+            self.tf_mask_tokens = tf.function(self.tf_mask_tokens, jit_compile=True)
+
+    @staticmethod
+    def tf_bernoulli(shape, probability):
+        import tensorflow as tf
+
+        prob_matrix = tf.fill(shape, probability)
+        return tf.cast(prob_matrix - tf.random.uniform(shape, 0, 1) >= 0, tf.bool)
+
+    def tf_mask_tokens(
+        self, inputs: Any, vocab_size, mask_token_id, special_tokens_mask: Optional[Any] = None
+    ) -> Tuple[Any, Any]:
+        """
+        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
+        """
+        import tensorflow as tf
+
+        input_shape = tf.shape(inputs)
+        # 1 for a special token, 0 for a normal token in the special tokens mask
+        # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
+        masked_indices = self.tf_bernoulli(input_shape, self.mlm_probability) & ~special_tokens_mask
+        # Replace unmasked indices with -100 in the labels since we only compute loss on masked tokens
+        labels = tf.where(masked_indices, inputs, -100)
+
+        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = self.tf_bernoulli(input_shape, 0.8) & masked_indices
+
+        inputs = tf.where(indices_replaced, mask_token_id, inputs)
+
+        # 10% of the time, we replace masked input tokens with random word
+        indices_random = self.tf_bernoulli(input_shape, 0.1) & masked_indices & ~indices_replaced
+        random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=tf.int64)
+        inputs = tf.where(indices_random, random_words, inputs)
+
+        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        return inputs, labels
+
+    def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        import tensorflow as tf
+
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], (dict, BatchEncoding)):
-            batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = self.tokenizer.pad(examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
-            batch = {"input_ids": _collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)}
+            batch = {
+                "input_ids": _tf_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+            }
 
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)
         if self.mlm:
-            batch["input_ids"], batch["labels"] = self.mask_tokens(
+            if special_tokens_mask is None:
+                special_tokens_mask = [
+                    self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True)
+                    for val in batch["input_ids"].numpy().tolist()
+                ]
+                # Cannot directly create as bool
+                special_tokens_mask = tf.cast(tf.convert_to_tensor(special_tokens_mask, dtype=tf.int64), tf.bool)
+            else:
+                special_tokens_mask = tf.cast(special_tokens_mask, tf.bool)
+            batch["input_ids"], batch["labels"] = self.tf_mask_tokens(
+                tf.cast(batch["input_ids"], tf.int64),
+                special_tokens_mask=special_tokens_mask,
+                mask_token_id=self.tokenizer.mask_token_id,
+                vocab_size=len(self.tokenizer),
+            )
+        else:
+            labels = batch["input_ids"]
+            if self.tokenizer.pad_token_id is not None:
+                # Replace self.tokenizer.pad_token_id with -100
+                labels = tf.where(labels == self.tokenizer.pad_token_id, -100, labels)
+            else:
+                labels = tf.identity(labels)  # Makes a copy, just in case
+            batch["labels"] = labels
+        return batch
+
+    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        # Handle dict or lists with proper padding and conversion to tensor.
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
+        else:
+            batch = {
+                "input_ids": _torch_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+            }
+
+        # If special token mask has been preprocessed, pop it from the dict.
+        special_tokens_mask = batch.pop("special_tokens_mask", None)
+        if self.mlm:
+            batch["input_ids"], batch["labels"] = self.torch_mask_tokens(
                 batch["input_ids"], special_tokens_mask=special_tokens_mask
             )
         else:
@@ -363,12 +687,12 @@ class DataCollatorForLanguageModeling:
             batch["labels"] = labels
         return batch
 
-    def mask_tokens(
-        self, inputs: torch.Tensor, special_tokens_mask: Optional[torch.Tensor] = None
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def torch_mask_tokens(self, inputs: Any, special_tokens_mask: Optional[Any] = None) -> Tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
+        import torch
+
         labels = inputs.clone()
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
         probability_matrix = torch.full(labels.shape, self.mlm_probability)
@@ -396,6 +720,69 @@ class DataCollatorForLanguageModeling:
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
+    def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        import numpy as np
+
+        # Handle dict or lists with proper padding and conversion to tensor.
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            batch = self.tokenizer.pad(examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of)
+        else:
+            batch = {
+                "input_ids": _numpy_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+            }
+
+        # If special token mask has been preprocessed, pop it from the dict.
+        special_tokens_mask = batch.pop("special_tokens_mask", None)
+        if self.mlm:
+            batch["input_ids"], batch["labels"] = self.numpy_mask_tokens(
+                batch["input_ids"], special_tokens_mask=special_tokens_mask
+            )
+        else:
+            labels = np.copy(batch["input_ids"])
+            if self.tokenizer.pad_token_id is not None:
+                labels[labels == self.tokenizer.pad_token_id] = -100
+            batch["labels"] = labels
+        return batch
+
+    def numpy_mask_tokens(self, inputs: Any, special_tokens_mask: Optional[Any] = None) -> Tuple[Any, Any]:
+        """
+        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
+        """
+        import numpy as np
+
+        labels = np.copy(inputs)
+        # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
+        probability_matrix = np.full(labels.shape, self.mlm_probability)
+        if special_tokens_mask is None:
+            special_tokens_mask = [
+                self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+            ]
+            special_tokens_mask = np.array(special_tokens_mask, dtype=np.bool)
+        else:
+            special_tokens_mask = special_tokens_mask.astype(np.bool)
+
+        probability_matrix[special_tokens_mask] = 0
+        # Numpy doesn't have bernoulli, so we use a binomial with 1 trial
+        masked_indices = np.random.binomial(1, probability_matrix, size=probability_matrix.shape).astype(np.bool)
+        labels[~masked_indices] = -100  # We only compute loss on masked tokens
+
+        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = np.random.binomial(1, 0.8, size=labels.shape).astype(np.bool) & masked_indices
+        inputs[indices_replaced] = self.tokenizer.mask_token_id
+
+        # 10% of the time, we replace masked input tokens with random word
+        # indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+        indices_random = (
+            np.random.binomial(1, 0.5, size=labels.shape).astype(np.bool) & masked_indices & ~indices_replaced
+        )
+        random_words = np.random.randint(
+            low=0, high=len(self.tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64
+        )
+        inputs[indices_random] = random_words
+
+        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        return inputs, labels
+
 
 @dataclass
 class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
@@ -413,16 +800,14 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         :class:`.DataCollatorForLanguageModeling`.
     """
 
-    def __call__(
-        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
-    ) -> Dict[str, torch.Tensor]:
+    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         if isinstance(examples[0], (dict, BatchEncoding)):
             input_ids = [e["input_ids"] for e in examples]
         else:
             input_ids = examples
             examples = [{"input_ids": e} for e in examples]
 
-        batch_input = _collate_batch(input_ids, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+        batch_input = _torch_collate_batch(input_ids, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
 
         mask_labels = []
         for e in examples:
@@ -439,8 +824,64 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
                     if i in ref_pos:
                         ref_tokens[i] = "##" + ref_tokens[i]
             mask_labels.append(self._whole_word_mask(ref_tokens))
-        batch_mask = _collate_batch(mask_labels, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
-        inputs, labels = self.mask_tokens(batch_input, batch_mask)
+        batch_mask = _torch_collate_batch(mask_labels, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+        inputs, labels = self.torch_mask_tokens(batch_input, batch_mask)
+        return {"input_ids": inputs, "labels": labels}
+
+    def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            input_ids = [e["input_ids"] for e in examples]
+        else:
+            input_ids = examples
+            examples = [{"input_ids": e} for e in examples]
+
+        batch_input = _tf_collate_batch(input_ids, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+
+        mask_labels = []
+        for e in examples:
+            ref_tokens = []
+            for id in tolist(e["input_ids"]):
+                token = self.tokenizer._convert_id_to_token(id)
+                ref_tokens.append(token)
+
+            # For Chinese tokens, we need extra inf to mark sub-word, e.g [喜,欢]-> [喜，##欢]
+            if "chinese_ref" in e:
+                ref_pos = tolist(e["chinese_ref"])
+                len_seq = len(e["input_ids"])
+                for i in range(len_seq):
+                    if i in ref_pos:
+                        ref_tokens[i] = "##" + ref_tokens[i]
+            mask_labels.append(self._whole_word_mask(ref_tokens))
+        batch_mask = _tf_collate_batch(mask_labels, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+        inputs, labels = self.tf_mask_tokens(batch_input, batch_mask)
+        return {"input_ids": inputs, "labels": labels}
+
+    def np_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            input_ids = [e["input_ids"] for e in examples]
+        else:
+            input_ids = examples
+            examples = [{"input_ids": e} for e in examples]
+
+        batch_input = _tf_collate_batch(input_ids, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+
+        mask_labels = []
+        for e in examples:
+            ref_tokens = []
+            for id in tolist(e["input_ids"]):
+                token = self.tokenizer._convert_id_to_token(id)
+                ref_tokens.append(token)
+
+            # For Chinese tokens, we need extra inf to mark sub-word, e.g [喜,欢]-> [喜，##欢]
+            if "chinese_ref" in e:
+                ref_pos = tolist(e["chinese_ref"])
+                len_seq = len(e["input_ids"])
+                for i in range(len_seq):
+                    if i in ref_pos:
+                        ref_tokens[i] = "##" + ref_tokens[i]
+            mask_labels.append(self._whole_word_mask(ref_tokens))
+        batch_mask = _numpy_collate_batch(mask_labels, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+        inputs, labels = self.numpy_mask_tokens(batch_input, batch_mask)
         return {"input_ids": inputs, "labels": labels}
 
     def _whole_word_mask(self, input_tokens: List[str], max_predictions=512):
@@ -489,11 +930,12 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         mask_labels = [1 if i in covered_indexes else 0 for i in range(len(input_tokens))]
         return mask_labels
 
-    def mask_tokens(self, inputs: torch.Tensor, mask_labels: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def torch_mask_tokens(self, inputs: Any, mask_labels: Any) -> Tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. Set
         'mask_labels' means we use whole word mask (wwm), we directly mask idxs according to it's ref.
         """
+        import torch
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
@@ -527,6 +969,90 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
+    def tf_mask_tokens(self, inputs: Any, mask_labels: Any) -> Tuple[Any, Any]:
+        """
+        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. Set
+        'mask_labels' means we use whole word mask (wwm), we directly mask idxs according to it's ref.
+        """
+        import tensorflow as tf
+
+        input_shape = tf.shape(inputs)
+        if self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+            )
+        labels = inputs.clone()
+        # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
+
+        masked_indices = tf.cast(mask_labels, tf.bool)
+
+        special_tokens_mask = [
+            self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+        ]
+        masked_indices = masked_indices & ~tf.convert_to_tensor(special_tokens_mask, dtype=tf.bool)
+        if self.tokenizer._pad_token is not None:
+            padding_mask = inputs == self.tokenizer.pad_token_id
+            masked_indices = masked_indices & ~padding_mask
+
+        # Replace unmasked indices with -100 in the labels since we only compute loss on masked tokens
+        labels = tf.where(masked_indices, inputs, -100)
+
+        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = self.tf_bernoulli(input_shape, 0.8) & masked_indices
+
+        inputs = tf.where(indices_replaced, self.tokenizer.mask_token_id, inputs)
+
+        # 10% of the time, we replace masked input tokens with random word
+        indices_random = self.tf_bernoulli(input_shape, 0.1) & masked_indices & ~indices_replaced
+        random_words = tf.random.uniform(input_shape, maxval=len(self.tokenizer), dtype=tf.int64)
+        inputs = tf.where(indices_random, random_words, inputs)
+
+        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        return inputs, labels
+
+    def numpy_mask_tokens(self, inputs: Any, mask_labels: Any) -> Tuple[Any, Any]:
+        """
+        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. Set
+        'mask_labels' means we use whole word mask (wwm), we directly mask idxs according to it's ref.
+        """
+        import numpy as np
+
+        if self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+            )
+        labels = np.copy(inputs)
+        # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
+
+        masked_indices = mask_labels.astype(np.bool)
+
+        special_tokens_mask = [
+            self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+        ]
+        masked_indices[np.array(special_tokens_mask, dtype=np.bool)] = 0
+        if self.tokenizer._pad_token is not None:
+            padding_mask = labels == self.tokenizer.pad_token_id
+            masked_indices[padding_mask] = 0
+
+        labels[~masked_indices] = -100  # We only compute loss on masked tokens
+
+        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = np.random.binomial(1, 0.8, size=labels.shape).astype(np.bool) & masked_indices
+        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
+
+        # 10% of the time, we replace masked input tokens with random word
+        # indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+        indices_random = (
+            np.random.binomial(1, 0.5, size=labels.shape).astype(np.bool) & masked_indices & ~indices_replaced
+        )
+        random_words = np.random.randint(
+            low=0, high=len(self.tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64
+        )
+        inputs[indices_random] = random_words[indices_random]
+
+        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        return inputs, labels
+
 
 @dataclass
 class DataCollatorForSOP(DataCollatorForLanguageModeling):
@@ -544,9 +1070,12 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
             FutureWarning,
         )
 
-    def __call__(self, examples: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, examples: List[Dict[str, Any]]) -> Dict[str, Any]:
+        import torch
+        from torch.nn.utils.rnn import pad_sequence
+
         input_ids = [example["input_ids"] for example in examples]
-        input_ids = _collate_batch(input_ids, self.tokenizer)
+        input_ids = _torch_collate_batch(input_ids, self.tokenizer)
         input_ids, labels, attention_mask = self.mask_tokens(input_ids)
 
         token_type_ids = [example["token_type_ids"] for example in examples]
@@ -564,11 +1093,13 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
             "sentence_order_label": sentence_order_label,
         }
 
-    def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def mask_tokens(self, inputs: Any) -> Tuple[Any, Any, Any]:
         """
         Prepare masked tokens inputs/labels/attention_mask for masked language modeling: 80% MASK, 10% random, 10%
         original. N-gram not applied yet.
         """
+        import torch
+
         if self.tokenizer.mask_token is None:
             raise ValueError(
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
@@ -606,7 +1137,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 
 
 @dataclass
-class DataCollatorForPermutationLanguageModeling:
+class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
     """
     Data collator used for permutation language modeling.
 
@@ -617,17 +1148,30 @@ class DataCollatorForPermutationLanguageModeling:
     tokenizer: PreTrainedTokenizerBase
     plm_probability: float = 1 / 6
     max_span_length: int = 5  # maximum length of a span of masked tokens
+    return_tensors: str = "pt"
 
-    def __call__(
-        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
-    ) -> Dict[str, torch.Tensor]:
+    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         if isinstance(examples[0], (dict, BatchEncoding)):
             examples = [e["input_ids"] for e in examples]
-        batch = _collate_batch(examples, self.tokenizer)
-        inputs, perm_mask, target_mapping, labels = self.mask_tokens(batch)
+        batch = _torch_collate_batch(examples, self.tokenizer)
+        inputs, perm_mask, target_mapping, labels = self.torch_mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
-    def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            examples = [e["input_ids"] for e in examples]
+        batch = _tf_collate_batch(examples, self.tokenizer)
+        inputs, perm_mask, target_mapping, labels = self.tf_mask_tokens(batch)
+        return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
+
+    def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            examples = [e["input_ids"] for e in examples]
+        batch = _numpy_collate_batch(examples, self.tokenizer)
+        inputs, perm_mask, target_mapping, labels = self.numpy_mask_tokens(batch)
+        return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
+
+    def torch_mask_tokens(self, inputs: Any) -> Tuple[Any, Any, Any, Any]:
         """
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 
@@ -641,6 +1185,7 @@ class DataCollatorForPermutationLanguageModeling:
             4. Set ``cur_len = cur_len + context_length``. If ``cur_len < max_len`` (i.e. there are tokens remaining in
                the sequence to be processed), repeat from Step 1.
         """
+        import torch
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
@@ -723,3 +1268,212 @@ class DataCollatorForPermutationLanguageModeling:
             ) & masked_indices[i]
 
         return inputs.long(), perm_mask, target_mapping, labels.long()
+
+    def tf_mask_tokens(self, inputs: Any) -> Tuple[Any, Any, Any, Any]:
+        """
+        The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
+
+            0. Start from the beginning of the sequence by setting ``cur_len = 0`` (number of tokens processed so far).
+            1. Sample a ``span_length`` from the interval ``[1, max_span_length]`` (length of span of tokens to be
+               masked)
+            2. Reserve a context of length ``context_length = span_length / plm_probability`` to surround span to be
+               masked
+            3. Sample a starting point ``start_index`` from the interval ``[cur_len, cur_len + context_length -
+               span_length]`` and mask tokens ``start_index:start_index + span_length``
+            4. Set ``cur_len = cur_len + context_length``. If ``cur_len < max_len`` (i.e. there are tokens remaining in
+               the sequence to be processed), repeat from Step 1.
+        """
+        from random import randint
+
+        import numpy as np
+        import tensorflow as tf
+
+        if self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+            )
+
+        if tf.shape(inputs)[1] % 2 != 0:
+            raise ValueError(
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+            )
+
+        labels = tf.identity(inputs)
+        # Creating the mask and target_mapping tensors
+        masked_indices = np.full(labels.shape.as_list(), 0, dtype=np.bool)
+        labels_shape = tf.shape(labels)
+        target_mapping = np.zeros((labels_shape[0], labels_shape[1], labels_shape[1]), dtype=np.float32)
+
+        for i in range(len(labels)):
+            # Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
+            cur_len = 0
+            max_len = tf.shape(labels)[1]
+
+            while cur_len < max_len:
+                # Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
+                span_length = randint(1, self.max_span_length + 1)
+                # Reserve a context of length `context_length = span_length / plm_probability` to surround the span to be masked
+                context_length = int(span_length / self.plm_probability)
+                # Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length - span_length]` and mask tokens `start_index:start_index + span_length`
+                start_index = cur_len + randint(0, context_length - span_length + 1)
+                masked_indices[i, start_index : start_index + span_length] = 1
+                # Set `cur_len = cur_len + context_length`
+                cur_len += context_length
+
+            # Since we're replacing non-masked tokens with -100 in the labels tensor instead of skipping them altogether,
+            # the i-th predict corresponds to the i-th token.
+            target_mapping[i] = np.eye(labels_shape[1])
+        masked_indices = tf.cast(tf.convert_to_tensor(masked_indices), dtype=tf.bool)
+        target_mapping = tf.convert_to_tensor(target_mapping)
+        special_tokens_mask = tf.convert_to_tensor(
+            [
+                self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True)
+                for val in labels.numpy().tolist()
+            ],
+        )
+        special_tokens_mask = tf.cast(special_tokens_mask, dtype=tf.bool)
+        masked_indices = masked_indices & ~special_tokens_mask
+        if self.tokenizer._pad_token is not None:
+            padding_mask = labels == self.tokenizer.pad_token_id
+            masked_indices = masked_indices & ~padding_mask
+
+        # Mask indicating non-functional tokens, where functional tokens are [SEP], [CLS], padding, etc.
+        non_func_mask = ~(padding_mask | special_tokens_mask)
+
+        inputs = tf.where(masked_indices, self.tokenizer.mask_token_id, inputs)
+        labels = tf.where(masked_indices, labels, -100)  # We only compute loss on masked tokens
+
+        perm_mask = []
+
+        for i in range(len(labels)):
+            # Generate permutation indices i.e. sample a random factorisation order for the sequence. This will
+            # determine which tokens a given token can attend to (encoded in `perm_mask`).
+            # Note: Length of token sequence being permuted has to be less than or equal to reused sequence length
+            # (see documentation for `mems`), otherwise information may leak through due to reuse. In this implementation,
+            # we assume that reused length is half of sequence length and permutation length is equal to reused length.
+            # This requires that the sequence length be even.
+
+            # Create a linear factorisation order
+            # tf.range is the equivalent of torch.arange
+            perm_index = tf.range(labels_shape[1])
+            # Split this into two halves, assuming that half the sequence is reused each time
+            perm_index = tf.transpose(tf.reshape(perm_index, (-1, labels_shape[1] // 2)))
+            # Permute the two halves such that they do not cross over
+            perm_index = tf.random.shuffle(perm_index)  # Shuffles along the first dimension
+            # Flatten this out into the desired permuted factorisation order
+            perm_index = tf.reshape(tf.transpose(perm_index), (-1,))
+            # Set the permutation indices of non-masked (non-functional) tokens to the
+            # smallest index (-1) so that:
+            # (1) They can be seen by all other positions
+            # (2) They cannot see masked positions, so there won't be information leak
+            perm_index = tf.where(~masked_indices[i] & non_func_mask[i], -1, perm_index)
+            # The logic for whether the i-th token can attend on the j-th token based on the factorisation order:
+            # 0 (can attend): If perm_index[i] > perm_index[j] or j is neither masked nor a functional token
+            # 1 (cannot attend): If perm_index[i] <= perm_index[j] and j is either masked or a functional token
+            perm_mask.append(
+                (tf.reshape(perm_index, (labels_shape[1], 1)) <= tf.reshape(perm_index, (1, labels_shape[1])))
+                & masked_indices[i]
+            )
+        perm_mask = tf.stack(perm_mask, axis=0)
+
+        return tf.cast(inputs, tf.int64), tf.cast(perm_mask, tf.float32), target_mapping, tf.cast(labels, tf.int64)
+
+    def numpy_mask_tokens(self, inputs: Any) -> Tuple[Any, Any, Any, Any]:
+        """
+        The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
+
+            0. Start from the beginning of the sequence by setting ``cur_len = 0`` (number of tokens processed so far).
+            1. Sample a ``span_length`` from the interval ``[1, max_span_length]`` (length of span of tokens to be
+               masked)
+            2. Reserve a context of length ``context_length = span_length / plm_probability`` to surround span to be
+               masked
+            3. Sample a starting point ``start_index`` from the interval ``[cur_len, cur_len + context_length -
+               span_length]`` and mask tokens ``start_index:start_index + span_length``
+            4. Set ``cur_len = cur_len + context_length``. If ``cur_len < max_len`` (i.e. there are tokens remaining in
+               the sequence to be processed), repeat from Step 1.
+        """
+        from random import randint
+
+        import numpy as np
+
+        if self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+            )
+
+        if inputs.shape[1] % 2 != 0:
+            raise ValueError(
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+            )
+
+        labels = np.copy(inputs)
+        # Creating the mask and target_mapping tensors
+        masked_indices = np.full(labels.shape, 0, dtype=np.bool)
+        target_mapping = np.zeros((labels.shape[0], labels.shape[1], labels.shape[1]), dtype=np.float32)
+
+        for i in range(labels.shape[0]):
+            # Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
+            cur_len = 0
+            max_len = labels.shape[1]
+
+            while cur_len < max_len:
+                # Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
+                span_length = randint(1, self.max_span_length + 1)
+                # Reserve a context of length `context_length = span_length / plm_probability` to surround the span to be masked
+                context_length = int(span_length / self.plm_probability)
+                # Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length - span_length]` and mask tokens `start_index:start_index + span_length`
+                start_index = cur_len + randint(0, context_length - span_length + 1)
+                masked_indices[i, start_index : start_index + span_length] = 1
+                # Set `cur_len = cur_len + context_length`
+                cur_len += context_length
+
+            # Since we're replacing non-masked tokens with -100 in the labels tensor instead of skipping them altogether,
+            # the i-th predict corresponds to the i-th token.
+            target_mapping[i] = np.eye(labels.shape[1])
+
+        special_tokens_mask = np.array(
+            [self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()],
+            dtype=np.bool,
+        )
+        masked_indices[special_tokens_mask] = 0
+        if self.tokenizer._pad_token is not None:
+            padding_mask = labels == self.tokenizer.pad_token_id
+            masked_indices[padding_mask] = 0.0
+
+        # Mask indicating non-functional tokens, where functional tokens are [SEP], [CLS], padding, etc.
+        non_func_mask = ~(padding_mask | special_tokens_mask)
+
+        inputs[masked_indices] = self.tokenizer.mask_token_id
+        labels[~masked_indices] = -100  # We only compute loss on masked tokens
+
+        perm_mask = np.zeros((labels.shape[0], labels.shape[1], labels.shape[1]), dtype=np.float32)
+
+        for i in range(labels.shape[0]):
+            # Generate permutation indices i.e. sample a random factorisation order for the sequence. This will
+            # determine which tokens a given token can attend to (encoded in `perm_mask`).
+            # Note: Length of token sequence being permuted has to be less than or equal to reused sequence length
+            # (see documentation for `mems`), otherwise information may leak through due to reuse. In this implementation,
+            # we assume that reused length is half of sequence length and permutation length is equal to reused length.
+            # This requires that the sequence length be even.
+
+            # Create a linear factorisation order
+            perm_index = np.arange(labels.shape[1])
+            # Split this into two halves, assuming that half the sequence is reused each time
+            perm_index = perm_index.reshape((-1, labels.shape[1] // 2)).T
+            # Permute the two halves such that they do not cross over
+            np.random.shuffle(perm_index)
+            # Flatten this out into the desired permuted factorisation order
+            perm_index = perm_index.T.flatten()
+            # Set the permutation indices of non-masked (non-functional) tokens to the
+            # smallest index (-1) so that:
+            # (1) They can be seen by all other positions
+            # (2) They cannot see masked positions, so there won't be information leak
+            perm_index[~masked_indices[i] & non_func_mask[i]] = -1
+            # The logic for whether the i-th token can attend on the j-th token based on the factorisation order:
+            # 0 (can attend): If perm_index[i] > perm_index[j] or j is neither masked nor a functional token
+            # 1 (cannot attend): If perm_index[i] <= perm_index[j] and j is either masked or a functional token
+            perm_mask[i] = (
+                perm_index.reshape((labels.shape[1], 1)) <= perm_index.reshape((1, labels.shape[1]))
+            ) & masked_indices[i]
+
+        return inputs.astype(np.int64), perm_mask, target_mapping, labels.astype(np.int64)
