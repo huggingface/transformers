@@ -21,7 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 REALM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "realm-cc-news-pretrained": "https://huggingface.co/realm-cc-news-pretrained/resolve/main/config.json",
+    "realm-cc-news-pretrained-bert": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-bert/resolve/main/config.json",
+    "realm-cc-news-pretrained-embedder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder/resolve/main/config.json",
+    "realm-cc-news-pretrained-retriever": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-retriever/resolve/main/config.json",
     # See all REALM models at https://huggingface.co/models?filter=realm
 }
 
@@ -80,13 +82,14 @@ class RealmConfig(PretrainedConfig):
         >>> # Initializing a REALM realm-cc-news-pretrained style configuration
         >>> configuration = RealmConfig()
 
-        >>> # Initializing a model from the realm-cc-news-pretrained style configuration
-        >>> model = RealmModel(configuration)
+        >>> # Initializing a model from the qqaatw/realm-cc-news-pretrained-embedder style configuration
+        >>> model = RealmRetriever(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
     model_type = "realm"
+
     def __init__(
         self,
         vocab_size=30522,
@@ -110,12 +113,7 @@ class RealmConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -132,4 +130,3 @@ class RealmConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        

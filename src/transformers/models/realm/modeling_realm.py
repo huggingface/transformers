@@ -15,7 +15,6 @@
 """ PyTorch REALM model. """
 
 
-import math
 import os
 
 import torch
@@ -33,16 +32,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-    ModelOutput
-)
+from ...modeling_outputs import MaskedLMOutput, ModelOutput
 from ...modeling_utils import (
     PreTrainedModel,
     SequenceSummary,
@@ -62,8 +52,9 @@ _CONFIG_FOR_DOC = "RealmConfig"
 _TOKENIZER_FOR_DOC = "RealmTokenizer"
 
 REALM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "qqaatw/realm-cc-news-pretrained-bert",
     "qqaatw/realm-cc-news-pretrained-embedder",
-    "qqaatw/realm-cc-news-pretrained-bert"
+    "qqaatw/realm-cc-news-pretrained-retriever",
     # See all REALM models at https://huggingface.co/models?filter=realm
 ]
 
@@ -107,13 +98,7 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
         if any(
-            n in [
-                "adam_v",
-                "adam_m",
-                "AdamWeightDecayOptimizer",
-                "AdamWeightDecayOptimizer_1",
-                "global_step"
-            ]
+            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
             for n in name
         ):
             logger.info(f"Skipping {'/'.join(name)}")
@@ -130,7 +115,7 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
                 pointer = getattr(pointer, "bias")
             elif scope_names[0] == "output_weights":
                 pointer = getattr(pointer, "weight")
-            #elif scope_names[0] == "squad":
+            # elif scope_names[0] == "squad":
             #    pointer = getattr(pointer, "classifier")
             else:
                 try:
@@ -158,38 +143,13 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
 
 
 @dataclass
-class BaseModelOutput(ModelOutput):
-    """
-    Base class for model's outputs, with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
 class RealmEmbedderOutput(ModelOutput):
     """
     Outputs of RealmEmbedder models.
 
     Args:
         projected_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.retriever_proj_size)`):
+
             Projected scores.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
@@ -283,7 +243,6 @@ class RealmRetrieverProjection(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.retriever_proj_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
-        #hidden_states = self.predictions(hidden_states)
         hidden_states = self.dense(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
@@ -301,7 +260,7 @@ class RealmPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -315,17 +274,21 @@ class RealmPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-    
-    def _flatten_inputs(self, *inputs):        
+
+    def _flatten_inputs(self, *inputs):
+        """Flatten inputs to (batch_size, ..., input_shape[-1])"""
         flattened_inputs = []
         for tensor in inputs:
-            input_shape = tensor.shape
-            if len(input_shape) > 2:
-                tensor = tensor.view((-1, input_shape[-1]))
-            flattened_inputs.append(tensor)
+            if tensor is None:
+                flattened_inputs.append(None)
+            else:
+                input_shape = tensor.shape
+                if len(input_shape) > 2:
+                    tensor = tensor.view((-1, input_shape[-1]))
+                flattened_inputs.append(tensor)
         return flattened_inputs
-            
-            
+
+
 REALM_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
@@ -389,7 +352,7 @@ REALM_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The embedder of REALM outputting raw hidden-states without any specific head on top.",
+    "The embedder of REALM outputting projected score that will be used to calculate relevance score.",
     REALM_START_DOCSTRING,
 )
 class RealmEmbedder(RealmPreTrainedModel):
@@ -399,6 +362,12 @@ class RealmEmbedder(RealmPreTrainedModel):
         self.bert = BertModel(self.config)
         self.cls = RealmRetrieverProjection(self.config)
         self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.bert.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.bert.embeddings.word_embeddings = value
 
     def forward(
         self,
@@ -415,6 +384,8 @@ class RealmEmbedder(RealmPreTrainedModel):
         return_dict=None,
     ):
 
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         bert_outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -430,22 +401,22 @@ class RealmEmbedder(RealmPreTrainedModel):
         )
 
         # [batch_size, hidden_size]
-        pooler_output = bert_outputs.pooler_output
+        pooler_output = bert_outputs[1]
         # [batch_size, retriever_proj_size]
         projected_score = self.cls(pooler_output)
-        
+
         if not return_dict:
-            return (projected_score,) + bert_outputs[1:]
+            return (projected_score,) + bert_outputs[2:4]
         else:
             return RealmEmbedderOutput(
-                projected_score = projected_score,
-                hidden_states = bert_outputs.hidden_states,
-                attentions = bert_outputs.attentions,
+                projected_score=projected_score,
+                hidden_states=bert_outputs.hidden_states,
+                attentions=bert_outputs.attentions,
             )
 
 
 @add_start_docstrings(
-    "The retriever of REALM outputting raw hidden-states without any specific head on top.",
+    "The retriever of REALM outputting relevance score representing the score of document candidates (before softmax)",
     REALM_START_DOCSTRING,
 )
 class RealmRetriever(RealmPreTrainedModel):
@@ -453,12 +424,12 @@ class RealmRetriever(RealmPreTrainedModel):
         super().__init__(config)
 
         self.embedder = RealmEmbedder(self.config)
-        
+
         if query_embedder:
             self.query_embedder = query_embedder
         else:
             self.query_embedder = self.embedder
-        
+
         self.init_weights()
 
     def forward(
@@ -479,6 +450,8 @@ class RealmRetriever(RealmPreTrainedModel):
         return_dict=None,
     ):
 
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         query_outputs = self.query_embedder(
             input_ids,
             attention_mask=attention_mask,
@@ -494,14 +467,8 @@ class RealmRetriever(RealmPreTrainedModel):
         )
 
         # [batch_size * num_candidates, candidate_seq_len]
-        (
-            flattened_input_ids, 
-            flattened_attention_mask,
-            flattened_token_type_ids
-        ) = self._flatten_inputs(
-            candidate_input_ids, 
-            candidate_attention_mask, 
-            candidate_token_type_ids
+        (flattened_input_ids, flattened_attention_mask, flattened_token_type_ids) = self._flatten_inputs(
+            candidate_input_ids, candidate_attention_mask, candidate_token_type_ids
         )
 
         candidate_outputs = self.embedder(
@@ -529,16 +496,14 @@ class RealmRetriever(RealmPreTrainedModel):
 
         if not return_dict:
             return relevance_score, query_score, candidate_score
-        else:
-            return RealmRetrieverOutput(
-                relevance_score = relevance_score,
-                query_score = query_score,
-                candidate_score = candidate_score
-            )
+
+        return RealmRetrieverOutput(
+            relevance_score=relevance_score, query_score=query_score, candidate_score=candidate_score
+        )
 
 
 @add_start_docstrings(
-    "The encoder of REALM outputting raw hidden-states without any specific head on top.",
+    "The encoder of REALM outputting masked lm logits and marginal log-likelihood loss.",
     REALM_START_DOCSTRING,
 )
 class RealmEncoder(RealmPreTrainedModel):
@@ -577,14 +542,11 @@ class RealmEncoder(RealmPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        (
-            flattened_input_ids, 
-            flattened_attention_mask, 
-            flattened_token_type_ids
-        ) = self._flatten_inputs(
-            input_ids, 
-            attention_mask, 
-            token_type_ids
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        (flattened_input_ids, flattened_attention_mask, flattened_token_type_ids) = self._flatten_inputs(
+            input_ids, attention_mask, token_type_ids
         )
 
         joint_outputs = self.bert(
@@ -616,8 +578,8 @@ class RealmEncoder(RealmPreTrainedModel):
                 mlm_mask = mlm_mask.type(torch.float32)
 
             # Compute marginal log-likelihood
-            loss_fct = CrossEntropyLoss(reduction='none')  # -100 index = padding token
-            
+            loss_fct = CrossEntropyLoss(reduction="none")  # -100 index = padding token
+
             # [batch_size * num_candidates * joint_seq_len, vocab_size]
             mlm_logits = prediction_scores.view(-1, self.config.vocab_size)
             # [batch_size * num_candidates * joint_seq_len]
@@ -631,13 +593,10 @@ class RealmEncoder(RealmPreTrainedModel):
             # [batch_size, joint_seq_len]
             marginal_gold_log_probs = joint_gold_log_prob.logsumexp(1)
             # []
-            masked_lm_loss = -torch.nansum(
-                torch.sum(marginal_gold_log_probs * mlm_mask) / 
-                torch.sum(mlm_mask)
-            )
+            masked_lm_loss = -torch.nansum(torch.sum(marginal_gold_log_probs * mlm_mask) / torch.sum(mlm_mask))
 
         if not return_dict:
-            output = (prediction_scores,) + joint_outputs[1:]
+            output = (prediction_scores,) + joint_outputs[2:4]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
