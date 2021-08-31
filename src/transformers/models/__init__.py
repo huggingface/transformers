@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    realm,
     albert,
     auto,
     bart,
@@ -73,6 +72,7 @@ from . import (
     phobert,
     prophetnet,
     rag,
+    realm,
     reformer,
     rembert,
     retribert,

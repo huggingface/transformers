@@ -18,10 +18,9 @@
 import unittest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import RealmConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from transformers import RealmConfig
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
@@ -29,14 +28,8 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     import torch
 
-    from transformers import (
-        RealmEmbedder,
-        RealmEncoder,
-        RealmRetriever,
-    )
-    from transformers.models.realm.modeling_realm import (
-        REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers import RealmEmbedder, RealmEncoder, RealmRetriever
+    from transformers.models.realm.modeling_realm import REALM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class RealmModelTester:
@@ -317,7 +310,6 @@ class RealmModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_embedder(self):
         retriever_projected_size = 128
-        vocab_size = 30522
 
         model = RealmEmbedder.from_pretrained("qqaatw/realm-cc-news-pretrained-embedder")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
@@ -349,7 +341,6 @@ class RealmModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_retriever(self):
         num_candidates = 2
-        vocab_size = 30522
 
         model = RealmRetriever.from_pretrained(
             "qqaatw/realm-cc-news-pretrained-retriever", num_candidates=num_candidates

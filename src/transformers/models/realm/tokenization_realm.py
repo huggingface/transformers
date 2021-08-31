@@ -32,7 +32,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "realm-cc-news-pretrained-embedder": 512,
     "realm-cc-news-pretrained-retriever": 512,
-    "realm-cc-news-pretrained-encoder": 512
+    "realm-cc-news-pretrained-encoder": 512,
 }
 
 

@@ -77,7 +77,7 @@ class RealmConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
-        
+
     Example::
 
         >>> from transformers import RealmEmbedder, RealmConfig

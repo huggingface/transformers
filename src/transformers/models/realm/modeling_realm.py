@@ -16,30 +16,18 @@
 
 
 import os
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
-from typing import Optional, Tuple
-from dataclasses import dataclass
-from packaging import version
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import MaskedLMOutput, ModelOutput
-from ...modeling_utils import (
-    PreTrainedModel,
-    SequenceSummary,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..bert import BertModel
 from .configuration_realm import RealmConfig
@@ -85,7 +73,6 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         arrays.append(array)
 
     for name, array in zip(names, arrays):
-        original_name = name
 
         # embedder
         embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
@@ -423,9 +410,10 @@ class RealmEmbedder(RealmPreTrainedModel):
 class RealmRetriever(RealmPreTrainedModel):
     r"""
     Parameters:
-        query_embedder (:class:`~transformers.RealmEmbedder`): 
+        query_embedder (:class:`~transformers.RealmEmbedder`):
             Embedder for input sequences. If not specified, it will use the same embedder as candidate sequences.
     """
+
     def __init__(self, config, query_embedder=None):
         super().__init__(config)
 
@@ -484,13 +472,16 @@ class RealmRetriever(RealmPreTrainedModel):
             Optionally, instead of passing :obj:`candidate_input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `candidate_input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        
+
         Returns:
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if not (any((input_ids is not None, inputs_embeds is not None)) and any((candidate_input_ids is not None, candidate_inputs_embeds is not None))):
+        if not (
+            any((input_ids is not None, inputs_embeds is not None))
+            and any((candidate_input_ids is not None, candidate_inputs_embeds is not None))
+        ):
             raise ValueError("You have to specify both inputs and candidate inputs")
 
         query_outputs = self.query_embedder(
@@ -582,7 +573,7 @@ class RealmEncoder(RealmPreTrainedModel):
         r"""
         relevance_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_candidates)`, `optional`):
             Relevance score derived from RealmRetriever.
- 
+
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
@@ -625,7 +616,9 @@ class RealmEncoder(RealmPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             if candidate_score is None:
-                raise ValueError("You have to specify relevance_score when `labels` is specified in order to calculate loss.")
+                raise ValueError(
+                    "You have to specify relevance_score when `labels` is specified in order to calculate loss."
+                )
 
             if mlm_mask is None:
                 mlm_mask = torch.ones_like(labels, dtype=torch.float32)
