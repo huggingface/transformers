@@ -30,6 +30,24 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
+    @require_torch
+    def test_small_model_pt(self):
+        text_classifier = pipeline(
+            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="pt"
+        )
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_1", "score": 0.502}])
+
+    @require_tf
+    def test_small_model_tf(self):
+        text_classifier = pipeline(
+            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="tf"
+        )
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_1", "score": 0.502}])
+
     @slow
     @require_torch
     def test_pt_bert(self):
@@ -54,7 +72,7 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         outputs = text_classifier("Birds are a type of animal")
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
 
-    def run_pipeline_test(self, model, tokenizer):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
 
         # Small inputs because BartTokenizer tiny has maximum position embeddings = 22

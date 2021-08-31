@@ -185,9 +185,13 @@ class DataCollatorForTokenClassification:
         sequence_length = torch.tensor(batch["input_ids"]).shape[1]
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
-            batch["labels"] = [label + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels]
+            batch[label_name] = [
+                label + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels
+            ]
         else:
-            batch["labels"] = [[self.label_pad_token_id] * (sequence_length - len(label)) + label for label in labels]
+            batch[label_name] = [
+                [self.label_pad_token_id] * (sequence_length - len(label)) + label for label in labels
+            ]
 
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
         return batch
@@ -418,7 +422,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             input_ids = examples
             examples = [{"input_ids": e} for e in examples]
 
-        batch_input = _collate_batch(input_ids, self.tokenizer)
+        batch_input = _collate_batch(input_ids, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
 
         mask_labels = []
         for e in examples:
@@ -435,7 +439,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
                     if i in ref_pos:
                         ref_tokens[i] = "##" + ref_tokens[i]
             mask_labels.append(self._whole_word_mask(ref_tokens))
-        batch_mask = _collate_batch(mask_labels, self.tokenizer)
+        batch_mask = _collate_batch(mask_labels, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
         inputs, labels = self.mask_tokens(batch_input, batch_mask)
         return {"input_ids": inputs, "labels": labels}
 

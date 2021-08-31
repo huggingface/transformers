@@ -408,6 +408,10 @@ def pipeline(
     if model is None:
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
+        logger.warning(f"No model was supplied, defaulted to {model} (https://huggingface.co/{model})")
+
+    # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
+    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
     # Config is the primordial information item.
     # Instantiate config if needed
@@ -417,9 +421,6 @@ def pipeline(
         config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
 
     model_name = model if isinstance(model, str) else None
-
-    # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
-    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
     # Infer the framework from the model
     # Forced if framework already defined, inferred if it's None

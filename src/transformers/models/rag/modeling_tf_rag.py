@@ -258,7 +258,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
                       ``generator_from_pt`` should be set to :obj:`True`.
 
             model_args (remaining positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             retriever (:class:`~transformers.RagRetriever`, `optional`):
                 The retriever to use.
             kwargs (remaining dictionary of keyword arguments, `optional`):

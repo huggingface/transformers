@@ -137,7 +137,7 @@ class TemperatureLogitsWarper(LogitsWarper):
 
         self.temperature = temperature
 
-    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
+    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.FloatTensor:
         scores = scores / self.temperature
         return scores
 
@@ -184,7 +184,8 @@ class TopPLogitsWarper(LogitsWarper):
     """
 
     def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
-        if not isinstance(top_p, float) or (top_p < 0 or top_p > 1.0):
+        top_p = float(top_p)
+        if top_p < 0 or top_p > 1.0:
             raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
 
         self.top_p = top_p
@@ -354,7 +355,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
             The id of the `end-of-sequence` token.
     """
 
-    def __init__(self, bad_words_ids: Iterable[Iterable[int]], eos_token_id: int):
+    def __init__(self, bad_words_ids: List[List[int]], eos_token_id: int):
 
         if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
             raise ValueError(f"`bad_words_ids` has to be a non-emtpy list, but is {bad_words_ids}.")

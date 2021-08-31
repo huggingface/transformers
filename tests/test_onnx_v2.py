@@ -9,6 +9,8 @@ from transformers import (  # LongformerConfig,; T5Config,
     BartConfig,
     DistilBertConfig,
     GPT2Config,
+    GPTNeoConfig,
+    MBartConfig,
     RobertaConfig,
     XLMRobertaConfig,
     is_torch_available,
@@ -20,17 +22,21 @@ from transformers.models.distilbert import DistilBertOnnxConfig
 
 # from transformers.models.longformer import LongformerOnnxConfig
 from transformers.models.gpt2 import GPT2OnnxConfig
+from transformers.models.gpt_neo import GPTNeoOnnxConfig
+from transformers.models.mbart import MBartOnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
 
 # from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
-from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat, validate_model_outputs
-from transformers.onnx.config import DEFAULT_ONNX_OPSET, OnnxConfigWithPast
-from transformers.onnx.utils import (
-    compute_effective_axis_dimension,
-    compute_serialized_parameters_size,
-    flatten_output_collection_property,
+from transformers.onnx import (
+    EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
+    OnnxConfig,
+    ParameterFormat,
+    export,
+    validate_model_outputs,
 )
+from transformers.onnx.config import DEFAULT_ONNX_OPSET, OnnxConfigWithPast
+from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
 from transformers.testing_utils import require_onnx, require_torch, slow
 
 
@@ -39,6 +45,15 @@ class OnnxUtilsTestCaseV2(TestCase):
     """
     Cover all the utilities involved to export ONNX models
     """
+
+    @require_torch
+    @patch("transformers.onnx.convert.is_torch_onnx_dict_inputs_support_available", return_value=False)
+    def test_ensure_pytorch_version_ge_1_8_0(self, mock_is_torch_onnx_dict_inputs_support_available):
+        """
+        Ensure we raise an Exception if the pytorch version is unsupported (< 1.8.0)
+        """
+        self.assertRaises(AssertionError, export, None, None, None, None, None)
+        mock_is_torch_onnx_dict_inputs_support_available.assert_called()
 
     def test_compute_effective_axis_dimension(self):
         """
@@ -78,7 +93,7 @@ class OnnxUtilsTestCaseV2(TestCase):
         ONNX exporter will export nested collections as ${collection_name}.${level_idx_0}.${level_idx_1}...${idx_n}
         """
         self.assertEqual(
-            flatten_output_collection_property("past_key", [[0], [1], [2]]),
+            OnnxConfig.flatten_output_collection_property("past_key", [[0], [1], [2]]),
             {
                 "past_key.0": 0,
                 "past_key.1": 1,
@@ -136,11 +151,13 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
         for name, config in OnnxConfigWithPastTestCaseV2.SUPPORTED_WITH_PAST_CONFIGS:
             with self.subTest(name):
                 self.assertFalse(
-                    OnnxConfigWithPast.default(config()).use_past, "OnnxConfigWithPast.default() should not use_past"
+                    OnnxConfigWithPast.from_model_config(config()).use_past,
+                    "OnnxConfigWithPast.from_model_config() should not use_past",
                 )
 
                 self.assertTrue(
-                    OnnxConfigWithPast.with_past(config()).use_past, "OnnxConfigWithPast.default() should use_past"
+                    OnnxConfigWithPast.with_past(config()).use_past,
+                    "OnnxConfigWithPast.from_model_config() should use_past",
                 )
 
     @patch.multiple(OnnxConfigWithPast, __abstractmethods__=set())
@@ -152,7 +169,7 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
             with self.subTest(name):
 
                 # without past
-                onnx_config_default = OnnxConfigWithPast.default(config())
+                onnx_config_default = OnnxConfigWithPast.from_model_config(config())
                 self.assertIsNotNone(onnx_config_default.values_override, "values_override should not be None")
                 self.assertIn("use_cache", onnx_config_default.values_override, "use_cache should be present")
                 self.assertFalse(
@@ -175,19 +192,23 @@ if is_torch_available():
         BertModel,
         DistilBertModel,
         GPT2Model,
+        GPTNeoModel,
+        MBartModel,
         RobertaModel,
         XLMRobertaModel,
     )
 
     PYTORCH_EXPORT_DEFAULT_MODELS = {
-        ("ALBERT", "albert-base-v2", AlbertModel, AlbertConfig, AlbertOnnxConfig),
+        ("ALBERT", "hf-internal-testing/tiny-albert", AlbertModel, AlbertConfig, AlbertOnnxConfig),
         ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
         ("BERT", "bert-base-cased", BertModel, BertConfig, BertOnnxConfig),
         ("DistilBERT", "distilbert-base-cased", DistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
         ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
+        ("GPT-Neo", "EleutherAI/gpt-neo-125M", GPTNeoModel, GPTNeoConfig, GPTNeoOnnxConfig),
         # ("LongFormer", "longformer-base-4096", LongformerModel, LongformerConfig, LongformerOnnxConfig),
         ("Roberta", "roberta-base", RobertaModel, RobertaConfig, RobertaOnnxConfig),
         ("XLM-Roberta", "roberta-base", XLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
+        ("MBart", "sshleifer/tiny-mbart", MBartModel, MBartConfig, MBartOnnxConfig),
         # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig),
     }
 
@@ -210,11 +231,11 @@ class OnnxExportTestCaseV2(TestCase):
 
         for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_DEFAULT_MODELS:
             with self.subTest(name):
-                self.assertTrue(hasattr(onnx_config_class, "default"))
+                self.assertTrue(hasattr(onnx_config_class, "from_model_config"))
 
                 tokenizer = AutoTokenizer.from_pretrained(model)
-                model = model_class(config_class())
-                onnx_config = onnx_config_class.default(model.config)
+                model = model_class(config_class.from_pretrained(model))
+                onnx_config = onnx_config_class.from_model_config(model.config)
 
                 with NamedTemporaryFile("w") as output:
                     onnx_inputs, onnx_outputs = export(

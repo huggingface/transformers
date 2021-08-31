@@ -1375,7 +1375,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
           high-level keys being the ``__init__`` keyword name of each vocabulary file required by the model, the
           low-level being the :obj:`short-cut-names` of the pretrained models with, as associated values, the
           :obj:`url` to the associated pretrained vocabulary file.
-        - **max_model_input_sizes** (:obj:`Dict[str, Optinal[int]]`) -- A dictionary with, as keys, the
+        - **max_model_input_sizes** (:obj:`Dict[str, Optional[int]]`) -- A dictionary with, as keys, the
           :obj:`short-cut-names` of the pretrained models, and as associated values, the maximum length of the sequence
           inputs of this model, or :obj:`None` if the model has no maximum input size.
         - **pretrained_init_configuration** (:obj:`Dict[str, Dict[str, Any]]`) -- A dictionary with, as keys, the
@@ -1566,6 +1566,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             use_auth_token (:obj:`str` or `bool`, `optional`):
                 The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
                 generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+            local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to only rely on local files and not to attempt to download any files.
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -1645,7 +1647,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
             fast_tokenizer_file = get_fast_tokenizer_file(
-                pretrained_model_name_or_path, revision=revision, use_auth_token=use_auth_token
+                pretrained_model_name_or_path,
+                revision=revision,
+                use_auth_token=use_auth_token,
+                local_files_only=local_files_only,
             )
             additional_files_names = {
                 "added_tokens_file": ADDED_TOKENS_FILE,
@@ -1718,6 +1723,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
             )
+
+            if revision is not None:
+                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
+
             raise EnvironmentError(msg)
 
         for file_id, file_path in vocab_files.items():
@@ -1776,30 +1785,29 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
                 config_tokenizer_class = config.tokenizer_class
             except (OSError, ValueError, KeyError):
-                # skip if an error occured.
+                # skip if an error occurred.
                 config = None
             if config_tokenizer_class is None:
                 # Third attempt. If we have not yet found the original type of the tokenizer,
                 # we are loading we see if we can infer it from the type of the configuration file
-                from .models.auto.configuration_auto import CONFIG_MAPPING  # tests_ignore
-                from .models.auto.tokenization_auto import TOKENIZER_MAPPING  # tests_ignore
+                from .models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES  # tests_ignore
 
                 if hasattr(config, "model_type"):
-                    config_class = CONFIG_MAPPING.get(config.model_type)
+                    model_type = config.model_type
                 else:
                     # Fallback: use pattern matching on the string.
-                    config_class = None
-                    for pattern, config_class_tmp in CONFIG_MAPPING.items():
+                    model_type = None
+                    for pattern in TOKENIZER_MAPPING_NAMES.keys():
                         if pattern in str(pretrained_model_name_or_path):
-                            config_class = config_class_tmp
+                            model_type = pattern
                             break
 
-                if config_class in TOKENIZER_MAPPING.keys():
-                    config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING[config_class]
-                    if config_tokenizer_class is not None:
-                        config_tokenizer_class = config_tokenizer_class.__name__
-                    else:
-                        config_tokenizer_class = config_tokenizer_class_fast.__name__
+                if model_type is not None:
+                    config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING_NAMES.get(
+                        model_type, (None, None)
+                    )
+                    if config_tokenizer_class is None:
+                        config_tokenizer_class = config_tokenizer_class_fast
 
         if config_tokenizer_class is not None:
             if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
@@ -1865,6 +1873,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                 special_tokens_map = json.load(special_tokens_map_handle)
             for key, value in special_tokens_map.items():
+                if key in kwargs and kwargs[key]:
+                    # This value has already been redefined by the kwargs
+                    # We keep this new value and ignore the one stored in the special_tokens_map_file
+
+                    continue
+
                 if isinstance(value, dict):
                     value = AddedToken(**value)
                 elif isinstance(value, list):
@@ -3386,6 +3400,7 @@ def get_fast_tokenizer_file(
     path_or_repo: Union[str, os.PathLike],
     revision: Optional[str] = None,
     use_auth_token: Optional[Union[bool, str]] = None,
+    local_files_only: bool = False,
 ) -> str:
     """
     Get the tokenizer file to use for this version of transformers.
@@ -3400,12 +3415,16 @@ def get_fast_tokenizer_file(
         use_auth_token (:obj:`str` or `bool`, `optional`):
             The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
             generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to only rely on local files and not to attempt to download any files.
 
     Returns:
         :obj:`str`: The tokenizer file to use.
     """
     # Inspect all files from the repo/folder.
-    all_files = get_list_of_files(path_or_repo, revision=revision, use_auth_token=use_auth_token)
+    all_files = get_list_of_files(
+        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
+    )
     tokenizer_files_map = {}
     for file_name in all_files:
         search = _re_tokenizer_file.search(file_name)

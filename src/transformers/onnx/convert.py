@@ -21,9 +21,9 @@ import numpy as np
 from packaging.version import Version, parse
 
 from .. import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
+from ..file_utils import is_torch_onnx_dict_inputs_support_available
 from ..utils import logging
 from .config import OnnxConfig
-from .utils import flatten_output_collection_property
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -79,10 +79,15 @@ def export(
 
     """
     if not is_torch_available():
-        raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
+        raise ImportError("Cannot convert because PyTorch is not installed. Please install torch first.")
 
     import torch
     from torch.onnx import export
+
+    from ..file_utils import torch_version
+
+    if not is_torch_onnx_dict_inputs_support_available():
+        raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
     logger.info(f"Using framework PyTorch: {torch.__version__}")
     torch.set_grad_enabled(False)
@@ -105,6 +110,8 @@ def export(
     if not inputs_match:
         raise ValueError("Model and config inputs doesn't match")
 
+    config.patch_ops()
+
     # export can works with named args but the dict containing named args as to be last element of the args tuple
     export(
         model,
@@ -118,6 +125,9 @@ def export(
         enable_onnx_checker=True,
         opset_version=opset,
     )
+
+    config.restore_ops()
+    torch.set_grad_enabled(True)
 
     return matched_inputs, onnx_outputs
 
@@ -134,6 +144,8 @@ def validate_model_outputs(
 
     logger.info("Validating ONNX model...")
 
+    # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
+    # dynamic input shapes.
     reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
 
     # Create ONNX Runtime session
@@ -146,8 +158,12 @@ def validate_model_outputs(
 
     # We flatten potential collection of outputs (i.e. past_keys) to a flat structure
     for name, value in ref_outputs.items():
+        # Overwriting the output name as "present" since it is the name used for the ONNX outputs
+        # ("past_key_values" being taken for the ONNX inputs)
+        if name == "past_key_values":
+            name = "present"
         if isinstance(value, (list, tuple)):
-            value = flatten_output_collection_property(name, value)
+            value = config.flatten_output_collection_property(name, value)
             ref_outputs_dict.update(value)
         else:
             ref_outputs_dict[name] = value
@@ -156,7 +172,7 @@ def validate_model_outputs(
     onnx_inputs = {}
     for name, value in reference_model_inputs.items():
         if isinstance(value, (list, tuple)):
-            value = flatten_output_collection_property(name, value)
+            value = config.flatten_output_collection_property(name, value)
             onnx_inputs.update({tensor_name: pt_tensor.numpy() for tensor_name, pt_tensor in value.items()})
         else:
             onnx_inputs[name] = value.numpy()
@@ -180,7 +196,7 @@ def validate_model_outputs(
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
-        ref_value = ref_outputs_dict[name].numpy()
+        ref_value = ref_outputs_dict[name].detach().numpy()
         logger.info(f'\t- Validating ONNX Model output "{name}":')
 
         # Shape
@@ -191,7 +207,7 @@ def validate_model_outputs(
                 f"Got {ref_value.shape} (reference) and {ort_value.shape} (ONNX)"
             )
         else:
-            logger.info(f"\t\t-[✓] {ort_value.shape} matchs {ref_value.shape}")
+            logger.info(f"\t\t-[✓] {ort_value.shape} matches {ref_value.shape}")
 
         # Values
         if not np.allclose(ref_value, ort_value, atol=atol):

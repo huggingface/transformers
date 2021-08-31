@@ -30,7 +30,6 @@ deps_table_check_updated:
 # autogenerating code
 
 autogenerate_code: deps_table_update
-	python utils/class_mapping_update.py
 
 # Check that source code meets quality standards
 

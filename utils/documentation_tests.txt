@@ -1,0 +1,2 @@
+docs/source/quicktour.rst
+docs/source/task_summary.rst

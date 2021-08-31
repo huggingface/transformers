@@ -594,6 +594,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 self = getattr(self, self.base_model_prefix)
             self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
 
+        for module in self.modules():
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
+
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
         uninitialized_encoder_weights: List[str] = []
@@ -1034,14 +1038,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
                 Can be either:
 
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
                     - a string or path valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `model id` string of a pretrained
@@ -1261,8 +1265,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
                     f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
-                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}\n\n"
                 )
+
+                if revision is not None:
+                    msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
+
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
@@ -1409,6 +1417,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         add_prefix = has_prefix_module and not expects_prefix_module
 
         if remove_prefix:
+            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
             expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
         elif add_prefix:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
@@ -1490,6 +1499,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             start_prefix = cls.base_model_prefix + "."
         if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
             model_to_load = getattr(model, cls.base_model_prefix)
+            if any(key in expected_keys_not_prefixed for key in loaded_keys):
+                raise ValueError(
+                    "The state dictionary of the model you are training to load is corrupted. Are you sure it was "
+                    "properly saved?"
+                )
 
         load(model_to_load, prefix=start_prefix)
 

@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_torch_available
 
 
 _import_structure = {
@@ -28,12 +28,17 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_encoder_decoder"] = ["EncoderDecoderModel"]
 
+if is_flax_available():
+    _import_structure["modeling_flax_encoder_decoder"] = ["FlaxEncoderDecoderModel"]
 
 if TYPE_CHECKING:
     from .configuration_encoder_decoder import EncoderDecoderConfig
 
     if is_torch_available():
         from .modeling_encoder_decoder import EncoderDecoderModel
+
+    if is_flax_available():
+        from .modeling_flax_encoder_decoder import FlaxEncoderDecoderModel
 
 else:
     import sys

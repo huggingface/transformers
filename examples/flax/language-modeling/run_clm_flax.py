@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import datasets
+import numpy as np
 from datasets import Dataset, load_dataset
 from tqdm import tqdm
 
@@ -51,6 +52,7 @@ from transformers import (
     HfArgumentParser,
     TrainingArguments,
     is_tensorboard_available,
+    set_seed,
 )
 from transformers.testing_utils import CaptureLogger
 
@@ -154,6 +156,9 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
+    keep_linebreaks: bool = field(
+        default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
@@ -182,18 +187,16 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
     steps_per_epoch = len(dataset) // batch_size
 
     if shuffle:
-        batch_idx = jax.random.permutation(rng, len(dataset))
+        batch_idx = np.random.permutation(len(dataset))
     else:
-        batch_idx = jnp.arange(len(dataset))
+        batch_idx = np.arange(len(dataset))
 
     batch_idx = batch_idx[: steps_per_epoch * batch_size]  # Skip incomplete batch.
     batch_idx = batch_idx.reshape((steps_per_epoch, batch_size))
 
     for idx in batch_idx:
         batch = dataset[idx]
-        batch = {k: jnp.array(v) for k, v in batch.items()}
-
-        batch = shard(batch)
+        batch = {k: np.array(v) for k, v in batch.items()}
 
         yield batch
 
@@ -269,6 +272,9 @@ def main():
     # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info(f"Training/evaluation parameters {training_args}")
 
+    # Set seed before initializing model.
+    set_seed(training_args.seed)
+
     #  Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
     # (the dataset will be downloaded automatically from the datasets Hub).
@@ -299,6 +305,7 @@ def main():
             )
     else:
         data_files = {}
+        dataset_args = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
@@ -306,20 +313,23 @@ def main():
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        dataset = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+            dataset_args["keep_linebreaks"] = data_args.keep_linebreaks
+        dataset = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir, **dataset_args)
 
-        if "validation" not in datasets.keys():
-            datasets["validation"] = load_dataset(
+        if "validation" not in dataset.keys():
+            dataset["validation"] = load_dataset(
                 extension,
                 data_files=data_files,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
+                **dataset_args,
             )
-            datasets["train"] = load_dataset(
+            dataset["train"] = load_dataset(
                 extension,
                 data_files=data_files,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
+                **dataset_args,
             )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -577,7 +587,7 @@ def main():
 
     train_time = 0
     train_metrics = []
-    epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
+    epochs = tqdm(range(num_epochs), desc="Epoch ... ", position=0)
     for epoch in epochs:
         # ======================== Training ================================
         train_start = time.time()
@@ -591,6 +601,7 @@ def main():
         # train
         for step in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
             batch = next(train_loader)
+            batch = shard(batch)
             state, train_metric = p_train_step(state, batch)
             train_metrics.append(train_metric)
 
@@ -617,6 +628,7 @@ def main():
                 for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
                     # Model forward
                     batch = next(eval_loader)
+                    batch = shard(batch)
                     metrics = p_eval_step(state.params, batch)
                     eval_metrics.append(metrics)
 

@@ -82,8 +82,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_camembert.py",
-    "test_modeling_flax_bert.py",
-    "test_modeling_flax_roberta.py",
+    "test_modeling_flax_mt5.py",
     "test_modeling_mbart.py",
     "test_modeling_mt5.py",
     "test_modeling_pegasus.py",
@@ -98,6 +97,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "BeitForMaskedImageModeling",
     "CLIPTextModel",
     "CLIPVisionModel",
     "FlaxCLIPTextModel",
@@ -122,6 +122,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFRagTokenForGeneration",
     "Wav2Vec2ForCTC",
     "HubertForCTC",
+    "Wav2Vec2ForSequenceClassification",
+    "HubertForSequenceClassification",
     "XLMForQuestionAnswering",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",
@@ -155,6 +157,7 @@ def get_model_modules():
         "modeling_retribert",
         "modeling_utils",
         "modeling_flax_auto",
+        "modeling_flax_encoder_decoder",
         "modeling_flax_utils",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
@@ -226,6 +229,7 @@ def get_model_test_files():
     _ignore_files = [
         "test_modeling_common",
         "test_modeling_encoder_decoder",
+        "test_modeling_flax_encoder_decoder",
         "test_modeling_marian",
         "test_modeling_tf_common",
     ]
@@ -306,17 +310,17 @@ def get_all_auto_configured_models():
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
     if is_torch_available():
         for attr_name in dir(transformers.models.auto.modeling_auto):
-            if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING"):
+            if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_auto, attr_name)))
     if is_tf_available():
         for attr_name in dir(transformers.models.auto.modeling_tf_auto):
-            if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING"):
+            if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_tf_auto, attr_name)))
     if is_flax_available():
         for attr_name in dir(transformers.models.auto.modeling_flax_auto):
-            if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING"):
+            if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_flax_auto, attr_name)))
-    return [cls.__name__ for cls in result]
+    return [cls for cls in result]
 
 
 def ignore_unautoclassed(model_name):
