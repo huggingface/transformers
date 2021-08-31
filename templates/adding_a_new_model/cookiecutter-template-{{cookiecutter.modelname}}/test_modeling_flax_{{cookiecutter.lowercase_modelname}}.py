@@ -354,6 +354,8 @@ if is_flax_available():
     import jax.numpy as jnp
     from transformers import (
         Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+        Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+        Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
         Flax{{cookiecutter.camelcase_modelname}}Model,
     )
 
@@ -537,7 +539,15 @@ def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
 
 @require_flax
 class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, Flax{{cookiecutter.camelcase_modelname}}Model) if is_flax_available() else ()
+    all_model_classes = (
+        (
+            Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, 
+            Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+            Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+            Flax{{cookiecutter.camelcase_modelname}}Model,
+        ) if is_flax_available()
+        else ()
+    )
     all_generative_model_classes = (Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
     test_pruning = False
