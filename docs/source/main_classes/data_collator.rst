@@ -18,7 +18,7 @@ the same type as the elements of :obj:`train_dataset` or :obj:`eval_dataset`.
 
 To be able to build batches, data collators may apply some processing (like padding). Some of them (like
 :class:`~transformers.DataCollatorForLanguageModeling`) also apply some random data augmentation (like random masking)
-oin the formed batch.
+on the formed batch.
 
 Examples of use can be found in the :doc:`example scripts <../examples>` or :doc:`example notebooks <../notebooks>`.
 
