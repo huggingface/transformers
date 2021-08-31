@@ -150,8 +150,10 @@ def validate_model_outputs(
     options.add_session_config_entry("session.load_model_format", "ONNX")
     session = InferenceSession(onnx_model_path_or_bytes, options)
 
-    # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
-    # dynamic input shapes.
+    # If static shape, use the same input than the model was exported for initially.
+    # Otherwise we use an input shape different to test the dynamic nature and ensure it works.
+    # TODO: 3 and 31 are currently hardcoded as "different" values.
+    #  We might need to have a logic to compute these values
     reference_model_inputs = config.generate_dummy_inputs(
         tokenizer=tokenizer,
         batch_size=batch_size if batch_size > 0 else 3,
