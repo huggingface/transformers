@@ -490,7 +490,7 @@ class RealmRetriever(RealmPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if not (any((input_ids, inputs_embeds)) and any((input_ids, inputs_embeds))):
+        if not (any((input_ids is not None, inputs_embeds is not None)) and any((candidate_input_ids is not None, candidate_inputs_embeds is not None))):
             raise ValueError("You have to specify both inputs and candidate inputs")
 
         query_outputs = self.query_embedder(
