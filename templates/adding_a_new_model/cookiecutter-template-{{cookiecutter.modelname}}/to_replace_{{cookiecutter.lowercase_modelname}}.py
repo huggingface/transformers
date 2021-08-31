@@ -91,7 +91,6 @@
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
     _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
         [
-            "Flax_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM",
             "Flax{{cookiecutter.camelcase_modelname}}ForCausalLM",
             "Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
@@ -184,7 +183,6 @@
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
         from .models.{{cookiecutter.lowercase_modelname}} import (
-            Flax_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM,
             Flax{{cookiecutter.camelcase_modelname}}ForCausalLM,
             Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
