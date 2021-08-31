@@ -205,7 +205,7 @@ def custom_unfold(input, dimension, size, step):
 def custom_get_block_length_and_num_blocks(seq_length, window_size):
     """
     Custom implementation for GPTNeoAttentionMixin._get_block_length_and_num_blocks to enable the export to ONNX as
-    original implmentation uses Python variables and control flow.
+    original implementation uses Python variables and control flow.
     """
     import torch
 

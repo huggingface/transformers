@@ -26,6 +26,8 @@ from ...file_utils import CONFIG_NAME
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("gptj", "GPTJConfig"),
+        ("layoutlmv2", "LayoutLMv2Config"),
         ("beit", "BeitConfig"),
         ("rembert", "RemBertConfig"),
         ("visual_bert", "VisualBertConfig"),
@@ -95,6 +97,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+        ("gptj", "GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("layoutlmv2", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -156,8 +160,10 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("gptj", "GPT-J"),
         ("beit", "BeiT"),
         ("rembert", "RemBERT"),
+        ("layoutlmv2", "LayoutLMv2"),
         ("visual_bert", "VisualBert"),
         ("canine", "Canine"),
         ("roformer", "RoFormer"),

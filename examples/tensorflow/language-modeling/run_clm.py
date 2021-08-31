@@ -43,7 +43,7 @@ import transformers
 from transformers import (
     CONFIG_MAPPING,
     CONFIG_NAME,
-    MODEL_FOR_MASKED_LM_MAPPING,
+    MODEL_FOR_CAUSAL_LM_MAPPING,
     TF2_WEIGHTS_NAME,
     AutoConfig,
     AutoTokenizer,
@@ -58,7 +58,7 @@ from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 # endregion
 
