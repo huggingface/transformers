@@ -247,6 +247,20 @@ Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
 
 
 {%- else %}
+Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification
+    :members: call
+
+
+Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
+    :members: call
+
+
 Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
