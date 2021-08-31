@@ -120,6 +120,14 @@ class SparseMLTrainer(Trainer):
             # default scheduler
             super().create_scheduler(num_training_steps)
 
+    def qat_active(self, epoch: int):
+        if not self.manager.quantization_modifiers:
+            return False
+
+        qat_start = min([mod.start_epoch for mod in self.manager.quantization_modifiers])
+
+        return qat_start < epoch + 1
+
     def save_model(self, output_dir: Optional[str] = None):
         """
         Save model during or after training. The sparsification recipe will also be saved.
