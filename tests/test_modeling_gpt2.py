@@ -32,6 +32,7 @@ if is_torch_available():
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2DoubleHeadsModel,
         GPT2ForSequenceClassification,
+        GPT2ForTokenClassification,
         GPT2LMHeadModel,
         GPT2Model,
         GPT2Tokenizer,
@@ -366,6 +367,16 @@ class GPT2ModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    def create_and_check_gpt2_for_token_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = GPT2ForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -394,7 +405,7 @@ class GPT2ModelTester:
 class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification)
+        (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification, GPT2ForTokenClassification)
         if is_torch_available()
         else ()
     )
@@ -461,6 +472,10 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_gpt2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
+
+    def test_gpt2_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_for_token_classification(*config_and_inputs)
 
     def test_gpt2_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
