@@ -1,4 +1,4 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,7 +63,6 @@ from distutils.core import Command
 from pathlib import Path
 
 from setuptools import find_packages, setup
-
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
@@ -253,7 +252,11 @@ extras["ray"] = deps_list("ray[tune]")
 extras["integrations"] = extras["optuna"] + extras["ray"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["speech"] = deps_list("soundfile", "torchaudio")
+extras["audio"] = deps_list("soundfile")
+extras["speech"] = deps_list("torchaudio") + extras["audio"]  # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
+extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
+extras["tf-speech"] = extras["audio"]
+extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["codecarbon"] = deps_list("codecarbon")
@@ -275,7 +278,7 @@ extras["all"] = (
     + extras["flax"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
-    + extras["speech"]
+    + extras["torch-speech"]
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
