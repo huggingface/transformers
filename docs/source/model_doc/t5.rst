@@ -176,11 +176,18 @@ language modeling head on top of the decoder.
         # encode the inputs
         task_prefix = "translate English to French: "
         input_sequences = [input_sequence_1, input_sequence_2]
-        encoding = tokenizer([task_prefix + sequence for sequence in input_sequences], padding='longest', max_length=max_source_length, truncation=True, return_tensors="pt")
+        encoding = tokenizer([task_prefix + sequence for sequence in input_sequences], 
+                             padding='longest', 
+                             max_length=max_source_length, 
+                             truncation=True, 
+                             return_tensors="pt")
         input_ids, attention_mask = encoding.input_ids, encoding.attention_mask
 
         # encode the targets
-        target_encoding = tokenizer([output_sequence_1, output_sequence_2], padding='longest', max_length=max_target_length, truncation=True)
+        target_encoding = tokenizer([output_sequence_1, output_sequence_2], 
+                                    padding='longest', 
+                                    max_length=max_target_length, 
+                                    truncation=True)
         labels = target_encoding.input_ids
 
         # replace padding token id's of the labels by -100
