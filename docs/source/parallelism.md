@@ -220,9 +220,12 @@ Special considerations: TP requires very fast network, and therefore it's not ad
 This section is based on the original much more [detailed TP overview](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530).
 by [@anton-l](https://github.com/anton-l).
 
-Implementations:
+Alternative names:
 - DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/features/#model-parallelism)
-- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation.
+
+Implementations:
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation, as it's very model-specific
+- [parallelformers](https://github.com/tunib-ai/parallelformers) (only inference at the moment)
 
 🤗 Transformers status:
 - core: not yet implemented in the core
