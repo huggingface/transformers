@@ -30,7 +30,7 @@ REALM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class RealmConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.RealmModel`.
+    This is the configuration class to store the configuration of :class:`~transformers.RealmEmbedder`, :class:`~transformers.RealmRetriever`, and :class:`~transformers.RealmEncoder`.
     It is used to instantiate an REALM model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
     the REALM `realm-cc-news-pretrained <https://huggingface.co/realm-cc-news-pretrained>`__ architecture.
@@ -43,8 +43,7 @@ class RealmConfig(PretrainedConfig):
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the REALM model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.RealmModel` or
-            :class:`~transformers.TFRealmModel`.
+            :obj:`inputs_ids` passed when calling :class:`~transformers.RealmEmbedder`, :class:`~transformers.RealmRetriever`, or :class:`~transformers.RealmEncoder`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         retriever_proj_size (:obj:`int`, `optional`, defaults to 128):
@@ -68,8 +67,8 @@ class RealmConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.RealmModel` or
-            :class:`~transformers.TFRealmModel`.
+            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.RealmEmbedder`,
+            :class:`~transformers.RealmRetriever`, or :class:`~transformers.RealmEncoder`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
