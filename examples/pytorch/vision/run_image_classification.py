@@ -244,7 +244,6 @@ def main():
         label2id[label] = str(i)
         id2label[str(i)] = label
 
-
     # Load the accuracy metric from the datasets package
     metric = datasets.load_metric("accuracy")
 
