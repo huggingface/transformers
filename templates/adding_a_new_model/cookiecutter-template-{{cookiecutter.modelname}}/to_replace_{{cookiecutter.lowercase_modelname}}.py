@@ -196,6 +196,8 @@
 {% else %}
         from .models.{{cookiecutter.lowercase_modelname}} import (
             Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+            Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+            Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
             Flax{{cookiecutter.camelcase_modelname}}Model,
             Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel,
         )
