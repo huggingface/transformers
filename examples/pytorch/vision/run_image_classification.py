@@ -85,13 +85,6 @@ class DataTrainingArguments:
             "value if set."
         },
     )
-    max_predict_samples: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-            "value if set."
-        },
-    )
     image_size: Optional[int] = field(default=224, metadata={"help": " The size (resolution) of each image."})
 
     def __post_init__(self):
