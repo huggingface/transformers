@@ -16,8 +16,6 @@
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
-import torch
-
 from transformers import PreTrainedTokenizer, TensorType
 
 from ...onnx import OnnxConfig, compute_effective_axis_dimension
@@ -203,6 +201,8 @@ class LayoutLMOnnxConfig(OnnxConfig):
 
         if not framework == TensorType.PYTORCH:
             raise NotImplementedError("Exporting LayoutLM to ONNX is currently only supported for PyTorch.")
+
+        import torch
 
         input_dict["bbox"] = torch.tensor(
             [
