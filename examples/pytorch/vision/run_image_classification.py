@@ -110,7 +110,8 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        default="google/vit-base-patch16-224-in21k",
+        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
     model_type: Optional[str] = field(
         default=None,
@@ -190,6 +191,7 @@ def main():
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
 
+    # Initialize our dataset and prepare it for the 'image-classification' task.
     ds = load_dataset(
         data_args.dataset_name,
         data_args.dataset_config_name,
@@ -198,10 +200,10 @@ def main():
         task="image-classification",
     )
 
+    # Define torchvision transforms to be applied to each image.
     normalize = Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     _train_transforms = Compose(
         [
-            pil_loader,
             RandomResizedCrop(data_args.image_size),
             RandomHorizontalFlip(),
             ToTensor(),
@@ -210,7 +212,6 @@ def main():
     )
     _val_transforms = Compose(
         [
-            pil_loader,
             Resize(data_args.image_size),
             CenterCrop(data_args.image_size),
             ToTensor(),
@@ -219,28 +220,38 @@ def main():
     )
 
     def train_transforms(example_batch):
-        example_batch["pixel_values"] = [_train_transforms(f) for f in example_batch["image_file_path"]]
+        """Apply _train_transforms across a batch."""
+        example_batch["pixel_values"] = [_train_transforms(pil_loader(f)) for f in example_batch["image_file_path"]]
         return example_batch
 
     def val_transforms(example_batch):
-        example_batch["pixel_values"] = [_val_transforms(f) for f in example_batch["image_file_path"]]
+        """Apply _val_transforms across a batch."""
+        example_batch["pixel_values"] = [_val_transforms(pil_loader(f)) for f in example_batch["image_file_path"]]
         return example_batch
 
+    # If we don't have a validation split, split off a percentage of train as validation.
     data_args.train_val_split = None if "validation" in ds.keys() else data_args.train_val_split
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
         split = ds["train"].train_test_split(data_args.train_val_split)
         ds["train"] = split["train"]
         ds["validation"] = split["test"]
 
+    # Prepare label mappings.
+    # We'll include these in the model's config to get human readable labels in the Inference API.
     labels = ds["train"].features["labels"].names
     label2id, id2label = dict(), dict()
     for i, label in enumerate(labels):
         label2id[label] = str(i)
         id2label[str(i)] = label
 
+
+    # Load the accuracy metric from the datasets package
     metric = datasets.load_metric("accuracy")
 
+    # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
+    # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p):
+        """Computes accuracy on a batch of predictions"""
         return metric.compute(predictions=np.argmax(p.predictions, axis=1), references=p.label_ids)
 
     config = AutoConfig.from_pretrained(
@@ -253,6 +264,18 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+    model = AutoModelForImageClassification.from_pretrained(
+        model_args.model_name_or_path,
+        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        config=config,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
+    # NOTE - We aren't directly using this feature extractor since we defined custom transforms above.
+    # We initialize this instance below and pass it to Trainer to ensure that the feature extraction
+    # config, preprocessor_config.json, is included in output directories.
+    # This way if we push a model to the hub, the inference widget will work.
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name or model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -262,20 +285,13 @@ def main():
         image_mean=normalize.mean,
         image_std=normalize.std,
     )
-    model = AutoModelForImageClassification.from_pretrained(
-        model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        config=config,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
 
     if training_args.do_train:
         if "train" not in ds:
             raise ValueError("--do_train requires a train dataset")
         if data_args.max_train_samples is not None:
             ds["train"] = ds["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+        # Set the training transforms
         ds["train"].set_transform(train_transforms)
 
     if training_args.do_eval:
@@ -285,8 +301,10 @@ def main():
             ds["validation"] = (
                 ds["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
             )
+        # Set the validation transforms
         ds["validation"].set_transform(val_transforms)
 
+    # Initalize our trainer
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -297,6 +315,7 @@ def main():
         data_collator=collate_fn,
     )
 
+    # Training
     if training_args.do_train:
         checkpoint = None
         if training_args.resume_from_checkpoint is not None:
@@ -309,11 +328,13 @@ def main():
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
 
+    # Evaluation
     if training_args.do_eval:
         metrics = trainer.evaluate()
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
+    # Write model card and (optionally) push to hub
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "image-classification",
