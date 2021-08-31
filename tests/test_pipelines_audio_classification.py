@@ -35,12 +35,36 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
+    @require_datasets
+    @slow
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
+        import datasets
+
         audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=feature_extractor)
 
+        # test with a raw waveform
         audio = np.zeros((34000,))
         output = audio_classifier(audio)
         # by default a model is initialized with num_labels=2
+        self.assertEqual(
+            output,
+            [
+                {"score": ANY(float), "label": ANY(str)},
+                {"score": ANY(float), "label": ANY(str)},
+            ],
+        )
+        output = audio_classifier(audio, top_k=1)
+        self.assertEqual(
+            output,
+            [
+                {"score": ANY(float), "label": ANY(str)},
+            ],
+        )
+
+        # test with a local file
+        dataset = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        filename = dataset[0]["file"]
+        output = audio_classifier(filename)
         self.assertEqual(
             output,
             [
@@ -60,7 +84,6 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         audio_classifier = pipeline("audio-classification", model=model, tokenizer=tokenizer)
         dataset = datasets.load_dataset("anton-l/superb_dummy", "ks", split="test")
 
-        # test with a raw waveform
         audio = np.array(dataset[3]["speech"], dtype=np.float32)
         output = audio_classifier(audio, top_k=4)
         self.assertEqual(
@@ -70,18 +93,6 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
                 {"score": 0.0073, "label": "up"},
                 {"score": 0.0064, "label": "_unknown_"},
                 {"score": 0.0015, "label": "down"},
-            ],
-        )
-
-        # test with a local file
-        dataset = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-        filename = dataset[0]["file"]
-        output = audio_classifier(filename, top_k=2)
-        self.assertEqual(
-            nested_simplify(output, decimals=4),
-            [
-                {"score": 0.9926, "label": "_unknown_"},
-                {"score": 0.0023, "label": "go"},
             ],
         )
 
