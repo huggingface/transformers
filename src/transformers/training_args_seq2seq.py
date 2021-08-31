@@ -39,8 +39,8 @@ class Seq2SeqTrainingArguments(TrainingArguments):
         The :obj:`max_length` to use on each evaluation loop when :obj:`predict_with_generate=True`. Will default to
         the :obj:`max_length` value of the model configuration.
     generation_num_beams (:obj:`int`, `optional`):
-        The :obj:`num_beams` to use on each evaluation loop when :obj:`predict_with_generate=True`. Will default to
-        the :obj:`num_beams` value of the model configuration.
+        The :obj:`num_beams` to use on each evaluation loop when :obj:`predict_with_generate=True`. Will default to the
+        :obj:`num_beams` value of the model configuration.
     """
 
     sortish_sampler: bool = field(default=False, metadata={"help": "Whether to use SortishSampler or not."})
