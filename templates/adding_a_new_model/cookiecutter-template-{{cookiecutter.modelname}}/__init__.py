@@ -98,7 +98,6 @@ if is_tf_available():
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
 if is_flax_available():
     _import_structure["modeling_flax_{{cookiecutter.lowercase_modelname}}"] = [
-        "Flax_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM",
         "Flax{{cookiecutter.camelcase_modelname}}ForCausalLM",
         "Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
@@ -186,7 +185,6 @@ if TYPE_CHECKING:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
     if is_flax_available():
         from .modeling_{{cookiecutter.lowercase_modelname}} import (
-            Flax{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM,
             Flax{{cookiecutter.camelcase_modelname}}ForCausalLM,
             Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
@@ -200,7 +198,6 @@ if TYPE_CHECKING:
 {% else %}
     if is_flax_available():
         from .modeling_{{cookiecutter.lowercase_modelname}} import (
-            Flax{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
             Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
             Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
