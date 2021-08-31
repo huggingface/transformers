@@ -23,6 +23,8 @@ from torch import nn
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...generation_beam_search import BeamSearchScorer
+from ...generation_logits_process import LogitsProcessorList
+from ...generation_stopping_criteria import StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -1375,6 +1377,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
         decoder_start_token_id=None,
         n_docs=None,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
+        stopping_criteria: Optional[StoppingCriteriaList] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
@@ -1478,6 +1482,12 @@ class RagTokenForGeneration(RagPreTrainedModel):
             remove_invalid_values (:obj:`bool`, `optional`):
                 Whether to remove possible `nan` and `inf` outputs of the model to prevent the generation method to
                 crash. Note that using ``remove_invalid_values`` can slow down generation.
+            logits_processor (:obj:`LogitsProcessorList`, `optional`):
+                This object is created automatically from other arguments of this function. `logits_processor` is meant
+                to be used to add another layer with custom logic.
+            stopping_criteria (:obj:`StoppingCriteriaList`, `optional`):
+                This object is created automatically from other arguments of this function. `stopping_criteria` is
+                meant to be used to add another layer with custom logic from your own code.
 
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
@@ -1585,6 +1595,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
             remove_invalid_values=remove_invalid_values,
+            logits_processor=logits_processor,
         )
 
         if num_beams == 1:
