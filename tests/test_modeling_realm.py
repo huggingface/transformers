@@ -326,14 +326,9 @@ class RealmModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, retriever_projected_size))
         self.assertEqual(output.shape, expected_shape)
 
-        print('embedder', output[:, :3])
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[-0.0714, -0.0837, -0.1314]]
-        )
-
+        expected_slice = torch.tensor([[-0.0714, -0.0837, -0.1314]])
         self.assertTrue(torch.allclose(output[:, :3], expected_slice, atol=1e-4))
-    
+
     @slow
     def test_inference_encoder(self):
         num_candidates = 2
@@ -347,12 +342,7 @@ class RealmModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((2, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
-
-        print('encoder', output[1, :2, :2])
-        expected_slice = torch.tensor(
-            [[[-11.0888, -11.2544], [-10.2170, -10.3874]]]
-        )
+        expected_slice = torch.tensor([[[-11.0888, -11.2544], [-10.2170, -10.3874]]])
 
         self.assertTrue(torch.allclose(output[1, :2, :2], expected_slice, atol=1e-4))
 
@@ -361,20 +351,16 @@ class RealmModelIntegrationTest(unittest.TestCase):
         num_candidates = 2
         vocab_size = 30522
 
-        model = RealmRetriever.from_pretrained("qqaatw/realm-cc-news-pretrained-retriever", num_candidates=num_candidates)
-        
+        model = RealmRetriever.from_pretrained(
+            "qqaatw/realm-cc-news-pretrained-retriever", num_candidates=num_candidates
+        )
+
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         candidate_input_ids = torch.tensor([[0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11]])
         output = model(input_ids, candidate_input_ids=candidate_input_ids)[0]
 
-        
         expected_shape = torch.Size((1, 2))
         self.assertEqual(output.shape, expected_shape)
 
-        print('retriever', output)
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[0.7410, 0.7170]]
-        )
-
+        expected_slice = torch.tensor([[0.7410, 0.7170]])
         self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
