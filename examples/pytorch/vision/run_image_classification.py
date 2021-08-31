@@ -348,6 +348,7 @@ def main():
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "image-classification",
         "dataset": data_args.dataset_name,
+        "tags": ["image-classification"],
     }
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)
