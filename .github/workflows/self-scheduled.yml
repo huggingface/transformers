@@ -34,7 +34,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
-          pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
+          pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -85,6 +85,45 @@ jobs:
           name: run_all_tests_torch_gpu_test_reports
           path: reports
 
+  run_all_tests_flax_gpu:
+    runs-on: [self-hosted, docker-gpu, single-gpu]
+    container:
+      image: tensorflow/tensorflow:2.4.1-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Launcher docker
+        uses: actions/checkout@v2
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
+          pip install .[flax,integrations,sklearn,testing,sentencepiece,flax-speech,vision]
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
+          python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
+
+      - name: Run all tests on GPU
+        run: |
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_flax_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_flax_gpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_flax_gpu_test_reports
+          path: reports
+
   run_all_tests_tf_gpu:
     runs-on: [self-hosted, docker-gpu, single-gpu]
     container:
@@ -102,7 +141,7 @@ jobs:
         run: |
           apt -y update && apt install -y git
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece]
+          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -158,7 +197,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
-          pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
+          pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -213,7 +252,7 @@ jobs:
         run: |
           apt -y update && apt install -y git
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece]
+          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -249,6 +288,45 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: run_all_tests_tf_multi_gpu_test_reports
+          path: reports
+
+  run_all_tests_flax_multi_gpu:
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    container:
+      image: tensorflow/tensorflow:2.4.1-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Launcher docker
+        uses: actions/checkout@v2
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
+          pip install .[flax,integrations,sklearn,testing,sentencepiece,flax-speech,vision]
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
+          python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
+
+      - name: Run all tests on GPU
+        run: |
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_flax_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_flax_gpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_flax_gpu_test_reports
           path: reports
 
   run_all_tests_torch_cuda_extensions_gpu:
