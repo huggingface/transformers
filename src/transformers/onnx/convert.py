@@ -23,7 +23,8 @@ from packaging.version import Version, parse
 from .. import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
 from ..file_utils import is_torch_onnx_dict_inputs_support_available
 from ..utils import logging
-from .config import OnnxConfig, DYNAMIC_AXIS
+from .config import DYNAMIC_AXIS, OnnxConfig
+
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
