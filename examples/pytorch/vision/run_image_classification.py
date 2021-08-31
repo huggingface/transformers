@@ -7,9 +7,17 @@ from typing import Optional
 import datasets
 import numpy as np
 import torch
-import torchvision.transforms as T
 from datasets import load_dataset
 from PIL import Image
+from torchvision.transforms import (
+    CenterCrop,
+    Compose,
+    Normalize,
+    RandomHorizontalFlip,
+    RandomResizedCrop,
+    Resize,
+    ToTensor,
+)
 
 import transformers
 from transformers import (
@@ -190,22 +198,22 @@ def main():
         task="image-classification",
     )
 
-    normalize = T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-    _train_transforms = T.Compose(
+    normalize = Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    _train_transforms = Compose(
         [
             pil_loader,
-            T.RandomResizedCrop(data_args.image_size),
-            T.RandomHorizontalFlip(),
-            T.ToTensor(),
+            RandomResizedCrop(data_args.image_size),
+            RandomHorizontalFlip(),
+            ToTensor(),
             normalize,
         ]
     )
-    _val_transforms = T.Compose(
+    _val_transforms = Compose(
         [
             pil_loader,
-            T.Resize(data_args.image_size),
-            T.CenterCrop(data_args.image_size),
-            T.ToTensor(),
+            Resize(data_args.image_size),
+            CenterCrop(data_args.image_size),
+            ToTensor(),
             normalize,
         ]
     )
