@@ -106,9 +106,9 @@ jobs:
           python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
           python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
       
-#      - name: Fetch the tests to run
-#        run: |
-#          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
+      - name: Fetch the tests to run
+        run: |
+          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
 
       - name: Report fetched tests
         uses: actions/upload-artifact@v2
@@ -118,10 +118,9 @@ jobs:
 
       - name: Run all non-slow tests on GPU
         run: |
-          python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_gpu
-#          if [ -f test_list.txt ]; then
-#            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_gpu $(cat test_list.txt)
-#          fi
+          if [ -f test_list.txt ]; then
+            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_gpu $(cat test_list.txt)
+          fi
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -251,61 +250,60 @@ jobs:
           name: run_all_tests_torch_multi_gpu_test_reports
           path: reports
 
-  run_tests_flax_multi_gpu:
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
-    container:
-      image: tensorflow/tensorflow:2.4.1-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
-          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
-          pip install --upgrade pip
-          pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
-
-      - name: Launcher docker
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
-
-      - name: NVIDIA-SMI
-        continue-on-error: true
-        run: |
-          nvidia-smi
-
-      - name: Are GPUs recognized by our DL frameworks
-        run: |
-          python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
-          python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
-      
+#  run_tests_flax_multi_gpu:
+#    runs-on: [self-hosted, docker-gpu, multi-gpu]
+#    container:
+#      image: tensorflow/tensorflow:2.4.1-gpu
+#      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+#    steps:
+#      - name: Install dependencies
+#        run: |
+#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
+#          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
+#          pip install --upgrade pip
+#          pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
+#
+#      - name: Launcher docker
+#        uses: actions/checkout@v2
+#        with:
+#          fetch-depth: 2
+#
+#      - name: NVIDIA-SMI
+#        continue-on-error: true
+#        run: |
+#          nvidia-smi
+#
+#      - name: Are GPUs recognized by our DL frameworks
+#        run: |
+#          python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
+#          python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
+#      
 #      - name: Fetch the tests to run
 #        run: |
 #          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
-
-      - name: Report fetched tests
-        uses: actions/upload-artifact@v2
-        with:
-          name: test_fetched
-          path: test_preparation.txt
-
-      - name: Run all non-slow tests on GPU
-        run: |
-          python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_multi_gpu
+#
+#      - name: Report fetched tests
+#        uses: actions/upload-artifact@v2
+#        with:
+#          name: test_fetched
+#          path: test_preparation.txt
+#
+#      - name: Run all non-slow tests on GPU
+#        run: |
 #          if [ -f test_list.txt ]; then
 #            python -m pytest -n 2 --dist=loadfile -v --make-reports=tests_flax_multi_gpu $(cat test_list.txt)
 #          fi
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        run: cat reports/tests_flax_multi_gpu_failures_short.txt
-
-      - name: Test suite reports artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v2
-        with:
-          name: run_all_tests_flax_multi_gpu_test_reports
-          path: reports
+#
+#      - name: Failure short reports
+#        if: ${{ failure() }}
+#        run: cat reports/tests_flax_multi_gpu_failures_short.txt
+#
+#      - name: Test suite reports artifacts
+#        if: ${{ always() }}
+#        uses: actions/upload-artifact@v2
+#        with:
+#          name: run_all_tests_flax_multi_gpu_test_reports
+#          path: reports
 
 #  run_tests_tf_multi_gpu:
 #    runs-on: [self-hosted, docker-gpu, multi-gpu]
