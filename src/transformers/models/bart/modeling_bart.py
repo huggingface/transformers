@@ -696,7 +696,7 @@ class BartEncoder(BartPretrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=False,
     ):
         r"""
         Args:
