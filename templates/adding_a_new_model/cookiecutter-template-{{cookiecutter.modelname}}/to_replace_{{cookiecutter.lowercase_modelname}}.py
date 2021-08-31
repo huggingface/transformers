@@ -411,7 +411,8 @@
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification"),
-{% else -%}
+{% else %}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification"),
 {% endif -%}
 # End.
 
@@ -419,7 +420,8 @@
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering"),
-{% else -%}
+{% else %}
+        ("{{cookiecutter.lowercase_modelname}}", "Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering"),
 {% endif -%}
 # End.
 
