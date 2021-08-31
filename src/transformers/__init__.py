@@ -1341,6 +1341,17 @@ if is_tf_available():
             "TFDebertaPreTrainedModel",
         ]
     )
+    _import_structure["models.deberta_v2"].extend(
+        [
+            "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFDebertaV2ForMaskedLM",
+            "TFDebertaV2ForQuestionAnswering",
+            "TFDebertaV2ForSequenceClassification",
+            "TFDebertaV2ForTokenClassification",
+            "TFDebertaV2Model",
+            "TFDebertaV2PreTrainedModel",
+        ]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2924,6 +2935,15 @@ if TYPE_CHECKING:
             TFDebertaForTokenClassification,
             TFDebertaModel,
             TFDebertaPreTrainedModel,
+        )
+        from .models.deberta_v2 import (
+            TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDebertaV2ForMaskedLM,
+            TFDebertaV2ForQuestionAnswering,
+            TFDebertaV2ForSequenceClassification,
+            TFDebertaV2ForTokenClassification,
+            TFDebertaV2Model,
+            TFDebertaV2PreTrainedModel,
         )
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
