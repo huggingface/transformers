@@ -404,7 +404,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTester:
         self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs_for_common(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size).clip(3, self.vocab_size)
         eos_tensor = np.expand_dims(np.array([self.eos_token_id] * self.batch_size), 1)
         input_ids = np.concatenate([input_ids, eos_tensor], axis=1)
 
