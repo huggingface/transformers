@@ -16,12 +16,7 @@ import unittest
 
 import numpy as np
 
-from transformers import (
-    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
-    PreTrainedTokenizer,
-    Wav2Vec2Config,
-    Wav2Vec2ForSequenceClassification,
-)
+from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, PreTrainedTokenizer
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,

@@ -133,8 +133,10 @@ class AudioClassificationPipeline(Pipeline):
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
 
-        assert isinstance(inputs, np.ndarray), "We expect a numpy ndarray as input"
-        assert len(inputs.shape) == 1, "We expect a single channel audio input for AudioClassificationPipeline"
+        if not isinstance(inputs, np.ndarray):
+            raise ValueError("We expect a numpy ndarray as input")
+        if len(inputs.shape) != 1:
+            raise ValueError("We expect a single channel audio input for AudioClassificationPipeline")
 
         if top_k is None or top_k > self.model.config.num_labels:
             top_k = self.model.config.num_labels
