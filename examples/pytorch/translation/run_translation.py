@@ -550,11 +550,11 @@ def main():
     # Evaluation
     results = {}
     max_length = (
-        training_args.generate_max_length
-        if training_args.generate_max_length is not None
+        training_args.generation_max_length
+        if training_args.generation_max_length is not None
         else data_args.val_max_target_length
     )
-    num_beams = data_args.num_beams if data_args.num_beams is not None else training_args.generate_num_beams
+    num_beams = data_args.num_beams if data_args.num_beams is not None else training_args.generation_num_beams
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
