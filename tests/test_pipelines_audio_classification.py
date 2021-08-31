@@ -16,7 +16,12 @@ import unittest
 
 import numpy as np
 
-from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, PreTrainedTokenizer
+from transformers import (
+    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+    PreTrainedTokenizer,
+    Wav2Vec2Config,
+    Wav2Vec2ForSequenceClassification,
+)
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -74,9 +79,27 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
     @require_torch
+    def test_small_model_pt(self):
+        model = "anton-l/wav2vec2-random-tiny-classifier"
+        tokenizer = PreTrainedTokenizer()
+        audio_classifier = pipeline("audio-classification", model=model, tokenizer=tokenizer)
+
+        audio = np.ones((8000,))
+        output = audio_classifier(audio, top_k=4)
+        self.assertEqual(
+            nested_simplify(output, decimals=4),
+            [
+                {"score": 0.0843, "label": "on"},
+                {"score": 0.0840, "label": "left"},
+                {"score": 0.0837, "label": "off"},
+                {"score": 0.0835, "label": "yes"},
+            ],
+        )
+
+    @require_torch
     @require_datasets
     @slow
-    def test_small_model_pt(self):
+    def test_large_model_pt(self):
         import datasets
 
         model = "superb/wav2vec2-base-superb-ks"
