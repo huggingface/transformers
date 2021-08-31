@@ -20,7 +20,7 @@ The following example showcases how to fine-tune a `ViT` for image-classificatio
 
 ## Using datasets from 🤗 `datasets`
 
-Here we show how to fine-tune a `ViT` on the `beans` dataset.
+Here we show how to fine-tune a `ViT` on the [beans](https://huggingface.co/datasets/beans) dataset.
 
 ```bash
 python run_image_classification.py \
@@ -45,7 +45,7 @@ root/cat/nsdf3.png
 root/cat/[...]/asd932_.png
 ```
 
-Then, you can can run the script like this:
+Once you've prepared your dataset, you can can run the script like this:
 
 ```bash
 python run_image_classification.py \
@@ -64,7 +64,14 @@ python run_image_classification.py \
 
 ## Sharing your model on 🤗 Hub
 
-1. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account. 
+0. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account
+
+1. Make sure you have `git-lfs` installed.
+
+```bash
+$ apt install git-lfs
+```
+
 2. Log in using `huggingface-cli`
 
 ```bash
