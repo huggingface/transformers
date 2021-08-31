@@ -147,7 +147,6 @@ def validate_model_outputs(
 
     # Create ONNX Runtime session
     options = SessionOptions()
-    options.add_session_config_entry("session.load_model_format", "ONNX")
     session = InferenceSession(onnx_model_path_or_bytes, options)
 
     # If static shape, use the same input than the model was exported for initially.
