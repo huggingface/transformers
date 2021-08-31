@@ -12,62 +12,6 @@ class PyTorchBenchmarkArguments:
         requires_backends(self, ["torch"])
 
 
-class DataCollator:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DataCollatorForLanguageModeling:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class DataCollatorForPermutationLanguageModeling:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class DataCollatorForSeq2Seq:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DataCollatorForSOP:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DataCollatorForTokenClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class DataCollatorForWholeWordMask:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DataCollatorWithPadding:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-def default_data_collator(*args, **kwargs):
-    requires_backends(default_data_collator, ["torch"])
-
-
 class GlueDataset:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
