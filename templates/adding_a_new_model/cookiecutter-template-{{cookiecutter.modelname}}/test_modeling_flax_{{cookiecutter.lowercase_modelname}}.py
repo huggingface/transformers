@@ -21,7 +21,7 @@ from transformers import is_flax_available, {{cookiecutter.camelcase_modelname}}
 from transformers.testing_utils import require_flax, slow
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
+from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 if is_flax_available():
     import numpy as np
@@ -291,6 +291,21 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, un
     def test_model_from_pretrained(self):
         model = Flax{{cookiecutter.camelcase_modelname}}Model.from_pretrained("{{cookiecutter.checkpoint_identifier}}")
         self.assertIsNotNone(model)
+
+
+def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
+    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+    if a is None and b is None:
+        return True
+    try:
+        if _assert_tensors_equal(a, b, atol=atol):
+            return True
+        raise
+    except Exception:
+        if len(prefix) > 0:
+            prefix = f"{prefix}: "
+        raise AssertionError(f"{prefix}{a} != {b}")
+
 
 @require_flax
 class Flax{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCase):
