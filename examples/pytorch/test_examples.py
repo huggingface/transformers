@@ -363,6 +363,7 @@ class ExamplesTests(TestCasePlus):
             --dataloader_num_workers 16
             --metric_for_best_model accuracy
             --max_steps 30
+            --train_val_split 0.1
             --seed 7
         """.split()
 

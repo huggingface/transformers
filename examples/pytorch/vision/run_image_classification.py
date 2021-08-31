@@ -1,5 +1,4 @@
 import logging
-import math
 import os
 import sys
 from dataclasses import dataclass, field
@@ -9,9 +8,9 @@ import datasets
 import numpy as np
 import torch
 import torchvision.transforms as T
-from torchvision.datasets import ImageFolder
+from datasets import load_dataset
+from PIL import Image
 
-# from datasets import load_dataset
 import transformers
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
@@ -23,13 +22,25 @@ from transformers import (
     TrainingArguments,
 )
 from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import check_min_version
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
 
+# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+check_min_version("4.9.0.dev0")
+
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+
+
+def pil_loader(path: str):
+    with open(path, "rb") as f:
+        im = Image.open(f)
+        return im.convert("RGB")
 
 
 @dataclass
@@ -41,22 +52,16 @@ class DataTrainingArguments:
     the command line.
     """
 
-    train_dir: str = field(
-        metadata={"help": "Path to the root training directory which contains one subdirectory per class."}
+    dataset_name: Optional[str] = field(
+        default="nateraw/image-folder", metadata={"help": "Name of a dataset from the datasets package"}
     )
-    validation_dir: str = field(
-        default=None,
-        metadata={
-            "help": "Path to the root validation directory which contains one subdirectory per class. "
-            "If not provided, the validation dataset will be split off of training dataset using train_val_split."
-        },
+    dataset_config_name: Optional[str] = field(
+        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    test_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the test data."})
+    train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."})
+    validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
     train_val_split: Optional[float] = field(
-        default=0.15,
-        metadata={
-            "help": "Percent to split off of train for validation. Only splits if validation_dir is not provided."
-        },
+        default=0.15, metadata={"help": "Percent to split off of train for validation."}
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -80,6 +85,14 @@ class DataTrainingArguments:
         },
     )
     image_size: Optional[int] = field(default=224, metadata={"help": " The size (resolution) of each image."})
+
+    def __post_init__(self):
+        data_files = dict()
+        if self.train_dir is not None:
+            data_files["train"] = self.train_dir
+        if self.validation_dir is not None:
+            data_files["val"] = self.validation_dir
+        self.data_files = data_files if data_files else None
 
 
 @dataclass
@@ -116,8 +129,8 @@ class ModelArguments:
 
 
 def collate_fn(examples):
-    pixel_values = torch.stack([example[0] for example in examples])
-    labels = torch.tensor([example[1] for example in examples])
+    pixel_values = torch.stack([example["pixel_values"] for example in examples])
+    labels = torch.tensor([example["labels"] for example in examples])
     return {"pixel_values": pixel_values, "labels": labels}
 
 
@@ -125,6 +138,7 @@ def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
+
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
@@ -168,57 +182,53 @@ def main():
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
 
-    normalize = T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-    train_dataset = ImageFolder(
-        data_args.train_dir,
-        T.Compose(
-            [
-                T.RandomResizedCrop(data_args.image_size),
-                T.RandomHorizontalFlip(),
-                T.ToTensor(),
-                normalize,
-            ]
-        ),
+    ds = load_dataset(
+        data_args.dataset_name,
+        data_args.dataset_config_name,
+        data_files=data_args.data_files,
+        cache_dir=model_args.cache_dir,
+        task="image-classification",
     )
-    labels = train_dataset.classes
+
+    normalize = T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    _train_transforms = T.Compose(
+        [
+            pil_loader,
+            T.RandomResizedCrop(data_args.image_size),
+            T.RandomHorizontalFlip(),
+            T.ToTensor(),
+            normalize,
+        ]
+    )
+    _val_transforms = T.Compose(
+        [
+            pil_loader,
+            T.Resize(data_args.image_size),
+            T.CenterCrop(data_args.image_size),
+            T.ToTensor(),
+            normalize,
+        ]
+    )
+
+    def train_transforms(example_batch):
+        example_batch["pixel_values"] = [_train_transforms(f) for f in example_batch["image_file_path"]]
+        return example_batch
+
+    def val_transforms(example_batch):
+        example_batch["pixel_values"] = [_val_transforms(f) for f in example_batch["image_file_path"]]
+        return example_batch
+
+    data_args.train_val_split = None if "validation" in ds.keys() else data_args.train_val_split
+    if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
+        split = ds["train"].train_test_split(data_args.train_val_split)
+        ds["train"] = split["train"]
+        ds["validation"] = split["test"]
+
+    labels = ds["train"].features["labels"].names
     label2id, id2label = dict(), dict()
     for i, label in enumerate(labels):
         label2id[label] = str(i)
         id2label[str(i)] = label
-
-    if data_args.validation_dir is not None:
-        eval_dataset = ImageFolder(
-            data_args.validation_dir,
-            T.Compose(
-                [
-                    T.Resize(data_args.image_size),
-                    T.CenterCrop(data_args.image_size),
-                    T.ToTensor(),
-                    normalize,
-                ]
-            ),
-        )
-    else:
-        indices = torch.randperm(len(train_dataset)).tolist()
-        n_val = math.floor(len(indices) * data_args.train_val_split)
-        train_dataset = torch.utils.data.Subset(train_dataset, indices[:-n_val])
-        eval_dataset = torch.utils.data.Subset(train_dataset, indices[-n_val:])
-
-    test_dataset = (
-        ImageFolder(
-            data_args.test_dir,
-            T.Compose(
-                [
-                    T.Resize(data_args.image_size),
-                    T.CenterCrop(data_args.image_size),
-                    T.ToTensor(),
-                    normalize,
-                ]
-            ),
-        )
-        if data_args.test_dir is not None
-        else None
-    )
 
     metric = datasets.load_metric("accuracy")
 
@@ -226,7 +236,7 @@ def main():
         return metric.compute(predictions=np.argmax(p.predictions, axis=1), references=p.label_ids)
 
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        model_args.config_name or model_args.model_name_or_path,
         num_labels=len(labels),
         label2id=label2id,
         id2label=id2label,
@@ -235,30 +245,8 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-
-    def model_init():
-        return AutoModelForImageClassification.from_pretrained(
-            model_args.model_name_or_path,
-            from_tf=bool(".ckpt" in model_args.model_name_or_path),
-            config=config,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-
-    if data_args.max_train_samples is not None and data_args.max_train_samples < len(train_dataset):
-        indices = torch.randperm(data_args.max_train_samples).tolist()
-        train_dataset = torch.utils.data.Subset(train_dataset, indices)
-    if data_args.max_eval_samples is not None and data_args.max_eval_samples < len(eval_dataset):
-        indices = torch.randperm(data_args.max_eval_samples).tolist()
-        eval_dataset = torch.utils.data.Subset(eval_dataset, indices)
-    if data_args.max_predict_samples is not None and data_args.max_predict_samples < len(test_dataset):
-        indices = torch.randperm(data_args.max_predict_samples).tolist()
-        test_dataset = torch.utils.data.Subset(test_dataset, indices)
-
-    # NOTE - We aren't directly using this feature extractor since we defined custom transforms above.
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.model_name_or_path,
+        model_args.feature_extractor_name or model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
@@ -266,11 +254,36 @@ def main():
         image_mean=normalize.mean,
         image_std=normalize.std,
     )
+    model = AutoModelForImageClassification.from_pretrained(
+        model_args.model_name_or_path,
+        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        config=config,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
+
+    if training_args.do_train:
+        if "train" not in ds:
+            raise ValueError("--do_train requires a train dataset")
+        if data_args.max_train_samples is not None:
+            ds["train"] = ds["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+        ds["train"].set_transform(train_transforms)
+
+    if training_args.do_eval:
+        if "validation" not in ds:
+            raise ValueError("--do_eval requires a validation dataset")
+        if data_args.max_eval_samples is not None:
+            ds["validation"] = (
+                ds["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+            )
+        ds["validation"].set_transform(val_transforms)
+
     trainer = Trainer(
-        model_init=model_init,
+        model=model,
         args=training_args,
-        train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=eval_dataset if training_args.do_eval else None,
+        train_dataset=ds["train"] if training_args.do_train else None,
+        eval_dataset=ds["validation"] if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=feature_extractor,
         data_collator=collate_fn,
@@ -293,21 +306,16 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
-    if training_args.do_predict:
-        predictions = trainer.predict(test_dataset, metric_key_prefix="predict").predictions
-        predictions = np.argmax(predictions, axis=1)
-
-        output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")
-        if trainer.is_world_process_zero():
-            with open(output_predict_file, "w") as writer:
-                logger.info("***** Writing predict results *****")
-                writer.write("index\tfile\tprediction\n")
-                for i, prediction in enumerate(predictions):
-                    file = test_dataset.imgs[i][0].split("/")[-1]
-                    writer.write(f"{i}\t{file}\t{prediction}\n")
-
-    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "image-classification"}
+    kwargs = {
+        "finetuned_from": model_args.model_name_or_path,
+        "tasks": "image-classification",
+        "dataset": data_args.dataset_name,
+    }
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)
     else:
         trainer.create_model_card(**kwargs)
+
+
+if __name__ == "__main__":
+    main()
