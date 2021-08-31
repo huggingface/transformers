@@ -25,7 +25,6 @@ from transformers.testing_utils import require_tf, require_torch, slow
 
 from .test_modeling_tf_bert import TFBertModelTester
 from .test_modeling_tf_common import ids_tensor
-from .test_modeling_tf_gpt2 import TFGPT2ModelTester
 from .test_modeling_tf_rembert import TFRemBertModelTester
 from .test_modeling_tf_roberta import TFRobertaModelTester
 
@@ -40,7 +39,6 @@ if is_tf_available():
         TFBertLMHeadModel,
         TFBertModel,
         TFEncoderDecoderModel,
-        TFGPT2LMHeadModel,
         TFRemBertForCausalLM,
         TFRemBertModel,
         TFRobertaForCausalLM,
@@ -206,48 +204,6 @@ class TFEncoderDecoderMixin:
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
-    def check_save_and_load_encoder_decoder_model(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        encoder_hidden_states,
-        decoder_config,
-        decoder_input_ids,
-        decoder_attention_mask,
-        **kwargs
-    ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
-
-        outputs = enc_dec_model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
-        )
-        out_2 = outputs[0].numpy()
-        out_2[np.isnan(out_2)] = 0
-
-        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
-            enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
-            enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
-            enc_dec_model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-                encoder_pretrained_model_name_or_path=encoder_tmp_dirname,
-                decoder_pretrained_model_name_or_path=decoder_tmp_dirname,
-            )
-
-            after_outputs = enc_dec_model(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-                decoder_attention_mask=decoder_attention_mask,
-            )
-            out_1 = after_outputs[0].numpy()
-            out_1[np.isnan(out_1)] = 0
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
     def check_encoder_decoder_model_labels(
         self,
         config,
@@ -274,7 +230,6 @@ class TFEncoderDecoderMixin:
         # Make sure `loss` exist
         assert "loss" in outputs_encoder_decoder
 
-        # Unlike in Pytorch's `GPT2LMHeadModel`, `TFGPT2LMHeadModel` cut last logit token and return it
         batch_size, seq_len = decoder_input_ids.shape
         expected_shape = (batch_size, seq_len - 1, decoder_config.vocab_size)
         self.assertEqual(outputs_encoder_decoder["logits"].shape, expected_shape)
@@ -366,10 +321,6 @@ class TFEncoderDecoderMixin:
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_save_and_load(**input_ids_dict)
-
-    def test_save_and_load_from_encoder_decoder_pretrained(self):
-        input_ids_dict = self.prepare_config_and_inputs()
-        self.check_save_and_load_encoder_decoder_model(**input_ids_dict)
 
     def test_encoder_decoder_model_labels(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -501,96 +452,6 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
             self.assertEqual(summary, [EXPECTED_SUMMARY_STUDENTS])
 
 
-@require_tf
-class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
-    def get_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
-
-    def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = TFBertModel(config, name="encoder")
-        decoder_model = TFGPT2LMHeadModel(decoder_config, name="decoder")
-        return encoder_model, decoder_model
-
-    def prepare_config_and_inputs(self):
-        model_tester_encoder = TFBertModelTester(self, batch_size=13)
-        model_tester_decoder = TFGPT2ModelTester(self)
-        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            attention_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_head_mask,
-            decoder_token_type_ids,
-            decoder_sequence_labels,
-            decoder_token_labels,
-            decoder_choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = decoder_config_and_inputs
-
-        # make sure that cross attention layers are added
-        decoder_config.add_cross_attention = True
-        #  disable cache for now
-        decoder_config.use_cache = False
-        return {
-            "config": config,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "decoder_config": decoder_config,
-            "decoder_input_ids": decoder_input_ids,
-            "decoder_token_type_ids": decoder_token_type_ids,
-            "decoder_attention_mask": decoder_attention_mask,
-            "decoder_sequence_labels": decoder_sequence_labels,
-            "decoder_token_labels": decoder_token_labels,
-            "decoder_choice_labels": decoder_choice_labels,
-            "encoder_hidden_states": encoder_hidden_states,
-            "labels": decoder_token_labels,
-        }
-
-    @slow
-    @require_torch
-    def test_bert2gpt2_summarization(self):
-
-        if is_torch_available():
-            from transformers import EncoderDecoderModel
-
-            tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
-            tokenizer_out = AutoTokenizer.from_pretrained("gpt2")
-
-            """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.layer...`.
-            (For GPT2 decoder, there is no issue)
-            model = TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16", from_pt=True)
-            """
-
-            # workaround to load from pt
-            _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
-            _model.encoder.save_pretrained("./encoder")
-            _model.decoder.save_pretrained("./decoder")
-            model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-                "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
-            )
-            model.config = _model.config
-
-            ARTICLE_STUDENTS = """(CNN)Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members singing a racist chant. SAE's national chapter suspended the students, but University of Oklahoma President David Boren took it a step further, saying the university's affiliation with the fraternity is permanently done. The news is shocking, but it's not the first time SAE has faced controversy. SAE was founded March 9, 1856, at the University of Alabama, five years before the American Civil War, according to the fraternity website. When the war began, the group had fewer than 400 members, of which "369 went to war for the Confederate States and seven for the Union Army," the website says. The fraternity now boasts more than 200,000 living alumni, along with about 15,000 undergraduates populating 219 chapters and 20 "colonies" seeking full membership at universities. SAE has had to work hard to change recently after a string of member deaths, many blamed on the hazing of new recruits, SAE national President Bradley Cohen wrote in a message on the fraternity's website. The fraternity's website lists more than 130 chapters cited or suspended for "health and safety incidents" since 2010. At least 30 of the incidents involved hazing, and dozens more involved alcohol. However, the list is missing numerous incidents from recent months. Among them, according to various media outlets: Yale University banned the SAEs from campus activities last month after members allegedly tried to interfere with a sexual misconduct investigation connected to an initiation rite. Stanford University in December suspended SAE housing privileges after finding sorority members attending a fraternity function were subjected to graphic sexual content. And Johns Hopkins University in November suspended the fraternity for underage drinking. "The media has labeled us as the 'nation's deadliest fraternity,' " Cohen said. In 2011, for example, a student died while being coerced into excessive alcohol consumption, according to a lawsuit. SAE's previous insurer dumped the fraternity. "As a result, we are paying Lloyd's of London the highest insurance rates in the Greek-letter world," Cohen said. Universities have turned down SAE's attempts to open new chapters, and the fraternity had to close 12 in 18 months over hazing incidents."""
-            EXPECTED_SUMMARY_STUDENTS = """SAS Alpha Epsilon suspended the students, but university president says it's permanent.\nThe fraternity has had to deal with a string of student deaths since 2010.\nSAS has more than 200,000 members, many of whom are students.\nA student died while being forced into excessive alcohol consumption."""
-
-            input_dict = tokenizer_in(ARTICLE_STUDENTS, return_tensors="tf")
-            output_ids = model.generate(input_ids=input_dict["input_ids"], max_length=None).numpy().tolist()
-            summary = tokenizer_out.batch_decode(output_ids, skip_special_tokens=True)
-
-            self.assertEqual(summary, [EXPECTED_SUMMARY_STUDENTS])
-
-
 @require_torch
 class TFRoBertaEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
@@ -706,20 +567,22 @@ class TFRembertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase)
 @require_tf
 class TFEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "bert-base-cased")
 
     def get_decoder_config(self):
-        config = AutoConfig.from_pretrained("gpt2")
+        config = AutoConfig.from_pretrained("bert-base-cased")
         config.is_decoder = True
         config.add_cross_attention = True
         return config
 
     def get_encoderdecoder_model(self):
-        return TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16", from_pt=True)
+        return TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", from_pt=True)
 
     def get_encoder_decoder_models(self):
         encoder_model = TFBertModel.from_pretrained("bert-base-cased", name="encoder")
-        decoder_model = TFGPT2LMHeadModel.from_pretrained("gpt2", config=self.get_decoder_config(), name="decoder")
+        decoder_model = TFBertLMHeadModel.from_pretrained(
+            "bert-base-cased", config=self.get_decoder_config(), name="decoder"
+        )
         return {"encoder": encoder_model, "decoder": decoder_model}
 
     def _check_configuration_tie(self, model):
@@ -742,7 +605,7 @@ class TFEncoderDecoderModelTest(unittest.TestCase):
 class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
     def get_encoder_decoder_config(self):
         encoder_config = AutoConfig.from_pretrained("bert-base-uncased")
-        decoder_config = AutoConfig.from_pretrained("gpt2")
+        decoder_config = AutoConfig.from_pretrained("bert-base-uncased")
         return EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
 
     @slow
@@ -751,7 +614,7 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         config = self.get_encoder_decoder_config()
         encoder_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        decoder_tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        decoder_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
         input_ids = encoder_tokenizer("who sings does he love me with reba", return_tensors="tf").input_ids
         decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
@@ -767,7 +630,7 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             encoder = TFAutoModel.from_pretrained("bert-base-uncased", name="encoder")
             # It's necessary to specify `add_cross_attention=True` here.
             decoder = TFAutoModelForCausalLM.from_pretrained(
-                "gpt2", is_decoder=True, add_cross_attention=True, name="decoder"
+                "bert-base-uncased", is_decoder=True, add_cross_attention=True, name="decoder"
             )
             pretrained_encoder_dir = os.path.join(tmp_dirname, "pretrained_encoder")
             pretrained_decoder_dir = os.path.join(tmp_dirname, "pretrained_decoder")

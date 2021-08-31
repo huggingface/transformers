@@ -22,7 +22,6 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
-    DUMMY_INPUTS,
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -30,8 +29,8 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import (
-    TFBaseModelOutputWithPastAndCrossAttentions,
-    TFCausalLMOutputWithCrossAttentions,
+    TFBaseModelOutputWithPast,
+    TFCausalLMOutputWithPast,
     TFSequenceClassifierOutputWithPast,
 )
 from ...modeling_tf_utils import (
@@ -67,7 +66,7 @@ TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class TFAttention(tf.keras.layers.Layer):
-    def __init__(self, nx, n_ctx, config, scale=False, is_cross_attention=False, **kwargs):
+    def __init__(self, nx, n_ctx, config, scale=False, **kwargs):
         super().__init__(**kwargs)
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
@@ -79,14 +78,7 @@ class TFAttention(tf.keras.layers.Layer):
         self.scale = scale
         self.output_attentions = config.output_attentions
 
-        self.is_cross_attention = is_cross_attention
-
-        if self.is_cross_attention:
-            self.c_attn = TFConv1D(n_state * 2, nx, initializer_range=config.initializer_range, name="c_attn")
-            self.q_attn = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="q_attn")
-        else:
-            self.c_attn = TFConv1D(n_state * 3, nx, initializer_range=config.initializer_range, name="c_attn")
-
+        self.c_attn = TFConv1D(n_state * 3, nx, initializer_range=config.initializer_range, name="c_attn")
         self.c_proj = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_proj")
         self.attn_dropout = tf.keras.layers.Dropout(config.attn_pdrop)
         self.resid_dropout = tf.keras.layers.Dropout(config.resid_pdrop)
@@ -113,14 +105,11 @@ class TFAttention(tf.keras.layers.Layer):
             dk = tf.cast(shape_list(k)[-1], dtype=w.dtype)  # scale attention_scores
             w = w / tf.math.sqrt(dk)
 
-        if not self.is_cross_attention:
-            # if only "normal" attention layer implements causal mask
-
-            # w has shape [batch, heads, dst_sequence, src_sequence], where information flows from src to dst.
-            _, _, nd, ns = shape_list(w)
-            b = self.causal_attention_mask(nd, ns, dtype=w.dtype)
-            b = tf.reshape(b, [1, 1, nd, ns])
-            w = w * b - 1e4 * (1 - b)
+        # w has shape [batch, heads, dst_sequence, src_sequence], where information flows from src to dst.
+        _, _, nd, ns = shape_list(w)
+        b = self.causal_attention_mask(nd, ns, dtype=w.dtype)
+        b = tf.reshape(b, [1, 1, nd, ns])
+        w = w * b - 1e4 * (1 - b)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -151,34 +140,9 @@ class TFAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
-    def call(
-        self,
-        x,
-        layer_past,
-        attention_mask,
-        head_mask,
-        encoder_hidden_states,
-        encoder_attention_mask,
-        use_cache,
-        output_attentions,
-        training=False,
-    ):
-
-        if encoder_hidden_states is not None:
-            if not hasattr(self, "q_attn"):
-                raise ValueError(
-                    "If class is used as cross attention, the weights `q_attn` have to be defined. "
-                    "Please make sure to instantiate class with `GPT2Attention(..., is_cross_attention=True)`."
-                )
-
-            query = self.q_attn(x)
-            kv_out = self.c_attn(encoder_hidden_states)
-            key, value = tf.split(kv_out, 2, axis=2)
-            attention_mask = encoder_attention_mask
-        else:
-            x = self.c_attn(x)
-            query, key, value = tf.split(x, 3, axis=2)
-
+    def call(self, x, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=False):
+        x = self.c_attn(x)
+        query, key, value = tf.split(x, 3, axis=2)
         query = self.split_heads(query)
         key = self.split_heads(key)
         value = self.split_heads(value)
@@ -210,7 +174,7 @@ class TFMLP(tf.keras.layers.Layer):
         nx = config.n_embd
         self.c_fc = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_fc")
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
-        self.act = get_tf_activation(config.activation_function)
+        self.act = get_tf_activation("gelu")
         self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
 
     def call(self, x, training=False):
@@ -228,78 +192,22 @@ class TFBlock(tf.keras.layers.Layer):
         self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
         self.attn = TFAttention(nx, n_ctx, config, scale, name="attn")
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
-
-        if config.add_cross_attention:
-
-            # Q: `n_ctx` is the dimensionality of the causal mask (usually same as n_positions).
-            # This doesn't apply to cross-attention, however it seems that `n_ctx` is never used.
-            # It's not clear if it makes sense to specify it here.
-            self.crossattention = TFAttention(nx, n_ctx, config, scale, name="crossattention", is_cross_attention=True)
-            self.ln_cross_attn = tf.keras.layers.LayerNormalization(
-                epsilon=config.layer_norm_epsilon, name="ln_cross_attn"
-            )
-
         self.mlp = TFMLP(inner_dim, config, name="mlp")
 
-    def call(
-        self,
-        x,
-        layer_past,
-        attention_mask,
-        head_mask,
-        encoder_hidden_states,
-        encoder_attention_mask,
-        use_cache,
-        output_attentions,
-        training=False,
-    ):
+    def call(self, x, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=False):
         a = self.ln_1(x)
         output_attn = self.attn(
-            a,
-            layer_past=layer_past,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            training=training,
+            a, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=training
         )
         a = output_attn[0]  # output_attn: a, present, (attentions)
-        outputs = output_attn[1:]
         x = x + a
-
-        # Cross-Attention Block
-        if encoder_hidden_states is not None:
-            # add one self-attention block for cross-attention
-            if not hasattr(self, "crossattention"):
-                raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with "
-                    "cross-attention layers by setting `config.add_cross_attention=True`"
-                )
-
-            ca = self.ln_cross_attn(x)
-            output_cross_attn = self.crossattention(
-                ca,
-                layer_past=None,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                use_cache=False,
-                output_attentions=output_attentions,
-                training=training,
-            )
-            ca = output_cross_attn[0]  # output_attn: a, present, (cross_attentions)
-            x = x + ca
-            outputs = outputs + output_cross_attn[2:]  # add cross attentions if we output attention weights
 
         m = self.ln_2(x)
         m = self.mlp(m, training=training)
         x = x + m
 
-        outputs = [x] + outputs
-        return outputs  # x, present, (attentions, cross_attentions)
+        outputs = [x] + output_attn[1:]
+        return outputs  # x, present, (attentions)
 
 
 @keras_serializable
@@ -360,8 +268,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -379,8 +285,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -430,31 +334,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
                 tf.subtract(one_cst, inputs["attention_mask"]), tf.constant(-10000.0)
             )
 
-        # Copied from `modeling_tf_t5.py` with -1e9 -> -10000
-        if self.config.add_cross_attention and inputs["encoder_attention_mask"] is not None:
-            # If a 2D ou 3D attention mask is provided for the cross-attention
-            # we need to make broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
-            # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            inputs["encoder_attention_mask"] = tf.cast(
-                inputs["encoder_attention_mask"], dtype=inputs["encoder_hidden_states"].dtype
-            )
-            num_dims_encoder_attention_mask = len(shape_list(inputs["encoder_attention_mask"]))
-            if num_dims_encoder_attention_mask == 3:
-                encoder_extended_attention_mask = inputs["encoder_attention_mask"][:, None, :, :]
-            if num_dims_encoder_attention_mask == 2:
-                encoder_extended_attention_mask = inputs["encoder_attention_mask"][:, None, None, :]
-
-            # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
-            # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
-            # encoder_extended_attention_mask = tf.math.equal(encoder_extended_attention_mask,
-            #                                         tf.transpose(encoder_extended_attention_mask, perm=(-1, -2)))
-
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
-        else:
-            encoder_extended_attention_mask = None
-
-        inputs["encoder_attention_mask"] = encoder_extended_attention_mask
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -490,7 +369,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
         presents = () if inputs["use_cache"] else None
         all_attentions = () if inputs["output_attentions"] else None
-        all_cross_attentions = () if inputs["output_attentions"] and self.config.add_cross_attention else None
         all_hidden_states = () if inputs["output_hidden_states"] else None
         for i, (block, layer_past) in enumerate(zip(self.h, inputs["past"])):
             if inputs["output_hidden_states"]:
@@ -501,8 +379,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
                 layer_past,
                 inputs["attention_mask"],
                 inputs["head_mask"][i],
-                inputs["encoder_hidden_states"],
-                inputs["encoder_attention_mask"],
                 inputs["use_cache"],
                 inputs["output_attentions"],
                 training=inputs["training"],
@@ -514,8 +390,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
             if inputs["output_attentions"]:
                 all_attentions = all_attentions + (outputs[2],)
-                if self.config.add_cross_attention and encoder_hidden_states is not None:
-                    all_cross_attentions = all_cross_attentions + (outputs[3],)
 
         hidden_states = self.ln_f(hidden_states)
 
@@ -530,18 +404,13 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
 
         if not inputs["return_dict"]:
-            return tuple(
-                v
-                for v in [hidden_states, presents, all_hidden_states, all_attentions, all_cross_attentions]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
 
-        return TFBaseModelOutputWithPastAndCrossAttentions(
+        return TFBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=presents,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -554,25 +423,7 @@ class TFGPT2PreTrainedModel(TFPreTrainedModel):
     config_class = GPT2Config
     base_model_prefix = "transformer"
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    _keys_to_ignore_on_load_unexpected = [r"h.\d+.attn.bias", r"h.\d+.crossattention.bias"]
-
-    @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        dummy = {"input_ids": tf.constant(DUMMY_INPUTS)}
-        # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
-        if self.config.add_cross_attention:
-            batch_size, seq_len = tf.constant(DUMMY_INPUTS).shape
-            shape = (batch_size, seq_len) + (self.config.hidden_size,)
-            h = tf.random.uniform(shape=shape)
-            dummy["encoder_hidden_states"] = h
-
-        return dummy
+    _keys_to_ignore_on_load_unexpected = [r"h.\d+.attn.bias"]
 
     @tf.function(
         input_signature=[
@@ -738,7 +589,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFBaseModelOutputWithPastAndCrossAttentions,
+        output_type=TFBaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
@@ -750,8 +601,6 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -759,26 +608,6 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         training=False,
         **kwargs,
     ):
-        r"""
-        encoder_hidden_states  (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-        past (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
-            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past` are used, the user can optionally input only the last :obj:`decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)` instead of all
-            :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past`). Set to :obj:`False` during training, :obj:`True` during generation
-        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -789,8 +618,6 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -806,8 +633,6 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
             position_ids=inputs["position_ids"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
-            encoder_hidden_states=inputs["encoder_hidden_states"],
-            encoder_attention_mask=inputs["encoder_attention_mask"],
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
@@ -821,20 +646,9 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = (
-            tf.convert_to_tensor(output.cross_attentions)
-            if self.config.output_attentions
-            and self.config.add_cross_attention
-            and output.cross_attentions is not None
-            else None
-        )
 
-        return TFBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=output.last_hidden_state,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
-            cross_attentions=cross_attns,
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=output.last_hidden_state, past_key_values=pkv, hidden_states=hs, attentions=attns
         )
 
 
@@ -867,7 +681,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFCausalLMOutputWithCrossAttentions,
+        output_type=TFCausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
@@ -879,8 +693,6 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -890,24 +702,6 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         **kwargs,
     ):
         r"""
-        encoder_hidden_states  (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-        past (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
-            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past` are used, the user can optionally input only the last :obj:`decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)` instead of all
-            :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past`). Set to :obj:`False` during training, :obj:`True` during generation
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
             config.vocab_size - 1]``.
@@ -922,8 +716,6 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -940,8 +732,6 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             position_ids=inputs["position_ids"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
-            encoder_hidden_states=inputs["encoder_hidden_states"],
-            encoder_attention_mask=inputs["encoder_attention_mask"],
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
@@ -962,30 +752,20 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return TFCausalLMOutputWithCrossAttentions(
+        return TFCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
-            cross_attentions=transformer_outputs.cross_attentions,
         )
 
     def serving_output(self, output):
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = (
-            tf.convert_to_tensor(output.cross_attentions)
-            if self.config.output_attentions
-            and self.config.add_cross_attention
-            and output.cross_attentions is not None
-            else None
-        )
 
-        return TFCausalLMOutputWithCrossAttentions(
-            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
-        )
+        return TFCausalLMOutputWithPast(logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1092,18 +872,16 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
         )
         transformer_outputs = self.transformer(
-            input_ids=flat_input_ids,
-            past=inputs["past"],
-            attention_mask=flat_attention_mask,
-            token_type_ids=flat_token_type_ids,
-            position_ids=flat_position_ids,
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            use_cache=inputs["use_cache"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
+            flat_input_ids,
+            inputs["past"],
+            flat_attention_mask,
+            flat_token_type_ids,
+            flat_position_ids,
+            inputs["head_mask"],
+            inputs["inputs_embeds"],
+            inputs["use_cache"],
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
