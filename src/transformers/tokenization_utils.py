@@ -57,7 +57,23 @@ class Trie:
     def __init__(self):
         self.data = {}
 
-    def add(self, word):
+    def add(self, word: str):
+        """
+        Passes over every char (utf-8 char) on word
+        and recursively adds it to the internal `data` trie representation.
+        The special key `""` is used to represent termination.
+
+        This function is idempotent, adding twice the same word will leave
+        the trie unchanged
+
+        >>> trie = Trie()
+        >>> trie.add("Hello 友達")
+        >>> trie.data
+        {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}}
+        >>> trie.add("Hello")
+        >>> trie.data
+        {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}}
+        """
         if not word:
             # Prevent empty string
             return
@@ -67,7 +83,22 @@ class Trie:
             ref = ref[char]
         ref[""] = 1
 
-    def split(self, text):
+    def split(self, text: str) -> List[str]:
+        """
+        Will look for the words added to the trie within `text`. Output is the original
+        string splitted along the boundaries of the words found.
+
+        This trie will match the longest possible word first !
+
+        >>> trie = Trie()
+        >>> trie.split("[CLS] This is a extra_id_100")
+        ["[CLS] This is a extra_id_100"]
+        >>> trie.add("[CLS]")
+        >>> trie.add("extra_id_1")
+        >>> trie.add("extra_id_100")
+        >>> trie.split("[CLS] This is a extra_id_100")
+        ["[CLS]", " This is a ", "extra_id_100"]
+        """
         states = {}
         offsets = []
 
