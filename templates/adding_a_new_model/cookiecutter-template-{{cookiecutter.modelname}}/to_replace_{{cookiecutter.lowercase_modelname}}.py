@@ -107,6 +107,8 @@
     _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
         [
             "Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
+            "Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
+            "Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
             "Flax{{cookiecutter.camelcase_modelname}}Model",
             "Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel",
         ]
