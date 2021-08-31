@@ -1,0 +1,82 @@
+<!---
+Copyright 2021 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+# Image classification examples
+
+The following example showcases how to fine-tune a `ViT` for image-classification using PyTorch.
+
+## Using datasets from 🤗 `datasets`
+
+Here we show how to fine-tune a `ViT` on the `beans` dataset.
+
+```bash
+python run_image_classification.py \
+    --dataset_name beans \
+    --output_dir ./beans_outputs/ \
+    --remove_unused_columns False \
+    --do_train \
+    --do_eval
+```
+
+## Using your own data
+
+To use your own dataset, the training script expects the following directory structure:
+
+```bash
+root/dog/xxx.png
+root/dog/xxy.png
+root/dog/[...]/xxz.png
+
+root/cat/123.png
+root/cat/nsdf3.png
+root/cat/[...]/asd932_.png
+```
+
+Then, you can can run the script like this:
+
+```bash
+python run_image_classification.py \
+    --dataset_name nateraw/image-folder \
+    --train_dir <path-to-train-root> \
+    --output_dir ./outputs/ \
+    --remove_unused_columns False \
+    --do_train \
+    --do_eval
+```
+
+### 💡 The above will split the train dir into training and evaluation sets
+  - To control the split amount, use the `--train_val_split` flag.
+  - To provide your own validation split in its own directory, you can pass the `--validation_dir <path-to-val-root>` flag.
+
+
+## Sharing your model on 🤗 Hub
+
+1. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account. 
+2. Log in using `huggingface-cli`
+
+```bash
+$ huggingface-cli login
+# ...follow the prompts
+```
+
+3. When running the script, pass the following arguments:
+
+```bash
+python run_image_classification.py \
+    --push_to_hub \
+    --push_to_hub_model_id <name-your-model> \
+    ...
+```
