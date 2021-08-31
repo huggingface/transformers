@@ -1358,7 +1358,9 @@ class Trainer:
                 for _ in train_dataloader:
                     break
 
-        for epoch in range(epochs_trained, num_train_epochs):
+        if self.use_amp and hasattr(self, "qat_active") and callable(self.qat_active) and self.qat_active(epoch):
+                logger.info("entering QAT phase, disabling FP16 training")
+                self.scaler._enabled = False
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
             elif isinstance(train_dataloader.dataset, IterableDatasetShard):
@@ -1953,16 +1955,16 @@ class Trainer:
 
         return inputs
 
-    def autocast_smart_context_manager(self):
+    def autocast_smart_context_manager(self, enabled):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
         """
         if self.use_amp:
             if version.parse(torch.__version__) >= version.parse("1.10"):
-                ctx_manager = autocast(dtype=self.amp_dtype)
+                ctx_manager = autocast(dtype=self.amp_dtype, enabled=enabled)
             else:
-                ctx_manager = autocast()
+                ctx_manager = autocast(enabled=enabled)
         else:
             ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
 
@@ -1994,7 +1996,7 @@ class Trainer:
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        with self.autocast_smart_context_manager():
+        with self.autocast_smart_context_manager(enabled=self.scaler.is_enabled()):
             loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
@@ -2651,7 +2653,7 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    with self.autocast_smart_context_manager():
+                    with self.autocast_smart_context_manager(enabled=self.scaler.is_enabled()):
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
 
@@ -2661,7 +2663,7 @@ class Trainer:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    with self.autocast_smart_context_manager():
+                    with self.autocast_smart_context_manager(enabled=self.scaler.is_enabled()):
                         outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
