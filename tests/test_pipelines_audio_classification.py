@@ -18,7 +18,14 @@ import numpy as np
 
 from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, PreTrainedTokenizer
 from transformers.pipelines import AudioClassificationPipeline, pipeline
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_datasets, require_tf, require_torch
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_datasets,
+    require_tf,
+    require_torch,
+    slow,
+)
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -28,15 +35,12 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
-    @require_datasets
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
-        import datasets
-
         audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=feature_extractor)
-        dataset = datasets.load_dataset("anton-l/superb_dummy", "ks", split="test")
 
-        audio = np.array(dataset[0]["speech"], dtype=np.float32)
+        audio = np.zeros((34000,))
         output = audio_classifier(audio)
+        # by default a model is initialized with num_labels=2
         self.assertEqual(
             output,
             [
@@ -47,6 +51,7 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_torch
     @require_datasets
+    @slow
     def test_small_model_pt(self):
         import datasets
 

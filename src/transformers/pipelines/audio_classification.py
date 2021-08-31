@@ -101,7 +101,7 @@ class AudioClassificationPipeline(Pipeline):
     def __call__(
         self,
         inputs: Union[np.ndarray, bytes, str],
-        top_k: Optional[int] = 5,
+        top_k: Optional[int] = None,
         **kwargs,
     ):
         """
@@ -115,9 +115,10 @@ class AudioClassificationPipeline(Pipeline):
                 the filename of the audio file, the file will be read at the correct sampling rate to get the waveform
                 using `ffmpeg`. This requires `ffmpeg` to be installed on the system. If `inputs` is :obj:`bytes` it is
                 supposed to be the content of an audio file and is interpreted by `ffmpeg` in the same way.
-            top_k (:obj:`int`, `optional`, defaults to 5):
-                The number of top labels that will be returned by the pipeline. If the provided number is higher than
-                the number of labels available in the model configuration, it will default to the number of labels.
+            top_k (:obj:`int`, `optional`, defaults to None):
+                The number of top labels that will be returned by the pipeline. If the provided number is `None` or
+                higher than the number of labels available in the model configuration, it will default to the number of
+                labels.
 
         Return:
             A list of :obj:`dict` with the following keys:
@@ -135,7 +136,7 @@ class AudioClassificationPipeline(Pipeline):
         assert isinstance(inputs, np.ndarray), "We expect a numpy ndarray as input"
         assert len(inputs.shape) == 1, "We expect a single channel audio input for AudioClassificationPipeline"
 
-        if top_k > self.model.config.num_labels:
+        if top_k is None or top_k > self.model.config.num_labels:
             top_k = self.model.config.num_labels
 
         processed = self.feature_extractor(
@@ -146,13 +147,12 @@ class AudioClassificationPipeline(Pipeline):
         with torch.no_grad():
             outputs = self.model(**processed)
 
-            probs = outputs.logits.softmax(-1)
+            probs = outputs.logits[0].softmax(-1)
             scores, ids = probs.topk(top_k)
 
             scores = scores.tolist()
             ids = ids.tolist()
 
-        scores, ids = scores[0], ids[0]
         labels = [{"score": score, "label": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
 
         return labels
