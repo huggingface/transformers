@@ -47,13 +47,17 @@ class RealmConfig(PretrainedConfig):
             :class:`~transformers.TFRealmModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
+        retriever_proj_size (:obj:`int`, `optional`, defaults to 128):
+            Dimension of the retriever(embedder) projection.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (:obj:`int`, `optional`, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_candidates (:obj:`int`, `optional`, defaults to 8):
+            Number of candidates inputted to the RealmRetriever or RealmEncoder.
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
+        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler.
             If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
@@ -73,17 +77,16 @@ class RealmConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
-        Example::
+        
+    Example::
 
-        >>> from transformers import RealmModel, RealmConfig
+        >>> from transformers import RealmEmbedder, RealmConfig
 
-        >>> # Initializing a REALM realm-cc-news-pretrained style configuration
+        >>> # Initializing a REALM realm-cc-news-pretrained-* style configuration
         >>> configuration = RealmConfig()
 
         >>> # Initializing a model from the qqaatw/realm-cc-news-pretrained-embedder style configuration
-        >>> model = RealmRetriever(configuration)
+        >>> model = RealmEmbedder(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
@@ -107,7 +110,6 @@ class RealmConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
-        is_encoder_decoder=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,

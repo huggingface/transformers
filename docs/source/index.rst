@@ -570,6 +570,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/phobert
     model_doc/prophetnet
     model_doc/rag
+    model_doc/realm
     model_doc/reformer
     model_doc/rembert
     model_doc/retribert

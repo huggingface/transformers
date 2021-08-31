@@ -150,7 +150,7 @@ class RealmEmbedderOutput(ModelOutput):
     Args:
         projected_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.retriever_proj_size)`):
 
-            Projected scores.
+            Projected score.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -176,11 +176,11 @@ class RealmRetrieverOutput(ModelOutput):
 
     Args:
         relevance_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_candidates)`):
-            Relevance score.
+            The relevance score of document candidates (before softmax).
         query_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.retriever_proj_size)`):
-            Query score.
+            Query score derived from the query embedder.
         candidate_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_candidates, config.retriever_proj_size)`):
-            Candidate score.
+            Candidate score derived from the embedder.
     """
 
     relevance_score: torch.FloatTensor = None
@@ -369,6 +369,8 @@ class RealmEmbedder(RealmPreTrainedModel):
     def set_input_embeddings(self, value):
         self.bert.embeddings.word_embeddings = value
 
+    @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=RealmEmbedderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -377,12 +379,13 @@ class RealmEmbedder(RealmPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -393,8 +396,6 @@ class RealmEmbedder(RealmPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -420,6 +421,11 @@ class RealmEmbedder(RealmPreTrainedModel):
     REALM_START_DOCSTRING,
 )
 class RealmRetriever(RealmPreTrainedModel):
+    r"""
+    Parameters:
+        query_embedder (:class:`~transformers.RealmEmbedder`): 
+            Embedder for input sequences. If not specified, it will use the same embedder as candidate sequences.
+    """
     def __init__(self, config, query_embedder=None):
         super().__init__(config)
 
@@ -432,6 +438,8 @@ class RealmRetriever(RealmPreTrainedModel):
 
         self.init_weights()
 
+    @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=RealmRetrieverOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -441,16 +449,49 @@ class RealmRetriever(RealmPreTrainedModel):
         candidate_input_ids=None,
         candidate_attention_mask=None,
         candidate_token_type_ids=None,
+        candidate_inputs_embeds=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        candidate_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_candidates, sequence_length)`):
+            Indices of candidate input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`transformers.RealmTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        candidate_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_candidates, sequence_length)`, `optional`):
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        candidate_token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_candidates, sequence_length)`, `optional`):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
+
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
+
+            `What are token type IDs? <../glossary.html#token-type-ids>`_
+        candidate_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_candidates, sequence_length, hidden_size)`, `optional`):
+            Optionally, instead of passing :obj:`candidate_input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `candidate_input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+        
+        Returns:
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if not (any((input_ids, inputs_embeds)) and any((input_ids, inputs_embeds))):
+            raise ValueError("You have to specify both inputs and candidate inputs")
 
         query_outputs = self.query_embedder(
             input_ids,
@@ -459,8 +500,6 @@ class RealmRetriever(RealmPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -477,9 +516,7 @@ class RealmRetriever(RealmPreTrainedModel):
             token_type_ids=flattened_token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            inputs_embeds=candidate_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -525,23 +562,40 @@ class RealmEncoder(RealmPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
+    @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
-        relevance_score=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
+        relevance_score=None,
         labels=None,
         mlm_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        relevance_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_candidates)`, `optional`):
+            Relevance score derived from RealmRetriever.
+ 
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+
+        mlm_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid calculating joint loss on certain positions. If not specified, the loss will not be masked. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+        Returns:
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -556,8 +610,6 @@ class RealmEncoder(RealmPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -572,6 +624,9 @@ class RealmEncoder(RealmPreTrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
+            if candidate_score is None:
+                raise ValueError("You have to specify relevance_score when `labels` is specified in order to calculate loss.")
+
             if mlm_mask is None:
                 mlm_mask = torch.ones_like(labels, dtype=torch.float32)
             else:

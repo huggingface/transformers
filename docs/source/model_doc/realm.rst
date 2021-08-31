@@ -19,7 +19,7 @@ Overview
 The REALM model was proposed in `REALM: Retrieval-Augmented Language Model Pre-Training
 <https://arxiv.org/abs/2002.08909>`__  by Kelvin Guu, Kenton Lee, Zora Tung, Panupong Pasupat and Ming-Wei Chang. It's
 a retrieval-augmented language model that firstly retrieves neural knowledge from a textual knowledge corpus and then 
-utilizes retrieved documents to process Open-QA tasks.
+utilizes retrieved documents to process question answering tasks.
 
 The abstract from the paper is the following:
 
@@ -27,12 +27,8 @@ The abstract from the paper is the following:
 To capture knowledge in a more modular and interpretable way, we augment language model pre-training with a latent knowledge retriever, which allows the model to retrieve and attend over documents from a large corpus such as Wikipedia, used during pre-training, fine-tuning and inference. For the first time, we show how to pre-train such a knowledge retriever in an unsupervised manner, using masked language modeling as the learning signal and backpropagating through a retrieval step that considers millions of documents.
 We demonstrate the effectiveness of Retrieval-Augmented Language Model pre-training (REALM) by fine-tuning on the challenging task of Open-domain Question Answering (Open-QA). We compare against state-of-the-art models for both explicit and implicit knowledge storage on three popular Open-QA benchmarks, and find that we outperform all previous methods by a significant margin (4-16% absolute accuracy), while also providing qualitative benefits such as interpretability and modularity.*
 
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
 This model was contributed by `qqaatw 
-<https://huggingface.co/qqaatw>>`__. The original code can be found `here 
+<https://huggingface.co/qqaatw>`__. The original code can be found `here 
 <https://github.com/google-research/language/tree/master/language/realm>`__.
 
 RealmConfig
@@ -57,10 +53,10 @@ RealmTokenizerFast
     :members:
 
 
-RealmModel
+RealmEmbedder
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.RealmModel
+.. autoclass:: transformers.RealmEmbedder
     :members: forward
 
 
