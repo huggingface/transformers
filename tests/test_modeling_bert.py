@@ -573,7 +573,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             traced_model = torch.jit.trace(
                 model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
             )
-            print(model_class)
 
             with tempfile.TemporaryDirectory() as tmp:
                 torch.jit.save(traced_model, os.path.join(tmp, "bert.pt"))
