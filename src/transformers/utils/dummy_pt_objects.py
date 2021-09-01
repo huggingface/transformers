@@ -307,6 +307,9 @@ def load_tf_weights_in_albert(*args, **kwargs):
     requires_backends(load_tf_weights_in_albert, ["torch"])
 
 
+MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
+
+
 MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
@@ -350,6 +353,15 @@ MODEL_WITH_LM_HEAD_MAPPING = None
 
 
 class AutoModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class AutoModelForAudioClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -3171,6 +3183,15 @@ def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
 
 
+class SpeechEncoderDecoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3193,6 +3214,24 @@ class Speech2TextModel:
 
 
 class Speech2TextPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class Speech2Text2ForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class Speech2Text2PreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

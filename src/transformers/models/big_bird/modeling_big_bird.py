@@ -2987,6 +2987,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             if token_type_ids is None:
                 token_type_ids = (~logits_mask).long()
             logits_mask = logits_mask
+            logits_mask[:, 0] = False
             logits_mask.unsqueeze_(2)
 
         outputs = self.bert(

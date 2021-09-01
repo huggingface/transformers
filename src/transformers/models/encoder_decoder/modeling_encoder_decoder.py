@@ -53,7 +53,7 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.PretrainedConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.

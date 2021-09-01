@@ -70,7 +70,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
     to support multiple audio formats
     """
 
-    def __init__(self, feature_extractor: "SequenceFeatureExtractor", *args, **kwargs):
+    def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
         """
         Arguments:
             feature_extractor (:obj:`~transformers.SequenceFeatureExtractor`):
@@ -96,6 +96,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
                 model on the associated CUDA device id.
         """
         super().__init__(*args, **kwargs)
+
         self.feature_extractor = feature_extractor
 
         if self.framework == "tf":
@@ -139,9 +140,13 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         processed = self.ensure_tensor_on_device(**processed)
 
         name = self.model.__class__.__name__
-        if name.endswith("ForConditionalGeneration"):
-            input_ids = processed["input_features"]
-            tokens = self.model.generate(input_ids=input_ids)
+        if name.endswith("ForConditionalGeneration") or name.endswith("EncoderDecoderModel"):
+            encoder = self.model.get_encoder()
+            # we need to pass `processed.get("attention_mask")` here since audio encoder
+            # attention mask  length is different from expected text decoder `encoder_attention_mask` length
+            tokens = self.model.generate(
+                encoder_outputs=encoder(**processed), attention_mask=processed.get("attention_mask")
+            )
             tokens = tokens.squeeze(0)
         elif name.endswith("ForCTC"):
             outputs = self.model(**processed)

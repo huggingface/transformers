@@ -249,9 +249,16 @@ _import_structure = {
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
+    "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
+    ],
+    "models.speech_to_text_2": [
+        "SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Speech2Text2Config",
+        "Speech2Text2Processor",
+        "Speech2Text2Tokenizer",
     ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
@@ -278,6 +285,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
     "pipelines": [
+        "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "Conversation",
         "ConversationalPipeline",
@@ -529,6 +537,7 @@ if is_torch_available():
     )
     _import_structure["models.auto"].extend(
         [
+            "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
@@ -544,6 +553,7 @@ if is_torch_available():
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
+            "AutoModelForAudioClassification",
             "AutoModelForCausalLM",
             "AutoModelForImageClassification",
             "AutoModelForMaskedLM",
@@ -1083,6 +1093,7 @@ if is_torch_available():
             "load_tf_weights_in_roformer",
         ]
     )
+    _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
     _import_structure["models.speech_to_text"].extend(
         [
             "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1091,6 +1102,7 @@ if is_torch_available():
             "Speech2TextPreTrainedModel",
         ]
     )
+    _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
     _import_structure["models.splinter"].extend(
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1714,6 +1726,8 @@ if is_flax_available():
             "FlaxAutoModelForTokenClassification",
         ]
     )
+
+    # Flax models structure
     _import_structure["models.bart"].extend(
         [
             "FlaxBartForConditionalGeneration",
@@ -2023,7 +2037,14 @@ if TYPE_CHECKING:
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
+    from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
+    from .models.speech_to_text_2 import (
+        SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Speech2Text2Config,
+        Speech2Text2Processor,
+        Speech2Text2Tokenizer,
+    )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
@@ -2051,6 +2072,7 @@ if TYPE_CHECKING:
 
     # Pipelines
     from .pipelines import (
+        AudioClassificationPipeline,
         AutomaticSpeechRecognitionPipeline,
         Conversation,
         ConversationalPipeline,
@@ -2259,6 +2281,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_albert,
         )
         from .models.auto import (
+            MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
@@ -2274,6 +2297,7 @@ if TYPE_CHECKING:
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
+            AutoModelForAudioClassification,
             AutoModelForCausalLM,
             AutoModelForImageClassification,
             AutoModelForMaskedLM,
@@ -2723,12 +2747,14 @@ if TYPE_CHECKING:
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
         )
+        from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Speech2TextForConditionalGeneration,
             Speech2TextModel,
             Speech2TextPreTrainedModel,
         )
+        from .models.speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2PreTrainedModel
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SplinterForQuestionAnswering,
