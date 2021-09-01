@@ -645,7 +645,7 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             )
             # check that the from pretrained methods work
             enc_dec_model.save_pretrained(tmp_dirname)
-            enc_dec_model.from_pretrained(tmp_dirname)
+            enc_dec_model = TFEncoderDecoderModel.from_pretrained(tmp_dirname)
 
             output = enc_dec_model(input_ids, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
 
