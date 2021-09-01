@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,27 +12,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support Encoder-Decoder architectures """
+""" Classes to support Speech-Encoder-Text-Decoder architectures """
 
 
 from typing import Optional
+
+from torch import nn
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_encoder_decoder import EncoderDecoderConfig
+from ..auto.configuration_auto import AutoConfig
+from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
+from .configuration_speech_encoder_decoder import SpeechEncoderDecoderConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "EncoderDecoderConfig"
+_CONFIG_FOR_DOC = "SpeechEncoderDecoderConfig"
 
-ENCODER_DECODER_START_DOCSTRING = r"""
-    This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
-    encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via
-    :meth:`~transformers.AutoModel.from_pretrained` function and the decoder is loaded via
+SPEECH_ENCODER_DECODER_START_DOCSTRING = r"""
+    This class can be used to initialize a speech-sequence-to-text-sequence model with any pretrained speech
+    autoencoding model as the encoder and any pretrained text autoregressive model as the decoder. The encoder is
+    loaded via :meth:`~transformers.AutoModel.from_pretrained` function and the decoder is loaded via
     :meth:`~transformers.AutoModelForCausalLM.from_pretrained` function. Cross-attention layers are automatically added
     to the decoder and should be fine-tuned on a downstream generative task, like summarization.
 
@@ -41,8 +45,12 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
     Zhou, Wei Li, Peter J. Liu.
 
-    After such an Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other models
-    (see the examples for more information).
+    Additionally, in `Large-Scale Self- and Semi-Supervised Learning for Speech Translation
+    <https://arxiv.org/abs/2104.06678>`__ it is shown how leveraging large pretrained speech models for speech
+    translation yields a significant performance improvement.
+
+    After such an Speech-Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other
+    models (see the examples for more information).
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -59,16 +67,21 @@ ENCODER_DECODER_START_DOCSTRING = r"""
             weights.
 """
 
-ENCODER_DECODER_INPUTS_DOCSTRING = r"""
+SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
+        input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Processor` should
+            be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
+            :meth:`transformers.Wav2Vec2Processor.__call__` for details.
+        input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, feature_size)`, `optional`):
+            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
+            by loading a ``.flac`` or ``.wav`` audio file into an array of type :obj:`List[float]` or a
+            :obj:`numpy.ndarray`, *e.g.* via the soundfile library (``pip install soundfile``). To prepare the array
+            into :obj:`input_features`, the :class:`~transformers.Speech2TextTokenizer` should be used for extracting
+            the fbank features, padding and conversion into a tensor of type :obj:`torch.FloatTensor`. See
+            :meth:`~transformers.Speech2TextTokenizer.__call__`
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
@@ -136,16 +149,16 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(ENCODER_DECODER_START_DOCSTRING)
-class EncoderDecoderModel(PreTrainedModel):
+@add_start_docstrings(SPEECH_ENCODER_DECODER_START_DOCSTRING)
+class SpeechEncoderDecoderModel(PreTrainedModel):
     r"""
     :class:`~transformers.EncoderDecoder` is a generic model class that will be instantiated as a transformer
     architecture with one of the base model classes of the library as encoder and another one as decoder when created
     with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
     :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
     """
-    config_class = EncoderDecoderConfig
-    base_model_prefix = "encoder_decoder"
+    config_class = SpeechEncoderDecoderConfig
+    base_model_prefix = "speech_encoder_decoder"
 
     def __init__(
         self,
@@ -153,24 +166,23 @@ class EncoderDecoderModel(PreTrainedModel):
         encoder: Optional[PreTrainedModel] = None,
         decoder: Optional[PreTrainedModel] = None,
     ):
-        assert config is not None or (
-            encoder is not None and decoder is not None
-        ), "Either a configuration or an Encoder and a decoder has to be provided"
+        if config is None and (encoder is None or decoder is None):
+            raise ValueError("Either a configuration or an encoder and a decoder has to be provided.")
         if config is None:
-            config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
+            config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
-            assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
+            if not isinstance(config, self.config_class):
+                raise ValueError(f"Config: {config} has to be of type {self.config_class}")
+
         # initialize with config
+        # make sure input & output embeddings is not tied
+        config.tie_word_embeddings = False
         super().__init__(config)
 
         if encoder is None:
-            from ..auto.modeling_auto import AutoModel
-
             encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
-            from ..auto.modeling_auto import AutoModelForCausalLM
-
             decoder = AutoModelForCausalLM.from_config(config.decoder)
 
         self.encoder = encoder
@@ -190,20 +202,13 @@ class EncoderDecoderModel(PreTrainedModel):
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
-        assert (
-            self.encoder.get_output_embeddings() is None
-        ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
+        if self.encoder.config.hidden_size != self.decoder.config.hidden_size:
+            # encoder outputs might need to be projected to different dimension for decoder
+            self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
 
-        # tie encoder, decoder weights if config set accordingly
-        self.tie_weights()
-
-    def tie_weights(self):
-        # tie encoder & decoder if needed
-        if self.config.tie_encoder_decoder:
-            # tie encoder and decoder base model
-            decoder_base_model_prefix = self.decoder.base_model_prefix
-            self._tie_encoder_decoder_weights(
-                self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
+        if self.encoder.get_output_embeddings() is not None:
+            raise ValueError(
+                f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
     def get_encoder(self):
@@ -211,9 +216,6 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
-
-    def get_input_embeddings(self):
-        return self.encoder.get_input_embeddings()
 
     def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
@@ -225,6 +227,10 @@ class EncoderDecoderModel(PreTrainedModel):
     def from_pretrained(cls, *args, **kwargs):
         # At the moment fast initialization is not supported
         # for composite models
+        if kwargs.get("_fast_init", False):
+            logger.warning(
+                "Fast initialization is currently not supported for SpeechEncoderDecoderModel. Falling back to slow intialization..."
+            )
         kwargs["_fast_init"] = False
         return super().from_pretrained(*args, **kwargs)
 
@@ -272,7 +278,7 @@ class EncoderDecoderModel(PreTrainedModel):
                       a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args (remaining positional arguments, `optional`):
-                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
 
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -286,13 +292,13 @@ class EncoderDecoderModel(PreTrainedModel):
 
         Example::
 
-            >>> from transformers import EncoderDecoderModel
-            >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased')
+            >>> from transformers import SpeechEncoderDecoderModel
+            >>> # initialize a wav2vec2bert from a pretrained Wav2Vec2 and a pretrained BERT model. Note that the cross-attention layers will be randomly initialized
+            >>> model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained('facebook/wav2vec2-base-960h', 'bert-base-uncased')
             >>> # saving model after fine-tuning
-            >>> model.save_pretrained("./bert2bert")
+            >>> model.save_pretrained("./wav2vec2bert")
             >>> # load fine-tuned model
-            >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
+            >>> model = SpeechEncoderDecoderModel.from_pretrained("./wav2vec2bert")
 
         """
 
@@ -315,19 +321,18 @@ class EncoderDecoderModel(PreTrainedModel):
         # by the value of the flag `is_decoder` that we need to set correctly.
         encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
-            assert (
-                encoder_pretrained_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
-            from ..auto.modeling_auto import AutoModel
+            if encoder_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    f"No `encoder_model` is passed to kwargs: {kwargs_encoder}. In this case make sure that `encoder_pretrained_model_name_or_path` defined"
+                )
 
             if "config" not in kwargs_encoder:
-                from ..auto.configuration_auto import AutoConfig
-
                 encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
 
                     logger.info(
-                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model from a decoder model. Cross-attention and casual mask are disabled."
+                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
+                        "from a decoder model. Cross-attention and casual mask are disabled."
                     )
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
@@ -338,18 +343,18 @@ class EncoderDecoderModel(PreTrainedModel):
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
-            assert (
-                decoder_pretrained_model_name_or_path is not None
-            ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
-            from ..auto.modeling_auto import AutoModelForCausalLM
+            if decoder_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+                )
 
             if "config" not in kwargs_decoder:
-                from ..auto.configuration_auto import AutoConfig
-
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model."
+                        "Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
+                        "and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                     )
                     decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True
@@ -358,26 +363,32 @@ class EncoderDecoderModel(PreTrainedModel):
 
             if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
                 logger.warning(
-                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder."
+                    f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
+                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config`"
+                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+        config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+
+        # make sure input & output embeddings is not tied
+        config.tie_word_embeddings = False
         return cls(encoder=encoder, decoder=decoder, config=config)
 
-    @add_start_docstrings_to_model_forward(ENCODER_DECODER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
+        input_values=None,
+        input_features=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
         past_key_values=None,
-        inputs_embeds=None,
         decoder_inputs_embeds=None,
         labels=None,
         use_cache=None,
@@ -391,26 +402,28 @@ class EncoderDecoderModel(PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import EncoderDecoderModel, BertTokenizer
+            >>> from transformers import SpeechEncoderDecoderModel, Speech2Text2Processor
             >>> import torch
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
+            >>> processor = Speech2Text2Processor.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
+            >>> model = SpeechEncoderDecoderModel.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
 
-            >>> # forward
-            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+            >>> # process dataset
+            >>> def map_to_array(batch):
+            >>>     speech, _ = sf.read(batch["file"])
+            >>>     batch["speech"] = speech
+            >>>     return batch
 
-            >>> # training
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
-            >>> loss, logits = outputs.loss, outputs.logits
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
 
-            >>> # save and load from pretrained
-            >>> model.save_pretrained("bert2bert")
-            >>> model = EncoderDecoderModel.from_pretrained("bert2bert")
+            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
+            >>> outputs = model(input_values=input_values, decoder_input_ids=decoder_input_ids)
 
             >>> # generation
-            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
+            >>> generated = model.generate(input_values)
+            >>> translation = processor.batch_decode(generated)
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -422,10 +435,18 @@ class EncoderDecoderModel(PreTrainedModel):
         }
 
         if encoder_outputs is None:
+            if input_values is not None and input_features is not None:
+                raise ValueError("You cannot specify both input_values and input_features at the same time")
+            elif input_values is not None:
+                inputs = input_values
+            elif input_features is not None:
+                inputs = input_features
+            else:
+                raise ValueError("You have to specify either input_values or input_features")
+
             encoder_outputs = self.encoder(
-                input_ids=input_ids,
+                inputs,
                 attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -434,14 +455,25 @@ class EncoderDecoderModel(PreTrainedModel):
 
         encoder_hidden_states = encoder_outputs[0]
 
+        # project encoder_hidden_states
+        if self.encoder.config.hidden_size != self.decoder.config.hidden_size:
+            encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
+
+        # compute correct encoder attention mask
+        if attention_mask is not None:
+            encoder_attention_mask = self.encoder._get_feature_vector_attention_mask(
+                encoder_hidden_states.shape[1], attention_mask
+            )
+        else:
+            encoder_attention_mask = None
+
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
@@ -454,13 +486,12 @@ class EncoderDecoderModel(PreTrainedModel):
             return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
-            loss=decoder_outputs.loss,
             logits=decoder_outputs.logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_last_hidden_state=encoder_hidden_states,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
@@ -482,8 +513,8 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
-            "Resizing the embedding layers via the EncoderDecoderModel directly is not supported."
-            "Please use the respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or model.decoder.resize_token_embeddings(...))"
+            "Resizing the embedding layers via the SpeechEncoderDecoderModel directly is not supported."
+            "Please use the respective methods of the wrapped decoder object (model.decoder.resize_token_embeddings(...))"
         )
 
     def _reorder_cache(self, past, beam_idx):
