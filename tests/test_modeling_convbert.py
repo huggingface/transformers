@@ -422,7 +422,7 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
 
-            # BertForMultipleChoice behaves incorrectly in JIT environments.
+            # ConvBertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == ConvBertForMultipleChoice:
                 return
 
@@ -435,7 +435,7 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
             )
 
             with tempfile.TemporaryDirectory() as tmp:
-                torch.jit.save(traced_model, os.path.join(tmp, "bert.pt"))
+                torch.jit.save(traced_model, os.path.join(tmp, "traced_model.pt"))
                 loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
