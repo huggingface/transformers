@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
-from ..models.auto.feature_extraction_auto import AutoFeatureExtractor
 from ..utils import logging
 from .base import Pipeline
 
@@ -141,7 +140,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         processed = self.ensure_tensor_on_device(**processed)
 
         name = self.model.__class__.__name__
-        if name.endswith("ForConditionalGeneration") or name.endswith("DecoderModel"):
+        if name.endswith("ForConditionalGeneration") or name.endswith("EncoderDecoderModel"):
             encoder = self.model.get_encoder()
             encoder_outputs = encoder(**processed)
             tokens = self.model.generate(
