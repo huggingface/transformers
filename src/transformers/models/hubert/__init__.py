@@ -21,6 +21,7 @@ from ...file_utils import _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
+    ".wav2vec2.feature_extraction_wav2vec2": ["Wav2Vec2FeatureExtractor"],
     "configuration_hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
 }
 
@@ -43,6 +44,7 @@ if is_tf_available():
     ]
 
 if TYPE_CHECKING:
+    from ..wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
     from .configuration_hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
 
     if is_torch_available():
