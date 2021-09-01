@@ -29,6 +29,8 @@ from ...file_utils import (
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
 from ...modeling_tf_utils import TFPreTrainedModel, input_processing
 from ...utils import logging
+from ..auto.configuration_auto import AutoConfig
+from ..auto.modeling_tf_auto import TFAutoModel, TFAutoModelForCausalLM
 from .configuration_encoder_decoder import EncoderDecoderConfig
 
 
@@ -175,13 +177,9 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         super().__init__(config)
 
         if encoder is None:
-            from ..auto.modeling_tf_auto import TFAutoModel
-
             encoder = TFAutoModel.from_config(config.encoder, name="encoder")
 
         if decoder is None:
-            from ..auto.modeling_tf_auto import TFAutoModelForCausalLM
-
             decoder = TFAutoModelForCausalLM.from_config(config.decoder, name="decoder")
 
         # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
@@ -327,11 +325,11 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
             if encoder_pretrained_model_name_or_path is None:
-                raise ValueError("If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined")
-            from ..auto.modeling_tf_auto import TFAutoModel
+                raise ValueError(
+                    "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+                )
 
             if "config" not in kwargs_encoder:
-                from ..auto.configuration_auto import AutoConfig
 
                 encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
@@ -351,11 +349,11 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
             if decoder_pretrained_model_name_or_path is None:
-                raise ValueError("If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined")
-            from ..auto.modeling_tf_auto import TFAutoModelForCausalLM
+                raise ValueError(
+                    "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+                )
 
             if "config" not in kwargs_decoder:
-                from ..auto.configuration_auto import AutoConfig
 
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
