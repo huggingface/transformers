@@ -241,11 +241,15 @@ class Speech2TextModelTester:
             decoder.save_pretrained(tmpdirname)
             decoder = Speech2TextDecoder.from_pretrained(tmpdirname).to(torch_device)
 
+        encoder_attention_mask = encoder._get_feature_vector_attention_mask(
+            encoder_last_hidden_state.shape[1], inputs_dict["attention_mask"]
+        )
+
         last_hidden_state_2 = decoder(
             input_ids=inputs_dict["decoder_input_ids"],
             attention_mask=inputs_dict["decoder_attention_mask"],
             encoder_hidden_states=encoder_last_hidden_state,
-            encoder_attention_mask=inputs_dict["attention_mask"],
+            encoder_attention_mask=encoder_attention_mask,
         )[0]
 
         self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
@@ -288,6 +292,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
+    # not implemented currently
     def test_inputs_embeds(self):
         pass
 
@@ -352,7 +357,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             else:
                 seq_length = self.model_tester.seq_length
 
-            subsampled_seq_length = model._get_subsampled_output_lengths(seq_length)
+            subsampled_seq_length = model._get_feat_extract_output_lengths(seq_length)
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -402,8 +407,8 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             model.to(torch_device)
             model.eval()
 
-            subsampled_encoder_seq_length = model._get_subsampled_output_lengths(encoder_seq_length)
-            subsampled_encoder_key_length = model._get_subsampled_output_lengths(encoder_key_length)
+            subsampled_encoder_seq_length = model._get_feat_extract_output_lengths(encoder_seq_length)
+            subsampled_encoder_key_length = model._get_feat_extract_output_lengths(encoder_key_length)
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
