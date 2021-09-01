@@ -78,7 +78,7 @@ class Speech2TextConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         max_source_positions (:obj:`int`, `optional`, defaults to 6000):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        max_target_positions: (:obj:`int`, `optional`, defaults to 1024):
+        max_target_positions (:obj:`int`, `optional`, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         num_conv_layers (:obj:`int`, `optional`, defaults to 2):
@@ -95,7 +95,7 @@ class Speech2TextConfig(PretrainedConfig):
         input_channels (:obj:`int`, `optional`, defaults to 1):
             An integer specifying number of input channels of the input feature vector.
 
-        Example::
+    Example::
 
         >>> from transformers import Speech2TextModel, Speech2TextConfig
 

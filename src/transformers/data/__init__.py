@@ -16,6 +16,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .data_collator import (
+    DataCollatorForLanguageModeling,
+    DataCollatorForPermutationLanguageModeling,
+    DataCollatorForSeq2Seq,
+    DataCollatorForSOP,
+    DataCollatorForTokenClassification,
+    DataCollatorForWholeWordMask,
+    DataCollatorWithPadding,
+    default_data_collator,
+)
 from .metrics import glue_compute_metrics, xnli_compute_metrics
 from .processors import (
     DataProcessor,
