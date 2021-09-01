@@ -14,11 +14,11 @@
 # limitations under the License.
 """ LayoutLM model configuration """
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
+from typing import Any, List, Mapping, Optional
 
-from transformers import PreTrainedTokenizer, TensorType
+from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
 
-from ...onnx import OnnxConfig, compute_effective_axis_dimension
+from ...onnx import OnnxConfig, PatchingSpec, compute_effective_axis_dimension
 from ...utils import logging
 from ..bert.configuration_bert import BertConfig
 
@@ -132,8 +132,14 @@ class LayoutLMConfig(BertConfig):
 
 
 class LayoutLMOnnxConfig(OnnxConfig):
-
-    DEFAULT_MAX_2D_POSITION = 1000
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        task: str = "default",
+        patching_specs: List[PatchingSpec] = None,
+    ):
+        super().__init__(config, task=task, patching_specs=patching_specs)
+        self.max_2d_positions = config.max_2d_position_embeddings - 1
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -208,7 +214,7 @@ class LayoutLMOnnxConfig(OnnxConfig):
             [
                 [0] * 4,
                 *[box] * seq_length,
-                [LayoutLMOnnxConfig.DEFAULT_MAX_2D_POSITION] * 4,
+                [self.max_2d_positions] * 4,
             ]
         ).tile(batch_size, 1, 1)
         return input_dict
