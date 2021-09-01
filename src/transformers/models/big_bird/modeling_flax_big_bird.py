@@ -2029,6 +2029,7 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
             if token_type_ids is None:
                 token_type_ids = (~logits_mask).astype("i4")
             logits_mask = jnp.expand_dims(logits_mask, axis=2)
+            logits_mask = jax.ops.index_update(logits_mask, jax.ops.index[:, 0], False)
 
         # init input tensors if not passed
         if token_type_ids is None:
