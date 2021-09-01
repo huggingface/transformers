@@ -307,6 +307,9 @@ def load_tf_weights_in_albert(*args, **kwargs):
     requires_backends(load_tf_weights_in_albert, ["torch"])
 
 
+MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
+
+
 MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
@@ -350,6 +353,15 @@ MODEL_WITH_LM_HEAD_MAPPING = None
 
 
 class AutoModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class AutoModelForAudioClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

@@ -27,6 +27,7 @@ from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, Aut
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
+from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
     ArgumentHandler,
@@ -86,6 +87,7 @@ if is_torch_available():
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         AutoModel,
+        AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForImageClassification,
         AutoModelForMaskedLM,
@@ -108,6 +110,12 @@ TASK_ALIASES = {
     "ner": "token-classification",
 }
 SUPPORTED_TASKS = {
+    "audio-classification": {
+        "impl": AudioClassificationPipeline,
+        "tf": (),
+        "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
+        "default": {"model": {"pt": "superb/wav2vec2-base-superb-ks"}},
+    },
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),

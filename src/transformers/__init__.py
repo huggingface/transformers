@@ -277,6 +277,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
     "pipelines": [
+        "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "Conversation",
         "ConversationalPipeline",
@@ -527,6 +528,7 @@ if is_torch_available():
     )
     _import_structure["models.auto"].extend(
         [
+            "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
@@ -542,6 +544,7 @@ if is_torch_available():
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
+            "AutoModelForAudioClassification",
             "AutoModelForCausalLM",
             "AutoModelForImageClassification",
             "AutoModelForMaskedLM",
@@ -2040,6 +2043,7 @@ if TYPE_CHECKING:
 
     # Pipelines
     from .pipelines import (
+        AudioClassificationPipeline,
         AutomaticSpeechRecognitionPipeline,
         Conversation,
         ConversationalPipeline,
@@ -2248,6 +2252,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_albert,
         )
         from .models.auto import (
+            MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
@@ -2263,6 +2268,7 @@ if TYPE_CHECKING:
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
+            AutoModelForAudioClassification,
             AutoModelForCausalLM,
             AutoModelForImageClassification,
             AutoModelForMaskedLM,
