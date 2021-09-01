@@ -148,6 +148,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
         self.vocab_file = vocab_file
+        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp
@@ -192,6 +193,12 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

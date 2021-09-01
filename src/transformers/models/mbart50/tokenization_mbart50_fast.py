@@ -145,6 +145,7 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
+        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
         self.lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
@@ -258,6 +259,12 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
         return inputs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
