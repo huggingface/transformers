@@ -115,6 +115,9 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     codevector_perplexity: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    contrastive_loss: Optional[torch.FloatTensor] = None
+    diversity_loss: Optional[torch.FloatTensor] = None
+    neg_is_pos: Optional[torch.FloatTensor] = None
 
 
 def _compute_mask_indices(
@@ -1309,7 +1312,6 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
             target = ((1 - mask_time_indices.long()) * -100).transpose(0, 1).flatten()
             contrastive_loss = nn.functional.cross_entropy(preds.float(), target, reduction="sum")
-
             # 7. compute diversity loss: \mathbf{L}_d
             num_codevectors = self.config.num_codevectors_per_group * self.config.num_codevector_groups
             diversity_loss = ((num_codevectors - codevector_perplexity) / num_codevectors) * mask_time_indices.sum()
@@ -1329,6 +1331,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             codevector_perplexity=codevector_perplexity,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            contrastive_loss=contrastive_loss,
+            diversity_loss=diversity_loss,
+            neg_is_pos=neg_is_pos,
         )
 
 
