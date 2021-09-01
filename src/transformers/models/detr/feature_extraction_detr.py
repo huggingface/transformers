@@ -673,7 +673,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     # POSTPROCESSING METHODS
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
-    def post_process(self, outputs, target_sizes):
+    def post_process(self, outputs, target_sizes, threshold=0.9):
         """
         Converts the output of :class:`~transformers.DetrForObjectDetection` into the format expected by the COCO api.
         Only supports PyTorch.
@@ -685,10 +685,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
                 image size (before any data augmentation). For visualization, this should be the image size after data
                 augment, but before padding.
+            threshold (:obj:`float`, `optional`, defaults to 0.9):
+                The probability necessary to make a prediction.
 
         Returns:
-            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an
-            image in the batch as predicted by the model.
+            :obj:`List[List[Dict]]`: A list of a list (for an image in the batch) of dictionaries, each dictionary containing the score, label and box
+            for a detected object in the image as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
@@ -701,6 +703,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         prob = nn.functional.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
+        keep = scores > threshold
 
         # convert to [x0, y0, x1, y1] format
         boxes = center_to_corners_format(out_bbox)
@@ -709,7 +712,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
         boxes = boxes * scale_fct[:, None, :]
 
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+        results = []
+
+        for s, l, b, k in zip(scores, labels, boxes, keep):
+            keys = ["score", "label", "box"]
+            result = [dict(zip(keys, vals)) for vals in zip(s[k], l[k], b[k])]
+            results.append(result)
 
         return results
 
