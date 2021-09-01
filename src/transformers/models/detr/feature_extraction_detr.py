@@ -689,8 +689,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 The probability necessary to make a prediction.
 
         Returns:
-            :obj:`List[List[Dict]]`: A list of a list (for an image in the batch) of dictionaries, each dictionary containing the score, label and box
-            for a detected object in the image as predicted by the model.
+            :obj:`List[List[Dict]]`: A list of a list (for an image in the batch) of dictionaries, each dictionary
+            containing the score, label and box for a detected object in the image as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 

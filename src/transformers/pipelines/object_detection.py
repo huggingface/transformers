@@ -6,13 +6,7 @@ from torch.functional import Tensor
 import requests
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import (
-    add_end_docstrings,
-    is_timm_available,
-    is_torch_available,
-    is_vision_available,
-    requires_backends,
-)
+from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
@@ -104,7 +98,7 @@ class ObjectDetectionPipeline(Pipeline):
                 - A string containing a http link pointing to an image
                 - A string containing a local path to an image
                 - An image loaded in PIL directly
-                
+
                 The pipeline accepts either a single image or a batch of images, which must then be passed as a string.
                 Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
                 images.
