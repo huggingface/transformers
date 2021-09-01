@@ -79,7 +79,7 @@ jobs:
           path: reports
 
   run_tests_flax_gpu:
-    runs-on: [self-hosted, docker-gpu, single-gpu]
+    runs-on: [self-hosted, docker-gpu-test, single-gpu]
     container:
       image: tensorflow/tensorflow:2.4.1-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
