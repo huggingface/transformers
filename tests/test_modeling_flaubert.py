@@ -408,7 +408,7 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
 
-            # BertForMultipleChoice behaves incorrectly in JIT environments.
+            # FlauBertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == FlaubertForMultipleChoice:
                 return
 
