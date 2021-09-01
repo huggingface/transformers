@@ -230,8 +230,8 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
-                "Your tokenizer fast does not have the necessary information to save the vocabulary of the tokenizer  "
-                "slow."
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
             )
 
         if not os.path.isdir(save_directory):
