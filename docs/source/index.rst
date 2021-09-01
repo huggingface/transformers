@@ -176,8 +176,7 @@ Supported models
 25. :doc:`DPR <model_doc/dpr>` (from Facebook) released with the paper `Dense Passage Retrieval for Open-Domain
     Question Answering <https://arxiv.org/abs/2004.04906>`__ by Vladimir Karpukhin, Barlas Oğuz, Sewon Min, Patrick
     Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
-26. :doc:`EncoderDecoder <model_doc/encoderdecoder>` (from Google Research) released with the paper `Leve
-ing
+26. :doc:`EncoderDecoder <model_doc/encoderdecoder>` (from Google Research) released with the paper `Leveraging
     Pre-trained Checkpoints for Sequence Generation Tasks <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi
     Narayan, Aliaksei Severyn.
 27. :doc:`ELECTRA <model_doc/electra>` (from Google Research/Stanford University) released with the paper `ELECTRA:
