@@ -34,8 +34,9 @@ from .configuration_realm import RealmConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "realm-cc-news-pretrained"
+_BERT_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-bert"
+_EMBEDDER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-embedder"
+_RETRIEVER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-retriever"
 _CONFIG_FOR_DOC = "RealmConfig"
 _TOKENIZER_FOR_DOC = "RealmTokenizer"
 
@@ -405,7 +406,7 @@ class RealmEmbedder(RealmPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The retriever of REALM outputting relevance score representing the score of document candidates (before softmax)",
+    "The retriever of REALM outputting relevance score representing the score of document candidates (before softmax).",
     REALM_START_DOCSTRING,
 )
 class RealmRetriever(RealmPreTrainedModel):
@@ -532,7 +533,7 @@ class RealmRetriever(RealmPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The encoder of REALM outputting masked lm logits and marginal log-likelihood loss.",
+    "The encoder of REALM outputting masked language model logits and marginal log-likelihood loss.",
     REALM_START_DOCSTRING,
 )
 class RealmEncoder(RealmPreTrainedModel):
@@ -554,7 +555,9 @@ class RealmEncoder(RealmPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        REALM_INPUTS_DOCSTRING.format("batch_size, num_candidates, sequence_length")
+    )
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -573,7 +576,8 @@ class RealmEncoder(RealmPreTrainedModel):
     ):
         r"""
         relevance_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_candidates)`, `optional`):
-            Relevance score derived from RealmRetriever.
+            Relevance score derived from RealmRetriever, must be specified if you want to compute the masked language
+            modeling loss.
 
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
@@ -588,6 +592,24 @@ class RealmEncoder(RealmPreTrainedModel):
             - 0 for tokens that are **masked**.
 
         Returns:
+
+        Example:
+
+        >>> import torch
+        >>> from transformers import RealmTokenizer, RealmEncoder
+
+        >>> tokenizer = RealmTokenizer.from_pretrained('qqaatw/realm-cc-news-pretrained-bert')
+        >>> model = RealmEncoder.from_pretrained('qqaatw/realm-cc-news-pretrained-bert', num_candidates=2)
+
+        >>> # batch_size = 2, num_candidates = 2
+        >>> text = [
+        >>>     ["Hello world!", "Nice to meet you!"],
+        >>>     ["The cute cat.", "The adorable dog."]
+        >>> ]
+
+        >>> inputs = tokenizer.batch_encode_candidates(text, max_length=10)
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -619,7 +641,7 @@ class RealmEncoder(RealmPreTrainedModel):
         if labels is not None:
             if candidate_score is None:
                 raise ValueError(
-                    "You have to specify relevance_score when `labels` is specified in order to calculate loss."
+                    "You have to specify `relevance_score` when `labels` is specified in order to compute loss."
                 )
 
             if mlm_mask is None:

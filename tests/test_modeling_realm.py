@@ -239,7 +239,9 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         (
             RealmEmbedder,
             RealmEncoder,
-            RealmRetriever,
+            # RealmRetriever is excluded from common tests as it is a container model
+            # consisting of two RealmEmbedders & simple inner product calculation.
+            # RealmRetriever
         )
         if is_torch_available()
         else ()
