@@ -43,7 +43,7 @@ if is_torch_available():
     from transformers.models.fnet.modeling_fnet import (
         FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         FNetBasicFourierTransform,
-        _scipy_available,
+        is_scipy_available,
     )
 
 
@@ -140,7 +140,7 @@ class FNetModelTester:
         fftn_output = transform(hidden_states)
 
         config.use_tpu_fourier_optimizations = True
-        if _scipy_available:
+        if is_scipy_available():
             transform = FNetBasicFourierTransform(config)
             dft_output = transform(hidden_states)
 
@@ -148,7 +148,7 @@ class FNetModelTester:
         transform = FNetBasicFourierTransform(config)
         fft_output = transform(hidden_states)
 
-        if _scipy_available:
+        if is_scipy_available():
             self.parent.assertTrue(torch.allclose(fftn_output[0][0], dft_output[0][0], atol=1e-4))
             self.parent.assertTrue(torch.allclose(fft_output[0][0], dft_output[0][0], atol=1e-4))
         self.parent.assertTrue(torch.allclose(fftn_output[0][0], fft_output[0][0], atol=1e-4))
