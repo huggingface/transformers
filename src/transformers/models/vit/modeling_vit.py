@@ -103,7 +103,7 @@ class ViTEmbeddings(nn.Module):
             mode="bicubic",
             align_corners=False,
         )
-        assert int(h0) == patch_pos_embed.shape[-1] and int(w0) == patch_pos_embed.shape[-2]
+        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
