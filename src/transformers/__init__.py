@@ -360,7 +360,7 @@ if is_tokenizers_available():
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
-    _import_structure["models.blenderbot_small"].append("BlenderbotTokenizerSmallFast")
+    _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
