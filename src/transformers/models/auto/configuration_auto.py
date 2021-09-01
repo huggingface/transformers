@@ -27,6 +27,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
         ("fnet", "FNetConfig"),
+        ("gptj", "GPTJConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
         ("beit", "BeitConfig"),
         ("rembert", "RemBertConfig"),
@@ -98,6 +99,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("gptj", "GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("layoutlmv2", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -161,6 +163,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("fnet", "FNet"),
+        ("gptj", "GPT-J"),
         ("beit", "BeiT"),
         ("rembert", "RemBERT"),
         ("layoutlmv2", "LayoutLMv2"),

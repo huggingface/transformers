@@ -51,6 +51,7 @@ from . import (
     funnel,
     gpt2,
     gpt_neo,
+    gptj,
     herbert,
     hubert,
     ibert,

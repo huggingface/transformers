@@ -12,62 +12,6 @@ class PyTorchBenchmarkArguments:
         requires_backends(self, ["torch"])
 
 
-class DataCollator:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DataCollatorForLanguageModeling:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class DataCollatorForPermutationLanguageModeling:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class DataCollatorForSeq2Seq:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DataCollatorForSOP:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DataCollatorForTokenClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class DataCollatorForWholeWordMask:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DataCollatorWithPadding:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-def default_data_collator(*args, **kwargs):
-    requires_backends(default_data_collator, ["torch"])
-
-
 class GlueDataset:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -363,6 +307,9 @@ def load_tf_weights_in_albert(*args, **kwargs):
     requires_backends(load_tf_weights_in_albert, ["torch"])
 
 
+MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
+
+
 MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
@@ -406,6 +353,15 @@ MODEL_WITH_LM_HEAD_MAPPING = None
 
 
 class AutoModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class AutoModelForAudioClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -1862,6 +1818,15 @@ class GPT2ForSequenceClassification:
         requires_backends(cls, ["torch"])
 
 
+class GPT2ForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class GPT2LMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -1934,6 +1899,45 @@ class GPTNeoPreTrainedModel:
 
 def load_tf_weights_in_gpt_neo(*args, **kwargs):
     requires_backends(load_tf_weights_in_gpt_neo, ["torch"])
+
+
+GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GPTJForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class GPTJForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class GPTJModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class GPTJPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None

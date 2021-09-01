@@ -105,9 +105,8 @@ Supported models
 3. :doc:`BARThez <model_doc/barthez>` (from École polytechnique) released with the paper `BARThez: a Skilled Pretrained
    French Sequence-to-Sequence Model <https://arxiv.org/abs/2010.12321>`__ by Moussa Kamal Eddine, Antoine J.-P.
    Tixier, Michalis Vazirgiannis.
-4. `BEiT <https://huggingface.co/transformers/master/model_doc/beit.html>`__ (from Microsoft) released with the paper
-   `BEiT: BERT Pre-Training of Image Transformers <https://arxiv.org/abs/2106.08254>`__ by Hangbo Bao, Li Dong, Furu
-   Wei.
+4. :doc:`BEiT <model_doc/beit>` (from Microsoft) released with the paper `BEiT: BERT Pre-Training of Image Transformers
+   <https://arxiv.org/abs/2106.08254>`__ by Hangbo Bao, Li Dong, Furu Wei.
 5. :doc:`BERT <model_doc/bert>` (from Google) released with the paper `BERT: Pre-training of Deep Bidirectional
    Transformers for Language Understanding <https://arxiv.org/abs/1810.04805>`__ by Jacob Devlin, Ming-Wei Chang,
    Kenton Lee and Kristina Toutanova.
@@ -195,6 +194,8 @@ Supported models
 31. :doc:`GPT-2 <model_doc/gpt2>` (from OpenAI) released with the paper `Language Models are Unsupervised Multitask
     Learners <https://blog.openai.com/better-language-models/>`__ by Alec Radford*, Jeffrey Wu*, Rewon Child, David
     Luan, Dario Amodei** and Ilya Sutskever**.
+31. :doc:`GPT-J <model_doc/gptj>` (from EleutherAI) released in the repository `kingoflolz/mesh-transformer-jax
+    <https://github.com/kingoflolz/mesh-transformer-jax/>`__ by Ben Wang and Aran Komatsuzaki.
 32. :doc:`GPT Neo <model_doc/gpt_neo>` (from EleutherAI) released in the repository `EleutherAI/gpt-neo
     <https://github.com/EleutherAI/gpt-neo>`__ by Sid Black, Stella Biderman, Leo Gao, Phil Wang and Connor Leahy.
 33. :doc:`Hubert <model_doc/hubert>` (from Facebook) released with the paper `HuBERT: Self-Supervised Speech
@@ -270,6 +271,9 @@ Supported models
 57. `Splinter <https://huggingface.co/transformers/master/model_doc/splinter.html>`__ (from Tel Aviv University),
     released together with the paper `Few-Shot Question Answering by Pretraining Span Selection
     <https://arxiv.org/abs/2101.00438>`__ by Ori Ram, Yuval Kirstain, Jonathan Berant, Amir Globerson, Omer Levy.
+57. :doc:`Splinter <model_doc/splinter>` (from Tel Aviv University), released together with the paper `Few-Shot
+    Question Answering by Pretraining Span Selection <https://arxiv.org/abs/2101.00438>`__ by Ori Ram, Yuval Kirstain,
+    Jonathan Berant, Amir Globerson, Omer Levy.
 58. :doc:`SqueezeBert <model_doc/squeezebert>` released with the paper `SqueezeBERT: What can computer vision teach NLP
     about efficient neural networks? <https://arxiv.org/abs/2006.11316>`__ by Forrest N. Iandola, Albert E. Shaw, Ravi
     Krishna, and Kurt W. Keutzer.
@@ -324,7 +328,7 @@ Flax), PyTorch, and/or TensorFlow.
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |            Model            | Tokenizer slow | Tokenizer fast | PyTorch support | TensorFlow support | Flax Support |
 +=============================+================+================+=================+====================+==============+
-|           ALBERT            |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
+|           ALBERT            |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |            BART             |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
@@ -354,7 +358,7 @@ Flax), PyTorch, and/or TensorFlow.
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |           DeBERTa           |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
-|         DeBERTa-v2          |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
+|         DeBERTa-v2          |       ✅       |       ❌       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |            DeiT             |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
@@ -377,6 +381,8 @@ Flax), PyTorch, and/or TensorFlow.
 |     Funnel Transformer      |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |           GPT Neo           |       ❌       |       ❌       |       ✅        |         ❌         |      ✅      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|            GPT-J            |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |           Hubert            |       ❌       |       ❌       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
@@ -581,6 +587,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/mt5
     model_doc/gpt
     model_doc/gpt2
+    model_doc/gptj
     model_doc/gpt_neo
     model_doc/hubert
     model_doc/pegasus

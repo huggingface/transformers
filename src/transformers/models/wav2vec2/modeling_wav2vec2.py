@@ -1616,7 +1616,6 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        # End copy
 
         if self.config.use_weighted_layer_sum:
             hidden_states = outputs[2]
