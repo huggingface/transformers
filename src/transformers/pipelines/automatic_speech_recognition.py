@@ -142,9 +142,10 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         name = self.model.__class__.__name__
         if name.endswith("ForConditionalGeneration") or name.endswith("EncoderDecoderModel"):
             encoder = self.model.get_encoder()
-            encoder_outputs = encoder(**processed)
+            # we need to pass `processed.get("attention_mask")` here since audio encoder
+            # attention mask  length is different from expected text decoder `encoder_attention_mask` length
             tokens = self.model.generate(
-                encoder_outputs=encoder_outputs, attention_mask=processed.get("attention_mask")
+                encoder_outputs=encoder(**processed), attention_mask=processed.get("attention_mask")
             )
             tokens = tokens.squeeze(0)
         elif name.endswith("ForCTC"):

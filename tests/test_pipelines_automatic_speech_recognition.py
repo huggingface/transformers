@@ -14,6 +14,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import AutoFeatureExtractor, AutoTokenizer, Speech2TextForConditionalGeneration, Wav2Vec2ForCTC
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.testing_utils import is_pipeline_test, require_datasets, require_torch, require_torchaudio, slow
@@ -43,6 +45,16 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         waveform = np.zeros((34000,))
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "C'est ce que j'ai fait à ce moment-là."})
+
+    @require_torch
+    def test_torch_small_no_tokenizer_files(self):
+        # test that model without tokenizer file cannot be loaded
+        with pytest.raises(ValueError):
+            pipeline(
+                task="automatic-speech-recognition",
+                model="hf-internal-testing/tiny-random-wav2vec2",
+                framework="pt",
+            )
 
     @require_datasets
     @require_torch
