@@ -452,7 +452,7 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
             self.assertEqual(summary, [EXPECTED_SUMMARY_STUDENTS])
 
 
-@require_torch
+@require_tf
 class TFRoBertaEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
         return TFEncoderDecoderModel.from_encoder_decoder_pretrained("roberta-base", "roberta-base")
@@ -508,7 +508,7 @@ class TFRoBertaEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase)
         }
 
 
-@require_torch
+@require_tf
 class TFRembertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
         return TFEncoderDecoderModel.from_encoder_decoder_pretrained("google/rembert", "google/rembert")
