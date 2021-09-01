@@ -175,9 +175,9 @@ class TrainerCallback:
             The optimizer used for the training steps.
         lr_scheduler (:obj:`torch.optim.lr_scheduler.LambdaLR`):
             The scheduler used for setting the learning rate.
-        train_dataloader (:obj:`torch.utils.data.dataloader.DataLoader`, `optional`):
+        train_dataloader (:obj:`torch.utils.data.DataLoader`, `optional`):
             The current dataloader used for training.
-        eval_dataloader (:obj:`torch.utils.data.dataloader.DataLoader`, `optional`):
+        eval_dataloader (:obj:`torch.utils.data.DataLoader`, `optional`):
             The current dataloader used for training.
         metrics (:obj:`Dict[str, float]`):
             The metrics computed by the last evaluation phase.
@@ -239,6 +239,12 @@ class TrainerCallback:
         """
         Event called at the beginning of a training step. If using gradient accumulation, one training step might take
         several inputs.
+        """
+        pass
+
+    def on_substep_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called at the end of an substep during gradient accumulation.
         """
         pass
 
@@ -354,6 +360,9 @@ class CallbackHandler(TrainerCallback):
         control.should_evaluate = False
         control.should_save = False
         return self.call_event("on_step_begin", args, state, control)
+
+    def on_substep_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
+        return self.call_event("on_substep_end", args, state, control)
 
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_step_end", args, state, control)

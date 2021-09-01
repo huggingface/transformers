@@ -47,7 +47,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.10.0.dev0")
+check_min_version("4.11.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
 
@@ -122,6 +122,13 @@ class DataTrainingArguments:
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
+    )
+    max_seq_length: int = field(
+        default=None,
+        metadata={
+            "help": "The maximum total input sequence length after tokenization. If set, sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
     )
     pad_to_max_length: bool = field(
         default=False,
@@ -358,6 +365,7 @@ def main():
             examples[text_column_name],
             padding=padding,
             truncation=True,
+            max_length=data_args.max_seq_length,
             # We use this argument because the texts in our dataset are lists of words (with a label for each word).
             is_split_into_words=True,
         )

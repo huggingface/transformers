@@ -1,4 +1,4 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,7 +64,6 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
-
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
 if stale_egg_info.exists():
@@ -91,7 +90,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.4.3",
+    "deepspeed>=0.5.1",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -101,7 +100,7 @@ _deps = [
     "flax>=0.3.4",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "huggingface-hub==0.0.12",
+    "huggingface-hub>=0.0.12",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -131,7 +130,7 @@ _deps = [
     "regex!=2019.12.17",
     "requests",
     "rouge-score",
-    "sacrebleu>=1.4.12",
+    "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "sagemaker>=2.31.0",
     "scikit-learn",
@@ -140,8 +139,9 @@ _deps = [
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
-    "sphinx==3.2.1",
+    "sphinx==3.5.4",
     "sphinxext-opengraph==0.4.1",
+    "sphinx-intl",
     "starlette",
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
@@ -252,7 +252,11 @@ extras["ray"] = deps_list("ray[tune]")
 extras["integrations"] = extras["optuna"] + extras["ray"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["speech"] = deps_list("soundfile", "torchaudio")
+extras["audio"] = deps_list("soundfile")
+extras["speech"] = deps_list("torchaudio") + extras["audio"]  # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
+extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
+extras["tf-speech"] = extras["audio"]
+extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["codecarbon"] = deps_list("codecarbon")
@@ -274,7 +278,7 @@ extras["all"] = (
     + extras["flax"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
-    + extras["speech"]
+    + extras["torch-speech"]
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
@@ -289,6 +293,7 @@ extras["docs_specific"] = deps_list(
     "sphinx-rtd-theme",
     "sphinx-copybutton",
     "sphinxext-opengraph",
+    "sphinx-intl",
 )
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
@@ -337,7 +342,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.10.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.11.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
@@ -348,6 +353,8 @@ setup(
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
+    package_data={"transformers": ["py.typed"]},
+    zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
     python_requires=">=3.6.0",

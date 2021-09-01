@@ -137,6 +137,14 @@ except importlib_metadata.PackageNotFoundError:
     _datasets_available = False
 
 
+_detectron2_available = importlib.util.find_spec("detectron2") is not None
+try:
+    _detectron2_version = importlib_metadata.version("detectron2")
+    logger.debug(f"Successfully imported detectron2 version {_detectron2_version}")
+except importlib_metadata.PackageNotFoundError:
+    _detectron2_available = False
+
+
 _faiss_available = importlib.util.find_spec("faiss") is not None
 try:
     _faiss_version = importlib_metadata.version("faiss")
@@ -274,8 +282,9 @@ PRESET_MIRROR_DICT = {
     "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
 }
 
-# This is the version of torch required to run torch.fx features.
+# This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
+TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
 
@@ -297,7 +306,7 @@ def is_torch_cuda_available():
         return False
 
 
-_torch_fx_available = False
+_torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
     _torch_fx_available = (torch_version.major, torch_version.minor) == (
@@ -305,9 +314,15 @@ if _torch_available:
         TORCH_FX_REQUIRED_VERSION.minor,
     )
 
+    _torch_onnx_dict_inputs_support_available = torch_version >= TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION
+
 
 def is_torch_fx_available():
     return _torch_fx_available
+
+
+def is_torch_onnx_dict_inputs_support_available():
+    return _torch_onnx_dict_inputs_support_available
 
 
 def is_tf_available():
@@ -343,6 +358,10 @@ def is_torch_tpu_available():
 
 def is_datasets_available():
     return _datasets_available
+
+
+def is_detectron2_available():
+    return _detectron2_available
 
 
 def is_rjieba_available():
@@ -391,6 +410,10 @@ def is_tokenizers_available():
 
 def is_vision_available():
     return importlib.util.find_spec("PIL") is not None
+
+
+def is_pytesseract_available():
+    return importlib.util.find_spec("pytesseract") is not None
 
 
 def is_in_notebook():
@@ -570,6 +593,14 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 
 
 # docstyle-ignore
+DETECTRON2_IMPORT_ERROR = """
+{0} requires the detectron2 library but it was not found in your environment. Checkout the instructions on the
+installation page: https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
+that match your environment.
+"""
+
+
+# docstyle-ignore
 FLAX_IMPORT_ERROR = """
 {0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your environment.
@@ -616,13 +647,22 @@ VISION_IMPORT_ERROR = """
 """
 
 
+# docstyle-ignore
+PYTESSERACT_IMPORT_ERROR = """
+{0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
+`pip install pytesseract`
+"""
+
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
+        ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
@@ -1056,7 +1096,7 @@ FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
 
-        >>> outputs = model(**inputs, labels=labels)
+        >>> outputs = model(**inputs)
         >>> logits = outputs.logits
 """
 
@@ -1114,10 +1154,11 @@ FLAX_CAUSAL_LM_SAMPLE = r"""
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
-        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
+        >>> outputs = model(**inputs)
 
-        >>> logits = outputs.logits
+        >>> # retrieve logts for next token
+        >>> next_token_logits = outputs.logits[:, -1]
 """
 
 FLAX_SAMPLE_DOCSTRINGS = {
@@ -1646,6 +1687,7 @@ def get_list_of_files(
     path_or_repo: Union[str, os.PathLike],
     revision: Optional[str] = None,
     use_auth_token: Optional[Union[bool, str]] = None,
+    local_files_only: bool = False,
 ) -> List[str]:
     """
     Gets the list of files inside :obj:`path_or_repo`.
@@ -1660,6 +1702,8 @@ def get_list_of_files(
         use_auth_token (:obj:`str` or `bool`, `optional`):
             The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
             generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to only rely on local files and not to attempt to download any files.
 
     Returns:
         :obj:`List[str]`: The list of files available in :obj:`path_or_repo`.
@@ -1673,7 +1717,7 @@ def get_list_of_files(
         return list_of_files
 
     # Can't grab the files if we are on offline mode.
-    if is_offline_mode():
+    if is_offline_mode() or local_files_only:
         return []
 
     # Otherwise we grab the token and use the model_info method.
@@ -1842,11 +1886,15 @@ class ModelOutput(OrderedDict):
         other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
 
         if other_fields_are_none and not is_tensor(first_field):
-            try:
-                iterator = iter(first_field)
+            if isinstance(first_field, dict):
+                iterator = first_field.items()
                 first_field_iterator = True
-            except TypeError:
-                first_field_iterator = False
+            else:
+                try:
+                    iterator = iter(first_field)
+                    first_field_iterator = True
+                except TypeError:
+                    first_field_iterator = False
 
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
@@ -1949,7 +1997,7 @@ class _LazyModule(ModuleType):
 
     # Very heavily inspired by optuna.integration._IntegrationModule
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
-    def __init__(self, name, module_file, import_structure, extra_objects=None):
+    def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
         super().__init__(name)
         self._modules = set(import_structure.keys())
         self._class_to_module = {}
@@ -1959,6 +2007,7 @@ class _LazyModule(ModuleType):
         # Needed for autocompletion in an IDE
         self.__all__ = list(import_structure.keys()) + sum(import_structure.values(), [])
         self.__file__ = module_file
+        self.__spec__ = module_spec
         self.__path__ = [os.path.dirname(module_file)]
         self._objects = {} if extra_objects is None else extra_objects
         self._name = name
