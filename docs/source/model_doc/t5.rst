@@ -201,9 +201,9 @@ language modeling head on top of the decoder.
 
 Additional training tips:
 
-- T5 models need a slightly higher learning rate than the default one set in the :obj:`Trainer`. Typically, 1e-4 and
-  3e-4 work well for almost all problems (classification, summarization, translation, question answering, question
-  generation).
+- T5 models need a slightly higher learning rate than the default one set in the :obj:`Trainer` when using the AdamW
+  optimizer. Typically, 1e-4 and 3e-4 work well for most problems (classification, summarization, translation, question
+  answering, question generation). Note that T5 was pre-trained using the AdaFactor optimizer.
 
 - According to `this forum post <https://discuss.huggingface.co/t/t5-finetuning-tips/684>`__, task prefixes matter when
   (1) doing multi-task training (2) your task is similar or related to one of the supervised tasks used in T5's
