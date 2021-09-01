@@ -1702,6 +1702,8 @@ if is_flax_available():
             "FlaxAutoModelForTokenClassification",
         ]
     )
+
+    # Flax models structure
     _import_structure["models.bart"].extend(
         [
             "FlaxBartForConditionalGeneration",
