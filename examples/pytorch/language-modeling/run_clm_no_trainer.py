@@ -173,6 +173,9 @@ def parse_args():
     parser.add_argument(
         "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
     )
+    parser.add_argument(
+        "--no_keep_linebreaks", action="store_true", help="Do not keep line breaks when using TXT files."
+    )
 
     args = parser.parse_args()
 
@@ -245,6 +248,7 @@ def main():
             )
     else:
         data_files = {}
+        dataset_args = {}
         if args.train_file is not None:
             data_files["train"] = args.train_file
         if args.validation_file is not None:
@@ -252,18 +256,21 @@ def main():
         extension = args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        raw_datasets = load_dataset(extension, data_files=data_files)
+            dataset_args["keep_linebreaks"] = not args.no_keep_linebreaks
+        raw_datasets = load_dataset(extension, data_files=data_files, **dataset_args)
         # If no validation data is there, validation_split_percentage will be used to divide the dataset.
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 extension,
                 data_files=data_files,
                 split=f"train[:{args.validation_split_percentage}%]",
+                **dataset_args,
             )
             raw_datasets["train"] = load_dataset(
                 extension,
                 data_files=data_files,
                 split=f"train[{args.validation_split_percentage}%:]",
+                **dataset_args,
             )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at

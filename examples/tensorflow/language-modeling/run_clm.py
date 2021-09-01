@@ -43,7 +43,7 @@ import transformers
 from transformers import (
     CONFIG_MAPPING,
     CONFIG_NAME,
-    MODEL_FOR_MASKED_LM_MAPPING,
+    MODEL_FOR_CAUSAL_LM_MAPPING,
     TF2_WEIGHTS_NAME,
     AutoConfig,
     AutoTokenizer,
@@ -58,7 +58,7 @@ from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 # endregion
 
@@ -185,6 +185,9 @@ class DataTrainingArguments:
             "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
             "value if set."
         },
+    )
+    keep_linebreaks: bool = field(
+        default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
     )
 
     def __post_init__(self):
@@ -318,6 +321,7 @@ def main():
             )
     else:
         data_files = {}
+        dataset_args = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
@@ -325,7 +329,8 @@ def main():
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        raw_datasets = load_dataset(extension, data_files=data_files)
+            dataset_args["keep_linebreaks"] = data_args.keep_linebreaks
+        raw_datasets = load_dataset(extension, data_files=data_files, **dataset_args)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
     # endregion

@@ -66,6 +66,23 @@ Tips:
   language modeling). With this approach, the smaller ViT-B/16 model achieves 79.9% accuracy on ImageNet, a significant
   improvement of 2% to training from scratch, but still 4% behind supervised pre-training.
 
+Following the original Vision Transformer, some follow-up works have been made:
+
+- DeiT (Data-efficient Image Transformers) by Facebook AI. DeiT models are distilled vision transformers. Refer to
+  :doc:`DeiT's documentation page <deit>`. The authors of DeiT also released more efficiently trained ViT models, which
+  you can directly plug into :class:`~transformers.ViTModel` or :class:`~transformers.ViTForImageClassification`. There
+  are 4 variants available (in 3 different sizes): `facebook/deit-tiny-patch16-224`, `facebook/deit-small-patch16-224`,
+  `facebook/deit-base-patch16-224` and `facebook/deit-base-patch16-384`. Note that one should use
+  :class:`~transformers.DeiTFeatureExtractor` in order to prepare images for the model.
+
+- BEiT (BERT pre-training of Image Transformers) by Microsoft Research. BEiT models outperform supervised pre-trained
+  vision transformers using a self-supervised method inspired by BERT (masked image modeling) and based on a VQ-VAE.
+  Refer to :doc:`BEiT's documentation page <beit>`.
+
+- DINO (a method for self-supervised training of Vision Transformers) by Facebook AI. Vision Transformers trained using
+  the DINO method show very interesting properties not seen with convolutional models. They are capable of segmenting
+  objects, without having ever been trained to do so. DINO checkpoints can be found on the `hub
+  <https://huggingface.co/models?other=dino>`__.
 
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code (written in JAX) can be
 found `here <https://github.com/google-research/vision_transformer>`__.

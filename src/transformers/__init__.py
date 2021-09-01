@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.10.0.dev0"
+__version__ = "4.11.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -80,6 +80,17 @@ _import_structure = {
         "xnli_output_modes",
         "xnli_processors",
         "xnli_tasks_num_labels",
+    ],
+    "data.data_collator": [
+        "DataCollator",
+        "DataCollatorForLanguageModeling",
+        "DataCollatorForPermutationLanguageModeling",
+        "DataCollatorForSeq2Seq",
+        "DataCollatorForSOP",
+        "DataCollatorForTokenClassification",
+        "DataCollatorForWholeWordMask",
+        "DataCollatorWithPadding",
+        "default_data_collator",
     ],
     "feature_extraction_sequence_utils": ["BatchFeature", "SequenceFeatureExtractor"],
     "file_utils": [
@@ -202,10 +213,18 @@ _import_structure = {
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
+    "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
+    "models.layoutlmv2": [
+        "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LayoutLMv2Config",
+        "LayoutLMv2FeatureExtractor",
+        "LayoutLMv2Processor",
+        "LayoutLMv2Tokenizer",
+    ],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -265,6 +284,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
     "pipelines": [
+        "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "Conversation",
         "ConversationalPipeline",
@@ -363,6 +383,7 @@ if is_tokenizers_available():
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
+    _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
@@ -403,7 +424,6 @@ else:
 # Speech-specific objects
 if is_speech_available():
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
-
 else:
     from .utils import dummy_speech_objects
 
@@ -428,6 +448,8 @@ if is_vision_available():
     _import_structure["models.clip"].append("CLIPProcessor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
+    _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
+    _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
@@ -458,17 +480,6 @@ else:
 if is_torch_available():
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
-    _import_structure["data.data_collator"] = [
-        "DataCollator",
-        "DataCollatorForLanguageModeling",
-        "DataCollatorForPermutationLanguageModeling",
-        "DataCollatorForSeq2Seq",
-        "DataCollatorForSOP",
-        "DataCollatorForTokenClassification",
-        "DataCollatorForWholeWordMask",
-        "DataCollatorWithPadding",
-        "default_data_collator",
-    ]
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
@@ -524,6 +535,7 @@ if is_torch_available():
     )
     _import_structure["models.auto"].extend(
         [
+            "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
@@ -539,6 +551,7 @@ if is_torch_available():
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
+            "AutoModelForAudioClassification",
             "AutoModelForCausalLM",
             "AutoModelForImageClassification",
             "AutoModelForMaskedLM",
@@ -805,6 +818,7 @@ if is_torch_available():
             "GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPT2DoubleHeadsModel",
             "GPT2ForSequenceClassification",
+            "GPT2ForTokenClassification",
             "GPT2LMHeadModel",
             "GPT2Model",
             "GPT2PreTrainedModel",
@@ -821,10 +835,20 @@ if is_torch_available():
             "load_tf_weights_in_gpt_neo",
         ]
     )
+    _import_structure["models.gptj"].extend(
+        [
+            "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTJForCausalLM",
+            "GPTJForSequenceClassification",
+            "GPTJModel",
+            "GPTJPreTrainedModel",
+        ]
+    )
     _import_structure["models.hubert"].extend(
         [
             "HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "HubertForCTC",
+            "HubertForSequenceClassification",
             "HubertModel",
             "HubertPreTrainedModel",
         ]
@@ -849,6 +873,16 @@ if is_torch_available():
             "LayoutLMForTokenClassification",
             "LayoutLMModel",
             "LayoutLMPreTrainedModel",
+        ]
+    )
+    _import_structure["models.layoutlmv2"].extend(
+        [
+            "LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LayoutLMv2ForQuestionAnswering",
+            "LayoutLMv2ForSequenceClassification",
+            "LayoutLMv2ForTokenClassification",
+            "LayoutLMv2Model",
+            "LayoutLMv2PreTrainedModel",
         ]
     )
     _import_structure["models.led"].extend(
@@ -1137,6 +1171,7 @@ if is_torch_available():
             "Wav2Vec2ForCTC",
             "Wav2Vec2ForMaskedLM",
             "Wav2Vec2ForPreTraining",
+            "Wav2Vec2ForSequenceClassification",
             "Wav2Vec2Model",
             "Wav2Vec2PreTrainedModel",
         ]
@@ -1326,6 +1361,17 @@ if is_tf_available():
             "TFDebertaForTokenClassification",
             "TFDebertaModel",
             "TFDebertaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deberta_v2"].extend(
+        [
+            "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFDebertaV2ForMaskedLM",
+            "TFDebertaV2ForQuestionAnswering",
+            "TFDebertaV2ForSequenceClassification",
+            "TFDebertaV2ForTokenClassification",
+            "TFDebertaV2Model",
+            "TFDebertaV2PreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -1630,6 +1676,18 @@ if is_flax_available():
         "FlaxTopPLogitsWarper",
     ]
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
+    _import_structure["models.albert"].extend(
+        [
+            "FlaxAlbertForMaskedLM",
+            "FlaxAlbertForMultipleChoice",
+            "FlaxAlbertForPreTraining",
+            "FlaxAlbertForQuestionAnswering",
+            "FlaxAlbertForSequenceClassification",
+            "FlaxAlbertForTokenClassification",
+            "FlaxAlbertModel",
+            "FlaxAlbertPreTrainedModel",
+        ]
+    )
     _import_structure["models.auto"].extend(
         [
             "FLAX_MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -1656,6 +1714,8 @@ if is_flax_available():
             "FlaxAutoModelForTokenClassification",
         ]
     )
+
+    # Flax models structure
     _import_structure["models.bart"].extend(
         [
             "FlaxBartForConditionalGeneration",
@@ -1698,6 +1758,17 @@ if is_flax_available():
             "FlaxCLIPTextPreTrainedModel",
             "FlaxCLIPVisionModel",
             "FlaxCLIPVisionPreTrainedModel",
+        ]
+    )
+    _import_structure["models.distilbert"].extend(
+        [
+            "FlaxDistilBertForMaskedLM",
+            "FlaxDistilBertForMultipleChoice",
+            "FlaxDistilBertForQuestionAnswering",
+            "FlaxDistilBertForSequenceClassification",
+            "FlaxDistilBertForTokenClassification",
+            "FlaxDistilBertModel",
+            "FlaxDistilBertPreTrainedModel",
         ]
     )
     _import_structure["models.electra"].extend(
@@ -1782,6 +1853,17 @@ if TYPE_CHECKING:
         xnli_output_modes,
         xnli_processors,
         xnli_tasks_num_labels,
+    )
+    from .data.data_collator import (
+        DataCollator,
+        DataCollatorForLanguageModeling,
+        DataCollatorForPermutationLanguageModeling,
+        DataCollatorForSeq2Seq,
+        DataCollatorForSOP,
+        DataCollatorForTokenClassification,
+        DataCollatorForWholeWordMask,
+        DataCollatorWithPadding,
+        default_data_collator,
     )
 
     # Feature Extractor
@@ -1908,10 +1990,18 @@ if TYPE_CHECKING:
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
+    from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
+    from .models.layoutlmv2 import (
+        LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LayoutLMv2Config,
+        LayoutLMv2FeatureExtractor,
+        LayoutLMv2Processor,
+        LayoutLMv2Tokenizer,
+    )
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
@@ -1969,6 +2059,7 @@ if TYPE_CHECKING:
 
     # Pipelines
     from .pipelines import (
+        AudioClassificationPipeline,
         AutomaticSpeechRecognitionPipeline,
         Conversation,
         ConversationalPipeline,
@@ -2059,6 +2150,7 @@ if TYPE_CHECKING:
         from .models.gpt2 import GPT2TokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
+        from .models.layoutlmv2 import LayoutLMv2TokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
@@ -2091,7 +2183,6 @@ if TYPE_CHECKING:
 
     if is_speech_available():
         from .models.speech_to_text import Speech2TextFeatureExtractor
-
     else:
         from .utils.dummy_speech_objects import *
 
@@ -2106,6 +2197,7 @@ if TYPE_CHECKING:
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
+        from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
@@ -2126,17 +2218,6 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
-        from .data.data_collator import (
-            DataCollator,
-            DataCollatorForLanguageModeling,
-            DataCollatorForPermutationLanguageModeling,
-            DataCollatorForSeq2Seq,
-            DataCollatorForSOP,
-            DataCollatorForTokenClassification,
-            DataCollatorForWholeWordMask,
-            DataCollatorWithPadding,
-            default_data_collator,
-        )
         from .data.datasets import (
             GlueDataset,
             GlueDataTrainingArguments,
@@ -2187,6 +2268,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_albert,
         )
         from .models.auto import (
+            MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
@@ -2202,6 +2284,7 @@ if TYPE_CHECKING:
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
+            AutoModelForAudioClassification,
             AutoModelForCausalLM,
             AutoModelForImageClassification,
             AutoModelForMaskedLM,
@@ -2424,6 +2507,7 @@ if TYPE_CHECKING:
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPT2DoubleHeadsModel,
             GPT2ForSequenceClassification,
+            GPT2ForTokenClassification,
             GPT2LMHeadModel,
             GPT2Model,
             GPT2PreTrainedModel,
@@ -2437,9 +2521,17 @@ if TYPE_CHECKING:
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
         )
+        from .models.gptj import (
+            GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTJForCausalLM,
+            GPTJForSequenceClassification,
+            GPTJModel,
+            GPTJPreTrainedModel,
+        )
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             HubertForCTC,
+            HubertForSequenceClassification,
             HubertModel,
             HubertPreTrainedModel,
         )
@@ -2460,6 +2552,14 @@ if TYPE_CHECKING:
             LayoutLMForTokenClassification,
             LayoutLMModel,
             LayoutLMPreTrainedModel,
+        )
+        from .models.layoutlmv2 import (
+            LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LayoutLMv2ForQuestionAnswering,
+            LayoutLMv2ForSequenceClassification,
+            LayoutLMv2ForTokenClassification,
+            LayoutLMv2Model,
+            LayoutLMv2PreTrainedModel,
         )
         from .models.led import (
             LED_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2699,6 +2799,7 @@ if TYPE_CHECKING:
             Wav2Vec2ForCTC,
             Wav2Vec2ForMaskedLM,
             Wav2Vec2ForPreTraining,
+            Wav2Vec2ForSequenceClassification,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
         )
@@ -2878,6 +2979,15 @@ if TYPE_CHECKING:
             TFDebertaForTokenClassification,
             TFDebertaModel,
             TFDebertaPreTrainedModel,
+        )
+        from .models.deberta_v2 import (
+            TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDebertaV2ForMaskedLM,
+            TFDebertaV2ForQuestionAnswering,
+            TFDebertaV2ForSequenceClassification,
+            TFDebertaV2ForTokenClassification,
+            TFDebertaV2Model,
+            TFDebertaV2PreTrainedModel,
         )
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3120,6 +3230,16 @@ if TYPE_CHECKING:
             FlaxTopPLogitsWarper,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
+        from .models.albert import (
+            FlaxAlbertForMaskedLM,
+            FlaxAlbertForMultipleChoice,
+            FlaxAlbertForPreTraining,
+            FlaxAlbertForQuestionAnswering,
+            FlaxAlbertForSequenceClassification,
+            FlaxAlbertForTokenClassification,
+            FlaxAlbertModel,
+            FlaxAlbertPreTrainedModel,
+        )
         from .models.auto import (
             FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
@@ -3180,6 +3300,15 @@ if TYPE_CHECKING:
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
         )
+        from .models.distilbert import (
+            FlaxDistilBertForMaskedLM,
+            FlaxDistilBertForMultipleChoice,
+            FlaxDistilBertForQuestionAnswering,
+            FlaxDistilBertForSequenceClassification,
+            FlaxDistilBertForTokenClassification,
+            FlaxDistilBertModel,
+            FlaxDistilBertPreTrainedModel,
+        )
         from .models.electra import (
             FlaxElectraForMaskedLM,
             FlaxElectraForMultipleChoice,
@@ -3228,7 +3357,11 @@ else:
     import sys
 
     sys.modules[__name__] = _LazyModule(
-        __name__, globals()["__file__"], _import_structure, extra_objects={"__version__": __version__}
+        __name__,
+        globals()["__file__"],
+        _import_structure,
+        module_spec=__spec__,
+        extra_objects={"__version__": __version__},
     )
 
 
