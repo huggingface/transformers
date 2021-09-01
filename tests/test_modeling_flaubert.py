@@ -421,7 +421,7 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
             )
 
             with tempfile.TemporaryDirectory() as tmp:
-                torch.jit.save(traced_model, os.path.join(tmp, "bert.pt"))
+                torch.jit.save(traced_model, os.path.join(tmp, "traced_model.pt"))
                 loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
