@@ -1234,7 +1234,7 @@ num_heads)`.
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class T5Model(T5PreTrainedModel):
@@ -1344,8 +1344,9 @@ class T5Model(T5PreTrainedModel):
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
+            >>> # forward pass
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
             >>> last_hidden_states = outputs.last_hidden_state
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1537,14 +1538,18 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
 
+            >>> # training
             >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
-            >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids
+            >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='pt').input_ids
             >>> outputs = model(input_ids=input_ids, labels=labels)
             >>> loss = outputs.loss
             >>> logits = outputs.logits
 
-            >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="pt").input_ids  # Batch size 1
+            >>> # inference
+            >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> outputs = model.generate(input_ids)
+            >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+            >>> # studies have shown that owning a dog is good for you.
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
