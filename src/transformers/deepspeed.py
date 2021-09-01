@@ -50,7 +50,7 @@ class HfDeepSpeedConfig:
     values: ``"auto"``. Without this special logic the DeepSpeed configuration is not modified in any way.
 
     Args:
-        config_file_or_dict (:obj:`Union[str, Dict]`) - path to DeepSpeed config file or dict.
+        config_file_or_dict (:obj:`Union[str, Dict]`): path to DeepSpeed config file or dict.
 
     """
 
