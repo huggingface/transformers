@@ -83,7 +83,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                         self.assertEqual(set(annotation_result.keys()), {"score", "label", "box"})
                         self.assertEqual(type(annotation_result["score"]), float)
                         self.assertEqual(type(annotation_result["label"]), str)
-                        self.assertEqual(type(annotation_result["box"]), list)
+                        self.assertEqual(type(annotation_result["box"]), dict)
 
                 if isinstance(valid_input["images"], list):
                     self.assertEqual(len(valid_input["images"]), len(output))
@@ -110,7 +110,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                         self.assertEqual(set(annotation_result.keys()), {"score", "label", "box"})
                         self.assertEqual(type(annotation_result["score"]), float)
                         self.assertEqual(type(annotation_result["label"]), str)
-                        self.assertEqual(type(annotation_result["box"]), list)
+                        self.assertEqual(type(annotation_result["box"]), dict)
 
                 if isinstance(valid_input["images"], list):
                     # When images are batched, pipeline output is a list of lists of dictionaries
@@ -137,7 +137,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                         self.assertEqual(set(annotation_result.keys()), {"score", "label", "box"})
                         self.assertEqual(type(annotation_result["score"]), float)
                         self.assertEqual(type(annotation_result["label"]), str)
-                        self.assertEqual(type(annotation_result["box"]), list)
+                        self.assertEqual(type(annotation_result["box"]), dict)
 
                 if isinstance(valid_input["images"], list):
                     self.assertEqual(len(valid_input["images"]), len(output))
@@ -164,7 +164,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                         self.assertEqual(set(annotation_result.keys()), {"score", "label", "box"})
                         self.assertEqual(type(annotation_result["score"]), float)
                         self.assertEqual(type(annotation_result["label"]), str)
-                        self.assertEqual(type(annotation_result["box"]), list)
+                        self.assertEqual(type(annotation_result["box"]), dict)
 
                 if isinstance(valid_input["images"], list):
                     # When images are batched, pipeline output is a list of lists of dictionaries
@@ -195,12 +195,13 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         for annotation_result in output:
             self.assertTrue(isinstance(annotation_result, dict))
             self.assertIn("box", annotation_result)
-            self.assertEqual(type(annotation_result["box"]), list)
-            self.assertEqual(len(annotation_result["box"]), 4)
-            for vertex in annotation_result["box"]:
-                self.assertEqual(set(vertex.keys()), {"x", "y"})
-                self.assertEqual(type(vertex["x"]), int)
-                self.assertEqual(type(vertex["y"]), int)
+            self.assertEqual(type(annotation_result["box"]), dict)
+            box = annotation_result["box"]
+            self.assertEqual(set(box.keys()), {"xmin", "ymin", "xmax", "ymax"})
+            self.assertEqual(type(box["xmin"]), int)
+            self.assertEqual(type(box["ymin"]), int)
+            self.assertEqual(type(box["xmax"]), int)
+            self.assertEqual(type(box["ymax"]), int)
 
     @slow
     def test_low_threshold(self):

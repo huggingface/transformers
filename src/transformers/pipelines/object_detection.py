@@ -137,7 +137,7 @@ class ObjectDetectionPipeline(Pipeline):
 
                 annotation["scores"] = scores.tolist()
                 annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
-                annotation["boxes"] = [self._get_clockwise_vertices(box) for box in boxes]
+                annotation["boxes"] = [self._get_bounding_box(box) for box in boxes]
 
                 # {"scores": [...], ...} --> [{"score":x, ...}, ...]
                 keys = ["score", "label", "box"]
@@ -150,21 +150,21 @@ class ObjectDetectionPipeline(Pipeline):
 
         return annotations
 
-    def _get_clockwise_vertices(self, box: Tensor) -> List[Dict[str, int]]:
+    def _get_bounding_box(self, box: Tensor) -> Dict[str, int]:
         """
-        Generates 4 corners of a box in a clockwise order (starting from top-left corner).
+        Turns list [xmin, xmax, ymin, ymax] into dict { "xmin": xmin, ... }
 
         Args:
             box (tensor): Tensor containing the coordinates in corners format.
 
         Returns:
-            vertices (List[Dict[str, int]]): 4 corners of a box
+            bbox (Dict[str, int]): Dict containing the coordinates in corners format.
         """
         xmin, ymin, xmax, ymax = box.int().tolist()
-        vertices = [
-            {"x": xmin, "y": ymin},
-            {"x": xmax, "y": ymin},
-            {"x": xmax, "y": ymax},
-            {"x": xmin, "y": ymax},
-        ]
-        return vertices
+        bbox = {
+            "xmin": xmin,
+            "ymin": ymin,
+            "xmax": xmax,
+            "ymax": ymax,
+        }
+        return bbox
