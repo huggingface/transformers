@@ -1039,10 +1039,9 @@ class LukeTokenizer(RobertaTokenizer):
         Prepares a sequence of input id, entity id and entity span, or a pair of sequences of inputs ids, entity ids,
         entity spans so that it can be used by the model. It adds special tokens, truncates sequences if overflowing
         while taking into account the special tokens and manages a moving window (with user defined stride) for
-        overflowing tokens. Except for the `longest_first` strategy, all truncation strategies function the same for
-        sequences of input ids or a pair of sequences of input ids. The `longest_first` strategy produces an error
-        instead of returning overflowing_tokens for a pair of sequences of input ids
-
+        overflowing tokens. Please Note, for `pair_ids` different than `None` and `truncation_strategy = longest_first`
+        or `True`, it is not possible to return overflowing tokens. Such a combination of arguments will raise an
+        error.
 
         Args:
             ids (:obj:`List[int]`):
