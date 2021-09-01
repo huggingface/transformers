@@ -516,6 +516,7 @@ if is_torch_available():
         "StoppingCriteriaList",
     ]
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
+    _import_structure["modeling_outputs"] = []
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
@@ -1249,6 +1250,7 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
+    _import_structure["modeling_tf_outputs"] = []
     _import_structure["modeling_tf_utils"] = [
         "TFPreTrainedModel",
         "TFSequenceSummary",
@@ -1675,6 +1677,8 @@ if is_flax_available():
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
     ]
+    _import_structure["generation_flax_utils"] = []
+    _import_structure["modeling_flax_outputs"] = []
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.albert"].extend(
         [
