@@ -184,6 +184,7 @@ class EncoderDecoderMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 enc_dec_model.save_pretrained(tmpdirname)
                 enc_dec_model = SpeechEncoderDecoderModel.from_pretrained(tmpdirname)
+                enc_dec_model.to(torch_device)
 
                 after_outputs = enc_dec_model(
                     input_values=input_values,
