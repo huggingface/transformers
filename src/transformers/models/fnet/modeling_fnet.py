@@ -25,14 +25,11 @@ from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
+from ...file_utils import is_scipy_available
 
-try:
+
+if is_scipy_available():
     from scipy import linalg
-
-    _scipy_available = True
-except ImportError:
-    _scipy_available = False
-
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -172,7 +169,7 @@ class FNetBasicFourierTransform(nn.Module):
         if not config.use_tpu_fourier_optimizations:
             self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
         elif config.max_position_embeddings <= 4096:
-            if _scipy_available:
+            if is_scipy_available():
                 self.register_buffer(
                     "dft_mat_hidden", torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64)
                 )
@@ -184,7 +181,7 @@ class FNetBasicFourierTransform(nn.Module):
                 )
             else:
                 logging.warning(
-                    "SciPy is need for DFT matrix calculation and is not found. Using TPU optimized fast fourier transform instead."
+                    "SciPy is needed for DFT matrix calculation and is not found. Using TPU optimized fast fourier transform instead."
                 )
                 self.fourier_transform = fftn
         else:
