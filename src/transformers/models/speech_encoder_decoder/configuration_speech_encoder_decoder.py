@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -98,7 +98,7 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
         Returns:
             :class:`SpeechEncoderDecoderConfig`: An instance of a configuration object
         """
-        logger.info("Set `config.is_decoder=True` and `config.add_cross_attention=True` for decoder_config")
+        logger.info("Setting `config.is_decoder=True` and `config.add_cross_attention=True` for decoder_config")
         decoder_config.is_decoder = True
         decoder_config.add_cross_attention = True
 
