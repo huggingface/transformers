@@ -1059,11 +1059,11 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
             >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
 
-            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=512, return_tensors='jax')
+            >>> inputs = tokenizer(text, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1118,19 +1118,20 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         Example::
 
             >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
+            >>> import jax.numpy as jnp
 
-            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=512, return_tensors='jax')
+            >>> inputs = tokenizer(text, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
 
             >>> decoder_start_token_id = model.config.decoder_start_token_id
             >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
             >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> last_decoder_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1329,8 +1330,9 @@ FLAX_T5_MODEL_DOCSTRING = """
 
         >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="np").input_ids
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
+        >>> # forward pass
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
 """
 
@@ -1469,19 +1471,20 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
         Example::
 
             >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
+            >>> import jax.numpy as jnp
 
-            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> text = "summarize: My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=512, return_tensors='jax')
+            >>> inputs = tokenizer(text, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
 
             >>> decoder_start_token_id = model.config.decoder_start_token_id
             >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
             >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> last_decoder_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1617,15 +1620,15 @@ FLAX_T5_CONDITIONAL_GENERATION_DOCSTRING = """
 
         >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
 
-        >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
         >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
         >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=512, return_tensors='jax')
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors='np')
 
         >>> # Generate Summary
         >>> summary_ids = model.generate(inputs['input_ids']).sequences
-        >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=False))
 """
 
 

@@ -28,6 +28,23 @@ multilingual variant of T5 that was pre-trained on a new Common Crawl-based data
 the design and modified training of mT5 and demonstrate its state-of-the-art performance on many multilingual
 benchmarks. All of the code and model checkpoints*
 
+Note: mT5 was only pre-trained on `mC4 <https://huggingface.co/datasets/mc4>`__ excluding any supervised training.
+Therefore, this model has to be fine-tuned before it is useable on a downstream task, unlike the original T5 model.
+Since mT5 was pre-trained unsupervisedly, there's no real advantage to using a task prefix during single-task
+fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
+
+Google has released the following variants:
+
+- `google/mt5-small <https://huggingface.co/google/mt5-small>`__
+
+- `google/mt5-base <https://huggingface.co/google/mt5-base>`__
+
+- `google/mt5-large <https://huggingface.co/google/mt5-large>`__
+
+- `google/mt5-xl <https://huggingface.co/google/mt5-xl>`__
+
+- `google/mt5-xxl <https://huggingface.co/google/mt5-xxl>`__.
+
 This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__. The original code can be
 found `here <https://github.com/google-research/multilingual-t5>`__.
 
