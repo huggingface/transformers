@@ -156,7 +156,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
-    load_weight_prefix = "tf_enocder_decoder_model_1"
+    load_weight_prefix = "tf_encoder_decoder_model_1"
 
     def __init__(
         self,
@@ -164,13 +164,13 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         encoder: Optional[TFPreTrainedModel] = None,
         decoder: Optional[TFPreTrainedModel] = None,
     ):
-        assert config is not None or (
-            encoder is not None and decoder is not None
-        ), "Either a configuration or an Encoder and a decoder has to be provided"
+        if config is None and (encoder is None or decoder is None):
+            raise ValueError("Either a configuration or an encoder and a decoder has to be provided")
         if config is None:
             config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
-            assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
+            if not isinstance(config, self.config_class):
+                raise ValueError(f"config: {config} has to be of type {self.config_class}")
         # initialize with config
         super().__init__(config)
 
@@ -185,8 +185,10 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             decoder = TFAutoModelForCausalLM.from_config(config.decoder, name="decoder")
 
         # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
-        assert encoder.name == "encoder"
-        assert decoder.name == "decoder"
+        if encoder.name != "encoder":
+            raise ValueError("encoder model must be created with the name `encoder`.")
+        if decoder.name != "decoder":
+            raise ValueError("decoder model must be created with the name `decoder`.")
 
         self.encoder = encoder
         self.decoder = decoder
@@ -324,9 +326,8 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         # by the value of the flag `is_decoder` that we need to set correctly.
         encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
-            assert (
-                encoder_pretrained_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+            if encoder_pretrained_model_name_or_path is None:
+                raise ValueError("If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined")
             from ..auto.modeling_tf_auto import TFAutoModel
 
             if "config" not in kwargs_encoder:
@@ -349,9 +350,8 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
-            assert (
-                decoder_pretrained_model_name_or_path is not None
-            ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+            if decoder_pretrained_model_name_or_path is None:
+                raise ValueError("If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined")
             from ..auto.modeling_tf_auto import TFAutoModelForCausalLM
 
             if "config" not in kwargs_decoder:
@@ -377,8 +377,10 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
-        assert encoder.name == "encoder"
-        assert decoder.name == "decoder"
+        if encoder.name != "encoder":
+            raise ValueError("encoder model must be created with the name `encoder`.")
+        if decoder.name != "decoder":
+            raise ValueError("decoder model must be created with the name `decoder`.")
 
         # instantiate config with corresponding kwargs
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
