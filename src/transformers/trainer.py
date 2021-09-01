@@ -768,7 +768,7 @@ class Trainer:
         and/or :obj:`create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        self.create_scheduler(num_training_steps)
+        self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer)
 
     def create_optimizer(self):
         """
@@ -813,9 +813,12 @@ class Trainer:
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
 
-    def create_scheduler(self, num_training_steps: int):
+        return self.optimizer
+
+    def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
         """
-        Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
+        Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
+        passed as an argument.
 
         Args:
             num_training_steps (int): The number of training steps to do.
@@ -823,10 +826,11 @@ class Trainer:
         if self.lr_scheduler is None:
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
-                self.optimizer,
+                optimizer=self.optimizer if optimizer is None else optimizer,
                 num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
             )
+        return self.lr_scheduler
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
@@ -1411,7 +1415,9 @@ class Trainer:
         load_result = self.model.load_state_dict(state_dict, strict=False)
 
         if len(load_result.missing_keys) != 0:
-            if set(load_result.missing_keys) == set(self.model._keys_to_ignore_on_save):
+            if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
+                self.model._keys_to_ignore_on_save
+            ):
                 self.model.tie_weights()
             else:
                 logger.warn(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
@@ -1721,22 +1727,30 @@ class Trainer:
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
+    def _prepare_input(self, data: Union[torch.Tensor, Any]) -> Union[torch.Tensor, Any]:
+        """
+        Prepares one :obj:`data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
+        """
+        if isinstance(data, dict):
+            return type(data)(**{k: self._prepare_input(v) for k, v in data.items()})
+        elif isinstance(data, (tuple, list)):
+            return type(data)(self._prepare_input(v) for v in data)
+        elif isinstance(data, torch.Tensor):
+            kwargs = dict(device=self.args.device)
+            if self.deepspeed and data.dtype != torch.int64:
+                # NLP models inputs are int64 and those get adjusted to the right dtype of the
+                # embedding. Other models such as wav2vec2's inputs are already float and thus
+                # may need special handling to match the dtypes of the model
+                kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
+            return data.to(**kwargs)
+        return data
+
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
         """
-        for k, v in inputs.items():
-            if isinstance(v, torch.Tensor):
-                kwargs = dict(device=self.args.device)
-                if self.deepspeed and inputs[k].dtype != torch.int64:
-                    # NLP models inputs are int64 and those get adjusted to the right dtype of the
-                    # embedding. Other models such as wav2vec2's inputs are already float and thus
-                    # may need special handling to match the dtypes of the model
-                    kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
-
-                inputs[k] = v.to(**kwargs)
-
+        inputs = self._prepare_input(inputs)
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
 
@@ -2201,6 +2215,9 @@ class Trainer:
             observed_batch_size = find_batch_size(inputs)
             if observed_batch_size is not None:
                 observed_num_examples += observed_batch_size
+                # For batch samplers, batch_size is not known by the dataloader in advance.
+                if batch_size is None:
+                    batch_size = observed_batch_size
 
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)

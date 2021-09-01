@@ -1038,14 +1038,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
                 Can be either:
 
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
                     - a string or path valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `model id` string of a pretrained
