@@ -14,8 +14,8 @@ Speech Encoder Decoder Models
 -----------------------------------------------------------------------------------------------------------------------
 
 The :class:`~transformers.SpeechEncoderDecoderModel` can be used to initialize a speech-sequence-to-text-sequence model
-with any pretrained speech autoencoding model as the encoder (*e.g.* :doc:`Wav2Vec2 <wav2vec2>`, :doc:`Hubert <hubert>`)
-and any pretrained autoregressive model as the decoder.
+with any pretrained speech autoencoding model as the encoder (*e.g.* :doc:`Wav2Vec2 <wav2vec2>`, :doc:`Hubert
+<hubert>`) and any pretrained autoregressive model as the decoder.
 
 The effectiveness of initializing speech-sequence-to-text-sequence models with pretrained checkpoints for speech
 recognition and speech translation has *e.g.* been shown in `Large-Scale Self- and Semi-Supervised Learning for Speech

@@ -98,9 +98,6 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         """
         super().__init__(*args, **kwargs)
 
-        if isinstance(feature_extractor, str):
-            feature_extractor = AutoFeatureExtractor.from_pretrained(feature_extractor)
-
         self.feature_extractor = feature_extractor
 
         if self.framework == "tf":
