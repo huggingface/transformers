@@ -385,7 +385,7 @@ class FlaxConvLayersCollection(nn.Module):
 
 
 class FlaxWav2Vec2FeatureExtractor(nn.Module):
-    """Construct the featurs from raw audio waveform"""
+    """Construct the features from raw audio waveform"""
 
     config: Wav2Vec2Config
     dtype: jnp.dtype = jnp.float32

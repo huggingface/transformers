@@ -137,6 +137,14 @@ except importlib_metadata.PackageNotFoundError:
     _datasets_available = False
 
 
+_detectron2_available = importlib.util.find_spec("detectron2") is not None
+try:
+    _detectron2_version = importlib_metadata.version("detectron2")
+    logger.debug(f"Successfully imported detectron2 version {_detectron2_version}")
+except importlib_metadata.PackageNotFoundError:
+    _detectron2_available = False
+
+
 _faiss_available = importlib.util.find_spec("faiss") is not None
 try:
     _faiss_version = importlib_metadata.version("faiss")
@@ -352,6 +360,10 @@ def is_datasets_available():
     return _datasets_available
 
 
+def is_detectron2_available():
+    return _detectron2_available
+
+
 def is_rjieba_available():
     return importlib.util.find_spec("rjieba") is not None
 
@@ -398,6 +410,10 @@ def is_tokenizers_available():
 
 def is_vision_available():
     return importlib.util.find_spec("PIL") is not None
+
+
+def is_pytesseract_available():
+    return importlib.util.find_spec("pytesseract") is not None
 
 
 def is_in_notebook():
@@ -577,6 +593,14 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 
 
 # docstyle-ignore
+DETECTRON2_IMPORT_ERROR = """
+{0} requires the detectron2 library but it was not found in your environment. Checkout the instructions on the
+installation page: https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
+that match your environment.
+"""
+
+
+# docstyle-ignore
 FLAX_IMPORT_ERROR = """
 {0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your environment.
@@ -623,13 +647,22 @@ VISION_IMPORT_ERROR = """
 """
 
 
+# docstyle-ignore
+PYTESSERACT_IMPORT_ERROR = """
+{0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
+`pip install pytesseract`
+"""
+
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
+        ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
@@ -1121,7 +1154,7 @@ FLAX_CAUSAL_LM_SAMPLE = r"""
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
         >>> outputs = model(**inputs)
 
         >>> # retrieve logts for next token
@@ -1964,7 +1997,7 @@ class _LazyModule(ModuleType):
 
     # Very heavily inspired by optuna.integration._IntegrationModule
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
-    def __init__(self, name, module_file, import_structure, extra_objects=None):
+    def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
         super().__init__(name)
         self._modules = set(import_structure.keys())
         self._class_to_module = {}
@@ -1974,6 +2007,7 @@ class _LazyModule(ModuleType):
         # Needed for autocompletion in an IDE
         self.__all__ = list(import_structure.keys()) + sum(import_structure.values(), [])
         self.__file__ = module_file
+        self.__spec__ = module_spec
         self.__path__ = [os.path.dirname(module_file)]
         self._objects = {} if extra_objects is None else extra_objects
         self._name = name
