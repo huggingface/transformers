@@ -239,7 +239,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         (
             RealmEmbedder,
             RealmEncoder,
-            # RealmRetriever, # needs override test_attention_outputs
+            RealmRetriever,
         )
         if is_torch_available()
         else ()

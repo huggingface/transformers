@@ -2809,6 +2809,37 @@ class RagTokenForGeneration:
         requires_backends(self, ["torch"])
 
 
+REALM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class RealmEmbedder:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RealmEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RealmPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class RealmRetriever:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_realm(*args, **kwargs):
+    requires_backends(load_tf_weights_in_realm, ["torch"])
+
+
 REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

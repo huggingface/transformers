@@ -71,6 +71,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
+    "RealmRetriever",  # Submodels have been tested.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "TFDPREncoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
@@ -114,6 +115,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
+    "RealmEmbedder",
+    "RealmEncoder",
+    "RealmRetriever",
     "TFDPRReader",
     "TFGPT2DoubleHeadsModel",
     "TFOpenAIGPTDoubleHeadsModel",

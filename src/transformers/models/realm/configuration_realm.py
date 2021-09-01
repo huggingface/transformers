@@ -30,20 +30,21 @@ REALM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class RealmConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of :class:`~transformers.RealmEmbedder`, :class:`~transformers.RealmRetriever`, and :class:`~transformers.RealmEncoder`.
-    It is used to instantiate an REALM model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the REALM `realm-cc-news-pretrained <https://huggingface.co/realm-cc-news-pretrained>`__ architecture.
+    This is the configuration class to store the configuration of :class:`~transformers.RealmEmbedder`,
+    :class:`~transformers.RealmRetriever`, and :class:`~transformers.RealmEncoder`. It is used to instantiate an REALM
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the REALM `realm-cc-news-pretrained
+    <https://huggingface.co/realm-cc-news-pretrained>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the REALM model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.RealmEmbedder`, :class:`~transformers.RealmRetriever`, or :class:`~transformers.RealmEncoder`.
+            :obj:`inputs_ids` passed when calling :class:`~transformers.RealmEmbedder`,
+            :class:`~transformers.RealmRetriever`, or :class:`~transformers.RealmEncoder`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         retriever_proj_size (:obj:`int`, `optional`, defaults to 128):
@@ -57,15 +58,15 @@ class RealmConfig(PretrainedConfig):
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_new"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.RealmEmbedder`,
             :class:`~transformers.RealmRetriever`, or :class:`~transformers.RealmEncoder`.

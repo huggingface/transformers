@@ -514,16 +514,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.realm"].extend(
-        [
-            "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "RealmEmbedder",
-            "RealmEncoder",
-            "RealmPreTrainedModel",
-            "RealmRetriever",
-            "load_tf_weights_in_realm",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1024,6 +1014,16 @@ if is_torch_available():
     )
     _import_structure["models.rag"].extend(
         ["RagModel", "RagPreTrainedModel", "RagSequenceForGeneration", "RagTokenForGeneration"]
+    )
+    _import_structure["models.realm"].extend(
+        [
+            "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RealmEmbedder",
+            "RealmEncoder",
+            "RealmPreTrainedModel",
+            "RealmRetriever",
+            "load_tf_weights_in_realm",
+        ]
     )
     _import_structure["models.reformer"].extend(
         [

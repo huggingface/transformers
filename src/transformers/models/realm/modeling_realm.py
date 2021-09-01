@@ -237,8 +237,8 @@ class RealmRetrieverProjection(nn.Module):
 
 class RealmPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = RealmConfig
@@ -277,14 +277,15 @@ class RealmPreTrainedModel(PreTrainedModel):
 
 
 REALM_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.RealmConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 REALM_INPUTS_DOCSTRING = r"""
@@ -292,9 +293,9 @@ REALM_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.RealmTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.RealmTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
@@ -313,8 +314,8 @@ REALM_INPUTS_DOCSTRING = r"""
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
@@ -448,9 +449,9 @@ class RealmRetriever(RealmPreTrainedModel):
         candidate_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_candidates, sequence_length)`):
             Indices of candidate input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.RealmTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.RealmTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         candidate_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_candidates, sequence_length)`, `optional`):
@@ -469,9 +470,9 @@ class RealmRetriever(RealmPreTrainedModel):
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         candidate_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_candidates, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`candidate_input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `candidate_input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            Optionally, instead of passing :obj:`candidate_input_ids` you can choose to directly pass an embedded
+            representation. This is useful if you want more control over how to convert `candidate_input_ids` indices
+            into associated vectors than the model's internal embedding lookup matrix.
 
         Returns:
         """
@@ -580,7 +581,8 @@ class RealmEncoder(RealmPreTrainedModel):
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
 
         mlm_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid calculating joint loss on certain positions. If not specified, the loss will not be masked. Mask values selected in ``[0, 1]``:
+            Mask to avoid calculating joint loss on certain positions. If not specified, the loss will not be masked.
+            Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
