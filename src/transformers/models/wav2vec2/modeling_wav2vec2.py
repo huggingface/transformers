@@ -308,7 +308,7 @@ class Wav2Vec2SamePadLayer(nn.Module):
 
 
 class Wav2Vec2FeatureExtractor(nn.Module):
-    """Construct the featurs from raw audio waveform"""
+    """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
         super().__init__()
@@ -1616,7 +1616,6 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        # End copy
 
         if self.config.use_weighted_layer_sum:
             hidden_states = outputs[2]

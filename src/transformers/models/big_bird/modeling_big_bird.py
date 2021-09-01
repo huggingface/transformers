@@ -1138,7 +1138,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             from_block_size: int. size of block in from sequence.
             to_block_size: int. size of block in to sequence.
             num_heads: int. total number of heads.
-            plan_from_length: list. plan from length where num_random_blocks are choosen from.
+            plan_from_length: list. plan from length where num_random_blocks are chosen from.
             plan_num_rand_blocks: list. number of rand blocks within the plan.
             window_block_left: int. number of blocks of window to left of a block.
             window_block_right: int. number of blocks of window to right of a block.
@@ -2024,13 +2024,12 @@ class BigBirdModel(BigBirdPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
-            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
@@ -2988,6 +2987,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             if token_type_ids is None:
                 token_type_ids = (~logits_mask).long()
             logits_mask = logits_mask
+            logits_mask[:, 0] = False
             logits_mask.unsqueeze_(2)
 
         outputs = self.bert(

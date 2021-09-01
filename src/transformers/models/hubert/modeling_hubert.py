@@ -237,7 +237,7 @@ class HubertSamePadLayer(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->Hubert
 class HubertFeatureExtractor(nn.Module):
-    """Construct the featurs from raw audio waveform"""
+    """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
         super().__init__()

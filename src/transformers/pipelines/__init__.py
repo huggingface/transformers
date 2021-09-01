@@ -27,6 +27,7 @@ from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, Aut
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
+from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
     ArgumentHandler,
@@ -86,6 +87,7 @@ if is_torch_available():
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         AutoModel,
+        AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForImageClassification,
         AutoModelForMaskedLM,
@@ -108,6 +110,12 @@ TASK_ALIASES = {
     "ner": "token-classification",
 }
 SUPPORTED_TASKS = {
+    "audio-classification": {
+        "impl": AudioClassificationPipeline,
+        "tf": (),
+        "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
+        "default": {"model": {"pt": "superb/wav2vec2-base-superb-ks"}},
+    },
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
@@ -298,10 +306,10 @@ def pipeline(
 
             - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`.
             - :obj:`"text-classification"`: will return a :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification") will return a
+            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification"`) will return a
               :class:`~transformers.TextClassificationPipeline`.
             - :obj:`"token-classification"`: will return a :class:`~transformers.TokenClassificationPipeline`.
-            - :obj:`"ner"` (alias of :obj:`"token-classification"): will return a
+            - :obj:`"ner"` (alias of :obj:`"token-classification"`): will return a
               :class:`~transformers.TokenClassificationPipeline`.
             - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`.
             - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
@@ -408,6 +416,10 @@ def pipeline(
     if model is None:
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
+        logger.warning(f"No model was supplied, defaulted to {model} (https://huggingface.co/{model})")
+
+    # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
+    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
     # Config is the primordial information item.
     # Instantiate config if needed
@@ -417,9 +429,6 @@ def pipeline(
         config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
 
     model_name = model if isinstance(model, str) else None
-
-    # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
-    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
     # Infer the framework from the model
     # Forced if framework already defined, inferred if it's None
@@ -437,8 +446,8 @@ def pipeline(
 
     model_config = model.config
 
-    load_tokenizer = type(model_config) in TOKENIZER_MAPPING
-    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING
+    load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
+    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
 
     if load_tokenizer:
         # Try to infer tokenizer from model or config name (if provided as str)

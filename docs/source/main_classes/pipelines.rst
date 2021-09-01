@@ -23,6 +23,7 @@ There are two categories of pipeline abstractions to be aware about:
 - The :func:`~transformers.pipeline` which is the most powerful object encapsulating all other pipelines.
 - The other task-specific pipelines:
 
+    - :class:`~transformers.AudioClassificationPipeline`
     - :class:`~transformers.AutomaticSpeechRecognitionPipeline`
     - :class:`~transformers.ConversationalPipeline`
     - :class:`~transformers.FeatureExtractionPipeline`
@@ -30,13 +31,13 @@ There are two categories of pipeline abstractions to be aware about:
     - :class:`~transformers.ImageClassificationPipeline`
     - :class:`~transformers.QuestionAnsweringPipeline`
     - :class:`~transformers.SummarizationPipeline`
+    - :class:`~transformers.TableQuestionAnsweringPipeline`
     - :class:`~transformers.TextClassificationPipeline`
     - :class:`~transformers.TextGenerationPipeline`
+    - :class:`~transformers.Text2TextGenerationPipeline`
     - :class:`~transformers.TokenClassificationPipeline`
     - :class:`~transformers.TranslationPipeline`
     - :class:`~transformers.ZeroShotClassificationPipeline`
-    - :class:`~transformers.Text2TextGenerationPipeline`
-    - :class:`~transformers.TableQuestionAnsweringPipeline`
 
 The pipeline abstraction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -49,6 +50,13 @@ pipeline but requires an additional argument which is the `task`.
 
 The task specific pipelines
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+AudioClassificationPipeline
+=======================================================================================================================
+
+.. autoclass:: transformers.AudioClassificationPipeline
+    :special-members: __call__
+    :members:
 
 AutomaticSpeechRecognitionPipeline
 =======================================================================================================================
