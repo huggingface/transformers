@@ -449,6 +449,13 @@ def pipeline(
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
 
+    if task in {"audio-classification"}:
+        # Audio classification will never require a tokenizer.
+        # the model on the other hand might have a tokenizer, but
+        # the files could be missing from the hub, instead of failing
+        # on such repos, we just force to not load it.
+        load_tokenizer = False
+
     if load_tokenizer:
         # Try to infer tokenizer from model or config name (if provided as str)
         if tokenizer is None:
