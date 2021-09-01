@@ -29,6 +29,7 @@ The following table lists all of our examples on how to use 🤗 Transformers wi
 | [**`causal-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | GPT2 | OSCAR | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/causal_language_modeling_flax.ipynb)
 | [**`masked-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | RoBERTa | OSCAR | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/masked_language_modeling_flax.ipynb)
 | [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/flax/text-classification) | BERT | GLUE | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification_flax.ipynb)
+| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/flax/token-classification) | BERT | CoNLL-2003 | ✅ |
 
 ## Intro: JAX and Flax
 
