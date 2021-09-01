@@ -76,16 +76,16 @@ class Speech2Text2Config(PretrainedConfig):
 
         Example::
 
-        >>> from transformers import Speech2Text2ForCausalLM, Speech2Text2Config
+            >>> from transformers import Speech2Text2ForCausalLM, Speech2Text2Config
 
-        >>> # Initializing a Speech2Text2 s2t_transformer_s style configuration
-        >>> configuration = Speech2Text2Config()
+            >>> # Initializing a Speech2Text2 s2t_transformer_s style configuration
+            >>> configuration = Speech2Text2Config()
 
-        >>> # Initializing a model from the s2t_transformer_s style configuration
-        >>> model = Speech2Text2ForCausalLM(configuration)
+            >>> # Initializing a model from the s2t_transformer_s style configuration
+            >>> model = Speech2Text2ForCausalLM(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
     model_type = "speech_to_text_2"
     keys_to_ignore_at_inference = ["past_key_values"]

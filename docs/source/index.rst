@@ -262,8 +262,8 @@ Supported models
     `fairseq S2T: Fast Speech-to-Text Modeling with fairseq <https://arxiv.org/abs/2010.05171>`__ by Changhan Wang, Yun
     Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino.
 56. :doc:`SpeechToTextTransformer2 <model_doc/speech_to_text_2>` (from Facebook), released together with the paper
-    [Large-Scale Self- and Semi-Supervised Learning for Speech Translation] by Changhan Wang, Anne Wu, Juan Pino,
-    Alexei Baevski, Michael Auli, Alexis Conneau.
+    `Large-Scale Self- and Semi-Supervised Learning for Speech Translation <https://arxiv.org/abs/2104.06678>`__ by
+    Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli, Alexis Conneau.
 57. `Splinter <https://huggingface.co/transformers/master/model_doc/splinter.html>`__ (from Tel Aviv University),
     released together with the paper `Few-Shot Question Answering by Pretraining Span Selection
     <https://arxiv.org/abs/2101.00438>`__ by Ori Ram, Yuval Kirstain, Jonathan Berant, Amir Globerson, Omer Levy.
