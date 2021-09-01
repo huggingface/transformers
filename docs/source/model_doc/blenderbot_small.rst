@@ -60,7 +60,7 @@ BlenderbotSmallTokenizer
 BlenderbotSmallTokenizerFast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BlenderbotSmallTokenizer
+.. autoclass:: transformers.BlenderbotSmallTokenizerFast
     :members:
 
 
