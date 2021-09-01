@@ -54,6 +54,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RemBertConfig"
 _TOKENIZER_FOR_DOC = "RemBertTokenizer"
+_CHECKPOINT_FOR_DOC = "google/rembert"
 
 REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/rembert",
