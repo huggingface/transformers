@@ -88,6 +88,7 @@ class GPTJConfig(PretrainedConfig):
     """
     model_type = "gptj"
     attribute_map = {
+        "max_position_embeddings": "n_positions",
         "hidden_size": "n_embd",
         "num_attention_heads": "n_head",
         "num_hidden_layers": "n_layer"
