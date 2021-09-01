@@ -3414,7 +3414,7 @@ class TokenizerTesterMixin:
 
                     # Should not raise an error
                     trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
-                    self.assertIn("tokenizer.json",os.listdir(os.path.join(tmp_dir, "checkpoint")))
+                    self.assertIn("tokenizer.json", os.listdir(os.path.join(tmp_dir, "checkpoint")))
 
 
 @is_staging_test
