@@ -593,23 +593,23 @@ class RealmEncoder(RealmPreTrainedModel):
 
         Returns:
 
-        Example:
+        Example::
 
-        >>> import torch
-        >>> from transformers import RealmTokenizer, RealmEncoder
+            >>> import torch
+            >>> from transformers import RealmTokenizer, RealmEncoder
 
-        >>> tokenizer = RealmTokenizer.from_pretrained('qqaatw/realm-cc-news-pretrained-bert')
-        >>> model = RealmEncoder.from_pretrained('qqaatw/realm-cc-news-pretrained-bert', num_candidates=2)
+            >>> tokenizer = RealmTokenizer.from_pretrained('qqaatw/realm-cc-news-pretrained-bert')
+            >>> model = RealmEncoder.from_pretrained('qqaatw/realm-cc-news-pretrained-bert', num_candidates=2)
 
-        >>> # batch_size = 2, num_candidates = 2
-        >>> text = [
-        >>>     ["Hello world!", "Nice to meet you!"],
-        >>>     ["The cute cat.", "The adorable dog."]
-        >>> ]
+            >>> # batch_size = 2, num_candidates = 2
+            >>> text = [
+            >>>     ["Hello world!", "Nice to meet you!"],
+            >>>     ["The cute cat.", "The adorable dog."]
+            >>> ]
 
-        >>> inputs = tokenizer.batch_encode_candidates(text, max_length=10)
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+            >>> inputs = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

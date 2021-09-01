@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for REALM."""
-import torch
 
 from ...file_utils import PaddingStrategy
 from ...tokenization_utils_base import BatchEncoding
@@ -69,7 +68,7 @@ class RealmTokenizer(BertTokenizer):
         differences:
 
             1. Handle additional num_candidate axis. (batch_size, num_candidates, text)
-            2. Always pad the sequences to `max_length` and always return PyTorch tensors..
+            2. Always pad the sequences to `max_length`.
             3. Must specify `max_length` in order to stack packs of candidates into a batch.
 
             - single sequence: ``[CLS] X [SEP]``
@@ -88,23 +87,27 @@ class RealmTokenizer(BertTokenizer):
         Returns:
             :class:`~transformers.BatchEncoding`: Encoded text or text pair.
 
-        Example: >>> from transformers import RealmTokenizer
+        Example::
 
-        >>> # batch_size = 2, num_candidates = 2 >>> text = [ >>> ["Hello world!", "Nice to meet you!"], >>> ["The cute
-        cat.", "The adorable dog."] >>> ]
+            >>> from transformers import RealmTokenizer
 
-        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
+            >>> # batch_size = 2, num_candidates = 2
+            >>> text = [
+            >>>     ["Hello world!", "Nice to meet you!"],
+            >>>     ["The cute cat.", "The adorable dog."]
+            >>> ]
 
-        >>> tokenized_text = tokenizer.batch_encode_candidates(text, max_length=10)
+            >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
+
+            >>> tokenized_text = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
         """
 
-        # Always return PyTorch tensor.
-        kwargs["return_tensors"] = "pt"
         # Always using a fixed sequence length to encode in order to stack candidates into a batch.
         kwargs["padding"] = PaddingStrategy.MAX_LENGTH
 
         batch_text = text
         batch_text_pair = kwargs.pop("text_pair", None)
+        return_tensors = kwargs.pop("return_tensors", None)
 
         output_data = {
             "input_ids": [],
@@ -118,7 +121,7 @@ class RealmTokenizer(BertTokenizer):
             else:
                 candidate_text_pair = None
 
-            encoded_candidates = super().__call__(candidate_text, candidate_text_pair, **kwargs)
+            encoded_candidates = super().__call__(candidate_text, candidate_text_pair, return_tensors=None, **kwargs)
 
             encoded_input_ids = encoded_candidates.get("input_ids")
             encoded_attention_mask = encoded_candidates.get("attention_mask")
@@ -131,6 +134,6 @@ class RealmTokenizer(BertTokenizer):
             if encoded_token_type_ids is not None:
                 output_data["token_type_ids"].append(encoded_token_type_ids)
 
-        output_data = dict((key, torch.stack(item)) for key, item in output_data.items() if len(item) != 0)
+        output_data = dict((key, item) for key, item in output_data.items() if len(item) != 0)
 
-        return BatchEncoding(output_data, tensor_type=kwargs["return_tensors"])
+        return BatchEncoding(output_data, tensor_type=return_tensors)
