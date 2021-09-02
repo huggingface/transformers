@@ -16,7 +16,7 @@ limitations under the License.
 
 # Image classification examples
 
-The following example showcases how to fine-tune a `ViT` for image-classification using PyTorch.
+The following examples showcase how to fine-tune a `ViT` for image-classification using PyTorch.
 
 ## Using datasets from 🤗 `datasets`
 
@@ -108,13 +108,15 @@ python run_image_classification.py \
 
 0. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account
 
-1. Make sure you have `git-lfs` installed.
+1. Make sure you have `git-lfs` installed and git set up.
 
 ```bash
 $ apt install git-lfs
+$ git config --global user.email "you@example.com"
+$ git config --global user.name "Your Name"
 ```
 
-2. Log in using `huggingface-cli`
+2. Log in with your HuggingFace account credentials using `huggingface-cli`
 
 ```bash
 $ huggingface-cli login

@@ -49,7 +49,7 @@ from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
-""" Finetuning a 🤗 Transformers model for image classification"""
+""" Fine-tuning a 🤗 Transformers model for image classification"""
 
 logger = logging.getLogger(__name__)
 
