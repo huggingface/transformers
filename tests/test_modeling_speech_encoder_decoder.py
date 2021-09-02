@@ -493,8 +493,8 @@ class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
 @require_torch
 class Wav2Vec2Speech2Text2(EncoderDecoderMixin, unittest.TestCase):
     def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = Wav2Vec2Model(config)
-        decoder_model = Speech2Text2ForCausalLM(decoder_config)
+        encoder_model = Wav2Vec2Model(config).eval()
+        decoder_model = Speech2Text2ForCausalLM(decoder_config).eval()
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
