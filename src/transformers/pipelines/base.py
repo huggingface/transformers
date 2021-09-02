@@ -765,15 +765,42 @@ class Pipeline(_ScikitCompat):
         Ensure PyTorch tensors are on the specified device.
 
         Args:
-            inputs (keyword arguments that should be :obj:`torch.Tensor`): The tensors to place on :obj:`self.device`.
+            inputs (keyword arguments that should be :obj:`torch.Tensor`, the rest is ignored): The tensors to place on :obj:`self.device`.
+            Recursive on lists **only**.
 
         Return:
             :obj:`Dict[str, torch.Tensor]`: The same as :obj:`inputs` but on the proper device.
         """
-        return {
-            name: tensor.to(self.device) if isinstance(tensor, torch.Tensor) else tensor
-            for name, tensor in inputs.items()
-        }
+        return self._ensure_tensor_on_device(inputs)
+
+    def _ensure_tensor_on_device(self, inputs):
+        if isinstance(inputs, dict):
+            return {name: self.ensure_tensor_on_cpu(tensor) for name, tensor in inputs.items()}
+        elif isinstance(inputs, list):
+            return [self.ensure_tensor_on_cpu(item) for item in inputs]
+        elif isinstance(inputs, torch.Tensor):
+            return inputs.to(self.device)
+        else:
+            return inputs
+
+    def ensure_tensor_on_cpu(self, inputs):
+        """
+        Ensure PyTorch tensors are on cpu.
+
+        Args:
+            inputs (keyword arguments that should be :obj:`torch.Tensor`, the rest is ignored): The tensor are placed back on cpu.
+
+        Return:
+            :obj:`Dict[str, torch.Tensor]`: The same as :obj:`inputs` but on cpu.
+        """
+        if isinstance(inputs, dict):
+            return {name: self.ensure_tensor_on_cpu(tensor) for name, tensor in inputs.items()}
+        elif isinstance(inputs, list):
+            return [self.ensure_tensor_on_cpu(item) for item in inputs]
+        elif isinstance(inputs, torch.Tensor):
+            return inputs.cpu()
+        else:
+            return inputs
 
     def check_model_type(self, supported_models: Union[List[str], dict]):
         """
@@ -822,6 +849,7 @@ class Pipeline(_ScikitCompat):
                 with torch.no_grad():
                     model_inputs = self.ensure_tensor_on_device(**model_inputs)
                     model_outputs = self.forward(model_inputs)
+                    model_inputs = self.ensure_tensor_on_cpu(model_outputs)
             else:
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs

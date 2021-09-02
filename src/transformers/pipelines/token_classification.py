@@ -204,7 +204,6 @@ class TokenClassificationPipeline(Pipeline):
         if self.framework == "tf":
             outputs = self.model(model_inputs.data)[0][0].numpy()
         else:
-            model_inputs = self.ensure_tensor_on_device(**model_inputs)
             outputs = self.model(**model_inputs)[0][0].cpu().numpy()
         return {
             "outputs": outputs,

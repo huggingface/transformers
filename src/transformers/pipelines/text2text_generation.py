@@ -144,7 +144,6 @@ class Text2TextGenerationPipeline(Pipeline):
 
     def forward(self, model_inputs):
         if self.framework == "pt":
-            model_inputs = self.ensure_tensor_on_device(**model_inputs)
             input_length = model_inputs["input_ids"].shape[-1]
         elif self.framework == "tf":
             input_length = tf.shape(model_inputs["input_ids"])[-1].numpy()

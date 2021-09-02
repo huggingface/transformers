@@ -149,7 +149,6 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         return processed
 
     def forward(self, model_inputs):
-        model_inputs = self.ensure_tensor_on_device(**model_inputs)
         name = self.model.__class__.__name__
         if name.endswith("ForConditionalGeneration") or name.endswith("EncoderDecoderModel"):
             encoder = self.model.get_encoder()

@@ -209,13 +209,9 @@ class ZeroShotClassificationPipeline(Pipeline):
         if isinstance(model_inputs, list):
             outputs = []
             for input_ in model_inputs:
-                if self.framework == "pt":
-                    input_ = self.ensure_tensor_on_device(**input_)
                 prediction = self.model(**input_)[0].cpu()
                 outputs.append(prediction)
         else:
-            if self.framework == "pt":
-                model_inputs = self.ensure_tensor_on_device(**model_inputs)
             outputs = self.model(**model_inputs)
 
         model_outputs = {"candidate_labels": candidate_labels, "sequences": sequences, "outputs": outputs}

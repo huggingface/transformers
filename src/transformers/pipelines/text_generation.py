@@ -149,8 +149,6 @@ class TextGenerationPipeline(Pipeline):
         return inputs
 
     def forward(self, model_inputs):
-        if self.framework == "pt":
-            model_inputs = self.ensure_tensor_on_device(**model_inputs)
         input_ids = model_inputs["input_ids"]
         prompt_text = model_inputs.pop("prompt_text")
         generated_sequence = self.model.generate(input_ids=input_ids, **self.generate_kwargs)  # BS x SL
