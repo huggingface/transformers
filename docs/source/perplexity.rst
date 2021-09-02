@@ -100,8 +100,8 @@ dataset in memory.
     test = load_dataset('wikitext', 'wikitext-2-raw-v1', split='test')
     encodings = tokenizer('\n\n'.join(test['text']), return_tensors='pt')
 
-With 🤗 Transformers, we can simply pass the ``input_ids`` as the ``labels`` to our model, and the average
-negative log-likelihood for each token is returned as the loss. With our sliding window approach, however, there is overlap in
+With 🤗 Transformers, we can simply pass the ``input_ids`` as the ``labels`` to our model, and the average negative
+log-likelihood for each token is returned as the loss. With our sliding window approach, however, there is overlap in
 the tokens we pass to the model at each iteration. We don't want the log-likelihood for the tokens we're just treating
 as context to be included in our loss, so we can set these targets to ``-100`` so that they are ignored. The following
 is an example of how we could do this with a stride of ``512``. This means that the model will have at least 512 tokens
