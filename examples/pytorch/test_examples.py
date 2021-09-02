@@ -38,7 +38,7 @@ SRC_DIRS = [
         "question-answering",
         "summarization",
         "translation",
-        "vision",
+        "image-classification",
     ]
 ]
 sys.path.extend(SRC_DIRS)
