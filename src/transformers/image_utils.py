@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import List, Union
+
 import numpy as np
 import PIL.Image
 
@@ -24,6 +26,9 @@ IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
 IMAGENET_STANDARD_MEAN = [0.5, 0.5, 0.5]
 IMAGENET_STANDARD_STD = [0.5, 0.5, 0.5]
 
+ImageInput = Union[
+    PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]
+]
 
 def is_torch_tensor(obj):
     return _is_torch(obj) if is_torch_available() else False

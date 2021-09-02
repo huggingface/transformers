@@ -16,6 +16,7 @@
 
 
 import argparse
+import json
 from collections import OrderedDict
 from pathlib import Path
 
@@ -43,7 +44,7 @@ def rename_keys(state_dict, encoder_only=False):
         if encoder_only and not key.startswith("head"):
             key = "segformer.encoder." + key
         if key.startswith("backbone"):
-            key = key.replace("backbone", f"segformer.encoder")
+            key = key.replace("backbone", "segformer.encoder")
         if "patch_embed" in key:
             # replace for example patch_embed1 by patch_embeddings.0
             idx = key[key.find("patch_embed") + len("patch_embed")]
@@ -123,7 +124,7 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     """
 
     # load default SegFormer configuration
-    config = SegFormerConfig()
+    config = SegformerConfig()
     encoder_only = False
 
     # set attributes based on model_name
@@ -150,7 +151,7 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
-    config.label2id = {v: k for k, v in id2label.items()}  
+    config.label2id = {v: k for k, v in id2label.items()}
     if size == "b0":
         pass
     elif size == "b1":
