@@ -257,7 +257,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
         table, query = pipeline_input["table"], pipeline_input["query"]
         if table.empty:
             raise ValueError("table is empty")
-        if not query:
+        if query is None or query == "":
             raise ValueError("query is empty")
         inputs = self.tokenizer(
             table, query, return_tensors=self.framework, truncation="drop_rows_to_fit", padding=self.padding
