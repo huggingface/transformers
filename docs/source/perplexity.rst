@@ -100,7 +100,7 @@ dataset in memory.
     test = load_dataset('wikitext', 'wikitext-2-raw-v1', split='test')
     encodings = tokenizer('\n\n'.join(test['text']), return_tensors='pt')
 
-With 🤗 Transformers, we can simply pass the ``input_ids`` as the ``labels`` to our model, and the average
+With 🤗 Transformers, we can simply pass the ``input_ids`` as the ``labels`` to our model, and the average negative
 log-likelihood for each token is returned as the loss. With our sliding window approach, however, there is overlap in
 the tokens we pass to the model at each iteration. We don't want the log-likelihood for the tokens we're just treating
 as context to be included in our loss, so we can set these targets to ``-100`` so that they are ignored. The following
@@ -113,7 +113,7 @@ available to condition on).
     max_length = model.config.n_positions
     stride = 512
 
-    lls = []
+    nlls = []
     for i in tqdm(range(0, encodings.input_ids.size(1), stride)):
         begin_loc = max(i + stride - max_length, 0)
         end_loc = min(i + stride, encodings.input_ids.size(1))
@@ -124,11 +124,11 @@ available to condition on).
 
         with torch.no_grad():
             outputs = model(input_ids, labels=target_ids)
-            log_likelihood = outputs[0] * trg_len
+            neg_log_likelihood = outputs[0] * trg_len
 
-        lls.append(log_likelihood)
+        nlls.append(neg_log_likelihood)
 
-    ppl = torch.exp(torch.stack(lls).sum() / end_loc)
+    ppl = torch.exp(torch.stack(nlls).sum() / end_loc)
 
 Running this with the stride length equal to the max input length is equivalent to the suboptimal, non-sliding-window
 strategy we discussed above. The smaller the stride, the more context the model will have in making each prediction,
