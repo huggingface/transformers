@@ -205,9 +205,8 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
-        assert (
-            self.encoder.get_output_embeddings() is None
-        ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
+        if self.encoder.get_output_embeddings() is not None:
+            raise ValueError("The encoder {} should not have a LM Head. Please use a model without LM Head")
 
     @property
     def dummy_inputs(self):
@@ -564,31 +563,37 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         use_cache=None,
         **kwargs,
     ):
-        assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
+        if past is None or len(past) not in {1, 2}:
+            raise ValueError(f"past has to be an iterable of length 1,2 got {past}")
+
         if len(past) == 1:
-            assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
+            if not isinstance(past[0], tf.Tensor):
+                raise ValueError(f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}")
             encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
             past_key_values = None
         else:
-            assert (
-                len(past) == 2
-            ), "`past` has to be of length 2 with the encoder_outputs at the first position and past_key_values at the second position."
+            if len(past) != 2:
+                raise ValueError(
+                    "`past` has to be of length 2 with the encoder_outputs at the first position and past_key_values at the second position."
+                )
             encoder_outputs, past_key_values = past
             if isinstance(encoder_outputs, tuple):
-                assert isinstance(
-                    encoder_outputs[0], tf.Tensor
-                ), f"`encoder_outputs[0]` has to be of type `tf.Tensor`, but is {type(encoder_outputs[0])}"
+                if not isinstance(encoder_outputs[0], tf.Tensor):
+                    raise ValueError(
+                        f"`encoder_outputs[0]` has to be of type `tf.Tensor`, but is {type(encoder_outputs[0])}"
+                    )
                 encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
             elif isinstance(encoder_outputs, tf.Tensor):
                 encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
-            assert (
-                past_key_values
-            ), f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
+            if not past_key_values:
+                raise ValueError(
+                    f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
+                )
             decoder_input_ids = decoder_input_ids[:, -1:]
 
-        assert isinstance(
-            encoder_outputs, TFBaseModelOutput
-        ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
+        if not isinstance(encoder_outputs, TFBaseModelOutput):
+            raise ValueError(f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}.")
+
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
