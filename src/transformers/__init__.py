@@ -1763,6 +1763,16 @@ if is_tf_available():
             "TFT5PreTrainedModel",
         ]
     )
+    _import_structure["models.tapas"].extend(
+        [
+            "TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFTapasForMaskedLM",
+            "TFTapasForQuestionAnswering",
+            "TFTapasForSequenceClassification",
+            "TFTapasModel",
+            "TFTapasPreTrainedModel",
+        ]
+    )
     _import_structure["models.transfo_xl"].extend(
         [
             "TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3474,6 +3484,14 @@ if TYPE_CHECKING:
             TFT5ForConditionalGeneration,
             TFT5Model,
             TFT5PreTrainedModel,
+        )
+        from .models.tapas import (
+            TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFTapasForMaskedLM,
+            TFTapasForQuestionAnswering,
+            TFTapasForSequenceClassification,
+            TFTapasModel,
+            TFTapasPreTrainedModel,
         )
         from .models.transfo_xl import (
             TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -49,7 +49,8 @@ entailment (a binary classification task). For more details, see their follow-up
 intermediate pre-training <https://www.aclweb.org/anthology/2020.findings-emnlp.27/>`__ by Julian Martin Eisenschlos,
 Syrine Krichene and Thomas Müller.
 
-This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
+This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. This model was contributed by `kamalkraj
+<https://huggingface.co/kamalkraj>`__. The original code can be found `here
 <https://github.com/google-research/tapas>`__.
 
 Tips:
@@ -433,3 +434,31 @@ TapasForQuestionAnswering
 
 .. autoclass:: transformers.TapasForQuestionAnswering
     :members: forward
+
+
+TFTapasModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFTapasModel
+    :members: call
+
+
+TFTapasForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFTapasForMaskedLM
+    :members: call
+
+
+TFTapasForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFTapasForSequenceClassification
+    :members: call
+
+
+TFTapasForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFTapasForQuestionAnswering
+    :members: call
