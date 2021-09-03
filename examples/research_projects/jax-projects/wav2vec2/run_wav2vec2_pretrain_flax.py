@@ -3,6 +3,7 @@ import logging
 import math
 import sys
 import time
+import wandb
 from dataclasses import field
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -31,6 +32,9 @@ from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_in
 
 
 logger = logging.getLogger(__name__)
+
+
+wandb.init(project="pretraining-wav2vec2-flax")
 
 
 @flax.struct.dataclass
@@ -119,7 +123,10 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_duration_in_seconds: Optional[float] = field(
-        default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
+        default=10.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
+    )
+    min_duration_in_seconds: Optional[float] = field(
+        default=3.0, metadata={"help": "Filter out audio files that are shorter than `min_duration_in_seconds` seconds"}
     )
     pad_to_multiple_of: Optional[int] = field(
         default=None,
@@ -278,8 +285,9 @@ def compute_contrastive_loss(
 
     # logs during training
     accuracy = (predictions.argmax(-1) == 0).sum() / num_losses
-    percentage_zeroed_out_vectors = neg_is_pos.sum() / neg_is_pos.reshape(-1).shape[0]
-    logs = {"acc": accuracy, "%-0-vecs": percentage_zeroed_out_vectors, "num_targets": mask_time_indices.sum()}
+    neg_is_pos_real = jnp.where(jnp.broadcast_to(mask_time_indices[None, :, :], neg_is_pos.shape), neg_is_pos, 0)
+    percentage_zeroed_out_vectors = neg_is_pos_real.sum() / (num_negatives * mask_time_indices.sum())
+    logs = {"acc": accuracy, "%_neg_is_pos": percentage_zeroed_out_vectors}
 
     return contrastive_loss, logs
 
@@ -335,6 +343,9 @@ def main():
             cache_dir=model_args.cache_dir,
         )
 
+#    datasets["train"] = datasets["train"].select(range(256))
+#    datasets["validation"] = datasets["validation"].select(range(32))
+
     # only normalized-inputs-training is supported
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, do_normalize=True
@@ -350,8 +361,11 @@ def main():
         prepare_dataset, num_proc=data_args.preprocessing_num_workers, remove_columns=datasets["train"].column_names
     )
 
-    # set max audio length in number of samples
+    # set max & min audio length in number of samples
     max_length = int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
+    min_length = int(data_args.min_duration_in_seconds * feature_extractor.sampling_rate)
+
+    vectorized_datasets = vectorized_datasets.filter(lambda x: len(x["speech"]) > min_length)
 
     def process_audio(batch):
         return feature_extractor(
@@ -510,9 +524,9 @@ def main():
             # add more loss
             logs["code_ppl"] = outputs.codevector_perplexity
             logs["gumbel_temp"] = gumbel_temperature
-            logs["contrast_loss"] = contrastive_loss / sample_size / math.log(2)
-            logs["diversity_loss"] = diversity_loss / sample_size / math.log(2)
-            logs["num_inputs"] = batch["mask_time_indices"].reshape(-1).shape[0]
+            logs["contrast_loss"] = contrastive_loss / sample_size
+            logs["diversity_loss"] = diversity_loss / sample_size
+            logs["%_mask_idx"] = sample_size / batch["mask_time_indices"].reshape(-1).shape[0]
 
             return loss, logs
 
@@ -521,17 +535,12 @@ def main():
         grad = jax.lax.pmean(grad, "batch")
         new_state = state.apply_gradients(grads=grad)
 
-        avg_metrics = {"loss": loss / math.log(2), "learn_rate": linear_decay_lr_schedule_fn(state.step)}
-        avg_metrics.update(logs)
+        metrics = {"loss": loss, "learn_rate": linear_decay_lr_schedule_fn(state.step)}
+        metrics.update(logs)
 
-        sum_metrics = {}
-        sum_metrics["num_targets"] = avg_metrics.pop("num_targets")
-        sum_metrics["num_inputs"] = avg_metrics.pop("num_inputs")
+        metrics = jax.lax.pmean(metrics, axis_name="batch")
 
-        avg_metrics = jax.lax.pmean(avg_metrics, axis_name="batch")
-        sum_metrics = jax.lax.psum(sum_metrics, axis_name="batch")
-
-        return new_state, avg_metrics, sum_metrics, new_dropout_rng, new_gumbel_rng
+        return new_state, metrics, new_dropout_rng, new_gumbel_rng
 
     # Create parallel version of the train step
     p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
@@ -602,10 +611,9 @@ def main():
             model_inputs = shard(model_inputs.data)
 
             # Model forward
-            state, train_avg_metric, train_sum_metric, dropout_rngs, gumbel_rngs = p_train_step(
+            state, train_metric, dropout_rngs, gumbel_rngs = p_train_step(
                 state, model_inputs, dropout_rngs, gumbel_rngs
             )
-            train_metric = {**train_avg_metric, **train_sum_metric}
             train_metrics.append(train_metric)
 
             cur_step = epoch * (num_train_samples // train_batch_size) + step
@@ -622,11 +630,14 @@ def main():
                 for key, value in train_metric.items():
                     log_str += f"| {key}: {round(value.item(), 6)} "
 
+                if jax.process_index() == 0:
+                    wandb.log(train_metric)
+
                 epochs.write(log_str)
                 train_metrics = []
 
         # ======================== Evaluating ==============================
-        continue
+        continue  # skip evaluation for now
 
         num_eval_samples = len(vectorized_datasets["validation"])
         eval_samples_idx = jnp.arange(num_eval_samples)
