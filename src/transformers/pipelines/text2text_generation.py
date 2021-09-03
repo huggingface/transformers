@@ -151,7 +151,7 @@ class Text2TextGenerationPipeline(Pipeline):
         min_length = generate_kwargs.get("min_length", self.model.config.min_length)
         max_length = generate_kwargs.get("max_length", self.model.config.max_length)
         self.check_inputs(input_length, min_length, max_length)
-        output_ids = self.model.generate(**model_inputs, **self.generate_kwargs)
+        output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         return {"output_ids": output_ids}
 
     def postprocess(self, model_outputs, return_type=ReturnType.TEXT, clean_up_tokenization_spaces=False):

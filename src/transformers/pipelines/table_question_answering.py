@@ -78,9 +78,6 @@ class TableQuestionAnsweringPipeline(Pipeline):
     """
 
     default_input_names = "table,query"
-    sequential = False
-    padding = True
-    truncation = True
 
     def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -257,7 +254,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
             forward_params["sequential"] = sequential
         return preprocess_params, forward_params, {}
 
-    def preprocess(self, pipeline_input, sequential=None, padding=None, truncation="drop_rows_to_fit"):
+    def preprocess(self, pipeline_input, sequential=None, padding=True, truncation="drop_rows_to_fit"):
         table, query = pipeline_input["table"], pipeline_input["query"]
         if table.empty:
             raise ValueError("table is empty")

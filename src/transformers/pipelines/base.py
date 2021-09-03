@@ -699,7 +699,7 @@ class Pipeline(_ScikitCompat):
             self.model.config.update(task_specific_params.get(task))
 
         self.call_count = 0
-        self.preprocess_params, self.forward_params, self.postprocess_params = self._sanitize_parameters(**kwargs)
+        self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
 
     def save_pretrained(self, save_directory: str):
         """
@@ -901,9 +901,9 @@ class Pipeline(_ScikitCompat):
         preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)
 
         # Fuse __init__ params and __call__ params without modifying the __init__ ones.
-        preprocess_params = {**self.preprocess_params, **preprocess_params}
-        forward_params = {**self.forward_params, **forward_params}
-        postprocess_params = {**self.postprocess_params, **postprocess_params}
+        preprocess_params = {**self._preprocess_params, **preprocess_params}
+        forward_params = {**self._forward_params, **forward_params}
+        postprocess_params = {**self._postprocess_params, **postprocess_params}
 
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
