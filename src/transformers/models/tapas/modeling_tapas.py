@@ -705,7 +705,7 @@ class TapasPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with bert->tapas
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Tapas
 class TapasPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -723,7 +723,7 @@ class TapasPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with bert->tapas
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Tapas
 class TapasLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -744,7 +744,7 @@ class TapasLMPredictionHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with bert->tapas
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Tapas
 class TapasOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
