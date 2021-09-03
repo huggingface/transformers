@@ -63,7 +63,7 @@ class TextGenerationPipeline(Pipeline):
                 prefix = self.XL_PREFIX
             if prefix is not None:
                 # Recalculate some generate_kwargs linked to prefix.
-                preprocess_params, forward_params, _ = self._sanitize_parameters(prefix=prefix, **self.forward_params)
+                preprocess_params, forward_params, _ = self._sanitize_parameters(prefix=prefix, **self._forward_params)
                 self._preprocess_params = {**self._preprocess_params, **preprocess_params}
                 self._forward_params = {**self._forward_params, **forward_params}
 
