@@ -295,16 +295,19 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
             loss.backward()
 
     @slow
+    def test_embedder_from_pretrained(self):
+        model = RealmEmbedder.from_pretrained("qqaatw/realm-cc-news-pretrained-embedder")
+        self.assertIsNotNone(model)
+
+    @slow
     def test_encoder_from_pretrained(self):
-        for model_name in REALM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RealmEncoder.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = RealmEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
+        self.assertIsNotNone(model)
 
     @slow
     def test_retriever_from_pretrained(self):
-        for model_name in REALM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RealmRetriever.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = RealmRetriever.from_pretrained("qqaatw/realm-cc-news-pretrained-retriever")
+        self.assertIsNotNone(model)
 
 
 @require_torch
