@@ -88,7 +88,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         hypothesis_template,
         padding=True,
         add_special_tokens=True,
-        truncation=TruncationStrategy.DO_NOT_TRUNCATE,
+        truncation=TruncationStrategy.ONLY_FIRST,
         **kwargs
     ):
         """
