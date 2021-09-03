@@ -45,7 +45,7 @@ class TextGenerationPipeline(Pipeline):
         self.check_model_type(
             TF_MODEL_FOR_CAUSAL_LM_MAPPING if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING
         )
-        if "prefix" not in self.preprocess_params:
+        if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
             # as a "default".
             # It also defines both some preprocess_kwargs and generate_kwargs
@@ -64,8 +64,8 @@ class TextGenerationPipeline(Pipeline):
             if prefix is not None:
                 # Recalculate some generate_kwargs linked to prefix.
                 preprocess_params, forward_params, _ = self._sanitize_parameters(prefix=prefix, **self.forward_params)
-                self.preprocess_params = {**self.preprocess_params, **preprocess_params}
-                self.forward_params = {**self.forward_params, **forward_params}
+                self._preprocess_params = {**self._preprocess_params, **preprocess_params}
+                self._forward_params = {**self._forward_params, **forward_params}
 
     def _sanitize_parameters(
         self,
