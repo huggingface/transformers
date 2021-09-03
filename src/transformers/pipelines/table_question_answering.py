@@ -245,31 +245,31 @@ class TableQuestionAnsweringPipeline(Pipeline):
             return results[0]
         return results
 
-    def set_parameters(self, sequential=None, padding=None, truncation=None, **kwargs):
-        if sequential is not None:
-            self.sequential = sequential
+    def _sanitize_parameters(self, sequential=None, padding=None, truncation=None, **kwargs):
+        preprocess_params = {}
         if padding is not None:
-            self.padding = padding
+            preprocess_params["padding"] = padding
         if truncation is not None:
-            self.truncation = truncation
+            preprocess_params["truncation"] = truncation
 
-    def preprocess(self, pipeline_input):
+        forward_params = {}
+        if sequential is not None:
+            forward_params["sequential"] = sequential
+        return preprocess_params, forward_params, {}
+
+    def preprocess(self, pipeline_input, sequential=None, padding=None, truncation="drop_rows_to_fit"):
         table, query = pipeline_input["table"], pipeline_input["query"]
         if table.empty:
             raise ValueError("table is empty")
         if query is None or query == "":
             raise ValueError("query is empty")
-        inputs = self.tokenizer(
-            table, query, return_tensors=self.framework, truncation="drop_rows_to_fit", padding=self.padding
-        )
+        inputs = self.tokenizer(table, query, return_tensors=self.framework, truncation=truncation, padding=padding)
         inputs["table"] = table
         return inputs
 
-    def forward(self, model_inputs):
+    def _forward(self, model_inputs, sequential=False):
         table = model_inputs.pop("table")
-        outputs = (
-            self.sequential_inference(**model_inputs) if self.sequential else self.batch_inference(**model_inputs)
-        )
+        outputs = self.sequential_inference(**model_inputs) if sequential else self.batch_inference(**model_inputs)
         model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}
         return model_outputs
 

@@ -126,9 +126,9 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         """
         return super().__call__(inputs, **kwargs)
 
-    def set_parameters(self, **kwargs):
+    def _sanitize_parameters(self, **kwargs):
         # No parameters on this pipeline right now
-        pass
+        return {}, {}, {}
 
     def preprocess(self, inputs):
         if isinstance(inputs, str):
@@ -148,7 +148,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         )
         return processed
 
-    def forward(self, model_inputs):
+    def _forward(self, model_inputs):
         name = self.model.__class__.__name__
         if name.endswith("ForConditionalGeneration") or name.endswith("EncoderDecoderModel"):
             encoder = self.model.get_encoder()

@@ -1,5 +1,4 @@
 import enum
-from typing import Optional
 
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..tokenization_utils import TruncationStrategy
@@ -44,13 +43,7 @@ class Text2TextGenerationPipeline(Pipeline):
     return_name = "generated"
 
     def __init__(self, *args, **kwargs):
-        self.return_type = ReturnType.TEXT
-        self.truncation = TruncationStrategy.DO_NOT_TRUNCATE
-        self.clean_up_tokenization_spaces = False
-        self.generate_kwargs = {}
         super().__init__(*args, **kwargs)
-        self.generate_kwargs["min_length"] = kwargs.get("min_length", self.model.config.min_length)
-        self.generate_kwargs["max_length"] = kwargs.get("max_length", self.model.config.max_length)
 
         self.check_model_type(
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
@@ -58,7 +51,7 @@ class Text2TextGenerationPipeline(Pipeline):
             else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
         )
 
-    def set_parameters(
+    def _sanitize_parameters(
         self,
         return_tensors=None,
         return_text=None,
@@ -67,15 +60,22 @@ class Text2TextGenerationPipeline(Pipeline):
         truncation=None,
         **generate_kwargs
     ):
+        preprocess_params = {}
+        if truncation is not None:
+            preprocess_params["truncation"] = truncation
+
+        forward_params = generate_kwargs
+
+        postprocess_params = {}
         if return_tensors is not None and return_type is None:
             return_type = ReturnType.TENSORS if return_tensors else ReturnType.TEXT
         if return_type is not None:
-            self.return_type = return_type
-        if truncation is not None:
-            self.truncation = truncation
+            postprocess_params["return_type"] = return_type
+
         if clean_up_tokenization_spaces is not None:
-            self.clean_up_tokenization_spaces = clean_up_tokenization_spaces
-        self.generate_kwargs.update(generate_kwargs)
+            postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
+
+        return preprocess_params, forward_params, postprocess_params
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
         """
@@ -138,30 +138,32 @@ class Text2TextGenerationPipeline(Pipeline):
             return [result]
         return result
 
-    def preprocess(self, inputs):
-        inputs = self._parse_and_tokenize(inputs, truncation=self.truncation)
+    def preprocess(self, inputs, truncation=TruncationStrategy.DO_NOT_TRUNCATE, **kwargs):
+        inputs = self._parse_and_tokenize(inputs, truncation=truncation, **kwargs)
         return inputs
 
-    def forward(self, model_inputs):
+    def _forward(self, model_inputs, max_length=None, min_length=None, **generate_kwargs):
         if self.framework == "pt":
             input_length = model_inputs["input_ids"].shape[-1]
         elif self.framework == "tf":
             input_length = tf.shape(model_inputs["input_ids"])[-1].numpy()
 
-        self.check_inputs(input_length, self.generate_kwargs["min_length"], self.generate_kwargs["max_length"])
+        min_length = generate_kwargs.get("min_length", self.model.config.min_length)
+        max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+        self.check_inputs(input_length, min_length, max_length)
         output_ids = self.model.generate(**model_inputs, **self.generate_kwargs)
         return {"output_ids": output_ids}
 
-    def postprocess(self, model_outputs):
+    def postprocess(self, model_outputs, return_type=ReturnType.TEXT, clean_up_tokenization_spaces=False):
         record = {}
-        if self.return_type == ReturnType.TENSORS:
+        if return_type == ReturnType.TENSORS:
             record = {f"{self.return_name}_token_ids": model_outputs}
-        elif self.return_type == ReturnType.TEXT:
+        elif return_type == ReturnType.TEXT:
             record = {
                 f"{self.return_name}_text": self.tokenizer.decode(
                     model_outputs["output_ids"][0],
                     skip_special_tokens=True,
-                    clean_up_tokenization_spaces=self.clean_up_tokenization_spaces,
+                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )
             }
         return record
@@ -256,8 +258,6 @@ class TranslationPipeline(Text2TextGenerationPipeline):
 
     # Used in the return key of the pipeline.
     return_name = "translation"
-    src_lang: Optional[str] = None
-    tgt_lang: Optional[str] = None
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
         if input_length > 0.9 * max_length:
@@ -267,32 +267,29 @@ class TranslationPipeline(Text2TextGenerationPipeline):
             )
         return True
 
-    def _parse_and_tokenize(self, *args, truncation):
+    def preprocess(self, *args, truncation, src_lang=None, tgt_lang=None):
         if getattr(self.tokenizer, "_build_translation_inputs", None):
             return self.tokenizer._build_translation_inputs(
-                *args,
-                return_tensors=self.framework,
-                src_lang=self.src_lang,
-                tgt_lang=self.tgt_lang,
-                truncation=truncation,
+                *args, return_tensors=self.framework, truncation=truncation, src_lang=src_lang, tgt_lang=tgt_lang
             )
         else:
             return super()._parse_and_tokenize(*args, truncation=truncation)
 
-    def set_parameters(self, src_lang=None, tgt_lang=None, **kwargs):
-        super().set_parameters(**kwargs)
+    def _sanitize_parameters(self, src_lang=None, tgt_lang=None, **kwargs):
+        preprocess_params, forward_params, postprocess_params = super()._sanitize_parameters(**kwargs)
         if src_lang is not None:
-            self.src_lang = src_lang
+            preprocess_params["src_lang"] = src_lang
         if tgt_lang is not None:
-            self.tgt_lang = tgt_lang
+            preprocess_params["tgt_lang"] = tgt_lang
         if src_lang is None and tgt_lang is None:
             # Backward compatibility, direct arguments use is preferred.
             task = kwargs.get("task", self.task)
             items = task.split("_")
             if task and len(items) == 4:
                 # translation, XX, to YY
-                self.src_lang = items[1]
-                self.tgt_lang = items[3]
+                preprocess_params["src_lang"] = items[1]
+                preprocess_params["tgt_lang"] = items[3]
+        return preprocess_params, forward_params, postprocess_params
 
     def __call__(self, *args, **kwargs):
         r"""

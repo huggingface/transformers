@@ -41,15 +41,15 @@ class FeatureExtractionPipeline(Pipeline):
             the associated CUDA device id.
     """
 
-    def set_parameters(self, **kwargs):
-        pass
+    def _sanitize_parameters(self, **kwargs):
+        return {}, {}, {}
 
     def preprocess(self, inputs) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
         model_inputs = self.tokenizer(inputs, return_tensors=return_tensors)
         return model_inputs
 
-    def forward(self, model_inputs):
+    def _forward(self, model_inputs):
         model_outputs = self.model(**model_inputs)
         return model_outputs
 

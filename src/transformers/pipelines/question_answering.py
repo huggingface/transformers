@@ -109,12 +109,6 @@ class QuestionAnsweringPipeline(Pipeline):
     """
 
     default_input_names = "question,context"
-    padding = "do_not_pad"
-    top_k = 1
-    doc_stride = 128
-    max_answer_len = 15
-    max_seq_len = 384
-    max_question_len = 64
     handle_impossible_answer = False
 
     def __init__(
@@ -165,7 +159,7 @@ class QuestionAnsweringPipeline(Pipeline):
         else:
             return SquadExample(None, question, context, None, None, None)
 
-    def set_parameters(
+    def _sanitize_parameters(
         self,
         padding=None,
         topk=None,
@@ -178,8 +172,15 @@ class QuestionAnsweringPipeline(Pipeline):
         **kwargs
     ):
         # Set defaults values
+        preprocess_params = {}
         if padding is not None:
-            self.padding = padding
+            preprocess_params["padding"] = padding
+        if doc_stride is not None:
+            preprocess_params["doc_stride"] = doc_stride
+        if max_question_len is not None:
+            preprocess_params["max_question_len"] = max_question_len
+
+        postprocess_params = {}
         if topk is not None and top_k is None:
             import warnings
 
@@ -188,17 +189,15 @@ class QuestionAnsweringPipeline(Pipeline):
         if top_k is not None:
             if top_k < 1:
                 raise ValueError(f"top_k parameter should be >= 1 (got {top_k})")
-            self.top_k = top_k
-        if doc_stride is not None:
-            self.doc_stride = doc_stride
+            postprocess_params["top_k"] = top_k
         if max_answer_len is not None:
             if max_answer_len < 1:
                 raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len}")
-            self.max_answer_len = max_answer_len
-        if max_question_len is not None:
-            self.max_question_len = max_question_len
+        if max_answer_len is not None:
+            postprocess_params["max_answer_len"] = max_answer_len
         if handle_impossible_answer is not None:
-            self.handle_impossible_answer = handle_impossible_answer
+            postprocess_params["handle_impossible_answer"] = handle_impossible_answer
+        return preprocess_params, {}, postprocess_params
 
     def __call__(self, *args, **kwargs):
         """
@@ -250,14 +249,14 @@ class QuestionAnsweringPipeline(Pipeline):
             return super().__call__(examples[0], **kwargs)
         return super().__call__(examples, **kwargs)
 
-    def preprocess(self, example):
+    def preprocess(self, example, padding="do_not_pad", doc_stride=128, max_question_len=64, max_seq_len=384):
         if not self.tokenizer.is_fast:
             features = squad_convert_examples_to_features(
                 examples=[example],
                 tokenizer=self.tokenizer,
-                max_seq_length=self.max_seq_len,
-                doc_stride=self.doc_stride,
-                max_query_length=self.max_question_len,
+                max_seq_length=max_seq_len,
+                doc_stride=doc_stride,
+                max_query_length=max_question_len,
                 padding_strategy=PaddingStrategy.MAX_LENGTH,
                 is_training=False,
                 tqdm_enabled=False,
@@ -269,10 +268,10 @@ class QuestionAnsweringPipeline(Pipeline):
             encoded_inputs = self.tokenizer(
                 text=example.question_text if question_first else example.context_text,
                 text_pair=example.context_text if question_first else example.question_text,
-                padding=self.padding,
+                padding=padding,
                 truncation="only_second" if question_first else "only_first",
-                max_length=self.max_seq_len,
-                stride=self.doc_stride,
+                max_length=max_seq_len,
+                stride=doc_stride,
                 return_tensors="np",
                 return_token_type_ids=True,
                 return_overflowing_tokens=True,
@@ -327,7 +326,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 )
         return {"features": features, "example": example}
 
-    def forward(self, model_inputs):
+    def _forward(self, model_inputs):
         features = model_inputs["features"]
         example = model_inputs["example"]
         model_input_names = self.tokenizer.model_input_names
@@ -346,7 +345,13 @@ class QuestionAnsweringPipeline(Pipeline):
             start, end = start.cpu().numpy(), end.cpu().numpy()
         return {"start": start, "end": end, "features": features, "example": example}
 
-    def postprocess(self, model_outputs):
+    def postprocess(
+        self,
+        model_outputs,
+        top_k=1,
+        handle_impossible_answer=False,
+        max_answer_len=15,
+    ):
         min_null_score = 1000000  # large and positive
         answers = []
         start_ = model_outputs["start"][0]
@@ -367,13 +372,13 @@ class QuestionAnsweringPipeline(Pipeline):
         start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
         end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
 
-        if self.handle_impossible_answer:
+        if handle_impossible_answer:
             min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
 
         # Mask CLS
         start_[0] = end_[0] = 0.0
 
-        starts, ends, scores = self.decode(start_, end_, self.top_k, self.max_answer_len, undesired_tokens)
+        starts, ends, scores = self.decode(start_, end_, top_k, max_answer_len, undesired_tokens)
         if not self.tokenizer.is_fast:
             char_to_word = np.array(example.char_to_word_offset)
 
@@ -426,10 +431,10 @@ class QuestionAnsweringPipeline(Pipeline):
                     }
                 )
 
-        if self.handle_impossible_answer:
+        if handle_impossible_answer:
             answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
 
-            answers = sorted(answers, key=lambda x: x["score"], reverse=True)[: self.top_k]
+            answers = sorted(answers, key=lambda x: x["score"], reverse=True)[:top_k]
         if len(answers) == 1:
             return answers[0]
         return answers

@@ -62,8 +62,6 @@ class ZeroShotClassificationPipeline(Pipeline):
     """
 
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
-        self.hypothesis_template = "This example is {}."
-        self.multi_label = False
         self._args_parser = args_parser
         super().__init__(*args, **kwargs)
         if self.entailment_id == -1:
@@ -136,19 +134,23 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         return inputs
 
-    def set_parameters(self, **kwargs):
+    def _sanitize_parameters(self, **kwargs):
         if kwargs.get("multi_class", None) is not None:
             kwargs["multi_label"] = kwargs["multi_class"]
             logger.warning(
                 "The `multi_class` argument has been deprecated and renamed to `multi_label`. "
                 "`multi_class` will be removed in a future version of Transformers."
             )
+        preprocess_params = {}
         if "candidate_labels" in kwargs:
-            self.candidate_labels = self._args_parser._parse_labels(kwargs["candidate_labels"])
-        if "multi_label" in kwargs:
-            self.multi_label = kwargs["multi_label"]
+            preprocess_params["candidate_labels"] = self._args_parser._parse_labels(kwargs["candidate_labels"])
         if "hypothesis_template" in kwargs:
-            self.hypothesis_template = kwargs["hypothesis_template"]
+            preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
+
+        postprocess_params = {}
+        if "multi_label" in kwargs:
+            postprocess_params["multi_label"] = kwargs["multi_label"]
+        return preprocess_params, {}, postprocess_params
 
     def __call__(
         self,
@@ -191,18 +193,18 @@ class ZeroShotClassificationPipeline(Pipeline):
             return result[0]
         return result
 
-    def preprocess(self, inputs):
-        sequence_pairs, sequences = self._args_parser(inputs, self.candidate_labels, self.hypothesis_template)
+    def preprocess(self, inputs, candidate_labels=None, hypothesis_template="This example is {}."):
+        sequence_pairs, sequences = self._args_parser(inputs, candidate_labels, hypothesis_template)
         model_inputs = self._parse_and_tokenize(sequence_pairs)
 
         prepared_inputs = {
-            "candidate_labels": self.candidate_labels,
+            "candidate_labels": candidate_labels,
             "sequences": sequences,
             "inputs": model_inputs,
         }
         return prepared_inputs
 
-    def forward(self, inputs):
+    def _forward(self, inputs):
         candidate_labels = inputs["candidate_labels"]
         sequences = inputs["sequences"]
         model_inputs = inputs["inputs"]
@@ -217,7 +219,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         model_outputs = {"candidate_labels": candidate_labels, "sequences": sequences, "outputs": outputs}
         return model_outputs
 
-    def postprocess(self, model_outputs):
+    def postprocess(self, model_outputs, multi_label=False):
         candidate_labels = model_outputs["candidate_labels"]
         sequences = model_outputs["sequences"]
         outputs = model_outputs["outputs"]
@@ -237,7 +239,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         num_sequences = N // n
         reshaped_outputs = logits.reshape((num_sequences, n, -1))
 
-        if self.multi_label or len(self.candidate_labels) == 1:
+        if multi_label or len(candidate_labels) == 1:
             # softmax over the entailment vs. contradiction dim for each label independently
             entailment_id = self.entailment_id
             contradiction_id = -1 if entailment_id == 0 else 0

@@ -66,17 +66,6 @@ class TextClassificationPipeline(Pipeline):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        if "function_to_apply" not in kwargs:
-            # Default value before `set_parameters`
-            if self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
-                function_to_apply = ClassificationFunction.SIGMOID
-            elif self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels > 1:
-                function_to_apply = ClassificationFunction.SOFTMAX
-            elif hasattr(self.model.config, "function_to_apply") and function_to_apply is None:
-                function_to_apply = self.model.config.function_to_apply
-            else:
-                function_to_apply = ClassificationFunction.NONE
-            self.function_to_apply = function_to_apply
 
         self.check_model_type(
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
@@ -84,23 +73,22 @@ class TextClassificationPipeline(Pipeline):
             else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
         )
 
-    def set_parameters(self, return_all_scores=None, function_to_apply=None, **kwargs):
-        self.tokenizer_kwargs = {}
-        if "truncation" in kwargs:
-            self.tokenizer_kwargs["truncation"] = kwargs["truncation"]
+    def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, **tokenizer_kwargs):
+        preprocess_params = tokenizer_kwargs
 
+        postprocess_params = {}
         if hasattr(self.model.config, "return_all_scores") and return_all_scores is None:
             return_all_scores = self.model.config.return_all_scores
+
         if return_all_scores is not None:
-            self.return_all_scores = return_all_scores
+            postprocess_params["return_all_scores"] = return_all_scores
 
         if isinstance(function_to_apply, str):
             function_to_apply = ClassificationFunction[function_to_apply.upper()]
 
         if function_to_apply is not None:
-            self.function_to_apply = function_to_apply
-
-        self.tokenizer_kwargs = {}
+            postprocess_params["function_to_apply"] = function_to_apply
+        return preprocess_params, {}, postprocess_params
 
     def __call__(self, *args, **kwargs):
         """
@@ -137,21 +125,31 @@ class TextClassificationPipeline(Pipeline):
         """
         return super().__call__(*args, **kwargs)
 
-    def preprocess(self, inputs) -> Dict[str, GenericTensor]:
+    def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
-        return self.tokenizer(inputs, return_tensors=return_tensors, **self.tokenizer_kwargs)
+        return self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
 
-    def forward(self, model_inputs):
+    def _forward(self, model_inputs):
         return self.model(**model_inputs)
 
-    def postprocess(self, model_outputs):
+    def postprocess(self, model_outputs, function_to_apply=None, return_all_scores=False):
+        # Default value before `set_parameters`
+        if function_to_apply is None:
+            if self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
+                function_to_apply = ClassificationFunction.SIGMOID
+            elif self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels > 1:
+                function_to_apply = ClassificationFunction.SOFTMAX
+            elif hasattr(self.model.config, "function_to_apply") and function_to_apply is None:
+                function_to_apply = self.model.config.function_to_apply
+            else:
+                function_to_apply = ClassificationFunction.NONE
+
         outputs = model_outputs["logits"][0]
         if self.framework == "pt":
             outputs = outputs.cpu().numpy()
         else:
             outputs = outputs.numpy()
 
-        function_to_apply = self.function_to_apply
         if function_to_apply == ClassificationFunction.SIGMOID:
             scores = sigmoid(outputs)
         elif function_to_apply == ClassificationFunction.SOFTMAX:
@@ -161,14 +159,14 @@ class TextClassificationPipeline(Pipeline):
         else:
             raise ValueError(f"Unrecognized `function_to_apply` argument: {function_to_apply}")
 
-        if self.return_all_scores:
+        if return_all_scores:
             return [{"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(scores)]
         else:
             return {"label": self.model.config.id2label[scores.argmax().item()], "score": scores.max().item()}
 
-    def run_multi(self, inputs):
-        return [self.run_single(item)[0] for item in inputs]
+    def run_multi(self, inputs, preprocess_params, forward_params, postprocess_params):
+        return [self.run_single(item, preprocess_params, forward_params, postprocess_params)[0] for item in inputs]
 
-    def run_single(self, inputs):
+    def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
         "This pipeline is odd, and return a list when single item is run"
-        return [super().run_single(inputs)]
+        return [super().run_single(inputs, preprocess_params, forward_params, postprocess_params)]

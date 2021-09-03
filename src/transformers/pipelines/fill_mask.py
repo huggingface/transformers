@@ -47,10 +47,6 @@ class FillMaskPipeline(Pipeline):
         This pipeline only works for inputs with exactly one token masked.
     """
 
-    top_k = 5
-    targets = None
-    target_ids = None
-
     def get_masked_index(self, input_ids: GenericTensor) -> np.ndarray:
         if self.framework == "tf":
             masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
@@ -91,12 +87,15 @@ class FillMaskPipeline(Pipeline):
         self.ensure_exactly_one_mask_token(model_inputs)
         return model_inputs
 
-    def forward(self, model_inputs):
+    def _forward(self, model_inputs):
         model_outputs = self.model(**model_inputs)
         model_outputs["input_ids"] = model_inputs["input_ids"][0]
         return model_outputs
 
-    def postprocess(self, model_outputs):
+    def postprocess(self, model_outputs, top_k=5, target_ids=None):
+        # Cap top_k if there are targets
+        if target_ids is not None and target_ids.shape[0] < top_k:
+            top_k = target_ids.shape[0]
         input_ids = model_outputs["input_ids"]
         outputs = model_outputs["logits"]
         result = []
@@ -108,10 +107,10 @@ class FillMaskPipeline(Pipeline):
 
             logits = outputs[0, masked_index.item(), :]
             probs = tf.nn.softmax(logits)
-            if self.target_ids is not None:
-                probs = tf.gather_nd(probs, tf.reshape(self.target_ids, (-1, 1)))
+            if target_ids is not None:
+                probs = tf.gather_nd(probs, tf.reshape(target_ids, (-1, 1)))
 
-            topk = tf.math.top_k(probs, k=self.top_k)
+            topk = tf.math.top_k(probs, k=top_k)
             values, predictions = topk.values.numpy(), topk.indices.numpy()
         else:
             masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
@@ -119,15 +118,15 @@ class FillMaskPipeline(Pipeline):
 
             logits = outputs[0, masked_index.item(), :]
             probs = logits.softmax(dim=0)
-            if self.target_ids is not None:
-                probs = probs[..., self.target_ids]
+            if target_ids is not None:
+                probs = probs[..., target_ids]
 
-            values, predictions = probs.topk(self.top_k)
+            values, predictions = probs.topk(top_k)
 
         for v, p in zip(values.tolist(), predictions.tolist()):
             tokens = input_ids.numpy()
-            if self.target_ids is not None:
-                p = self.target_ids[p].tolist()
+            if target_ids is not None:
+                p = target_ids[p].tolist()
             tokens[masked_index] = p
             # Filter padding out:
             tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
@@ -141,7 +140,7 @@ class FillMaskPipeline(Pipeline):
             )
         return result
 
-    def get_target_ids(self, targets):
+    def get_target_ids(self, targets, top_k=None):
         if isinstance(targets, str):
             targets = [targets]
         try:
@@ -180,23 +179,23 @@ class FillMaskPipeline(Pipeline):
         if len(target_ids) == 0:
             raise ValueError("At least one target must be provided when passed.")
         target_ids = np.array(target_ids)
-        # Cap top_k if there are targets
-        if self.top_k > target_ids.shape[0]:
-            self.top_k = target_ids.shape[0]
         return target_ids
 
-    def set_parameters(self, top_k=None, targets=None):
-        if top_k is not None:
-            self.top_k = top_k
+    def _sanitize_parameters(self, top_k=None, targets=None):
+        postprocess_params = {}
 
         if targets is not None:
-            self.target_ids = self.get_target_ids(targets)
-            self.targets = targets
+            target_ids = self.get_target_ids(targets, top_k)
+            postprocess_params["target_ids"] = target_ids
+
+        if top_k is not None:
+            postprocess_params["top_k"] = top_k
 
         if self.tokenizer.mask_token_id is None:
             raise PipelineException(
                 "fill-mask", self.model.base_model_prefix, "The tokenizer does not define a `mask_token`."
             )
+        return {}, {}, postprocess_params
 
     def __call__(self, inputs, *args, **kwargs):
         """

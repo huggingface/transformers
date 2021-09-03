@@ -97,7 +97,6 @@ class TokenClassificationPipeline(Pipeline):
 
     def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
         self.ignore_labels = ["O"]
-        self.aggregation_strategy = AggregationStrategy.NONE
         super().__init__(*args, **kwargs)
         self.check_model_type(
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
@@ -108,13 +107,15 @@ class TokenClassificationPipeline(Pipeline):
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser
 
-    def set_parameters(
+    def _sanitize_parameters(
         self,
         ignore_labels=None,
         grouped_entities: Optional[bool] = None,
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
     ):
+
+        postprocess_params = {}
         if grouped_entities is not None or ignore_subwords is not None:
             if grouped_entities and ignore_subwords:
                 aggregation_strategy = AggregationStrategy.FIRST
@@ -144,9 +145,10 @@ class TokenClassificationPipeline(Pipeline):
                     "Slow tokenizers cannot handle subwords. Please set the `aggregation_strategy` option"
                     'to `"simple"` or use a fast tokenizer.'
                 )
-            self.aggregation_strategy = aggregation_strategy
+            postprocess_params["aggregation_strategy"] = aggregation_strategy
         if ignore_labels is not None:
-            self.ignore_labels = ignore_labels
+            postprocess_params["ignore_labels"] = ignore_labels
+        return {}, {}, postprocess_params
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
@@ -196,7 +198,7 @@ class TokenClassificationPipeline(Pipeline):
 
         return model_inputs
 
-    def forward(self, model_inputs):
+    def _forward(self, model_inputs):
         # Forward
         special_tokens_mask = model_inputs.pop("special_tokens_mask")
         offset_mapping = model_inputs.pop("offset_mapping", None)
@@ -204,7 +206,7 @@ class TokenClassificationPipeline(Pipeline):
         if self.framework == "tf":
             outputs = self.model(model_inputs.data)[0][0].numpy()
         else:
-            outputs = self.model(**model_inputs)[0][0].cpu().numpy()
+            outputs = self.model(**model_inputs)[0][0].numpy()
         return {
             "outputs": outputs,
             "special_tokens_mask": special_tokens_mask,
@@ -213,7 +215,7 @@ class TokenClassificationPipeline(Pipeline):
             **model_inputs,
         }
 
-    def postprocess(self, model_outputs):
+    def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE):
         outputs = model_outputs["outputs"]
         sentence = model_outputs["sentence"]
         input_ids = model_outputs["input_ids"][0]
@@ -221,8 +223,10 @@ class TokenClassificationPipeline(Pipeline):
         special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
 
         scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
-        pre_entities = self.gather_pre_entities(sentence, input_ids, scores, offset_mapping, special_tokens_mask)
-        grouped_entities = self.aggregate(pre_entities, self.aggregation_strategy)
+        pre_entities = self.gather_pre_entities(
+            sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
+        )
+        grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
         # Filter anything that is in self.ignore_labels
         entities = [
             entity
@@ -239,6 +243,7 @@ class TokenClassificationPipeline(Pipeline):
         scores: np.ndarray,
         offset_mapping: Optional[List[Tuple[int, int]]],
         special_tokens_mask: np.ndarray,
+        aggregation_strategy: AggregationStrategy,
     ) -> List[dict]:
         """Fuse various numpy arrays into dicts with all the information needed for aggregation"""
         pre_entities = []
@@ -265,7 +270,7 @@ class TokenClassificationPipeline(Pipeline):
                     is_subword = len(word) != len(word_ref)
                 else:
                     # This is a fallback heuristic. This will fail most likely on any kind of text + punctuation mixtures that will be considered "words". Non word aware models cannot do better than this unfortunately.
-                    if self.aggregation_strategy in {
+                    if aggregation_strategy in {
                         AggregationStrategy.FIRST,
                         AggregationStrategy.AVERAGE,
                         AggregationStrategy.MAX,

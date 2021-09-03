@@ -77,9 +77,9 @@ class AudioClassificationPipeline(Pipeline):
     <https://huggingface.co/models?filter=audio-classification>`__.
     """
 
-    top_k = 5
-
     def __init__(self, *args, **kwargs):
+        # Default, might be overriden by the model.config.
+        kwargs["top_k"] = 5
         super().__init__(*args, **kwargs)
 
         if self.framework != "pt":
@@ -116,12 +116,14 @@ class AudioClassificationPipeline(Pipeline):
         """
         return super().__call__(inputs, **kwargs)
 
-    def set_parameters(self, top_k=None, **kwargs):
+    def _sanitize_parameters(self, top_k=None, **kwargs):
         # No parameters on this pipeline right now
+        postprocess_params = {}
         if top_k is not None:
-            self.top_k = top_k
-        if self.top_k > self.model.config.num_labels:
-            self.top_k = self.model.config.num_labels
+            if top_k > self.model.config.num_labels:
+                top_k = self.model.config.num_labels
+            postprocess_params["top_k"] = top_k
+        return {}, {}, postprocess_params
 
     def preprocess(self, inputs):
         if isinstance(inputs, str):
@@ -141,13 +143,13 @@ class AudioClassificationPipeline(Pipeline):
         )
         return processed
 
-    def forward(self, model_inputs):
+    def _forward(self, model_inputs):
         model_outputs = self.model(**model_inputs)
         return model_outputs
 
-    def postprocess(self, model_outputs):
+    def postprocess(self, model_outputs, top_k=5):
         probs = model_outputs.logits[0].softmax(-1)
-        scores, ids = probs.topk(self.top_k)
+        scores, ids = probs.topk(top_k)
 
         scores = scores.tolist()
         ids = ids.tolist()

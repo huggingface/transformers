@@ -30,14 +30,8 @@ class ImageClassificationPipeline(Pipeline):
     <https://huggingface.co/models?filter=image-classification>`__.
     """
 
-    # XXX: we cannot hardcode a number, because
-    # we need to be overridden by `model.config.num_labels` possibly
-    top_k = None
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.top_k is None:
-            self.set_parameters(top_k=5)
 
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
@@ -67,11 +61,11 @@ class ImageClassificationPipeline(Pipeline):
         image = image.convert("RGB")
         return image
 
-    def set_parameters(self, top_k=None):
+    def _sanitize_parameters(self, top_k=None):
+        postprocess_params = {}
         if top_k is not None:
-            if top_k > self.model.config.num_labels:
-                top_k = self.model.config.num_labels
-            self.top_k = top_k
+            postprocess_params["top_k"] = top_k
+        return {}, {}, postprocess_params
 
     def __call__(self, images: Union[str, List[str], "Image", List["Image"]], **kwargs):
         """
@@ -109,13 +103,15 @@ class ImageClassificationPipeline(Pipeline):
         model_inputs = self.feature_extractor(images=image, return_tensors="pt")
         return model_inputs
 
-    def forward(self, model_inputs):
+    def _forward(self, model_inputs):
         model_outputs = self.model(**model_inputs)
         return model_outputs
 
-    def postprocess(self, model_outputs):
+    def postprocess(self, model_outputs, top_k=5):
+        if top_k > self.model.config.num_labels:
+            top_k = self.model.config.num_labels
         probs = model_outputs.logits.softmax(-1)[0]
-        scores, ids = probs.topk(self.top_k)
+        scores, ids = probs.topk(top_k)
 
         scores = scores.tolist()
         ids = ids.tolist()

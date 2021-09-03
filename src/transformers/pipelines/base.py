@@ -599,22 +599,24 @@ PIPELINE_INIT_ARGS = r"""
 if is_torch_available():
 
     class PipelineDataset(Dataset):
-        def __init__(self, dataset, process):
+        def __init__(self, dataset, process, params):
             self.dataset = dataset
             self.process = process
+            self.params = params
 
         def __len__(self):
             return len(self.dataset)
 
         def __getitem__(self, i):
             item = self.dataset[i]
-            processed = self.process(item)
+            processed = self.process(item, **self.params)
             return processed
 
     class PipelineIterator(IterableDataset):
-        def __init__(self, loader, infer):
+        def __init__(self, loader, infer, params):
             self.loader = loader
             self.infer = infer
+            self.params = params
 
         def __len__(self):
             return len(self.loader)
@@ -625,7 +627,7 @@ if is_torch_available():
 
         def __next__(self):
             item = next(self.iterator)
-            processed = self.infer(item)
+            processed = self.infer(item, **self.params)
             return processed
 
     class KeyDataset(Dataset):
@@ -697,7 +699,7 @@ class Pipeline(_ScikitCompat):
             self.model.config.update(task_specific_params.get(task))
 
         self.call_count = 0
-        self.set_parameters(**kwargs)
+        self.preprocess_params, self.forward_params, self.postprocess_params = self._sanitize_parameters(**kwargs)
 
     def save_pretrained(self, save_directory: str):
         """
@@ -825,45 +827,84 @@ class Pipeline(_ScikitCompat):
             )
 
     @abstractmethod
-    def set_parameters(self, **pipeline_parameters):
-        raise NotImplementedError("set_parameters not implemented")
+    def _sanitize_parameters(self, **pipeline_parameters):
+        """
+        _sanitize_parameters will be called with any excessive named arguments from
+        either `__init__` or `__call__` methods.
+        It should return 3 dictionnaries of the resolved parameters used by the
+        various `preprocess`, `forward` and `postprocess` methods.
+
+        It is not meant to be called directly, it will be automatically called and the
+        final parameters resolved by `__init__` and `__call__`
+        """
+        raise NotImplementedError("_sanitize_parameters not implemented")
 
     @abstractmethod
-    def preprocess(self, input_: Any, **preprocess_parameters) -> Dict[str, GenericTensor]:
+    def preprocess(self, input_: Any, **preprocess_parameters: Dict) -> Dict[str, GenericTensor]:
+        """
+        Preprocess will take the `input_` of a specific pipeline and return a dictionnary
+        of everything necessary for `_forward` to run properly. It should contain
+        at least one tensor, but might have arbitrary other items.
+        """
         raise NotImplementedError("preprocess not implemented")
 
     @abstractmethod
-    def postprocess(self, model_outputs: ModelOutput, **postprocess_parameters) -> Any:
+    def postprocess(self, model_outputs: ModelOutput, **postprocess_parameters: Dict) -> Any:
+        """
+        Postprocess will receive the raw outputs of the `_forward` method, generally
+        tensors, and reformat them into something more friendly.
+        Generally it will output a list or a dict or results (containing just strings and numbers).
+        """
         raise NotImplementedError("postprocess not implemented")
 
     @abstractmethod
-    def forward(self, input_tensors: Dict[str, GenericTensor], **forward_parameters) -> ModelOutput:
-        raise NotImplementedError("postprocess not implemented")
+    def _forward(self, input_tensors: Dict[str, GenericTensor], **forward_parameters: Dict) -> ModelOutput:
+        """
+        _forward will receive the prepared dictionnary from `preprocess` and run it on the
+        model. This method might involve the GPU or the CPU and should be agnostic to it.
+        Isolating this function is the reason for `preprocess` and `postprocess` to exist,
+        so that the hot path, this method generally can run as fast as possible.
 
-    def infer_forward(self, model_inputs, *args, **kwargs):
+        It is not meant to be called directly, `forward` is preferred. It is basically the same
+        but contains additional code surrounding `_forward` making sure tensors and models
+        are on the same device, disabling the training part of the code (leading to faster inference).
+        """
+        raise NotImplementedError("_forward not implemented")
+
+    def forward(self, model_inputs, **forward_params):
         with self.device_placement():
             if self.framework == "tf":
                 model_inputs["training"] = False
-                model_outputs = self.forward(model_inputs)
+                model_outputs = self._forward(model_inputs, **forward_params)
             elif self.framework == "pt":
                 with torch.no_grad():
                     model_inputs = self.ensure_tensor_on_device(**model_inputs)
-                    model_outputs = self.forward(model_inputs)
+                    model_outputs = self._forward(model_inputs, **forward_params)
                     model_inputs = self.ensure_tensor_on_cpu(model_outputs)
             else:
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs
 
-    def get_iterator(self, inputs, num_workers: int):
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        dataset = PipelineDataset(inputs, self.preprocess)
+    def get_iterator(self, inputs, num_workers: int, preprocess_params, forward_params, postprocess_params):
+        if "TOKENIZERS_PARALLELISM" not in os.environ:
+            logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
+            os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=1, collate_fn=collate_fn)
-        model_iterator = PipelineIterator(dataloader, self.infer_forward)
-        final_iterator = PipelineIterator(model_iterator, self.postprocess)
+        model_iterator = PipelineIterator(dataloader, self.forward, forward_params)
+        final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
 
     def __call__(self, inputs, *args, num_workers=8, **kwargs):
-        self.set_parameters(**kwargs)
+        if args:
+            logger.warning(f"Ignoring args : {args}")
+        preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)
+
+        # Fuse __init__ params and __call__ params without modifying the __init__ ones.
+        preprocess_params = {**self.preprocess_params, **preprocess_params}
+        forward_params = {**self.forward_params, **forward_params}
+        postprocess_params = {**self.postprocess_params, **postprocess_params}
+
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
             warnings.warn(
@@ -872,21 +913,23 @@ class Pipeline(_ScikitCompat):
             )
         if isinstance(inputs, list):
             if self.framework == "pt":
-                final_iterator = self.get_iterator(inputs, num_workers)
+                final_iterator = self.get_iterator(
+                    inputs, num_workers, preprocess_params, forward_params, postprocess_params
+                )
                 outputs = [output for output in final_iterator]
                 return outputs
             else:
-                return self.run_multi(inputs)
+                return self.run_multi(inputs, preprocess_params, forward_params, postprocess_params)
         elif Dataset and isinstance(inputs, Dataset):
-            return self.get_iterator(inputs, num_workers)
+            return self.get_iterator(inputs, num_workers, preprocess_params, forward_params, postprocess_params)
         else:
-            return self.run_single(inputs)
+            return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
-    def run_multi(self, inputs):
-        return [self.run_single(item) for item in inputs]
+    def run_multi(self, inputs, preprocess_params, forward_params, postprocess_params):
+        return [self.run_single(item, preprocess_params, forward_params, postprocess_params) for item in inputs]
 
-    def run_single(self, inputs):
-        model_inputs = self.preprocess(inputs)
-        model_outputs = self.infer_forward(model_inputs)
-        outputs = self.postprocess(model_outputs)
+    def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
+        model_inputs = self.preprocess(inputs, **preprocess_params)
+        model_outputs = self.forward(model_inputs, **forward_params)
+        outputs = self.postprocess(model_outputs, **postprocess_params)
         return outputs

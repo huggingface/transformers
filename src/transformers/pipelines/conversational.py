@@ -190,29 +190,32 @@ class ConversationalPipeline(Pipeline):
         conversational_pipeline([conversation_1, conversation_2])
     """
 
-    min_length_for_response = 32
-    minimum_tokens = 10
-    clean_up_tokenization_spaces = True
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.max_length = kwargs.get("max_length", self.model.config.max_length)
 
-    def set_parameters(
+    def _sanitize_parameters(
         self, min_length_for_response=None, minimum_tokens=None, clean_up_tokenization_spaces=None, **generate_kwargs
     ):
-        if min_length_for_response:
-            self.min_length_for_response = min_length_for_response
-        if minimum_tokens:
-            self.minimum_tokens = minimum_tokens
+        preprocess_params = {}
+        forward_params = {}
+        postprocess_params = {}
+
+        if min_length_for_response is not None:
+            preprocess_params["min_length_for_response"] = min_length_for_response
+        if minimum_tokens is not None:
+            forward_params["minimum_tokens"] = minimum_tokens
+
         if "max_length" in generate_kwargs:
-            self.max_length = generate_kwargs.get("max_length", self.model.config.max_length)
-        if clean_up_tokenization_spaces:
-            self.clean_up_tokenization_spaces = clean_up_tokenization_spaces
+            forward_params["max_length"] = generate_kwargs["max_length"]
+            # self.max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+        if clean_up_tokenization_spaces is not None:
+            postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
+
         if generate_kwargs:
-            self.generate_kwargs = generate_kwargs
+            forward_params.update(generate_kwargs)
+        return preprocess_params, forward_params, postprocess_params
 
     def __call__(self, conversations: Union[Conversation, List[Conversation]], num_workers=0, **kwargs):
         r"""
@@ -260,32 +263,31 @@ class ConversationalPipeline(Pipeline):
             input_ids = tf.constant([input_ids])
         return {"input_ids": input_ids, "conversation": conversation}
 
-    def forward(self, model_inputs):
-        max_length = self.max_length
+    def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):
+        max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+
         n = model_inputs["input_ids"].shape[1]
-        if max_length - self.minimum_tokens < n:
-            logger.warning(
-                f"Conversation input is to long ({n}), trimming it to ({max_length} - {self.minimum_tokens})"
-            )
-            trim = max_length - self.minimum_tokens
+        if max_length - minimum_tokens < n:
+            logger.warning(f"Conversation input is to long ({n}), trimming it to ({max_length} - {minimum_tokens})")
+            trim = max_length - minimum_tokens
             model_inputs["input_ids"] = model_inputs["input_ids"][:, -trim:]
             if "attention_mask" in model_inputs:
                 model_inputs["attention_mask"] = model_inputs["attention_mask"][:, -trim:]
         conversation = model_inputs.pop("conversation")
         model_inputs["max_length"] = max_length
-        output_ids = self.model.generate(**model_inputs)
+        output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.model.config.is_encoder_decoder:
             start_position = 1
         else:
             start_position = n
         return {"output_ids": output_ids[0, start_position:], "conversation": conversation}
 
-    def postprocess(self, model_outputs):
+    def postprocess(self, model_outputs, clean_up_tokenization_spaces=True):
         output_ids = model_outputs["output_ids"]
         answer = self.tokenizer.decode(
             output_ids,
             skip_special_tokens=True,
-            clean_up_tokenization_spaces=self.clean_up_tokenization_spaces,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
         )
         conversation = model_outputs["conversation"]
         conversation.mark_processed()
