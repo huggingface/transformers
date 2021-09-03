@@ -98,7 +98,6 @@ class RealmTokenizer(BertTokenizer):
             >>> ]
 
             >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
-
             >>> tokenized_text = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
         """
 
@@ -109,11 +108,7 @@ class RealmTokenizer(BertTokenizer):
         batch_text_pair = kwargs.pop("text_pair", None)
         return_tensors = kwargs.pop("return_tensors", None)
 
-        output_data = {
-            "input_ids": [],
-            "attention_mask": [],
-            "token_type_ids": [],
-        }
+        output_data = { "input_ids": [], "attention_mask": [],"token_type_ids": [],}
 
         for idx, candidate_text in enumerate(batch_text):
             if batch_text_pair is not None:

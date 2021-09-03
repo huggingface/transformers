@@ -101,10 +101,6 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
                 pointer = getattr(pointer, "weight")
             elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
                 pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            # elif scope_names[0] == "squad":
-            #    pointer = getattr(pointer, "classifier")
             else:
                 try:
                     pointer = getattr(pointer, scope_names[0])
@@ -278,7 +274,7 @@ class RealmPreTrainedModel(PreTrainedModel):
 
 
 REALM_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
@@ -421,10 +417,7 @@ class RealmRetriever(RealmPreTrainedModel):
 
         self.embedder = RealmEmbedder(self.config)
 
-        if query_embedder:
-            self.query_embedder = query_embedder
-        else:
-            self.query_embedder = self.embedder
+        self.query_embedder = query_embedder if query_embedder is not None else self.embedder
 
         self.init_weights()
 

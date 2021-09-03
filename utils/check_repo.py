@@ -116,7 +116,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
     "RealmEmbedder",
-    "RealmEncoder",
     "RealmRetriever",
     "TFDPRReader",
     "TFGPT2DoubleHeadsModel",
