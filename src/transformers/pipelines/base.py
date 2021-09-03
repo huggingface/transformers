@@ -829,45 +829,42 @@ class Pipeline(_ScikitCompat):
     @abstractmethod
     def _sanitize_parameters(self, **pipeline_parameters):
         """
-        _sanitize_parameters will be called with any excessive named arguments from
-        either `__init__` or `__call__` methods.
-        It should return 3 dictionnaries of the resolved parameters used by the
-        various `preprocess`, `forward` and `postprocess` methods.
+        _sanitize_parameters will be called with any excessive named arguments from either `__init__` or `__call__`
+        methods. It should return 3 dictionnaries of the resolved parameters used by the various `preprocess`,
+        `forward` and `postprocess` methods.
 
-        It is not meant to be called directly, it will be automatically called and the
-        final parameters resolved by `__init__` and `__call__`
+        It is not meant to be called directly, it will be automatically called and the final parameters resolved by
+        `__init__` and `__call__`
         """
         raise NotImplementedError("_sanitize_parameters not implemented")
 
     @abstractmethod
     def preprocess(self, input_: Any, **preprocess_parameters: Dict) -> Dict[str, GenericTensor]:
         """
-        Preprocess will take the `input_` of a specific pipeline and return a dictionnary
-        of everything necessary for `_forward` to run properly. It should contain
-        at least one tensor, but might have arbitrary other items.
+        Preprocess will take the `input_` of a specific pipeline and return a dictionnary of everything necessary for
+        `_forward` to run properly. It should contain at least one tensor, but might have arbitrary other items.
         """
         raise NotImplementedError("preprocess not implemented")
 
     @abstractmethod
     def postprocess(self, model_outputs: ModelOutput, **postprocess_parameters: Dict) -> Any:
         """
-        Postprocess will receive the raw outputs of the `_forward` method, generally
-        tensors, and reformat them into something more friendly.
-        Generally it will output a list or a dict or results (containing just strings and numbers).
+        Postprocess will receive the raw outputs of the `_forward` method, generally tensors, and reformat them into
+        something more friendly. Generally it will output a list or a dict or results (containing just strings and
+        numbers).
         """
         raise NotImplementedError("postprocess not implemented")
 
     @abstractmethod
     def _forward(self, input_tensors: Dict[str, GenericTensor], **forward_parameters: Dict) -> ModelOutput:
         """
-        _forward will receive the prepared dictionnary from `preprocess` and run it on the
-        model. This method might involve the GPU or the CPU and should be agnostic to it.
-        Isolating this function is the reason for `preprocess` and `postprocess` to exist,
-        so that the hot path, this method generally can run as fast as possible.
+        _forward will receive the prepared dictionnary from `preprocess` and run it on the model. This method might
+        involve the GPU or the CPU and should be agnostic to it. Isolating this function is the reason for `preprocess`
+        and `postprocess` to exist, so that the hot path, this method generally can run as fast as possible.
 
-        It is not meant to be called directly, `forward` is preferred. It is basically the same
-        but contains additional code surrounding `_forward` making sure tensors and models
-        are on the same device, disabling the training part of the code (leading to faster inference).
+        It is not meant to be called directly, `forward` is preferred. It is basically the same but contains additional
+        code surrounding `_forward` making sure tensors and models are on the same device, disabling the training part
+        of the code (leading to faster inference).
         """
         raise NotImplementedError("_forward not implemented")
 
