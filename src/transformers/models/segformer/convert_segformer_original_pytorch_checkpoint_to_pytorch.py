@@ -358,6 +358,7 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     # verify logits
     assert logits.shape == expected_shape
+    print("Actual slice:", logits[0, :3, :3, :3])
     assert torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4)
 
     # finally, save model and feature extractor
