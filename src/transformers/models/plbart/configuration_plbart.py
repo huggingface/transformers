@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright UCLA NLP and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021, UCLA NLP, The Facebook AI Research Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PLBART model configuration """
+from collections import OrderedDict
+from typing import Mapping
+
+from transformers.onnx import OnnxConfigWithPast
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,30 +25,25 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "plbart-base": "https://huggingface.co/plbart-base/resolve/main/config.json",
+    "uclanlp/plbart-base": "https://huggingface.co/uclanlp/plbart-base/resolve/main/config.json",
     # See all PLBART models at https://huggingface.co/models?filter=plbart
 }
 
 
 class PLBartConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.PLBartModel`.
-    It is used to instantiate an PLBART model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the PLBART `plbart-base <https://huggingface.co/plbart-base>`__ architecture.
-
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
-
-
+    This is the configuration class to store the configuration of a :class:`~transformers.PLBartModel` adapted from
+    :class:`~transformers.MBartConfig`. It is used to instantiate a PLBART model according to the specified arguments,
+    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
+    to that of the PLBART `uclanlp/plbart-base <https://huggingface.co/uclanlp/plbart-base>`__ architecture.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
             Vocabulary size of the PLBART model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.PLBartModel` or
-            :class:`~transformers.TFPLBartModel`.
+            :obj:`inputs_ids` passed when calling :class:`~transformers.PLBartModel`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
-            Dimension of the layers and the pooler layer.
+            Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):
             Number of encoder layers.
         decoder_layers (:obj:`int`, `optional`, defaults to 12):
@@ -54,9 +53,9 @@ class PLBartConfig(PretrainedConfig):
         decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
         decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
@@ -79,50 +78,54 @@ class PLBartConfig(PretrainedConfig):
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        Example::
-
+            Whether or not the model should return the last key/values attentions (not used by all models)
+        forced_eos_token_id (:obj:`int`, `optional`, defaults to 2):
+            The id of the token to force as the last generated token when :obj:`max_length` is reached. Usually set to
+            :obj:`eos_token_id`.
+    Example::
         >>> from transformers import PLBartModel, PLBartConfig
-
-        >>> # Initializing a PLBART plbart-base style configuration
+        >>> # Initializing a PLBART uclanlp/plbart-base style configuration
         >>> configuration = PLBartConfig()
-
-        >>> # Initializing a model from the plbart-base style configuration
+        >>> # Initializing a model from the uclanlp/plbart-base style configuration
         >>> model = PLBartModel(configuration)
-
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
     model_type = "plbart"
     keys_to_ignore_at_inference = ["past_key_values"]
+
     def __init__(
         self,
-        vocab_size=50265,
+        vocab_size=50005,
         max_position_embeddings=1024,
-        encoder_layers=12,
-        encoder_ffn_dim=4096,
-        encoder_attention_heads=16,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
-        decoder_attention_heads=16,
+        encoder_layers=6,
+        encoder_ffn_dim=3072,
+        encoder_attention_heads=12,
+        decoder_layers=6,
+        decoder_ffn_dim=3072,
+        decoder_attention_heads=12,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
         use_cache=True,
         is_encoder_decoder=True,
         activation_function="gelu",
-        d_model=1024,
+        d_model=768,
         dropout=0.1,
-        attention_dropout=0.0,
+        attention_dropout=0.1,
         activation_dropout=0.0,
         init_std=0.02,
-        decoder_start_token_id=2,
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        forced_eos_token_id=2,
         **kwargs
     ):
         super().__init__(
@@ -130,8 +133,8 @@ class PLBartConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs
+            forced_eos_token_id=forced_eos_token_id,
+            **kwargs,
         )
 
         self.vocab_size = vocab_size
@@ -156,7 +159,6 @@ class PLBartConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
-        
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
@@ -164,3 +166,32 @@ class PLBartConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+
+class PLBartOnnxConfig(OnnxConfigWithPast):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.use_past:
+            return OrderedDict(
+                [
+                    ("last_hidden_state", {0: "batch", 1: "sequence"}),
+                    ("past_keys", {0: "batch", 2: "sequence"}),
+                    ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
+                ]
+            )
+        else:
+            return OrderedDict(
+                [
+                    ("last_hidden_state", {0: "batch", 1: "sequence"}),
+                    ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
+                ]
+            )
