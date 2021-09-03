@@ -98,6 +98,7 @@ class RealmConfig(PretrainedConfig):
         vocab_size=30522,
         hidden_size=768,
         retriever_proj_size=128,
+        span_hidden_size=256,
         num_hidden_layers=12,
         num_attention_heads=12,
         num_candidates=8,
@@ -121,6 +122,7 @@ class RealmConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.retriever_proj_size = retriever_proj_size
+        self.span_hidden_size = span_hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_candidates = num_candidates
