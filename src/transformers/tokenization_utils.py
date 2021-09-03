@@ -411,8 +411,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
         no_split_token = set(self.unique_no_split_tokens)
-        trie = self.trie
-        tokens = trie.split(text)
+        tokens = self.trie.split(text)
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
             if token in no_split_token:
