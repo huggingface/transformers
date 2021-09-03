@@ -572,9 +572,7 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         self.segformer = SegformerModel(config)
 
         # Classifier head
-        self.classifier = (
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
-        )
+        self.classifier = nn.Linear(config.hidden_sizes[-1], config.num_labels)
 
         self.init_weights()
 
@@ -625,9 +623,13 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
 
         sequence_output = outputs[0]
 
+        print("Shape of sequence output:", sequence_output.shape)
+
         # reshape last hidden states to (batch_size, height*width, hidden_size)
         batch_size = sequence_output.shape[0]
         sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
+
+        print("Shape of sequence output:", sequence_output.shape)
 
         # global pooling
         sequence_output = sequence_output.mean(dim=1)
@@ -722,7 +724,7 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SegFormer Model transformer with an all-MLP decoder head on top e.g. for ADE20k, CityScapes. """,
+    """SegFormer Model transformer with an all-MLP decode head on top e.g. for ADE20k, CityScapes. """,
     SEGFORMER_START_DOCSTRING,
 )
 class SegformerForImageSegmentation(SegformerPreTrainedModel):

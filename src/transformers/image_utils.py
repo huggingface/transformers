@@ -30,6 +30,7 @@ ImageInput = Union[
     PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]
 ]
 
+
 def is_torch_tensor(obj):
     return _is_torch(obj) if is_torch_available() else False
 

@@ -77,7 +77,7 @@ class SegformerConfig(PretrainedConfig):
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         decoder_hidden_size (:obj:`int`, `optional`, defaults to 256):
-            The dimension of the decoder.
+            The dimension of the all-MLP decode head.
 
         Example::
 
