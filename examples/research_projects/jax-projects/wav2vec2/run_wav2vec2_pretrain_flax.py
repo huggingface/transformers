@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import logging
+import math
 import sys
 import time
 from dataclasses import field
@@ -121,7 +122,7 @@ class DataTrainingArguments:
         default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
     )
     pad_to_multiple_of: Optional[int] = field(
-        default=1024,
+        default=None,
         metadata={
             "help": "If set will pad the sequence to a multiple of the provided value. This is important to avoid triggering recompilations on TPU"
         },
@@ -167,13 +168,13 @@ class FlaxDataCollatorForWav2Vec2Pretraining:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
-            max_length=self.max_length,
             padding=self.padding,
+            max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="np",
         )
-        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
 
+        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
         batch_size = batch["input_values"].shape[0]
 
         attention_mask = None
@@ -184,7 +185,7 @@ class FlaxDataCollatorForWav2Vec2Pretraining:
             # these two operations makes sure that all values
             # before the output lengths indices are attended to
             attention_mask[(np.arange(attention_mask.shape[0]), output_lengths - 1)] = 1
-            attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
+            attention_mask = np.flip(np.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
 
         # sample randomly masked indices
         batch["mask_time_indices"] = _compute_mask_indices(
@@ -199,7 +200,7 @@ class FlaxDataCollatorForWav2Vec2Pretraining:
         batch["sampled_negative_indices"] = _sample_negative_indices(
             (batch["mask_time_indices"].shape + (self.model.config.proj_codevector_dim,)),
             self.model.config.num_negatives,
-            attention_mask=attention_mask,
+            mask_time_indices=batch["mask_time_indices"],
         )
 
         return batch
@@ -250,29 +251,40 @@ def compute_contrastive_loss(
 
     # take negative vectors from sampled indices
     quantized_negatives = quantized_features.reshape(-1, hidden_size)[negative_indices.reshape(-1)]
+    # => Shape num_negatives x batch_size x seq_length x hidden_size
     quantized_negatives = quantized_negatives.reshape(
         batch_size, sequence_length, num_negatives, hidden_size
     ).transpose(2, 0, 1, 3)
 
     target_features = jnp.concatenate([quantized_features[None, :], quantized_negatives], axis=0)
     loss_logits = optax.cosine_similarity(transformer_features, target_features)
+    # => Shape [1, num_negatives] x batch_size x seq_length
     loss_logits = loss_logits / logits_temp
 
     neg_is_pos = (quantized_features == quantized_negatives).all(-1)
     neg_is_pos = jnp.concatenate([jnp.full((1,) + loss_logits.shape[1:], False), neg_is_pos], axis=0)
 
     # make sure incorrectly sampled vectors don't contribute to loss
-    loss_logits = jnp.where(neg_is_pos, -1e9, loss_logits)
+    loss_logits = jnp.where(neg_is_pos, -(2 ** 30), loss_logits)
 
-    predictions = loss_logits.transpose(2, 1, 0).reshape(-1, loss_logits.shape[0])
-    targets = ((1 - mask_time_indices) * -100).transpose(1, 0).flatten()
+    # => Shape batch_size*sequence_length x [1, num_negatives]
+    num_losses = batch_size * sequence_length
+    predictions = loss_logits.transpose(1, 2, 0).reshape(num_losses, loss_logits.shape[0])
+    targets = jnp.zeros_like(num_losses)
 
-    target_mask = jnp.where(targets >= 0, 1.0, 0.0)
+    target_mask = mask_time_indices.reshape(num_losses)
     contrastive_loss = optax.softmax_cross_entropy(predictions, onehot(targets, predictions.shape[-1])) * target_mask
-
     contrastive_loss = contrastive_loss.sum()
 
-    return contrastive_loss
+    # logs during training
+    accuracy = (predictions.argmax(-1) == 0).sum() / num_losses
+    percentage_zeroed_out_vectors = neg_is_pos.sum() / neg_is_pos.reshape(-1).shape[0]
+    logs = {"acc": accuracy, "%-0-vecs": percentage_zeroed_out_vectors, "num_targets": mask_time_indices.sum()}
+
+    return contrastive_loss, logs
+
+
+DATA_DIR = "/home/patrick/wav2vec2_tpu_replicate"
 
 
 def main():
@@ -286,7 +298,9 @@ def main():
     configure_logger(model_args, training_args)
 
     # Downloading and loading a dataset from the hub.
-    datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+    datasets = load_dataset(
+        data_args.dataset_name, data_args.dataset_config_name, data_dir=DATA_DIR, cache_dir=model_args.cache_dir
+    )
 
     if "validation" not in datasets.keys():
         # make sure only "validation" and "train" keys remain"
@@ -294,12 +308,14 @@ def main():
         datasets["validation"] = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
+            data_dir=DATA_DIR,
             split=f"{data_args.train_split_name}[:{data_args.validation_split_percentage}%]",
             cache_dir=model_args.cache_dir,
         )
         datasets["train"] = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
+            data_dir=DATA_DIR,
             split=f"{data_args.train_split_name}[{data_args.validation_split_percentage}%:]",
             cache_dir=model_args.cache_dir,
         )
@@ -334,17 +350,17 @@ def main():
         prepare_dataset, num_proc=data_args.preprocessing_num_workers, remove_columns=datasets["train"].column_names
     )
 
-    # filter audio files that are too long
-    vectorized_datasets = vectorized_datasets.filter(
-        lambda data: len(data["speech"]) < int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
-    )
+    # set max audio length in number of samples
+    max_length = int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
 
-    def normalize(batch):
-        return feature_extractor(batch["speech"], sampling_rate=feature_extractor.sampling_rate)
+    def process_audio(batch):
+        return feature_extractor(
+            batch["speech"], sampling_rate=feature_extractor.sampling_rate, max_length=max_length, truncation=True
+        )
 
     # normalize and transform to `BatchFeatures`
     vectorized_datasets = vectorized_datasets.map(
-        normalize,
+        process_audio,
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
         load_from_cache_file=not data_args.overwrite_cache,
@@ -353,11 +369,7 @@ def main():
 
     # pretraining is only supported for "newer" stable layer norm architecture
     # apply_spec_augment has to be True, mask_feature_prob has to be 0.0
-    config = Wav2Vec2Config.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        gradient_checkpointing=model_args.gradient_checkpointing,
-    )
+    config = Wav2Vec2Config.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
 
     if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
         raise ValueError(
@@ -366,8 +378,14 @@ def main():
 
     model = FlaxWav2Vec2ForPreTraining(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
+    # define data collator
+    padding = "longest" if data_args.pad_to_multiple_of is not None else "max_length"
     data_collator = FlaxDataCollatorForWav2Vec2Pretraining(
-        model=model, feature_extractor=feature_extractor, pad_to_multiple_of=data_args.pad_to_multiple_of
+        model=model,
+        feature_extractor=feature_extractor,
+        max_length=max_length,
+        padding=padding,
+        pad_to_multiple_of=data_args.pad_to_multiple_of,
     )
 
     # Enable tensorboard only on the master node
@@ -448,12 +466,14 @@ def main():
 
         def loss_fn(params):
             negative_indices = batch.pop("sampled_negative_indices")
+            sample_size = batch["mask_time_indices"].sum()
 
             gumbel_temperature = jnp.clip(
-                model_args.max_gumbel_temperature * model_args.gumbel_temperature_decay ** state.step,
+                model_args.max_gumbel_temperature * (model_args.gumbel_temperature_decay ** state.step),
                 a_min=model_args.min_gumbel_temperature,
             )
 
+            # forward
             outputs = state.apply_fn(
                 **batch,
                 gumbel_temperature=gumbel_temperature,
@@ -463,7 +483,8 @@ def main():
                 train=True,
             )
 
-            contrastive_loss = compute_contrastive_loss(
+            # compute contrastive loss
+            contrastive_loss, logs = compute_contrastive_loss(
                 outputs.projected_quantized_states,
                 outputs.projected_states,
                 negative_indices,
@@ -472,21 +493,45 @@ def main():
                 num_negatives,
             )
 
+            # higher codevector_perplexity leads to lower diversity loss
             diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
-            loss = contrastive_loss + diversity_loss_weight * diversity_loss
 
-            return loss
+            # make sure that diversity loss is multiplied by `sample_size` since contrastive_loss is `sum`-reduced instead of averaged
+            # also multiply diversity_loss_weight
+            # \alpha * L_d (Eq. 2 from paper: https://arxiv.org/pdf/2006.11477.pdf)
+            diversity_loss = diversity_loss * sample_size * diversity_loss_weight
 
-        grad_fn = jax.value_and_grad(loss_fn)
-        loss, grad = grad_fn(state.params)
+            # L = L_m + \alpha * L_d (Eq. 2 from paper: https://arxiv.org/pdf/2006.11477.pdf)
+            loss = contrastive_loss + diversity_loss
+
+            # average loss over all loss samples
+            loss = loss / sample_size
+
+            # add more loss
+            logs["code_ppl"] = outputs.codevector_perplexity
+            logs["gumbel_temp"] = gumbel_temperature
+            logs["contrast_loss"] = contrastive_loss / sample_size / math.log(2)
+            logs["diversity_loss"] = diversity_loss / sample_size / math.log(2)
+            logs["num_inputs"] = batch["mask_time_indices"].reshape(-1).shape[0]
+
+            return loss, logs
+
+        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+        (loss, logs), grad = grad_fn(state.params)
         grad = jax.lax.pmean(grad, "batch")
         new_state = state.apply_gradients(grads=grad)
 
-        metrics = jax.lax.pmean(
-            {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch"
-        )
+        avg_metrics = {"loss": loss / math.log(2), "learn_rate": linear_decay_lr_schedule_fn(state.step)}
+        avg_metrics.update(logs)
 
-        return new_state, metrics, new_dropout_rng, new_gumbel_rng
+        sum_metrics = {}
+        sum_metrics["num_targets"] = avg_metrics.pop("num_targets")
+        sum_metrics["num_inputs"] = avg_metrics.pop("num_inputs")
+
+        avg_metrics = jax.lax.pmean(avg_metrics, axis_name="batch")
+        sum_metrics = jax.lax.psum(sum_metrics, axis_name="batch")
+
+        return new_state, avg_metrics, sum_metrics, new_dropout_rng, new_gumbel_rng
 
     # Create parallel version of the train step
     p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
@@ -494,10 +539,11 @@ def main():
     # Define eval fn
     def eval_step(params, batch):
         negative_indices = batch.pop("sampled_negative_indices")
+        sample_size = batch["mask_time_indices"].sum()
 
         outputs = model(**batch, params=params, train=False)
 
-        contrastive_loss = compute_contrastive_loss(
+        contrastive_loss, _ = compute_contrastive_loss(
             outputs.projected_quantized_states,
             outputs.projected_states,
             negative_indices,
@@ -506,11 +552,25 @@ def main():
             num_negatives,
         )
 
+        # L = L_m + \alpha * L_d (Eq. 2 from paper: https://arxiv.org/pdf/2006.11477.pdf )
+        # higher codevector_perplexity leads to lower diversity loss
         diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
-        loss = contrastive_loss + diversity_loss_weight * diversity_loss
+
+        # make sure that diversity loss is multiplied by `sample_size` since contrastive_loss is `sum`-reduced instead of averaged
+        # also multiply diversity_loss_weight
+        # L = L_m + \alpha * L_d (Eq. 2 from paper: https://arxiv.org/pdf/2006.11477.pdf )
+        diversity_loss = diversity_loss * sample_size * diversity_loss_weight
+
+        loss = contrastive_loss + diversity_loss
+
+        # average loss over all loss samples
+        loss = loss / sample_size
 
         # summarize metrics
-        metrics = {"loss": loss.mean(), "codevector_perplexity": outputs.codevector_perplexity}
+        metrics = {
+            "contrastive_loss": contrastive_loss / math.log(2),
+            "codevector_perplexity": outputs.codevector_perplexity,
+        }
         metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return metrics
@@ -542,9 +602,10 @@ def main():
             model_inputs = shard(model_inputs.data)
 
             # Model forward
-            state, train_metric, dropout_rngs, gumbel_rngs = p_train_step(
+            state, train_avg_metric, train_sum_metric, dropout_rngs, gumbel_rngs = p_train_step(
                 state, model_inputs, dropout_rngs, gumbel_rngs
             )
+            train_metric = {**train_avg_metric, **train_sum_metric}
             train_metrics.append(train_metric)
 
             cur_step = epoch * (num_train_samples // train_batch_size) + step
@@ -556,13 +617,17 @@ def main():
                 if has_tensorboard and jax.process_index() == 0:
                     write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
-                epochs.write(
-                    f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
-                )
+                # write logging string
+                log_str = f"Step... {cur_step} "
+                for key, value in train_metric.items():
+                    log_str += f"| {key}: {round(value.item(), 6)} "
 
+                epochs.write(log_str)
                 train_metrics = []
 
         # ======================== Evaluating ==============================
+        continue
+
         num_eval_samples = len(vectorized_datasets["validation"])
         eval_samples_idx = jnp.arange(num_eval_samples)
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
