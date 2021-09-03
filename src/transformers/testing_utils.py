@@ -32,6 +32,7 @@ from transformers import logging as transformers_logging
 from .deepspeed import is_deepspeed_available
 from .file_utils import (
     is_datasets_available,
+    is_einops_available,
     is_faiss_available,
     is_flax_available,
     is_keras2onnx_available,
@@ -246,6 +247,19 @@ def require_keras2onnx(test_case):
 def require_onnx(test_case):
     if not is_onnx_available():
         return unittest.skip("test requires ONNX")(test_case)
+    else:
+        return test_case
+
+
+def require_einops(test_case):
+    """
+    Decorator marking a test that requires einops.
+
+    These tests are skipped when einops isn't installed.
+
+    """
+    if not is_einops_available():
+        return unittest.skip("test requires einops")(test_case)
     else:
         return test_case
 

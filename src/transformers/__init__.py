@@ -701,7 +701,6 @@ if is_torch_available():
         [
             "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "CvTForImageClassification",
-            "CvTForMaskedImageModeling",
             "CvTModel",
             "CvTPreTrainedModel",
         ]

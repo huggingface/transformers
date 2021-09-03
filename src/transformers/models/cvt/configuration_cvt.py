@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/cvt-21-384x384": "https://huggingface.co/microsoft/cvt-21-384x384/resolve/main/config.json",
+    "microsoft/cvt-21-384x384": "https://huggingface.co/microsoft/cvt-21-384x384-IN-1k/resolve/main/config.json",
     # See all CvT models at https://huggingface.co/models?filter=cvt
 }
 

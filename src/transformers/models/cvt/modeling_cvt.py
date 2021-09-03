@@ -16,17 +16,14 @@
 
 
 import collections.abc
-import os
 from collections import OrderedDict
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss, MSELoss
 
-import scipy
 from einops import rearrange
 from einops.layers.torch import Rearrange
 from timm.models.layers import DropPath, trunc_normal_
@@ -41,10 +38,10 @@ from .configuration_cvt import CvTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "CvTConfig"
-_CHECKPOINT_FOR_DOC = "google/CvT-base-patch16-224"
+_CHECKPOINT_FOR_DOC = "microsoft/cvt-21-384x384-IN-1k"
 
 CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/CvT-base-patch16-224",
+    "microsoft/cvt-21-384x384-IN-1k",
     # See all CvT models at https://huggingface.co/models?filter=CvT
 ]
 
@@ -206,7 +203,7 @@ class CvTAttention(nn.Module):
 
         return q, k, v
 
-    def forward(self, x, h, w, output_attentions=False):
+    def forward(self, x, h, w):
         if self.conv_proj_q is not None or self.conv_proj_k is not None or self.conv_proj_v is not None:
             q, k, v = self.forward_conv(x, h, w)
 
@@ -224,60 +221,7 @@ class CvTAttention(nn.Module):
         x = self.proj(x)
         x = self.proj_drop(x)
 
-        if output_attentions:
-            return x, attn
-
-        return x
-
-    @staticmethod
-    def compute_macs(module, input, output):
-        # T: num_token
-        # S: num_token
-        input = input[0]
-        flops = 0
-
-        _, T, C = input.shape
-        H = W = int(np.sqrt(T - 1)) if module.with_cls_token else int(np.sqrt(T))
-
-        H_Q = H / module.stride_q
-        W_Q = H / module.stride_q
-        T_Q = H_Q * W_Q + 1 if module.with_cls_token else H_Q * W_Q
-
-        H_KV = H / module.stride_kv
-        W_KV = W / module.stride_kv
-        T_KV = H_KV * W_KV + 1 if module.with_cls_token else H_KV * W_KV
-
-        # C = module.dim
-        # S = T
-        # Scaled-dot-product macs
-        # [B x T x C] x [B x C x T] --> [B x T x S]
-        # multiplication-addition is counted as 1 because operations can be fused
-        flops += T_Q * T_KV * module.dim
-        # [B x T x S] x [B x S x C] --> [B x T x C]
-        flops += T_Q * module.dim * T_KV
-
-        if hasattr(module, "conv_proj_q") and hasattr(module.conv_proj_q, "conv"):
-            params = sum([p.numel() for p in module.conv_proj_q.conv.parameters()])
-            flops += params * H_Q * W_Q
-
-        if hasattr(module, "conv_proj_k") and hasattr(module.conv_proj_k, "conv"):
-            params = sum([p.numel() for p in module.conv_proj_k.conv.parameters()])
-            flops += params * H_KV * W_KV
-
-        if hasattr(module, "conv_proj_v") and hasattr(module.conv_proj_v, "conv"):
-            params = sum([p.numel() for p in module.conv_proj_v.conv.parameters()])
-            flops += params * H_KV * W_KV
-
-        params = sum([p.numel() for p in module.proj_q.parameters()])
-        flops += params * T_Q
-        params = sum([p.numel() for p in module.proj_k.parameters()])
-        flops += params * T_KV
-        params = sum([p.numel() for p in module.proj_v.parameters()])
-        flops += params * T_KV
-        params = sum([p.numel() for p in module.proj.parameters()])
-        flops += params * T
-
-        module.__flops__ += flops
+        return x, attn
 
 
 class CvTLayer(nn.Module):
@@ -308,16 +252,14 @@ class CvTLayer(nn.Module):
         dim_mlp_hidden = int(dim_out * mlp_ratio)
         self.mlp = CvTOutput(in_features=dim_out, hidden_features=dim_mlp_hidden, act_layer=act_layer, drop=drop)
 
-    def forward(self, x, h, w, output_attentions=False):
+    def forward(self, x, h, w):
         res = x
 
         x = self.norm1(x)
-        attn, all_attn = self.attn(x, h, w, output_attentions)
+        attn, all_attn = self.attn(x, h, w)
         x = res + self.drop_path(attn)
         x = x + self.drop_path(self.mlp(self.norm2(x)))
-        if output_attentions:
-            return x, all_attn
-        return x
+        return x, all_attn
 
 
 class CvTEncoder(nn.Module):
@@ -394,7 +336,7 @@ class CvTEncoder(nn.Module):
             self.apply(self._init_weights_trunc_normal)
 
     def _init_weights_trunc_normal(self, m):
-        if isinstance(m, nn.Linear):
+        if isinstance(m, (nn.Linear, nn.Conv2d)):
             logger.info("=> init weight of Linear from trunc norm")
             trunc_normal_(m.weight, std=0.02)
             if m.bias is not None:
@@ -405,7 +347,7 @@ class CvTEncoder(nn.Module):
             nn.init.constant_(m.weight, 1.0)
 
     def _init_weights_xavier(self, m):
-        if isinstance(m, nn.Linear):
+        if isinstance(m, (nn.Linear, nn.Conv2d)):
             logger.info("=> init weight of Linear from xavier uniform")
             nn.init.xavier_uniform_(m.weight)
             if m.bias is not None:
@@ -415,9 +357,9 @@ class CvTEncoder(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def forward(self, x, output_attentions=False, output_hidden_states=False):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+    def forward(self, x):
+        all_hidden_states = ()
+        all_self_attentions = ()
 
         x = self.patch_embed(x)
         B, C, H, W = x.size()
@@ -433,15 +375,11 @@ class CvTEncoder(nn.Module):
         x = self.pos_drop(x)
 
         for i, blk in enumerate(self.blocks):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (x,)
-
-            x, attn = blk(x, H, W, output_attentions)
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (attn,)
-
-        if output_hidden_states:
             all_hidden_states = all_hidden_states + (x,)
+            x, attn = blk(x, H, W)
+            all_self_attentions = all_self_attentions + (attn,)
+
+        all_hidden_states = all_hidden_states + (x,)
 
         if self.cls_token is not None:
             cls_tokens, x = torch.split(x, [1, H * W], 1)
@@ -568,20 +506,16 @@ class CvTModel(CvTPreTrainedModel):
         return layers
 
     def forward_features(self, x, output_attentions=False, output_hidden_states=False):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
+        all_hidden_states = ()
+        all_self_attentions = ()
         for i in range(self.num_stages):
-            x, hidden_states, attentions, cls_tokens = getattr(self, f"stage{i}")(
-                x, output_attentions, output_hidden_states
-            )
-            if output_hidden_states:
-                if i == 0:
-                    all_hidden_states = all_hidden_states + hidden_states
-                else:
-                    all_hidden_states = all_hidden_states + hidden_states[1:]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + attentions
+            x, hidden_states, attentions, cls_tokens = getattr(self, f"stage{i}")(x)
+            if i == 0:
+                all_hidden_states = all_hidden_states + hidden_states
+            else:
+                all_hidden_states = all_hidden_states + hidden_states[1:]
+
+            all_self_attentions = all_self_attentions + attentions
 
         if self.cls_token:
             x = self.norm(cls_tokens)
@@ -591,7 +525,15 @@ class CvTModel(CvTPreTrainedModel):
             x = self.norm(x)
             x = torch.mean(x, dim=1)
 
-        return x, all_hidden_states, all_self_attentions
+        last_hidden_state = all_hidden_states[-1]
+
+        if output_hidden_states is False:
+            all_hidden_states = None
+
+        if output_attentions is False:
+            all_self_attentions = None
+
+        return x, all_hidden_states, all_self_attentions, last_hidden_state
 
     @add_start_docstrings_to_model_forward(CvT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
@@ -629,16 +571,16 @@ class CvTModel(CvTPreTrainedModel):
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
-        x, all_hidden_states, all_self_attentions = self.forward_features(
+        x, all_hidden_states, all_self_attentions, last_hidden_state = self.forward_features(
             pixel_values, output_attentions, output_hidden_states
         )
 
         if not return_dict:
-            return x, all_hidden_states, all_self_attentions
+            return x, last_hidden_state, all_hidden_states, all_self_attentions
 
         return BaseModelOutputWithPooling(
-            last_hidden_state=all_hidden_states[-1],
-            pooler_output=x,
+            last_hidden_state=last_hidden_state,
+            pooler_output=x.view(-1, self.config.dim_embed[-1]),
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
@@ -712,17 +654,16 @@ class CvTForImageClassification(CvTPreTrainedModel):
         return layers
 
     def forward_features(self, x, output_attentions=False, output_hidden_states=False):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
+        all_hidden_states = ()
+        all_self_attentions = ()
         for i in range(self.num_stages):
-            x, hidden_states, attentions, cls_tokens = getattr(self, f"stage{i}")(
-                x, output_attentions, output_hidden_states
-            )
-            if output_hidden_states:
+            x, hidden_states, attentions, cls_tokens = getattr(self, f"stage{i}")(x)
+            if i == 0:
                 all_hidden_states = all_hidden_states + hidden_states
-            if output_attentions:
-                all_self_attentions = all_self_attentions + attentions
+            else:
+                all_hidden_states = all_hidden_states + hidden_states[1:]
+
+            all_self_attentions = all_self_attentions + attentions
 
         if self.cls_token:
             x = self.norm(cls_tokens)
@@ -732,7 +673,15 @@ class CvTForImageClassification(CvTPreTrainedModel):
             x = self.norm(x)
             x = torch.mean(x, dim=1)
 
-        return x, all_hidden_states, all_self_attentions
+        last_hidden_state = all_hidden_states[-1]
+
+        if output_hidden_states is False:
+            all_hidden_states = None
+
+        if output_attentions is False:
+            all_self_attentions = None
+
+        return x, all_hidden_states, all_self_attentions, last_hidden_state
 
     @add_start_docstrings_to_model_forward(CvT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
@@ -775,7 +724,7 @@ class CvTForImageClassification(CvTPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        x, all_hidden_states, all_self_attentions = self.forward_features(
+        x, all_hidden_states, all_self_attentions, last_hidden_state = self.forward_features(
             pixel_values, output_attentions, output_hidden_states
         )
         logits = self.head(x)

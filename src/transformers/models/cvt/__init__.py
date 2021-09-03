@@ -35,14 +35,6 @@ if is_torch_available():
         "CvTPreTrainedModel",
     ]
 
-
-if is_flax_available():
-    _import_structure["modeling_flax_cvt"] = [
-        "FlaxCvTForImageClassification",
-        "FlaxCvTModel",
-        "FlaxCvTPreTrainedModel",
-    ]
-
 if TYPE_CHECKING:
     from .configuration_cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvTConfig
 
@@ -56,10 +48,6 @@ if TYPE_CHECKING:
             CvTModel,
             CvTPreTrainedModel,
         )
-
-    if is_flax_available():
-        from .modeling_flax_cvt import FlaxCvTForImageClassification, FlaxCvTModel, FlaxCvTPreTrainedModel
-
 
 else:
     import sys

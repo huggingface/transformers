@@ -352,6 +352,10 @@ def is_datasets_available():
     return _datasets_available
 
 
+def is_einops_available():
+    return importlib.util.find_spec("einops") is not None
+
+
 def is_rjieba_available():
     return importlib.util.find_spec("rjieba") is not None
 
@@ -617,6 +621,13 @@ TIMM_IMPORT_ERROR = """
 """
 
 # docstyle-ignore
+EINOPS_IMPORT_ERROR = """
+{0} requires the einops library but it was not found in your environment. You can install it with pip:
+`pip install einops`
+"""
+
+
+# docstyle-ignore
 VISION_IMPORT_ERROR = """
 {0} requires the PIL library but it was not found in your environment. You can install it with pip:
 `pip install pillow`
@@ -640,6 +651,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
+        ("einops", (is_einops_available, EINOPS_IMPORT_ERROR)),
     ]
 )
 
