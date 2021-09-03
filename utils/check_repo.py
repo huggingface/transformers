@@ -44,10 +44,13 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+<<<<<<< HEAD
     "SegformerDecodeHead",  # Building part of bigger (tested) model.
+=======
+>>>>>>> Fix style
     "PLBartEncoder",  # Building part of bigger (tested) model.
     "PLBartDecoder",  # Building part of bigger (tested) model.
-    "PLBartDecoderWrapper", # Building part of bigger (tested) model.
+    "PLBartDecoderWrapper",  # Building part of bigger (tested) model.
     "BigBirdPegasusEncoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoderWrapper",  # Building part of bigger (tested) model.

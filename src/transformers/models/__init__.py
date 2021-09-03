@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    plbart,
     albert,
     auto,
     bart,
@@ -83,6 +82,7 @@ from . import (
     pegasus,
     perceiver,
     phobert,
+    plbart,
     prophetnet,
     qdqbert,
     rag,

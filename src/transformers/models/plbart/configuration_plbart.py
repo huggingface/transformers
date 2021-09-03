@@ -38,6 +38,7 @@ class PLBartConfig(PretrainedConfig):
     to that of the PLBART `uclanlp/plbart-base <https://huggingface.co/uclanlp/plbart-base>`__ architecture.
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
             Vocabulary size of the PLBART model. Defines the number of different tokens that can be represented by the
@@ -87,6 +88,7 @@ class PLBartConfig(PretrainedConfig):
         forced_eos_token_id (:obj:`int`, `optional`, defaults to 2):
             The id of the token to force as the last generated token when :obj:`max_length` is reached. Usually set to
             :obj:`eos_token_id`.
+
     Example::
         >>> from transformers import PLBartModel, PLBartConfig
         >>> # Initializing a PLBART uclanlp/plbart-base style configuration

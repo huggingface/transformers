@@ -40,9 +40,7 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def convert_fairseq_mbart_checkpoint_from_disk(
-    checkpoint_path, hf_config_path="uclanlp/plbart-base", finetuned=False
-):
+def convert_fairseq_mbart_checkpoint_from_disk(checkpoint_path, hf_config_path="uclanlp/plbart-base", finetuned=False):
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     remove_ignore_keys_(state_dict)
     vocab_size = state_dict["encoder.embed_tokens.weight"].shape[0]
@@ -62,9 +60,7 @@ def convert_fairseq_mbart_checkpoint_from_disk(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument(
-        "fairseq_path", type=str, help="model.pt on local filesystem."
-    )
+    parser.add_argument("fairseq_path", type=str, help="model.pt on local filesystem.")
     parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
         "--hf_config",
@@ -75,6 +71,8 @@ if __name__ == "__main__":
     parser.add_argument("--finetuned", action="store_true", help="whether the model is a fine-tuned checkpoint")
     args = parser.parse_args()
     model = convert_fairseq_mbart_checkpoint_from_disk(
-        args.fairseq_path, hf_config_path=args.hf_config, finetuned=args.finetuned,
+        args.fairseq_path,
+        hf_config_path=args.hf_config,
+        finetuned=args.finetuned,
     )
     model.save_pretrained(args.pytorch_dump_folder_path)
