@@ -142,15 +142,15 @@ class Text2TextGenerationPipeline(Pipeline):
         inputs = self._parse_and_tokenize(inputs, truncation=truncation, **kwargs)
         return inputs
 
-    def _forward(self, model_inputs, max_length=None, min_length=None, **generate_kwargs):
+    def _forward(self, model_inputs, **generate_kwargs):
         if self.framework == "pt":
             input_length = model_inputs["input_ids"].shape[-1]
         elif self.framework == "tf":
             input_length = tf.shape(model_inputs["input_ids"])[-1].numpy()
 
-        min_length = generate_kwargs.get("min_length", self.model.config.min_length)
-        max_length = generate_kwargs.get("max_length", self.model.config.max_length)
-        self.check_inputs(input_length, min_length, max_length)
+        generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
+        generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
+        self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         return {"output_ids": output_ids}
 
@@ -267,7 +267,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
             )
         return True
 
-    def preprocess(self, *args, truncation, src_lang=None, tgt_lang=None):
+    def preprocess(self, *args, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None):
         if getattr(self.tokenizer, "_build_translation_inputs", None):
             return self.tokenizer._build_translation_inputs(
                 *args, return_tensors=self.framework, truncation=truncation, src_lang=src_lang, tgt_lang=tgt_lang
