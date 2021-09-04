@@ -239,7 +239,7 @@ _import_structure = {
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
-    "models.pegasus": ["PegasusConfig"],
+    "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
@@ -1720,6 +1720,13 @@ if is_flax_available():
     )
 
     # Flax models structure
+    _import_structure["models.pegasus"].extend(
+        [
+            "FlaxPegasusForConditionalGeneration",
+            "FlaxPegasusModel",
+            "FlaxPegasusPreTrainedModel",
+        ]
+    )
     _import_structure["models.bart"].extend(
         [
             "FlaxBartForConditionalGeneration",
@@ -2019,7 +2026,7 @@ if TYPE_CHECKING:
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
-    from .models.pegasus import PegasusConfig
+    from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.phobert import PhobertTokenizer
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
@@ -3222,6 +3229,11 @@ if TYPE_CHECKING:
         from .utils.dummy_tf_objects import *
 
     if is_flax_available():
+        from .models.pegasus import (
+            FlaxPegasusForConditionalGeneration,
+            FlaxPegasusModel,
+            FlaxPegasusPreTrainedModel,
+        )
         from .generation_flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
