@@ -254,9 +254,9 @@ Supported models
 52. :doc:`ProphetNet <model_doc/prophetnet>` (from Microsoft Research) released with the paper `ProphetNet: Predicting
     Future N-gram for Sequence-to-Sequence Pre-training <https://arxiv.org/abs/2001.04063>`__ by Yu Yan, Weizhen Qi,
     Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang and Ming Zhou.
-53. :doc:`REALM <model_doc/realm>` (from Google Research) released with the paper `REALM: Retrieval-Augmented Language
-    Model Pre-Training <https://arxiv.org/abs/2002.08909>`__ by Kelvin Guu, Kenton Lee, Zora Tung, Panupong Pasupat and
-    Ming-Wei Chang.
+53. `REALM <https://huggingface.co/transformers/master/model_doc/realm.html>`__ (from Google Research) released with
+    the paper `REALM: Retrieval-Augmented Language Model Pre-Training <https://arxiv.org/abs/2002.08909>`__ by Kelvin
+    Guu, Kenton Lee, Zora Tung, Panupong Pasupat and Ming-Wei Chang.
 54. :doc:`Reformer <model_doc/reformer>` (from Google Research) released with the paper `Reformer: The Efficient
     Transformer <https://arxiv.org/abs/2001.04451>`__ by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
 55. :doc:`RemBERT <model_doc/rembert>` (from Google Research) released with the paper `Rethinking embedding coupling in

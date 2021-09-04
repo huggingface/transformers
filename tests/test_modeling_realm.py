@@ -29,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import RealmEmbedder, RealmEncoder, RealmRetriever
-    from transformers.models.realm.modeling_realm import REALM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class RealmModelTester:
