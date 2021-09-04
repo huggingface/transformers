@@ -1720,13 +1720,6 @@ if is_flax_available():
     )
 
     # Flax models structure
-    _import_structure["models.pegasus"].extend(
-        [
-            "FlaxPegasusForConditionalGeneration",
-            "FlaxPegasusModel",
-            "FlaxPegasusPreTrainedModel",
-        ]
-    )
     _import_structure["models.bart"].extend(
         [
             "FlaxBartForConditionalGeneration",
@@ -1816,6 +1809,13 @@ if is_flax_available():
         ]
     )
     _import_structure["models.mt5"].extend(["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
+    _import_structure["models.pegasus"].extend(
+        [
+            "FlaxPegasusForConditionalGeneration",
+            "FlaxPegasusModel",
+            "FlaxPegasusPreTrainedModel",
+        ]
+    )
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForMaskedLM",
@@ -3229,11 +3229,6 @@ if TYPE_CHECKING:
         from .utils.dummy_tf_objects import *
 
     if is_flax_available():
-        from .models.pegasus import (
-            FlaxPegasusForConditionalGeneration,
-            FlaxPegasusModel,
-            FlaxPegasusPreTrainedModel,
-        )
         from .generation_flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
@@ -3347,6 +3342,7 @@ if TYPE_CHECKING:
             FlaxMBartPreTrainedModel,
         )
         from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
+        from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.roberta import (
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,

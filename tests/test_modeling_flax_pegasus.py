@@ -16,12 +16,8 @@
 
 import unittest
 
-from transformers import (
-    is_flax_available,
-    PegasusConfig,
-    PegasusTokenizer,
-)
-from transformers.testing_utils import require_sentencepiece, require_flax, require_tokenizers, slow
+from transformers import PegasusConfig, PegasusTokenizer, is_flax_available
+from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -29,11 +25,9 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 if is_flax_available():
     import numpy as np
+
     import jax.numpy as jnp
-    from transformers import (
-        FlaxPegasusForConditionalGeneration,
-        FlaxPegasusModel,
-    )
+    from transformers import FlaxPegasusForConditionalGeneration, FlaxPegasusModel
 
 
 @require_flax
@@ -204,7 +198,13 @@ def prepare_pegasus_inputs_dict(
     if attention_mask is None:
         attention_mask = np.not_equal(input_ids, config.pad_token_id).astype(np.int8)
     if decoder_attention_mask is None:
-        decoder_attention_mask = np.concatenate([np.ones(decoder_input_ids[:, :1].shape, dtype=np.int8), np.not_equal(decoder_input_ids[:, 1:], config.pad_token_id).astype(np.int8)], axis=-1)
+        decoder_attention_mask = np.concatenate(
+            [
+                np.ones(decoder_input_ids[:, :1].shape, dtype=np.int8),
+                np.not_equal(decoder_input_ids[:, 1:], config.pad_token_id).astype(np.int8),
+            ],
+            axis=-1,
+        )
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -217,9 +217,10 @@ def prepare_pegasus_inputs_dict(
 class FlaxPegasusModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            FlaxPegasusForConditionalGeneration, 
+            FlaxPegasusForConditionalGeneration,
             FlaxPegasusModel,
-        ) if is_flax_available()
+        )
+        if is_flax_available()
         else ()
     )
     all_generative_model_classes = (FlaxPegasusForConditionalGeneration,) if is_flax_available() else ()
@@ -273,7 +274,7 @@ TOLERANCE = 1e-4
 @require_flax
 class FlaxPegasusModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = FlaxPegasusModel.from_pretrained('google/pegasus-large')
+        model = FlaxPegasusModel.from_pretrained("google/pegasus-large")
         # change to intended input here
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -288,7 +289,7 @@ class FlaxPegasusModelIntegrationTest(unittest.TestCase):
         _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_inference_with_head(self):
-        model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
+        model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
         # change to intended input here
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -303,8 +304,8 @@ class FlaxPegasusModelIntegrationTest(unittest.TestCase):
         _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_seq_to_seq_generation(self):
-        hf = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-        tok = PegasusTokenizer.from_pretrained('google/pegasus-large')
+        hf = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
+        tok = PegasusTokenizer.from_pretrained("google/pegasus-large")
 
         batch_input = [
             # string 1,

@@ -67,7 +67,6 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
-
         ("pegasus", "FlaxPegasusForConditionalGeneration"),
         ("distilbert", "FlaxDistilBertForMaskedLM"),
         ("albert", "FlaxAlbertForMaskedLM"),
@@ -83,7 +82,6 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
-
         ("pegasus", "FlaxPegasusForConditionalGeneration"),
         ("bart", "FlaxBartForConditionalGeneration"),
         ("t5", "FlaxT5ForConditionalGeneration"),

@@ -31,7 +31,7 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -211,6 +211,7 @@ PEGASUS_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
+
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
 def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
     """
@@ -224,7 +225,7 @@ def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_tok
     return shifted_input_ids
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaBartAttention with Bart->Pegasus
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->Pegasus
 class FlaxPegasusAttention(nn.Module):
     config: PegasusConfig
     embed_dim: int
@@ -445,14 +446,15 @@ class FlaxPegasusEncoderLayer(nn.Module):
 
         return outputs
 
-# Copied from transformers.models.mbart.modeling_flax_bart.FlaxBartEncoderLayerCollection with MBart->Pegasus
+
 class FlaxPegasusEncoderLayerCollection(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.layers = [
-            FlaxPegasusEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.encoder_layers)
+            FlaxPegasusEncoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -585,14 +587,14 @@ class FlaxPegasusDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.mbart.modeling_flax_bart.FlaxBartDecoderLayerCollection with Bart->Pegasus
 class FlaxPegasusDecoderLayerCollection(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.layers = [
-            FlaxPegasusDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
+            FlaxPegasusDecoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.decoder_layerdrop
 
