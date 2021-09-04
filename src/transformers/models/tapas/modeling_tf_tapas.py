@@ -17,12 +17,10 @@
 import enum
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
-
-import tensorflow_probability as tfp
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
@@ -46,6 +44,7 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     get_initializer,
     input_processing,
+    keras_serializable,
     shape_list,
 )
 from ...utils import logging
@@ -74,12 +73,37 @@ _TOKENIZER_FOR_DOC = "TapasTokenizer"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
 TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "kamalkraj/tapas-base",
-    "kamalkraj/tapas-base-finetuned-sqa",
-    "kamalkraj/tapas-base-finetuned-wtq",
-    "kamalkraj/tapas-base-finetuned-wikisql-supervised",
-    "kamalkraj/tapas-base-finetuned-tabfact"
-    # See all tapas models at https://huggingface.co/models?filter=tapas
+    # large models
+    "google/tapas-large",
+    "google/tapas-large-finetuned-sqa",
+    "google/tapas-large-finetuned-wtq",
+    "google/tapas-large-finetuned-wikisql-supervised",
+    "google/tapas-large-finetuned-tabfact",
+    # base models
+    "google/tapas-base",
+    "google/tapas-base-finetuned-sqa",
+    "google/tapas-base-finetuned-wtq",
+    "google/tapas-base-finetuned-wikisql-supervised",
+    "google/tapas-base-finetuned-tabfact",
+    # small models
+    "google/tapas-small",
+    "google/tapas-small-finetuned-sqa",
+    "google/tapas-small-finetuned-wtq",
+    "google/tapas-small-finetuned-wikisql-supervised",
+    "google/tapas-small-finetuned-tabfact",
+    # mini models
+    "google/tapas-mini",
+    "google/tapas-mini-finetuned-sqa",
+    "google/tapas-mini-finetuned-wtq",
+    "google/tapas-mini-finetuned-wikisql-supervised",
+    "google/tapas-mini-finetuned-tabfact",
+    # tiny models
+    "google/tapas-tiny",
+    "google/tapas-tiny-finetuned-sqa",
+    "google/tapas-tiny-finetuned-wtq",
+    "google/tapas-tiny-finetuned-wikisql-supervised",
+    "google/tapas-tiny-finetuned-tabfact",
+    # See all TAPAS models at https://huggingface.co/models?filter=tapas
 ]
 
 EPSILON_ZERO_DIVISION = 1e-10
@@ -132,7 +156,6 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
@@ -179,13 +202,15 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
             final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
-
         if input_ids is not None:
             input_shape = shape_list(input_ids)
         else:
             input_shape = shape_list(inputs_embeds)[:-1]
 
         seq_length = input_shape[1]
+
+        if token_type_ids is None:
+            token_type_ids = tf.fill(dims=input_shape + [self.number_of_token_type_embeddings], value=0)
 
         if position_ids is None:
             # create absolute position embeddings
@@ -208,9 +233,6 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
                 position = tf.expand_dims(tf.range(start=0, limit=seq_length), axis=0)
                 position_ids = tf.math.minimum(self.max_position_embeddings - 1, position - first_position)
 
-        if token_type_ids is None:
-            token_type_ids = tf.fill(dims=input_shape + [self.number_of_token_type_embeddings], value=0)
-
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
@@ -228,11 +250,12 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Tapas
 class TFTapasSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number "
                 f"of attention heads ({config.num_attention_heads})"
@@ -284,7 +307,7 @@ class TFTapasSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.divide(attention_scores, dk)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            # Apply the attention mask is (precomputed for all layers in TFTapasModel call() function)
             attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
@@ -308,6 +331,7 @@ class TFTapasSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Tapas
 class TFTapasSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
@@ -326,6 +350,7 @@ class TFTapasSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Tapas
 class TFTapasAttention(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
@@ -359,6 +384,7 @@ class TFTapasAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Tapas
 class TFTapasIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
@@ -379,6 +405,7 @@ class TFTapasIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->Tapas
 class TFTapasOutput(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
@@ -397,6 +424,7 @@ class TFTapasOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Tapas
 class TFTapasLayer(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
@@ -430,6 +458,7 @@ class TFTapasLayer(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Tapas
 class TFTapasEncoder(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
@@ -477,6 +506,7 @@ class TFTapasEncoder(tf.keras.layers.Layer):
         )
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Tapas
 class TFTapasPooler(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
@@ -497,6 +527,43 @@ class TFTapasPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
+class TFTapasMLMHead(tf.keras.layers.Layer):
+    def __init__(self, config: TapasConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+        super().__init__(**kwargs)
+        self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
+
+        self.input_embeddings = input_embeddings
+
+    def build(self, input_shape: tf.TensorShape):
+        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        super().build(input_shape)
+
+    def get_output_embeddings(self):
+        return self.input_embeddings
+
+    def set_output_embeddings(self, value: tf.Variable):
+        self.input_embeddings.weight = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self) -> Dict[str, tf.Variable]:
+        return {"bias": self.bias}
+
+    def set_bias(self, value: tf.Variable):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+        seq_length = shape_list(hidden_states)[1]
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
+
+        return hidden_states
+
+
+@keras_serializable
 class TFTapasMainLayer(tf.keras.layers.Layer):
     config_class = TapasConfig
 
@@ -840,14 +907,10 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
             )
 
         self.tapas = TFTapasMainLayer(config, add_pooling_layer=False, name="tapas")
-        self.lm_head = tf.keras.layers.Dense(config.vocab_size, name="lm_head")
+        self.lm_head = TFTapasMLMHead(config, input_embeddings=self.tapas.embeddings, name="lm_head")
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.lm_head
-
-    def get_prefix_bias_name(self) -> str:
-        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
-        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -928,7 +991,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
             training=inputs["training"],
         )
         sequence_output = outputs[0]
-        prediction_scores = self.mlm(sequence_output=sequence_output, training=inputs["training"])
+        prediction_scores = self.lm_head(sequence_output)
         loss = (
             None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
         )
@@ -1079,7 +1142,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             >>> logits = outputs.logits
             >>> logits_aggregation = outputs.logits_aggregation
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1102,7 +1165,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             kwargs_call=kwargs,
         )
         outputs = self.tapas(
-            input_ids,
+            input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -1119,14 +1182,14 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
 
         sequence_output = self.dropout(sequence_output)
 
-        if input_ids is not None:
+        if inputs["input_ids"] is not None:
             input_shape = shape_list(inputs["input_ids"])
         else:
             input_shape = shape_list(inputs["inputs_embeds"])[:-1]
 
         # Construct indices for the table.
-        if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape + [len(self.config.type_vocab_sizes)], 0)
+        if inputs["token_type_ids"] is None:
+            inputs["token_type_ids"] = tf.fill(input_shape + [len(self.config.type_vocab_sizes)], 0)
 
         token_types = [
             "segment_ids",
@@ -1138,8 +1201,8 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             "numeric_relations",
         ]
 
-        row_ids = token_type_ids[:, :, token_types.index("row_ids")]
-        column_ids = token_type_ids[:, :, token_types.index("column_ids")]
+        row_ids = inputs["token_type_ids"][:, :, token_types.index("row_ids")]
+        column_ids = inputs["token_type_ids"][:, :, token_types.index("column_ids")]
 
         # Construct indices for the table.
         row_index = IndexMap(
@@ -1209,16 +1272,16 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             if is_supervised:
                 aggregate_mask = None
             else:
-                if float_answer is not None:
+                if inputs["float_answer"] is not None:
                     assert (
-                        labels.shape[0] == float_answer.shape[0]
+                        shape_list(inputs["labels"])[0] == shape_list(inputs["float_answer"])[0]
                     ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
-                        float_answer,
+                        inputs["float_answer"],
                         pooled_output,
                         self.config.cell_selection_preference,
-                        labels,
+                        inputs["labels"],
                         self.aggregation_classifier,
                     )
                 else:
@@ -1235,17 +1298,17 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             selection_loss_per_example = None
             if not self.config.select_one_column:
                 weight = tf.where(
-                    labels == 0,
-                    tf.ones_like(labels, dtype=tf.float32),
-                    self.config.positive_label_weight * tf.ones_like(labels, dtype=tf.float32),
+                    inputs["labels"] == 0,
+                    tf.ones_like(inputs["labels"], dtype=tf.float32),
+                    self.config.positive_label_weight * tf.ones_like(inputs["labels"], dtype=tf.float32),
                 )
-                selection_loss_per_token = -dist_per_token.log_prob(labels) * weight
+                selection_loss_per_token = -dist_per_token.log_prob(inputs["labels"]) * weight
                 selection_loss_per_example = tf.reduce_sum(selection_loss_per_token * input_mask_float, axis=1) / (
                     tf.reduce_sum(input_mask_float, axis=1) + EPSILON_ZERO_DIVISION
                 )
             else:
                 selection_loss_per_example, logits = _single_column_cell_selection_loss(
-                    logits, column_logits, labels, cell_index, col_index, cell_mask
+                    logits, column_logits, inputs["labels"], cell_index, col_index, cell_mask
                 )
                 dist_per_token = tfp.distributions.Bernoulli(logits=logits)
 
@@ -1262,14 +1325,14 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             if self.config.num_aggregation_labels > 0:
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
-                    if aggregation_labels is not None:
+                    if inputs["aggregation_labels"] is not None:
                         assert (
-                            shape_list(labels)[0] == shape_list(aggregation_labels)[0]
+                            shape_list(inputs["labels"])[0] == shape_list(inputs["aggregation_labels"])[0]
                         ), "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation,
                             aggregate_mask,
-                            aggregation_labels,
+                            inputs["aggregation_labels"],
                             self.config.use_answer_as_supervision,
                             self.config.num_aggregation_labels,
                             self.config.aggregation_loss_weight,
@@ -1279,7 +1342,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                             "You have to specify aggregation labels in order to calculate the aggregation loss"
                         )
                 else:
-                    aggregation_labels = tf.zeros(shape_list(labels)[0], dtype=tf.int32)
+                    aggregation_labels = tf.zeros(shape_list(inputs["labels"])[0], dtype=tf.int32)
                     per_example_additional_loss = _calculate_aggregation_loss(
                         logits_aggregation,
                         aggregate_mask,
@@ -1290,15 +1353,15 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                     )
 
                 if self.config.use_answer_as_supervision:
-                    if numeric_values is not None and numeric_values_scale is not None:
-                        assert shape_list(numeric_values) == shape_list(numeric_values_scale)
+                    if inputs["numeric_values"] is not None and inputs["numeric_values_scale"] is not None:
+                        assert shape_list(inputs["numeric_values"]) == shape_list(inputs["numeric_values_scale"])
                         # Add regression loss for numeric answers which require aggregation.
                         answer_loss, large_answer_loss_mask = _calculate_regression_loss(
-                            float_answer,
+                            inputs["float_answer"],
                             aggregate_mask,
                             dist_per_token,
-                            numeric_values,
-                            numeric_values_scale,
+                            inputs["numeric_values"],
+                            inputs["numeric_values_scale"],
                             table_mask_float,
                             logits_aggregation,
                             self.config,
@@ -1318,7 +1381,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             _, logits = _single_column_cell_selection_loss(
                 logits, column_logits, labels, cell_index, col_index, cell_mask
             )
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits, logits_aggregation) + outputs[2:]
             return ((total_loss,) + output) if calculate_loss else output
 
@@ -1351,10 +1414,10 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.tapas = TFTapasMainLayer(config)
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.tapas = TFTapasMainLayer(config, name="tapas")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
         self.classifier = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range)
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
@@ -1411,7 +1474,6 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
             >>> loss = outputs.loss
             >>> logits = outputs.logits
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         inputs = input_processing(
             func=self.call,
@@ -1462,6 +1524,15 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+
+""" TAPAS utilities."""
+
+
+class AverageApproximationFunction(str, enum.Enum):
+    RATIO = "ratio"
+    FIRST_ORDER = "first_order"
+    SECOND_ORDER = "second_order"
 
 
 # Beginning of everything related to segmented tensors
@@ -1708,10 +1779,52 @@ def reduce_min(values, index, name="segmented_reduce_min"):
     return _segment_reduce(values, index, tf.math.unsorted_segment_min, name)
 
 
-class AverageApproximationFunction(str, enum.Enum):
-    RATIO = "ratio"
-    FIRST_ORDER = "first_order"
-    SECOND_ORDER = "second_order"
+def compute_column_logits(
+    sequence_output, column_output_weights, column_output_bias, cell_index, cell_mask, allow_empty_column_selection
+):
+    """
+    Computes the column logits.
+
+    Args:
+        sequence_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Also known as last_hidden_state. Sequence of hidden-states at the output of the last layer of the model.
+        column_output_weights (:obj:`tf.Tensor` of shape :obj:`(hidden_size)`):
+            Weights of the linear layer for column selection.
+        column_output_bias (:obj:`tf.Tensor` of shape :obj:`()`):
+            Bias of the linear layer for column selection.
+        cell_index (:obj:`ProductIndexMap`):
+            Index that groups tokens into cells.
+        cell_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, max_num_rows * max_num_cols)`):
+            Mask for cells that exist in the table (i.e. that are not padding).
+        allow_empty_column_selection (:obj:`bool`):
+            Whether to allow not to select any column
+
+    Returns:
+        column_logits (:obj:`tf.Tensor`of shape :obj:`(batch_size, max_num_cols)`): Tensor containing the column logits
+        for every example in the batch.
+    """
+
+    # First, compute the token logits (batch_size, seq_len) - without temperature
+    token_logits = tf.einsum("bsj,j->bs", sequence_output, column_output_weights) + column_output_bias
+
+    # Next, average the logits per cell (batch_size, max_num_cols*max_num_rows)
+    cell_logits, cell_logits_index = reduce_mean(token_logits, cell_index)
+
+    # Finally, average the logits per column (batch_size, max_num_cols)
+    column_index = cell_index.project_inner(cell_logits_index)
+    column_logits, out_index = reduce_sum(cell_logits * cell_mask, column_index)
+
+    cell_count, _ = reduce_sum(cell_mask, column_index)
+    column_logits /= cell_count + EPSILON_ZERO_DIVISION
+
+    # Mask columns that do not appear in the example.
+    is_padding = tf.logical_and(cell_count < 0.5, tf.not_equal(out_index.indices, 0))
+    column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(is_padding, tf.float32)
+
+    if not allow_empty_column_selection:
+        column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(tf.equal(out_index.indices, 0), tf.float32)
+
+    return column_logits
 
 
 def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell_index, col_index, cell_mask):
@@ -1787,54 +1900,6 @@ def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell
     return selection_loss_per_example, logits
 
 
-def compute_column_logits(
-    sequence_output, column_output_weights, column_output_bias, cell_index, cell_mask, allow_empty_column_selection
-):
-    """
-    Computes the column logits.
-
-    Args:
-        sequence_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Also known as last_hidden_state. Sequence of hidden-states at the output of the last layer of the model.
-        column_output_weights (:obj:`tf.Tensor` of shape :obj:`(hidden_size)`):
-            Weights of the linear layer for column selection.
-        column_output_bias (:obj:`tf.Tensor` of shape :obj:`()`):
-            Bias of the linear layer for column selection.
-        cell_index (:obj:`ProductIndexMap`):
-            Index that groups tokens into cells.
-        cell_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, max_num_rows * max_num_cols)`):
-            Mask for cells that exist in the table (i.e. that are not padding).
-        allow_empty_column_selection (:obj:`bool`):
-            Whether to allow not to select any column
-
-    Returns:
-        column_logits (:obj:`tf.Tensor`of shape :obj:`(batch_size, max_num_cols)`): Tensor containing the column logits
-        for every example in the batch.
-    """
-
-    # First, compute the token logits (batch_size, seq_len) - without temperature
-    token_logits = tf.einsum("bsj,j->bs", sequence_output, column_output_weights) + column_output_bias
-
-    # Next, average the logits per cell (batch_size, max_num_cols*max_num_rows)
-    cell_logits, cell_logits_index = reduce_mean(token_logits, cell_index)
-
-    # Finally, average the logits per column (batch_size, max_num_cols)
-    column_index = cell_index.project_inner(cell_logits_index)
-    column_logits, out_index = reduce_sum(cell_logits * cell_mask, column_index)
-
-    cell_count, _ = reduce_sum(cell_mask, column_index)
-    column_logits /= cell_count + EPSILON_ZERO_DIVISION
-
-    # Mask columns that do not appear in the example.
-    is_padding = tf.logical_and(cell_count < 0.5, tf.not_equal(out_index.indices, 0))
-    column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(is_padding, tf.float32)
-
-    if not allow_empty_column_selection:
-        column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(tf.equal(out_index.indices, 0), tf.float32)
-
-    return column_logits
-
-
 def compute_token_logits(sequence_output, temperature, output_weights, output_bias):
     """
     Computes logits per token
@@ -1883,7 +1948,7 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
         aggregation functions.
     """
     # tf.Tensor(batch_size,)
-    aggregate_mask_init = tf.cast(tf.logical_not(tf.is_nan(answer)), tf.float32)
+    aggregate_mask_init = tf.cast(tf.logical_not(tf.math.is_nan(answer)), tf.float32)
     logits_aggregation = aggregation_classifier(pooled_output)
     dist_aggregation = tfp.distributions.Categorical(logits=logits_aggregation)
     # Index 0 corresponds to "no aggregation".
@@ -1891,7 +1956,7 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
     # Cell selection examples according to current model.
     is_pred_cell_selection = aggregation_ops_total_mass <= cell_selection_preference
     # Examples with non-empty cell selection supervision.
-    is_cell_supervision_available = tf.reduce_sum(label_ids, axis=1) > 0
+    is_cell_supervision_available = tf.reduce_sum(labels, axis=1) > 0
     aggregate_mask = tf.where(
         tf.logical_and(is_pred_cell_selection, is_cell_supervision_available),
         tf.zeros_like(aggregate_mask_init, dtype=tf.float32),
@@ -1968,7 +2033,7 @@ def _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask):
     # This increases the probability of all aggregation functions, in a way
     # similar to MML, but without considering whether the function gives the
     # correct answer.
-    return -tf.log(aggregation_ops_total_mass) * aggregate_mask
+    return -tf.math.log(aggregation_ops_total_mass) * aggregate_mask
 
 
 def _calculate_aggregation_loss(
@@ -2047,7 +2112,7 @@ def _calculate_expected_result(
     scaled_probability_per_cell = (scaled_probability_per_cell / numeric_values_scale) * input_mask_float
     count_result = tf.reduce_sum(scaled_probability_per_cell, axis=1)
     numeric_values_masked = tf.where(
-        tf.is_nan(numeric_values), tf.zeros_like(numeric_values), numeric_values
+        tf.math.is_nan(numeric_values), tf.zeros_like(numeric_values), numeric_values
     )  # Mask non-numeric table values to zero.
     sum_result = tf.reduce_sum(scaled_probability_per_cell * numeric_values_masked, axis=1)
     avg_approximation = config.average_approximation_function
@@ -2130,7 +2195,7 @@ def _calculate_regression_loss(
     )
 
     # <float32>[batch_size]
-    answer_masked = tf.where(tf.is_nan(answer), tf.zeros_like(answer), answer)
+    answer_masked = tf.where(tf.math.is_nan(answer), tf.zeros_like(answer), answer)
 
     if config.use_normalized_answer_loss:
         normalizer = tf.stop_gradient(
