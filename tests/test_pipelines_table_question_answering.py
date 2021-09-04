@@ -19,11 +19,13 @@ from transformers import (
     AutoModelForTableQuestionAnswering,
     AutoTokenizer,
     TableQuestionAnsweringPipeline,
+    TFAutoModelForTableQuestionAnswering,
     pipeline,
 )
 from transformers.testing_utils import (
     is_pipeline_test,
     require_pandas,
+    require_tensorflow_probability,
     require_tf,
     require_torch,
     require_torch_scatter,
@@ -33,6 +35,7 @@ from transformers.testing_utils import (
 from .test_pipelines_common import PipelineTestCaseMeta
 
 
+@require_tensorflow_probability
 @require_torch_scatter
 @require_torch
 @require_pandas
@@ -43,9 +46,105 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
 
     @require_tf
-    @unittest.skip("Table question answering not implemented in TF")
     def test_small_model_tf(self):
-        pass
+        model_id = "lysandre/tiny-tapas-random-wtq"
+        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id, from_pt=True)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        self.assertIsInstance(model.config.aggregation_labels, dict)
+        self.assertIsInstance(model.config.no_aggregation_label_index, int)
+
+        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
+        outputs = table_querier(
+            table={
+                "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
+                "age": ["56", "45", "59"],
+                "number of movies": ["87", "53", "69"],
+                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+            },
+            query="how many movies has george clooney played in?",
+        )
+        self.assertEqual(
+            outputs,
+            {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+        )
+        outputs = table_querier(
+            table={
+                "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
+                "age": ["56", "45", "59"],
+                "number of movies": ["87", "53", "69"],
+                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+            },
+            query=["how many movies has george clooney played in?", "how old is he?", "what's his date of birth?"],
+        )
+        self.assertEqual(
+            outputs,
+            [
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+            ],
+        )
+        outputs = table_querier(
+            table={
+                "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                "Stars": ["36542", "4512", "3934"],
+                "Contributors": ["651", "77", "34"],
+                "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+            },
+            query=[
+                "What repository has the largest number of stars?",
+                "Given that the numbers of stars defines if a repository is active, what repository is the most active?",
+                "What is the number of repositories?",
+                "What is the average number of stars?",
+                "What is the total amount of stars?",
+            ],
+        )
+        self.assertEqual(
+            outputs,
+            [
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+            ],
+        )
+
+        with self.assertRaises(ValueError):
+            table_querier(query="What does it do with empty context ?", table=None)
+        with self.assertRaises(ValueError):
+            table_querier(query="What does it do with empty context ?", table="")
+        with self.assertRaises(ValueError):
+            table_querier(query="What does it do with empty context ?", table={})
+        with self.assertRaises(ValueError):
+            table_querier(
+                table={
+                    "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                    "Stars": ["36542", "4512", "3934"],
+                    "Contributors": ["651", "77", "34"],
+                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                }
+            )
+        with self.assertRaises(ValueError):
+            table_querier(
+                query="",
+                table={
+                    "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                    "Stars": ["36542", "4512", "3934"],
+                    "Contributors": ["651", "77", "34"],
+                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                },
+            )
+        with self.assertRaises(ValueError):
+            table_querier(
+                query=None,
+                table={
+                    "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                    "Stars": ["36542", "4512", "3934"],
+                    "Contributors": ["651", "77", "34"],
+                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                },
+            )
 
     @require_torch
     def test_small_model_pt(self):
