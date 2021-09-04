@@ -1284,6 +1284,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if from_pt:
             if state_dict is None:
                 try:
+
                     state_dict = torch.load(resolved_archive_file, map_location="cpu")
                 except Exception:
                     raise OSError(
@@ -1307,6 +1308,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             f"`torch_dtype` can be either a `torch.dtype` or `auto`, but received {torch_dtype}"
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+
+            del state_dict # save memory - will reload again
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1357,6 +1360,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 raise
         elif from_pt:
+
+            # drop storage on CPU
+            model = model.to(device='meta')
+            # only now can load state_dict
+            state_dict = torch.load(resolved_archive_file, map_location="cpu")
+
             model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_state_dict_into_model(
                 model,
                 state_dict,
@@ -1364,6 +1373,38 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ignore_mismatched_sizes=ignore_mismatched_sizes,
                 _fast_init=_fast_init,
             )
+            print("UNEXPECTED_KEYS", unexpected_keys)
+            print("MISMATCHED_KEYS", mismatched_keys)
+
+            # materialize sd keys one by one on CPU
+            def slam_dict(mod, state_dict):
+                for k, p in state_dict.items():
+                    split_name = k.split(".")
+                    print(split_name)
+                    m = mod
+                    matched = True
+                    while len(split_name) > 1:
+                        if hasattr(m, split_name[0]):
+                            m = getattr(m, split_name[0])
+                            del split_name[0]
+                        else:
+                            matched = False
+                            break
+                    if matched:
+                        setattr(m, split_name[0], torch.nn.Parameter(p))
+            slam_dict(model, state_dict)
+
+            # XXX: could there be any other non-state_dict entries that are still on device=meta? other than
+            # 1. state_dict
+            # 2. missing_keys that had _init_weights
+            # for n,p in model.named_parameters():
+            #     if p.is_meta:
+            #         p = p.to(device='cpu')
+            # the other solution is to:
+            # 1. sd = torch.load()
+            # 2. make a list which keys are going to be replaced
+            # 3. switch only those params to meta
+            # that way we don't need to do any special case handling
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -1457,10 +1498,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if _fast_init:
             # retrieve unintialized modules and initialize
-            unintialized_modules = model.retrieve_modules_from_names(
+            uninitialized_modules = model.retrieve_modules_from_names(
                 missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
             )
-            for module in unintialized_modules:
+            for module in uninitialized_modules:
+                # XXX: untested
+                # put the params that aren't going to be replaced by state_dict to CPU before running init
+                for p in module.parameters(recursive=False):
+                    p = p.to(device='cpu')
                 model._init_weights(module)
 
         # copy state_dict so _load_from_state_dict can modify it
@@ -1476,6 +1521,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         def load(module: nn.Module, prefix=""):
             local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
             args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
+
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 
