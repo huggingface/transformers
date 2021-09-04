@@ -1915,6 +1915,11 @@ class TapasTokenizer(PreTrainedTokenizer):
             - predicted_aggregation_indices (``List[int]``of length ``batch_size``, `optional`, returned when
               ``logits_aggregation`` is provided): Predicted aggregation operator indices of the aggregation head.
         """
+        # converting to numpy arrays to work with PT/TF/JAX
+        logits = logits.numpy()
+        if logits_agg is not None:
+            logits_agg = logits_agg.numpy()
+        data = data.convert_to_tensors("np")
         # input data is of type float32
         # np.log(np.finfo(np.float32).max) = 88.72284
         # Any value over 88.72284 will overflow when passed through the exponential, sending a warning
@@ -1975,7 +1980,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         output = (predicted_answer_coordinates,)
 
         if logits_agg is not None:
-            predicted_aggregation_indices = logits_agg.argmax(dim=-1)
+            predicted_aggregation_indices = logits_agg.argmax(axis=-1)
             output = (predicted_answer_coordinates, predicted_aggregation_indices.tolist())
 
         return output
