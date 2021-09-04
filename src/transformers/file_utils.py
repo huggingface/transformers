@@ -215,7 +215,7 @@ except importlib_metadata.PackageNotFoundError:
 _tensorflow_probability_available = importlib.util.find_spec("tensorflow_probability") is not None
 try:
     _tensorflow_probability_version = importlib_metadata.version("tensorflow_probability")
-    logger.debug(f"Successfully tensorflow_probability version {_tensorflow_probability_version}")
+    logger.debug(f"Successfully imported tensorflow-probability version {_tensorflow_probability_version}")
 except importlib_metadata.PackageNotFoundError:
     _tensorflow_probability_available = False
 
