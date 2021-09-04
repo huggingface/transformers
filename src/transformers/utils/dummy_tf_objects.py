@@ -239,6 +239,9 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = None
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 
 
+TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
+
+
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
@@ -354,6 +357,15 @@ class TFAutoModelForSequenceClassification:
 
     def call(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+
+class TFAutoModelForTableQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFAutoModelForTokenClassification:

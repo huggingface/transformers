@@ -418,6 +418,17 @@ class TFAutoModelForQuestionAnswering(_BaseAutoModelClass):
 TFAutoModelForQuestionAnswering = auto_class_update(TFAutoModelForQuestionAnswering, head_doc="question answering")
 
 
+class TFAutoModelForTableQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
+
+
+TFAutoModelForTableQuestionAnswering = auto_class_update(
+    TFAutoModelForTableQuestionAnswering,
+    head_doc="table question answering",
+    checkpoint_for_example="google/tapas-base-finetuned-wtq",
+)
+
+
 class TFAutoModelForTokenClassification(_BaseAutoModelClass):
     _model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
