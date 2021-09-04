@@ -21,10 +21,11 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_modeling_bert import BertModelTester
-from .test_modeling_common import ids_tensor, floats_tensor, random_attention_mask
+from .test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from .test_modeling_speech_to_text import Speech2TextModelTester
 from .test_modeling_speech_to_text_2 import Speech2Text2StandaloneDecoderModelTester
 from .test_modeling_wav2vec2 import Wav2Vec2ModelTester
+
 
 if is_torch_available():
     import numpy as np
@@ -53,15 +54,15 @@ class EncoderDecoderMixin:
         pass
 
     def check_encoder_decoder_model_from_pretrained_configs(
-            self,
-            config,
-            attention_mask,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            input_values=None,
-            input_features=None,
-            **kwargs
+        self,
+        config,
+        attention_mask,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        input_values=None,
+        input_features=None,
+        **kwargs
     ):
         encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
@@ -85,15 +86,15 @@ class EncoderDecoderMixin:
         )
 
     def check_encoder_decoder_model(
-            self,
-            config,
-            attention_mask,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            input_values=None,
-            input_features=None,
-            **kwargs
+        self,
+        config,
+        attention_mask,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        input_values=None,
+        input_features=None,
+        **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -125,16 +126,16 @@ class EncoderDecoderMixin:
         )
 
     def check_encoder_decoder_model_from_pretrained(
-            self,
-            config,
-            attention_mask,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            return_dict,
-            input_values=None,
-            input_features=None,
-            **kwargs
+        self,
+        config,
+        attention_mask,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        return_dict,
+        input_values=None,
+        input_features=None,
+        **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
@@ -155,15 +156,15 @@ class EncoderDecoderMixin:
         )
 
     def check_save_and_load(
-            self,
-            config,
-            attention_mask,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            input_values=None,
-            input_features=None,
-            **kwargs
+        self,
+        config,
+        attention_mask,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        input_values=None,
+        input_features=None,
+        **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -198,15 +199,15 @@ class EncoderDecoderMixin:
                 self.assertLessEqual(max_diff, 1e-5)
 
     def check_save_and_load_encoder_decoder_model(
-            self,
-            config,
-            attention_mask,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            input_values=None,
-            input_features=None,
-            **kwargs
+        self,
+        config,
+        attention_mask,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        input_values=None,
+        input_features=None,
+        **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -244,16 +245,16 @@ class EncoderDecoderMixin:
                 self.assertLessEqual(max_diff, 1e-5)
 
     def check_encoder_decoder_model_output_attentions(
-            self,
-            config,
-            attention_mask,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            labels=None,
-            input_values=None,
-            input_features=None,
-            **kwargs
+        self,
+        config,
+        attention_mask,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        labels=None,
+        input_values=None,
+        input_features=None,
+        **kwargs
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
@@ -301,7 +302,7 @@ class EncoderDecoderMixin:
         )
 
     def check_encoder_decoder_model_generate(
-            self, config, decoder_config, input_values=None, input_features=None, **kwargs
+        self, config, decoder_config, input_values=None, input_features=None, **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -507,6 +508,7 @@ class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
     # all published pretrained models are Speech2TextModel != Speech2TextEncoder
     def test_real_model_save_load_from_pretrained(self):
         pass
+
 
 @require_torch
 class Wav2Vec2Speech2Text2(EncoderDecoderMixin, unittest.TestCase):
