@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+# This is a little script that:
+# 1. syncs the upstream default branch with origin default branch (master or main usually)
+# 2. and then rebases the current branch to upstream default master using the merge strategy
+#
+# Usage:
+# git-rebase
+
+
+if [ -n "$(git status -s -uno)" ]; then
+    echo "Error: you have uncommitted git files; either git stash or git commit them first"
+    exit 1
+fi
+
+repo_user_repo_name=$(git config --get remote.origin.url | sed 's|^.*//||; s/.*@//; s/[^:/]\+[:/]//; s/.git$//')
+cmd="curl -s https://api.github.com/repos/${repo_user_repo_name} | jq --raw-output .default_branch"
+default_branch=$(eval "$cmd") || exit 1
+echo -e "\n\n*** Discovered default branch: $default_branch"
+
+cur_branch=$(git branch | sed -n '/\* /s///p')
+if [ "$cur_branch" = "$default_branch" ]; then
+    echo "Error: this script expects you to be on the branch you need to rebase, but this is a $default_branch branch"
+    echo "Exiting"
+    exit 1
+fi
+
+# my script github-make-pr-branch sets up upstream git remote, when creating a branch, so here we
+# know if we are in a branch of a forked repo and need to merge the forked master first. I'm not
+# sure how to do this check in a general way w/o having an explicit `upstream` set up
+if [ -n "$(git remote get-url upstream 2> /dev/null)" ]; then
+    echo "detected a fork, merging upstream/master into origin/master first"
+    git fetch upstream
+    git checkout $default_branch
+    git merge --no-edit upstream/$default_branch
+    git push --set-upstream origin $default_branch
+    git checkout -
+else
+    echo "detected non-forked repo, updating origin"
+    git fetch origin
+fi
+
+git pull --rebase
+git merge origin/$default_branch
+
+echo "Now resolve conflicts if any, followed by git commit and finally git push"
