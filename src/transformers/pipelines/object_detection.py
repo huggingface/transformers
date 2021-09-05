@@ -129,15 +129,25 @@ class ObjectDetectionPipeline(Pipeline):
 
             if self.framework == "pt":
                 target_sizes = torch.IntTensor([[im.height, im.width] for im in images])
-                annotations = self.feature_extractor.post_process(outputs, target_sizes, threshold)
-
-                for annotation in annotations:
-                    for detected_obj in annotation:
-                        detected_obj["score"] = detected_obj["score"].item()
-                        detected_obj["label"] = self.model.config.id2label[detected_obj["label"].item()]
-                        detected_obj["box"] = self._get_bounding_box(detected_obj["box"])
             else:
                 raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")
+
+            annotations = self.feature_extractor.post_process(outputs, target_sizes)
+            for i, annotation in enumerate(annotations):
+                keep = annotation["scores"] > threshold
+                scores = annotation["scores"][keep]
+                labels = annotation["labels"][keep]
+                boxes = annotation["boxes"][keep]
+
+                annotation["scores"] = scores.tolist()
+                annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
+                annotation["boxes"] = [self._get_bounding_box(box) for box in boxes]
+
+                # {"scores": [...], ...} --> [{"score":x, ...}, ...]
+                keys = ["score", "label", "box"]
+                annotation = [dict(zip(keys, vals)) for vals in zip(*annotation.values())]
+
+                annotations[i] = annotation
 
         if not is_batched:
             return annotations[0]
