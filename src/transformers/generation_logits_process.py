@@ -404,11 +404,8 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         elif len(tokens) > len(prev_tokens):
             # if bad word tokens are longer then prev input_ids they can't be equal
             return False
-        elif prev_tokens[-len(tokens) :] == tokens:
-            # if tokens match
-            return True
         else:
-            return False
+            return prev_tokens[-len(tokens) :] == tokens
 
     def _calc_banned_bad_words_ids(self, prev_input_ids: List[List[int]]) -> Iterable[int]:
         banned_tokens = []
@@ -422,7 +419,9 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
         return banned_tokens
 
-    def _set_scores_to_inf_for_banned_tokens(self, scores: torch.Tensor, banned_tokens: List[List[int]]) -> torch.Tensor:
+    def _set_scores_to_inf_for_banned_tokens(
+        self, scores: torch.Tensor, banned_tokens: List[List[int]]
+    ) -> torch.Tensor:
         """
         Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be a
         list of list of banned tokens to ban in the format [[batch index, vocabulary position],...
@@ -455,7 +454,10 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
                 # [ 1  0  0 ]
 
                 banned_mask = (
-                    torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
+                    torch.sparse.LongTensor(banned_mask.t(), indices, scores.size())
+                    .to(scores.device)
+                    .to_dense()
+                    .bool()
                 )
 
                 if self.static_bad_words_mask is not None:
