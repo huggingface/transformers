@@ -19,12 +19,12 @@ from transformers import (
     AutoFeatureExtractor,
     AutoModelForObjectDetection,
     ObjectDetectionPipeline,
-    PreTrainedTokenizer,
     is_vision_available,
     pipeline,
 )
 from transformers.testing_utils import (
     is_pipeline_test,
+    nested_simplify,
     require_datasets,
     require_tf,
     require_torch,
@@ -53,9 +53,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
 
     @require_datasets
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
-        threshold = 0.0
         object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
-        outputs = object_detector("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=threshold)
+        outputs = object_detector("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
 
         self.assertGreater(len(outputs), 0)
         for detected_object in outputs:
@@ -82,7 +81,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
             # L
             dataset[2]["file"],
         ]
-        batch_outputs = object_detector(batch, threshold=threshold)
+        batch_outputs = object_detector(batch, threshold=0.0)
 
         self.assertEqual(len(batch), len(batch_outputs))
         for outputs in batch_outputs:
@@ -104,44 +103,43 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
 
     @require_torch
     def test_small_model_pt(self):
-        threshold = 0.0
         model_id = "mishig/tiny-detr-mobilenetsv3"
 
         model = AutoModelForObjectDetection.from_pretrained(model_id)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
         object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
 
-        outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=threshold)
+        outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.0)
 
-        self.assertGreater(len(outputs), 0)
-        for detected_object in outputs:
-            self.assertEqual(
-                detected_object,
-                {
-                    "score": ANY(float),
-                    "label": ANY(str),
-                    "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
-                },
-            )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 266, "ymin": 200, "xmax": 799, "ymax": 599}},
+                {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 266, "ymin": 200, "xmax": 799, "ymax": 599}},
+            ],
+        )
 
-        batch = [
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
-        ]
-        batch_outputs = object_detector(batch, threshold=threshold)
+        outputs = object_detector(
+            [
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+            ],
+            threshold=0.0,
+        )
 
-        self.assertEqual(len(batch), len(batch_outputs))
-        for outputs in batch_outputs:
-            self.assertGreater(len(outputs), 0)
-            for detected_object in outputs:
-                self.assertEqual(
-                    detected_object,
-                    {
-                        "score": ANY(float),
-                        "label": ANY(str),
-                        "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
-                    },
-                )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [
+                    {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 266, "ymin": 200, "xmax": 799, "ymax": 599}},
+                    {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 266, "ymin": 200, "xmax": 799, "ymax": 599}},
+                ],
+                [
+                    {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 266, "ymin": 200, "xmax": 799, "ymax": 599}},
+                    {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 266, "ymin": 200, "xmax": 799, "ymax": 599}},
+                ],
+            ],
+        )
 
     @require_torch
     @slow
@@ -153,111 +151,101 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
         object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
 
         outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9982, "label": "remote", "box": {"xmin": 66, "ymin": 118, "xmax": 292, "ymax": 196}},
+                {"score": 0.9960, "label": "remote", "box": {"xmin": 555, "ymin": 120, "xmax": 613, "ymax": 312}},
+                {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 1065, "ymax": 789}},
+                {"score": 0.9988, "label": "cat", "box": {"xmin": 22, "ymin": 86, "xmax": 523, "ymax": 784}},
+                {"score": 0.9987, "label": "cat", "box": {"xmin": 575, "ymin": 39, "xmax": 1066, "ymax": 614}},
+            ],
+        )
 
-        self.assertGreater(len(outputs), 0)
-        for detected_object in outputs:
-            self.assertEqual(
-                detected_object,
-                {
-                    "score": ANY(float),
-                    "label": ANY(str),
-                    "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
-                },
-            )
-
-        batch = [
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
-        ]
-        batch_outputs = object_detector(batch)
-
-        self.assertEqual(len(batch), len(batch_outputs))
-        for outputs in batch_outputs:
-            self.assertGreater(len(outputs), 0)
-            for detected_object in outputs:
-                self.assertEqual(
-                    detected_object,
-                    {
-                        "score": ANY(float),
-                        "label": ANY(str),
-                        "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
-                    },
-                )
+        outputs = object_detector(
+            [
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+            ]
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [
+                    {"score": 0.9982, "label": "remote", "box": {"xmin": 66, "ymin": 118, "xmax": 292, "ymax": 196}},
+                    {"score": 0.9960, "label": "remote", "box": {"xmin": 555, "ymin": 120, "xmax": 613, "ymax": 312}},
+                    {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 1065, "ymax": 789}},
+                    {"score": 0.9988, "label": "cat", "box": {"xmin": 22, "ymin": 86, "xmax": 523, "ymax": 784}},
+                    {"score": 0.9987, "label": "cat", "box": {"xmin": 575, "ymin": 39, "xmax": 1066, "ymax": 614}},
+                ],
+                [
+                    {"score": 0.9982, "label": "remote", "box": {"xmin": 66, "ymin": 118, "xmax": 292, "ymax": 196}},
+                    {"score": 0.9960, "label": "remote", "box": {"xmin": 555, "ymin": 120, "xmax": 613, "ymax": 312}},
+                    {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 1065, "ymax": 789}},
+                    {"score": 0.9988, "label": "cat", "box": {"xmin": 22, "ymin": 86, "xmax": 523, "ymax": 784}},
+                    {"score": 0.9987, "label": "cat", "box": {"xmin": 575, "ymin": 39, "xmax": 1066, "ymax": 614}},
+                ],
+            ],
+        )
 
     @require_torch
     @slow
-    def test_ntegration_torch_object_detection(self):
+    def test_integration_torch_object_detection(self):
         model_id = "facebook/detr-resnet-50"
 
         object_detector = pipeline("object-detection", model=model_id)
 
         outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9982, "label": "remote", "box": {"xmin": 66, "ymin": 118, "xmax": 292, "ymax": 196}},
+                {"score": 0.9960, "label": "remote", "box": {"xmin": 555, "ymin": 120, "xmax": 613, "ymax": 312}},
+                {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 1065, "ymax": 789}},
+                {"score": 0.9988, "label": "cat", "box": {"xmin": 22, "ymin": 86, "xmax": 523, "ymax": 784}},
+                {"score": 0.9987, "label": "cat", "box": {"xmin": 575, "ymin": 39, "xmax": 1066, "ymax": 614}},
+            ],
+        )
 
-        self.assertGreater(len(outputs), 0)
-        for detected_object in outputs:
-            self.assertEqual(
-                detected_object,
-                {
-                    "score": ANY(float),
-                    "label": ANY(str),
-                    "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
-                },
-            )
+        outputs = object_detector(
+            [
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+            ]
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [
+                    {"score": 0.9982, "label": "remote", "box": {"xmin": 66, "ymin": 118, "xmax": 292, "ymax": 196}},
+                    {"score": 0.9960, "label": "remote", "box": {"xmin": 555, "ymin": 120, "xmax": 613, "ymax": 312}},
+                    {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 1065, "ymax": 789}},
+                    {"score": 0.9988, "label": "cat", "box": {"xmin": 22, "ymin": 86, "xmax": 523, "ymax": 784}},
+                    {"score": 0.9987, "label": "cat", "box": {"xmin": 575, "ymin": 39, "xmax": 1066, "ymax": 614}},
+                ],
+                [
+                    {"score": 0.9982, "label": "remote", "box": {"xmin": 66, "ymin": 118, "xmax": 292, "ymax": 196}},
+                    {"score": 0.9960, "label": "remote", "box": {"xmin": 555, "ymin": 120, "xmax": 613, "ymax": 312}},
+                    {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 1065, "ymax": 789}},
+                    {"score": 0.9988, "label": "cat", "box": {"xmin": 22, "ymin": 86, "xmax": 523, "ymax": 784}},
+                    {"score": 0.9987, "label": "cat", "box": {"xmin": 575, "ymin": 39, "xmax": 1066, "ymax": 614}},
+                ],
+            ],
+        )
 
-        batch = [
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
-        ]
-        batch_outputs = object_detector(batch)
-
-        self.assertEqual(len(batch), len(batch_outputs))
-        for outputs in batch_outputs:
-            self.assertGreater(len(outputs), 0)
-            for detected_object in outputs:
-                self.assertEqual(
-                    detected_object,
-                    {
-                        "score": ANY(float),
-                        "label": ANY(str),
-                        "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
-                    },
-                )
-
-    def test_custom_tokenizer(self):
+    @require_torch
+    @slow
+    def test_threshold(self):
+        threshold = 0.9985
         model_id = "facebook/detr-resnet-50"
-        tokenizer = PreTrainedTokenizer()
 
-        # Assert that the pipeline can be initialized with a feature extractor that is not in any mapping
-        object_detector = pipeline("object-detection", model=model_id, tokenizer=tokenizer)
+        object_detector = pipeline("object-detection", model=model_id)
 
-        self.assertIs(object_detector.tokenizer, tokenizer)
-
-    def test_low_threshold(self):
-        threshold = 0.0
-        model_id = "mishig/tiny-detr-mobilenetsv3"
-
-        model = AutoModelForObjectDetection.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
-
-        valid_input = {"images": "http://images.cocodataset.org/val2017/000000039769.jpg", "threshold": threshold}
-
-        output = object_detector(**valid_input)
-
-        self.assertTrue(isinstance(output, list))
-        self.assertEqual(len(output), 5)
-
-    def test_high_threshold(self):
-        threshold = 1.0
-        model_id = "mishig/tiny-detr-mobilenetsv3"
-
-        model = AutoModelForObjectDetection.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
-
-        valid_input = {"images": "http://images.cocodataset.org/val2017/000000039769.jpg", "threshold": threshold}
-
-        output = object_detector(**valid_input)
-
-        self.assertTrue(isinstance(output, list))
-        self.assertEqual(len(output), 0)
+        outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=threshold)
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9988, "label": "cat", "box": {"xmin": 22, "ymin": 86, "xmax": 523, "ymax": 784}},
+                {"score": 0.9987, "label": "cat", "box": {"xmin": 575, "ymin": 39, "xmax": 1066, "ymax": 614}},
+            ],
+        )
