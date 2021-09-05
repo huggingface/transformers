@@ -415,17 +415,14 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         for prev_input_ids_slice in prev_input_ids:
             banned_tokens_slice = []
             for banned_token_seq in self.bad_words_id_length_greater_than_1:
-                if self._tokens_match(prev_input_ids_slice, banned_token_seq[:-1]) is False:
-                    # if tokens do not match continue
-                    continue
-
-                banned_tokens_slice.append(banned_token_seq[-1])
+                if self._tokens_match(prev_input_ids_slice, banned_token_seq[:-1]):
+                    banned_tokens_slice.append(banned_token_seq[-1])
 
             banned_tokens.append(banned_tokens_slice)
 
         return banned_tokens
 
-    def _set_scores_to_inf_for_banned_tokens(self, scores: torch.Tensor, banned_tokens: List[List[int]]) -> None:
+    def _set_scores_to_inf_for_banned_tokens(self, scores: torch.Tensor, banned_tokens: List[List[int]]) -> torch.Tensor:
         """
         Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be a
         list of list of banned tokens to ban in the format [[batch index, vocabulary position],...
@@ -445,24 +442,29 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
                         f"An invalid bad word ID is defined: {token}. This ID is not contained in the"
                         f"vocabulary, and is therefore ignored."
                     )
-        if not banned_mask_list:
+        if not banned_mask_list and self.static_bad_words_mask is None:
             return scores
 
-        banned_mask = torch.LongTensor(banned_mask_list)
-        indices = torch.ones(len(banned_mask))
-        # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
-        # [ 0  1  1 ]
-        # [ 0  0  0 ]
-        # [ 1  0  0 ]
+        else:
+            if banned_mask_list:
+                banned_mask = torch.LongTensor(banned_mask_list)
+                indices = torch.ones(len(banned_mask))
+                # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
+                # [ 0  1  1 ]
+                # [ 0  0  0 ]
+                # [ 1  0  0 ]
 
-        banned_mask = (
-            torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
-        )
-        if self.static_bad_words_mask is not None:
-            banned_mask |= self.static_bad_words_mask
+                banned_mask = (
+                    torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
+                )
 
-        scores = scores.masked_fill(banned_mask, -float("inf"))
-        return scores
+                if self.static_bad_words_mask is not None:
+                    banned_mask = torch.bitwise_or(banned_mask, self.static_bad_words_mask)
+            else:
+                banned_mask = self.static_bad_words_mask
+
+            scores = scores.masked_fill(banned_mask, -float("inf"))
+            return scores
 
 
 class PrefixConstrainedLogitsProcessor(LogitsProcessor):
