@@ -40,15 +40,15 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def convert_fairseq_mbart_checkpoint_from_disk(checkpoint_path, hf_config_path="uclanlp/plbart-base", finetuned=False):
+def convert_fairseq_plbart_checkpoint_from_disk(checkpoint_path, hf_config_path="uclanlp/plbart-base", finetuned=False):
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     remove_ignore_keys_(state_dict)
     vocab_size = state_dict["encoder.embed_tokens.weight"].shape[0]
 
-    mbart_config = PLBartConfig.from_pretrained(hf_config_path, vocab_size=vocab_size)
+    plbart_config = PLBartConfig.from_pretrained(hf_config_path, vocab_size=vocab_size)
 
     state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
-    model = PLBartForConditionalGeneration(mbart_config)
+    model = PLBartForConditionalGeneration(plbart_config)
     model.model.load_state_dict(state_dict)
 
     if finetuned:

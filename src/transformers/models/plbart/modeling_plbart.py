@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021, The Facebook AI Research Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 UCLA NLP, The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 import copy
 import math
 import random
+import warnings
 from typing import Optional, Tuple
 
 import torch
@@ -58,26 +59,21 @@ PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
-    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that PLBart does not
-    have a single `decoder_start_token_id` in contrast to other Bart-like models.
+    Shift input ids one token to the right.
     """
-    prev_output_tokens = input_ids.clone()
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
 
     assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
     # replace possible -100 values in labels by `pad_token_id`
-    prev_output_tokens.masked_fill_(prev_output_tokens == -100, pad_token_id)
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
-    index_of_eos = (prev_output_tokens.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
-    decoder_start_tokens = prev_output_tokens.gather(1, index_of_eos).squeeze()
-    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
-    prev_output_tokens[:, 0] = decoder_start_tokens
-
-    return prev_output_tokens
+    return shifted_input_ids
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -93,7 +89,6 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-# Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -108,7 +103,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->PLBart
 class PLBartLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -129,7 +123,6 @@ class PLBartLearnedPositionalEmbedding(nn.Embedding):
         return super().forward(positions + self.offset)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PLBart
 class PLBartAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -267,7 +260,6 @@ class PLBartAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->PLBart
 class PLBartEncoderLayer(nn.Module):
     def __init__(self, config: PLBartConfig):
         super().__init__()
@@ -304,7 +296,6 @@ class PLBartEncoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -313,14 +304,15 @@ class PLBartEncoderLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
 
         if hidden_states.dtype == torch.float16 and (
             torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
@@ -336,7 +328,6 @@ class PLBartEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->PLBart
 class PLBartDecoderLayer(nn.Module):
     def __init__(self, config: PLBartConfig):
         super().__init__()
@@ -378,10 +369,10 @@ class PLBartDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+            encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -394,7 +385,6 @@ class PLBartDecoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -409,13 +399,13 @@ class PLBartDecoderLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -429,18 +419,19 @@ class PLBartDecoderLayer(nn.Module):
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -453,7 +444,6 @@ class PLBartDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_bart.BartClassificationHead with Bart->PLBart
 class PLBartClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -478,9 +468,10 @@ class PLBartClassificationHead(nn.Module):
         return hidden_states
 
 
-class PLBartPreTrainedModel(PreTrainedModel):
+class PLBartPretrainedModel(PreTrainedModel):
     config_class = PLBartConfig
     base_model_prefix = "model"
+    _keys_to_ignore_on_load_unexpected = [r"encoder\.version", r"decoder\.version"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -504,6 +495,14 @@ class PLBartPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
+class PretrainedPLBartModel(PLBartPretrainedModel):
+    def __init_subclass__(self):
+        warnings.warn(
+            "The class `PretrainedPLBartModel` has been depreciated, please use `PLBartPretrainedModel` instead.",
+            FutureWarning,
+        )
+
+
 PLBART_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -525,10 +524,10 @@ PLBART_GENERATION_EXAMPLE = r"""
 
         >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration, PLBartConfig
 
-        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base')
-        >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base')
+        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base-cnn')
+        >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base-cnn')
 
-        >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
+        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
 
         >>> # Generate Summary
@@ -539,11 +538,10 @@ PLBART_GENERATION_EXAMPLE = r"""
 
         >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration
         >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base')
-        >>> # de_DE is the language symbol id <LID> for German
-        >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
+        >>> TXT = "My friends are <mask> but they eat too many carbs."
 
         >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base')
-        >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='pt')['input_ids']
+        >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
         >>> logits = model(input_ids).logits
 
         >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
@@ -580,8 +578,7 @@ PLBART_INPUTS_DOCSTRING = r"""
 
             `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
 
-            PLBart uses a specific language id token as the starting token for :obj:`decoder_input_ids` generation that
-            varies according to source and target language, *e.g.* 25004 for `en_XX`, and 25003 for `de_DE`. If
+            PLBart uses the :obj:`eos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
             :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
 
@@ -591,6 +588,10 @@ PLBART_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
+
+            If you want to change padding behavior, you should read :func:`modeling_plbart._prepare_decoder_inputs` and
+            modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
+            information on the default strategy.
         head_mask (:obj:`torch.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
@@ -652,7 +653,7 @@ PLBART_INPUTS_DOCSTRING = r"""
 """
 
 
-class PLBartEncoder(PLBartPreTrainedModel):
+class PLBartEncoder(PLBartPretrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     :class:`PLBartEncoderLayer`.
@@ -684,7 +685,6 @@ class PLBartEncoder(PLBartPreTrainedModel):
         )
         self.layers = nn.ModuleList([PLBartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
-        self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
 
@@ -809,8 +809,6 @@ class PLBartEncoder(PLBartPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        hidden_states = self.layer_norm(hidden_states)
-
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -821,7 +819,7 @@ class PLBartEncoder(PLBartPreTrainedModel):
         )
 
 
-class PLBartDecoder(PLBartPreTrainedModel):
+class PLBartDecoder(PLBartPretrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`PLBartDecoderLayer`
 
@@ -849,7 +847,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
         )
         self.layers = nn.ModuleList([PLBartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
-        self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
 
@@ -859,7 +856,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1076,8 +1072,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
-        hidden_states = self.layer_norm(hidden_states)
-
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -1102,7 +1096,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
     "The bare PLBART Model outputting raw hidden-states without any specific head on top.",
     PLBART_START_DOCSTRING,
 )
-class PLBartModel(PLBartPreTrainedModel):
+class PLBartModel(PLBartPretrainedModel):
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
 
@@ -1153,17 +1147,20 @@ class PLBartModel(PLBartPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+
+        # different to other models, PLBart automatically creates decoder_input_ids from
+        # input_ids if no decoder_input_ids are provided
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            decoder_input_ids = shift_tokens_right(
+                input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # different to other models, PLBart automatically creates decoder_input_ids from
-        # input_ids if no decoder_input_ids are provided
-        if decoder_input_ids is None and decoder_inputs_embeds is None:
-            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1217,14 +1214,9 @@ class PLBartModel(PLBartPreTrainedModel):
 @add_start_docstrings(
     "The PLBART Model with a language modeling head. Can be used for summarization.", PLBART_START_DOCSTRING
 )
-class PLBartForConditionalGeneration(PLBartPreTrainedModel):
+class PLBartForConditionalGeneration(PLBartPretrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"encoder\.version",
-        r"decoder\.version",
-        r"lm_head\.weight",
-    ]
+    _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"lm_head\.weight"]
 
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
@@ -1289,13 +1281,14 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
 
         Returns:
-
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
             if decoder_input_ids is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
 
         outputs = self.model(
             input_ids,
@@ -1366,7 +1359,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return shift_tokens_right(labels, self.config.pad_token_id)
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
@@ -1386,7 +1379,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
     """,
     PLBART_START_DOCSTRING,
 )
-class PLBartForSequenceClassification(PLBartPreTrainedModel):
+class PLBartForSequenceClassification(PLBartPretrainedModel):
     def __init__(self, config: PLBartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = PLBartModel(config)
@@ -1406,7 +1399,6 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
         self,
         input_ids=None,
@@ -1500,7 +1492,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
     """,
     PLBART_START_DOCSTRING,
 )
-class PLBartForQuestionAnswering(PLBartPreTrainedModel):
+class PLBartForQuestionAnswering(PLBartPretrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1519,7 +1511,6 @@ class PLBartForQuestionAnswering(PLBartPreTrainedModel):
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering.forward
     def forward(
         self,
         input_ids=None,
@@ -1615,8 +1606,7 @@ class PLBartForQuestionAnswering(PLBartPreTrainedModel):
         )
 
 
-# Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->PLBart
-class PLBartDecoderWrapper(PLBartPreTrainedModel):
+class PLBartDecoderWrapper(PLBartPretrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
     used in combination with the :class:`~transformers.EncoderDecoderModel` framework.
@@ -1630,8 +1620,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->PLBart
-class PLBartForCausalLM(PLBartPreTrainedModel):
+class PLBartForCausalLM(PLBartPretrainedModel):
     def __init__(self, config):
         super().__init__(config)
         config = copy.deepcopy(config)
@@ -1754,8 +1743,8 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
 
             >>> from transformers import PLBartTokenizer, PLBartForCausalLM
 
-            >>> tokenizer = PLBartTokenizer.from_pretrained('facebook/bart-large')
-            >>> model = PLBartForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
+            >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base')
+            >>> model = PLBartForCausalLM.from_pretrained('uclanlp/plbart-base', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
