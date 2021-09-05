@@ -132,8 +132,9 @@ class ObjectDetectionPipeline(Pipeline):
             else:
                 raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")
 
-            annotations = self.feature_extractor.post_process(outputs, target_sizes)
-            for i, annotation in enumerate(annotations):
+            raw_annotations = self.feature_extractor.post_process(outputs, target_sizes)
+            annotations = []
+            for annotation in raw_annotations:
                 keep = annotation["scores"] > threshold
                 scores = annotation["scores"][keep]
                 labels = annotation["labels"][keep]
@@ -145,9 +146,12 @@ class ObjectDetectionPipeline(Pipeline):
 
                 # {"scores": [...], ...} --> [{"score":x, ...}, ...]
                 keys = ["score", "label", "box"]
-                annotation = [dict(zip(keys, vals)) for vals in zip(*annotation.values())]
+                annotation = [
+                    dict(zip(keys, vals))
+                    for vals in zip(annotation["scores"], annotation["labels"], annotation["boxes"])
+                ]
 
-                annotations[i] = annotation
+                annotations.append(annotation)
 
         if not is_batched:
             return annotations[0]
