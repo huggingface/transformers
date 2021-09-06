@@ -17,6 +17,7 @@
 
 from typing import Any, Optional, Tuple
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -858,7 +859,7 @@ class CLIPModel(CLIPPreTrainedModel):
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
-        self.logit_scale = nn.Parameter(torch.ones([]))
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
         self.init_weights()
 
