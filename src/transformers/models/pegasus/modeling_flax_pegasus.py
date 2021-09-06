@@ -225,6 +225,16 @@ def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_tok
     return shifted_input_ids
 
 
+def create_sinusoidal_positions(n_pos, dim, dtype):
+    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
+    sentinel = dim // 2 + dim % 2
+    out = np.zeros_like(position_enc)
+    out[:, 0:sentinel] = np.sin(position_enc[:, 0::2])
+    out[:, sentinel:] = np.cos(position_enc[:, 1::2])
+
+    return jnp.array(out, dtype=dtype)
+
+
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->Pegasus
 class FlaxPegasusAttention(nn.Module):
     config: PegasusConfig
@@ -710,11 +720,8 @@ class FlaxPegasusEncoder(nn.Module):
         # Pegasus is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+        self.embed_positions = create_sinusoidal_positions(
+            self.config.max_position_embeddings, embed_dim, dtype=self.dtype
         )
         self.layers = FlaxPegasusEncoderLayerCollection(self.config, self.dtype)
         self.layer_norm = nn.LayerNorm(dtype=self.dtype)
@@ -734,7 +741,8 @@ class FlaxPegasusEncoder(nn.Module):
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(position_ids + self.offset)
+        # embed positions
+        embed_pos = jnp.take(self.embed_positions, position_ids, axis=0)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
@@ -782,11 +790,8 @@ class FlaxPegasusDecoder(nn.Module):
         # Pegasus is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+        self.embed_positions = create_sinusoidal_positions(
+            self.config.max_position_embeddings, embed_dim, dtype=self.dtype
         )
 
         self.layers = FlaxPegasusDecoderLayerCollection(self.config, self.dtype)
@@ -811,7 +816,7 @@ class FlaxPegasusDecoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # embed positions
-        positions = self.embed_positions(position_ids + self.offset)
+        positions = jnp.take(self.embed_positions, position_ids, axis=0)
 
         hidden_states = inputs_embeds + positions
 
