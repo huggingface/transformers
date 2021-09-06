@@ -60,12 +60,22 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.t5_base_tokenizer
         src_text = "Unicode €."
         encoded = tokenizer(src_text)
-        expected = [88, 113, 108, 102, 114, 103, 104, 35, 229, 133, 175, 49, 1]
-        self.assertEqual(encoded["input_ids"], expected)
+        encoded_ids = [88, 113, 108, 102, 114, 103, 104, 35, 229, 133, 175, 49, 1]
+        self.assertEqual(encoded["input_ids"], encoded_ids)
+
+        # decoding
+        decoded = tokenizer.decode(encoded_ids)
+        self.assertEqual(decoded, "Unicode €.</s>")
 
         encoded = tokenizer("e è é ê ë")
-        expected = [104, 35, 198, 171, 35, 198, 172, 35, 198, 173, 35, 198, 174, 1]
-        self.assertEqual(encoded["input_ids"], expected)
+        encoded_ids = [104, 35, 198, 171, 35, 198, 172, 35, 198, 173, 35, 198, 174, 1]
+        self.assertEqual(encoded["input_ids"], encoded_ids)
+        # decoding
+        decoded = tokenizer.decode(encoded_ids)
+        self.assertEqual(decoded, "e è é ê ë</s>")
+
+        # encode/decode, but with `encode` instead of `__call__`
+        self.assertEqual(tokenizer.decode(tokenizer.encode("e è é ê ë")), "e è é ê ë</s>")
 
     def test_prepare_batch_integration(self):
         tokenizer = self.t5_base_tokenizer

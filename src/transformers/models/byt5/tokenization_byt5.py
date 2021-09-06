@@ -224,15 +224,16 @@ class ByT5Tokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-        string = ""
+        bstring = b""
         for token in tokens:
-            if token in self.special_tokens_decoder:
-                tok_string = self.special_tokens_decoder[token]
-            elif token in self.added_tokens_decoder:
-                tok_string = self.added_tokens_decoder[token]
+            if token in self.special_tokens_encoder:
+                tok_string = token.encode("utf-8")
+            elif token in self.added_tokens_encoder:
+                tok_string = token.encode("utf-8")
             else:
-                tok_string = token
-            string += tok_string
+                tok_string = bytes([ord(token)])
+            bstring += tok_string
+        string = bstring.decode("utf-8")
         return string
 
     # ByT5Tokenizer has no vocab file
