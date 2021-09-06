@@ -63,6 +63,8 @@ class PerceiverConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        use_query_residual (:obj:`float`, `optional`, defaults to :obj:`False`):
+            Whether to add a query residual in the cross-attention layer.
 
     Example::
 
@@ -95,6 +97,7 @@ class PerceiverConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         is_encoder_decoder=False,
+        use_query_residual=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -112,3 +115,4 @@ class PerceiverConfig(PretrainedConfig):
         self.position_embedding_init_scale = position_embedding_init_scale
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.use_query_residual = use_query_residual

@@ -54,10 +54,6 @@ class PerceiverEmbeddings(nn.Module):
         self.latents = nn.Parameter(torch.randn(config.num_latents, config.hidden_size))
         self.position_embeddings = nn.Parameter(torch.zeros(1, config.num_latents, config.hidden_size))
 
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.num_latents).expand((1, -1)))
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-
     def forward(self, batch_size):
         embeddings = self.latents.expand(batch_size, -1, -1)  # Thanks, Phil Wang
         embeddings = embeddings + self.position_embeddings
@@ -92,10 +88,7 @@ class PerceiverSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+        self.config = config
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -114,8 +107,8 @@ class PerceiverSelfAttention(nn.Module):
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
+        # and values come from the inputs; the attention mask needs to be
+        # such that the inputs's non-relevant tokens are not attended to.
         is_cross_attention = inputs is not None
 
         if is_cross_attention:
@@ -130,22 +123,6 @@ class PerceiverSelfAttention(nn.Module):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
-
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
@@ -168,6 +145,14 @@ class PerceiverSelfAttention(nn.Module):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
+
+        # Optionally include a residual to the query.
+        # Consider omitting the residual if the semantics of query and output
+        # are different, e.g. if queries are positions and outputs are pixels.
+        if is_cross_attention and self.config.use_query_residual:
+            context_layer = query_layer + context_layer
+        else:
+            pass
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -286,6 +271,8 @@ class PerceiverLayer(nn.Module):
             hidden_states,
             attention_mask,
             head_mask,
+            inputs,
+            inputs_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -363,9 +350,7 @@ class PerceiverEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    inputs,
-                    inputs_mask,
-                    output_attentions,
+                    output_attentions=output_attentions,
                 )
 
                 hidden_states = layer_outputs[0]
