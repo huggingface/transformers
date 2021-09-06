@@ -1229,6 +1229,7 @@ if is_torch_available():
     _import_structure["optimization"] = [
         "Adafactor",
         "AdamW",
+        "RecAdam",
         "get_constant_schedule",
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
@@ -2853,6 +2854,7 @@ if TYPE_CHECKING:
         from .optimization import (
             Adafactor,
             AdamW,
+            RecAdam,
             get_constant_schedule,
             get_constant_schedule_with_warmup,
             get_cosine_schedule_with_warmup,
