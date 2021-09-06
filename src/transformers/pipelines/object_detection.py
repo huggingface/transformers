@@ -100,7 +100,7 @@ class ObjectDetectionPipeline(Pipeline):
                 - An image loaded in PIL directly
 
                 The pipeline accepts either a single image or a batch of images.
-                Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
+                Images in a batch must all be in the same format: all as HTTP(S) links, all as local paths, or all as PIL
                 images.
             threshold (:obj:`float`, `optional`, defaults to 0.9):
                 The probability necessary to make a prediction.
