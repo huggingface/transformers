@@ -199,7 +199,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        tokens = list(text)
+        tokens = [chr(i) for i in text.encode("utf-8")]
         return tokens
 
     def _convert_token_to_id(self, token):

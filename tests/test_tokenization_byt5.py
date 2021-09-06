@@ -56,6 +56,13 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         batch_without_eos_added = tokenizer(["hi", "I went to the gym", ""])
         self.assertListEqual(batch_with_eos_added["input_ids"], batch_without_eos_added["input_ids"])
 
+    def test_multibytes_char(self):
+        tokenizer = self.t5_base_tokenizer
+        src_text = "Unicode €."
+        encoded = tokenizer(src_text)
+        expected = [88, 113, 108, 102, 114, 103, 104, 35, 229, 133, 175, 49, 1]
+        self.assertEqual(encoded["input_ids"], expected)
+
     def test_prepare_batch_integration(self):
         tokenizer = self.t5_base_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
