@@ -237,8 +237,8 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             { % else - %}
             is_encoder_decoder = is_encoder_decoder,
                                  decoder_start_token_id = decoder_start_token_id,
-                                                          { % endif - %}
+            { % endif - %}
             ** kwargs
-            )
+        )
 
 
