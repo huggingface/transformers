@@ -527,19 +527,52 @@ class TFTapasPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-class TFTapasMLMHead(tf.keras.layers.Layer):
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->Tapas
+class TFTapasPredictionHeadTransform(tf.keras.layers.Layer):
+    def __init__(self, config: TapasConfig, **kwargs):
+        super().__init__(**kwargs)
+
+        self.dense = tf.keras.layers.Dense(
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
+        )
+
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = get_tf_activation(config.hidden_act)
+        else:
+            self.transform_act_fn = config.hidden_act
+
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(inputs=hidden_states)
+
+        return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->Tapas
+class TFTapasLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
+
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
 
+        self.transform = TFTapasPredictionHeadTransform(config, name="transform")
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape: tf.TensorShape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+
         super().build(input_shape)
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> tf.keras.layers.Layer:
         return self.input_embeddings
 
     def set_output_embeddings(self, value: tf.Variable):
@@ -554,6 +587,7 @@ class TFTapasMLMHead(tf.keras.layers.Layer):
         self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+        hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
@@ -561,6 +595,19 @@ class TFTapasMLMHead(tf.keras.layers.Layer):
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->Tapas
+class TFTapasMLMHead(tf.keras.layers.Layer):
+    def __init__(self, config: TapasConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+        super().__init__(**kwargs)
+
+        self.predictions = TFTapasLMPredictionHead(config, input_embeddings, name="predictions")
+
+    def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
+        prediction_scores = self.predictions(hidden_states=sequence_output)
+
+        return prediction_scores
 
 
 @keras_serializable
@@ -907,10 +954,10 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
             )
 
         self.tapas = TFTapasMainLayer(config, add_pooling_layer=False, name="tapas")
-        self.lm_head = TFTapasMLMHead(config, input_embeddings=self.tapas.embeddings, name="lm_head")
+        self.lm_head = TFTapasMLMHead(config, input_embeddings=self.tapas.embeddings, name="cls")
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
-        return self.lm_head
+        return self.lm_head.predictions
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
