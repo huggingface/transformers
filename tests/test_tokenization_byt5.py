@@ -63,6 +63,10 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected = [88, 113, 108, 102, 114, 103, 104, 35, 229, 133, 175, 49, 1]
         self.assertEqual(encoded["input_ids"], expected)
 
+        encoded = tokenizer("e è é ê ë")
+        expected = [104, 35, 198, 171, 35, 198, 172, 35, 198, 173, 35, 198, 174, 1]
+        self.assertEqual(encoded["input_ids"], expected)
+
     def test_prepare_batch_integration(self):
         tokenizer = self.t5_base_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
