@@ -112,6 +112,11 @@ class BigBirdPegasusConfig(PretrainedConfig):
     """
     model_type = "bigbird_pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "attention_probs_dropout_prob": "attention_dropout",
+    }
 
     def __init__(
         self,
@@ -146,15 +151,6 @@ class BigBirdPegasusConfig(PretrainedConfig):
         use_bias=False,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
-
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
@@ -183,14 +179,11 @@ class BigBirdPegasusConfig(PretrainedConfig):
         self.num_random_blocks = num_random_blocks
         self.use_bias = use_bias
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def attention_probs_dropout_prob(self) -> float:
-        return self.attention_dropout
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )

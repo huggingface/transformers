@@ -82,6 +82,7 @@ class T5Config(PretrainedConfig):
     """
     model_type = "t5"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
@@ -104,12 +105,6 @@ class T5Config(PretrainedConfig):
         gradient_checkpointing=False,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -126,18 +121,12 @@ class T5Config(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
         self.gradient_checkpointing = gradient_checkpointing
-
-    @property
-    def hidden_size(self):
-        return self.d_model
-
-    @property
-    def num_attention_heads(self):
-        return self.num_heads
-
-    @property
-    def num_hidden_layers(self):
-        return self.num_layers
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )
 
 
 class T5OnnxConfig(OnnxConfigWithPast):

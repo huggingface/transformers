@@ -99,6 +99,12 @@ class LEDConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "led"
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "attention_probs_dropout_prob": "attention_dropout",
+        "initializer_range": "init_std",
+    }
 
     def __init__(
         self,
@@ -130,15 +136,6 @@ class LEDConfig(PretrainedConfig):
         attention_window: Union[List[int], int] = 512,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
-
         self.vocab_size = vocab_size
         self.max_encoder_position_embeddings = max_encoder_position_embeddings
         self.max_decoder_position_embeddings = max_decoder_position_embeddings
@@ -162,18 +159,11 @@ class LEDConfig(PretrainedConfig):
         self.attention_window = attention_window
         self.gradient_checkpointing = gradient_checkpointing
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def attention_probs_dropout_prob(self) -> float:
-        return self.attention_dropout
-
-    @property
-    def initializer_range(self) -> float:
-        return self.init_std
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )

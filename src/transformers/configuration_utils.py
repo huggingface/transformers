@@ -57,6 +57,8 @@ class PretrainedConfig(PushToHubMixin):
           :class:`~RagConfig`.
         - **keys_to_ignore_at_inference** (:obj:`List[str]`) -- A list of keys to ignore by default when looking at
           dictionary outputs of the model during inference.
+        - **attribute_map** (:obj:`Dict[str, str]`) -- A dict that maps model specific attribute names to the
+          standardized naming of attributes.
 
     Common attributes (present in all subclasses)
 
@@ -218,6 +220,17 @@ class PretrainedConfig(PushToHubMixin):
     """
     model_type: str = ""
     is_composition: bool = False
+    attribute_map: Dict[str, str] = {}
+
+    def __setattr__(self, key, value):
+        if key in super().__getattribute__("attribute_map"):
+            key = super().__getattribute__("attribute_map")[key]
+        super().__setattr__(key, value)
+
+    def __getattribute__(self, key):
+        if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
+            key = super().__getattribute__("attribute_map")[key]
+        return super().__getattribute__(key)
 
     def __init__(self, **kwargs):
         # Attributes with defaults
@@ -350,7 +363,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @num_labels.setter
     def num_labels(self, num_labels: int):
-        if self.id2label is None or len(self.id2label) != num_labels:
+        if not hasattr(self, "id2label") or self.id2label is None or len(self.id2label) != num_labels:
             self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 

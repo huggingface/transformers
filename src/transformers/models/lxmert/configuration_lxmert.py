@@ -113,13 +113,13 @@ class LxmertConfig(PretrainedConfig):
     """
 
     model_type = "lxmert"
+    attribute_map = {}
 
     def __init__(
         self,
         vocab_size=30522,
         hidden_size=768,
         num_attention_heads=12,
-        num_labels=2,
         num_qa_labels=9500,
         num_object_labels=1600,
         num_attr_labels=400,
@@ -149,11 +149,9 @@ class LxmertConfig(PretrainedConfig):
         output_hidden_states=False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
-        self.num_labels = num_labels
         self.hidden_act = hidden_act
         self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -179,5 +177,6 @@ class LxmertConfig(PretrainedConfig):
         self.visual_attr_loss = visual_attr_loss
         self.visual_feat_loss = visual_feat_loss
         self.output_hidden_states = output_hidden_states
-        self.output_attentions = self.output_attentions
+        self.output_attentions = output_attentions
         self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
+        super().__init__(**kwargs)

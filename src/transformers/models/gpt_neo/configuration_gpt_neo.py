@@ -96,6 +96,7 @@ class GPTNeoConfig(PretrainedConfig):
             >>> configuration = model.config
     """
     model_type = "gpt_neo"
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
@@ -124,8 +125,6 @@ class GPTNeoConfig(PretrainedConfig):
         eos_token_id=50256,
         **kwargs
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -163,6 +162,8 @@ class GPTNeoConfig(PretrainedConfig):
                 "Please verify the value of `config.attention_types` argument."
             )
 
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
     @staticmethod
     def expand_attention_types_params(attention_types):
         attentions = []
@@ -170,14 +171,6 @@ class GPTNeoConfig(PretrainedConfig):
             for _ in range(item[1]):
                 attentions.extend(item[0])
         return attentions
-
-    @property
-    def num_attention_heads(self):
-        return self.num_heads
-
-    @property
-    def num_hidden_layers(self):
-        return self.num_layers
 
 
 def custom_unfold(input, dimension, size, step):

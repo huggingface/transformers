@@ -93,6 +93,11 @@ class DistilBertConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "distilbert"
+    attribute_map = {
+        "hidden_size": "dim",
+        "num_attention_heads": "n_heads",
+        "num_hidden_layers": "n_layers",
+    }
 
     def __init__(
         self,
@@ -112,7 +117,6 @@ class DistilBertConfig(PretrainedConfig):
         pad_token_id=0,
         **kwargs
     ):
-        super().__init__(**kwargs, pad_token_id=pad_token_id)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.sinusoidal_pos_embds = sinusoidal_pos_embds
@@ -126,18 +130,7 @@ class DistilBertConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.qa_dropout = qa_dropout
         self.seq_classif_dropout = seq_classif_dropout
-
-    @property
-    def hidden_size(self):
-        return self.dim
-
-    @property
-    def num_attention_heads(self):
-        return self.n_heads
-
-    @property
-    def num_hidden_layers(self):
-        return self.n_layers
+        super().__init__(**kwargs, pad_token_id=pad_token_id)
 
 
 class DistilBertOnnxConfig(OnnxConfig):

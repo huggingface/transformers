@@ -110,6 +110,7 @@ class Speech2TextConfig(PretrainedConfig):
     """
     model_type = "speech_to_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
@@ -146,15 +147,6 @@ class Speech2TextConfig(PretrainedConfig):
         input_channels=1,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
-
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -191,10 +183,11 @@ class Speech2TextConfig(PretrainedConfig):
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )
