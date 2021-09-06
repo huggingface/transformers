@@ -184,6 +184,7 @@ class EncoderDecoderMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 enc_dec_model.save_pretrained(tmpdirname)
                 enc_dec_model = SpeechEncoderDecoderModel.from_pretrained(tmpdirname)
+                enc_dec_model.to(torch_device)
 
                 after_outputs = enc_dec_model(
                     input_values=input_values,
@@ -387,8 +388,8 @@ class Wav2Vec2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
         )
 
     def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = Wav2Vec2Model(config)
-        decoder_model = BertLMHeadModel(decoder_config)
+        encoder_model = Wav2Vec2Model(config).eval()
+        decoder_model = BertLMHeadModel(decoder_config).eval()
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
@@ -438,8 +439,8 @@ class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
         )
 
     def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = Speech2TextEncoder(config)
-        decoder_model = BertLMHeadModel(decoder_config)
+        encoder_model = Speech2TextEncoder(config).eval()
+        decoder_model = BertLMHeadModel(decoder_config).eval()
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
@@ -492,8 +493,8 @@ class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
 @require_torch
 class Wav2Vec2Speech2Text2(EncoderDecoderMixin, unittest.TestCase):
     def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = Wav2Vec2Model(config)
-        decoder_model = Speech2Text2ForCausalLM(decoder_config)
+        encoder_model = Wav2Vec2Model(config).eval()
+        decoder_model = Speech2Text2ForCausalLM(decoder_config).eval()
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
