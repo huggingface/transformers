@@ -18,6 +18,8 @@ import glob
 import os
 import re
 
+from collections import OrderedDict
+
 import black
 
 
@@ -323,9 +325,12 @@ def convert_to_rst(model_list, max_per_line=None):
     return "\n".join(result)
 
 
-def convert_to_localized_md(model_list, format_str):
+def convert_to_localized_md(model_list, localized_model_list, format_str):
     """Convert `model_list` to each localized README."""
     
+    # TODO: supplements regex needs to be fixed.
+    _re = re.compile(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*by (?<! [A-Z]\.)(.*)(?=\. )\. ([^\n]*)")
+
     def _rep(match):
         title, model_link, paper_institutions, paper_title_link, paper_authors, supplements = match.groups()
         return format_str.format(
@@ -336,10 +341,17 @@ def convert_to_localized_md(model_list, format_str):
             paper_authors=paper_authors,
             supplements=supplements
         )
-
-    model_list = re.sub(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*by ([^\.]*)\.([^\n]*)", _rep, model_list)
     
-    return model_list
+    localized_model_index = { re.search(r"\*\*\[([^\]]*)", line).groups()[0] : line for line in  localized_model_list.strip().split('\n')}
+
+    for model in model_list.strip().split('\n'):
+        title = re.search(r"\*\*\[([^\]]*)", model).groups()[0]
+        if title not in localized_model_index:
+            localized_model_index[title] = re.sub(_re, _rep, model)
+
+    sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
+    
+    return "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
 
 
 def _find_text_in_file(filename, start_prompt, end_prompt):
@@ -389,7 +401,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
         
         _localized_md_list = get_model_list(filename, _start_prompt, _end_prompt)
         converted_md_lists.append(
-            (filename, _localized_md_list, convert_to_localized_md(md_list, _format_model_list), _start_prompt, _end_prompt)
+            (filename, _localized_md_list, convert_to_localized_md(md_list, _localized_md_list, _format_model_list), _start_prompt, _end_prompt)
         )
 
     """
@@ -413,7 +425,6 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
                     start_prompt=_start_prompt,
                     end_prompt=_end_prompt        
                 )
-                input(converted_md)
                 with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n") as f:
                     f.writelines(lines[:start_index] + [converted_md] + lines[end_index:])
 
