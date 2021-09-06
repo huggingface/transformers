@@ -125,7 +125,7 @@ class Trie:
         # for loop
         skip = None
         # Main loop, Giving this algorithm O(n) complexity
-        for current, c in enumerate(text):
+        for current, current_char in enumerate(text):
             if skip and current < skip:
                 # Prevents the lookahead for matching twice
                 # like extra_id_100 and id_100
@@ -141,12 +141,12 @@ class Trie:
             reset = False
 
             # In this case, we already have partial matches (But unfinished)
-            for start, p in states.items():
-                if c in p:
+            for start, trie_pointer in states.items():
+                if current_char in trie_pointer:
                     # The current character being looked at has a match within the trie
                     # update the pointer (it will be stored back into states later).
-                    p = p[c]
-                    if "" in p:
+                    trie_pointer = trie_pointer[current_char]
+                    if "" in trie_pointer:
                         # This is a final match, we need to reset and
                         # store the results in `offsets`.
 
@@ -154,18 +154,18 @@ class Trie:
                         # Important in case of extra_id_1 vs extra_id_100
                         lookahead_index = current + 1
                         end = current + 1
-                        next_c = c
-                        while next_c in p:
-                            p = p[next_c]
+                        next_char = current_char
+                        while next_char in trie_pointer:
+                            trie_pointer = trie_pointer[next_char]
                             lookahead_index += 1
-                            if "" in p:
+                            if "" in trie_pointer:
                                 end = lookahead_index + 1
                                 skip = lookahead_index + 1
 
                             if lookahead_index == len(text):
                                 # End of string
                                 break
-                            next_c = text[lookahead_index]
+                            next_char = text[lookahead_index]
                         # End lookahead
 
                         # Storing and resetting
@@ -175,7 +175,7 @@ class Trie:
 
                     # Storing back the new pointer into the states.
                     # Partial matches got longer by one.
-                    states[start] = p
+                    states[start] = trie_pointer
                 else:
                     # The new character has not match in the trie, we need
                     # to stop keeping track of this partial match.
@@ -193,8 +193,8 @@ class Trie:
 
             # If this character is a starting character within the trie
             # start keeping track of this partial match.
-            if c in self.data:
-                states[current] = self.data[c]
+            if current_char in self.data:
+                states[current] = self.data[current_char]
 
         # We have all the offsets now, we just need to do the actual splitting.
         # We need to eventually add the first part of the string and the eventual
@@ -301,7 +301,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self.added_tokens_encoder: Dict[str, int] = {}
         self.added_tokens_decoder: Dict[int, str] = {}
         self.unique_no_split_tokens: List[str] = []
-        self.trie = Trie()
+        self.tokens_trie = Trie()
 
         self._decode_use_source_tokenizer = False
 
@@ -401,7 +401,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 trie.add(token.lower())
             else:
                 trie.add(token)
-        self.trie = trie
+        self.tokens_trie = trie
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
@@ -457,7 +457,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
         no_split_token = set(self.unique_no_split_tokens)
-        tokens = self.trie.split(text)
+        tokens = self.tokens_trie.split(text)
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
             if token in no_split_token:
