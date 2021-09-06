@@ -137,14 +137,15 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     {% else -%}
     keys_to_ignore_at_inference = ["past_key_values"]
     {% endif -%}
-
-    { % if cookiecutter.is_encoder_decoder_model == "False" %}
-    { % - else %}
+    
+    {% if cookiecutter.is_encoder_decoder_model == "False" %}
+    {%- else %}
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model"
     }
-    { % - endif %}
+
+    {%- endif %}
 
     def __init__(
         self,
@@ -228,17 +229,16 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         {% endif -%}
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            { % if cookiecutter.is_encoder_decoder_model == "False" - %}
-            { % else - %}
-            is_encoder_decoder = is_encoder_decoder,
-                                 decoder_start_token_id = decoder_start_token_id,
-            { % endif - %}
-            ** kwargs
+            {% if cookiecutter.is_encoder_decoder_model == "False" -%}
+            {% else -%}
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            {% endif -%}
+            **kwargs
         )
 
-
+    
