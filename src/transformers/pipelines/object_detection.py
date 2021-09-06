@@ -54,7 +54,6 @@ class ObjectDetectionPipeline(Pipeline):
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
-        requires_backends(self, "timm")
         requires_backends(self, "vision")
 
         self.check_model_type(MODEL_FOR_OBJECT_DETECTION_MAPPING)
