@@ -16,7 +16,7 @@ limitations under the License.
 
 # Token classification examples
 
-Fine-tuning the library models for token classification task such as Named Entity Recognition (NER), Parts-of-speech tagging (POS) or phrase extraction (CHUNKS). The main script run_ner.py leverages the 🤗 Datasets library. You can easily customize it to your needs if you need extra processing on your datasets.
+Fine-tuning the library models for token classification task such as Named Entity Recognition (NER), Parts-of-speech tagging (POS) or phrase extraction (CHUNKS). The main script run_flax_ner.py leverages the 🤗 Datasets library. You can easily customize it to your needs if you need extra processing on your datasets.
 
 It will either run on a datasets hosted on our hub or with your own text files for training and validation, you might just need to add some tweaks in the data preprocessing.
 
@@ -53,18 +53,19 @@ Next, let's add a symbolic link to the `run_flax_ner.py`.
 
 ```bash
 export MODEL_DIR="./bert-ner-conll2003-test"
-ln -s ~/transformers/examples/flax/text-classification/run_flax_ner.py run_flax_ner.py
+ln -s ~/transformers/examples/flax/token-classification/run_flax_ner.py run_flax_ner.py
 ```
 
 ```bash
 python run_flax_ner.py \
   --model_name_or_path bert-base-cased \
   --dataset_name conll2003 \
-  --max_length 128 \
+  --max_seq_length 128 \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --per_device_train_batch_size 4 \
   --output_dir ${MODEL_DIR} \
+  --eval_steps 300 \
   --push_to_hub
 ```
 
@@ -77,3 +78,5 @@ $ tensorboard --logdir .
 ```
 
 or directly on the hub under *Training metrics*.
+
+sample Metrics - [tfhub.dev](https://tensorboard.dev/experiment/u52qsBIpQSKEEXEJd2LVYA)
