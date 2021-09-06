@@ -81,22 +81,21 @@ def convert_tf_checkpoint_to_pytorch(
         model = TapasForMaskedLM(config=config)
     elif task == "INTERMEDIATE_PRETRAINING":
         model = TapasModel(config=config)
+    else:
+        raise ValueError(f"Task {task} not supported.")
 
     print(f"Building PyTorch model from configuration: {config}")
-
     # Load weights from tf checkpoint
     load_tf_weights_in_tapas(model, config, tf_checkpoint_path)
 
     # Save pytorch-model (weights and configuration)
     print(f"Save PyTorch model to {pytorch_dump_path}")
-    model.save_pretrained(pytorch_dump_path[:-17])
+    model.save_pretrained(pytorch_dump_path)
 
     # Save tokenizer files
-    dir_name = r"C:\Users\niels.rogge\Documents\Python projecten\tensorflow\Tensorflow models\SQA\Base\tapas_sqa_inter_masklm_base_reset"
-    tokenizer = TapasTokenizer(vocab_file=dir_name + r"\vocab.txt", model_max_length=512)
-
     print(f"Save tokenizer files to {pytorch_dump_path}")
-    tokenizer.save_pretrained(pytorch_dump_path[:-17])
+    tokenizer = TapasTokenizer(vocab_file=tf_checkpoint_path[:-10] + "vocab.txt", model_max_length=512)
+    tokenizer.save_pretrained(pytorch_dump_path)
 
     print("Used relative position embeddings:", model.config.reset_position_index_per_cell)
 
