@@ -75,7 +75,7 @@ class ObjectDetectionPipeline(Pipeline):
                     f"Incorrect path or url, URLs must start with `http://` or `https://`, and {image} is not a valid path"
                 )
         elif isinstance(image, Image.Image):
-            image = image
+            pass
         else:
             raise ValueError(
                 "Incorrect format used for image. Should be an url linking to an image, a local path, or a PIL image."
