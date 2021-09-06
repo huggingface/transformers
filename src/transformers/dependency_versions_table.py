@@ -67,6 +67,7 @@ deps = {
     "timm": "timm",
     "tokenizers": "tokenizers>=0.10.1,<0.11",
     "torch": "torch>=1.0",
+    "torchvision": "torchvision>=0.10.0",
     "torchaudio": "torchaudio",
     "tqdm": "tqdm>=4.27",
     "unidic": "unidic>=1.0.2",

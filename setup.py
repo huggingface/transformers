@@ -149,6 +149,7 @@ _deps = [
     "timm",
     "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
+    "torchvision>=0.10.0",
     "torchaudio",
     "tqdm>=4.27",
     "unidic>=1.0.2",
@@ -258,6 +259,7 @@ extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
 extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
+extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["timm"] = deps_list("timm")
 extras["codecarbon"] = deps_list("codecarbon")
 
