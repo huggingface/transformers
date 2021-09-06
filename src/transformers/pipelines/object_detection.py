@@ -95,7 +95,7 @@ class ObjectDetectionPipeline(Pipeline):
             images (:obj:`str`, :obj:`List[str]`, :obj:`PIL.Image` or :obj:`List[PIL.Image]`):
                 The pipeline handles three types of images:
 
-                - A string containing a http link pointing to an image
+                - A string containing an HTTP(S) link pointing to an image
                 - A string containing a local path to an image
                 - An image loaded in PIL directly
 
