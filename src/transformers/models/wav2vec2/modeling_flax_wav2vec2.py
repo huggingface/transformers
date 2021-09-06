@@ -720,18 +720,35 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
         perplexity = jnp.exp(-jnp.sum(marginal_probs * jnp.log(marginal_probs + 1e-7), axis=-1)).sum()
         return perplexity
 
-    def __call__(self, hidden_states, mask_time_indices=None, deterministic=True, temperature=1):
+    def __call__(self, hidden_states, mask_time_indices=None, deterministic=True, temperature=1, gumbels=None):
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
         # project to codevector dim
         hidden_states = self.weight_proj(hidden_states)
+        mask = None
+
+        if mask_time_indices is not None:
+            mask = np.tile(mask_time_indices.flatten(), 2)
+            gumb_save = gumbels
+
         hidden_states = hidden_states.reshape(batch_size * sequence_length * self.num_groups, -1)
 
         if not deterministic:
             # sample code vector probs via gumbel in differentiateable way
             gumbel_rng = self.make_rng("gumbel")
-            gumbels = jax.random.gumbel(gumbel_rng, hidden_states.shape)
+            gumbels_temp = jax.random.gumbel(gumbel_rng, hidden_states.shape)
+
+            if mask is not None:
+                gumbels_temp = np.ones_like(gumbels, shape=(3, 666, 640))
+                gumbels_temp[mask_time_indices] = gumb_save.reshape(batch_size, -1, 640).reshape(-1, 640)
+                gumbels_temp = gumbels_temp.reshape(batch_size * sequence_length * self.num_groups, -1)
+            gumbels = gumbels_temp
             codevector_probs = nn.softmax((hidden_states + gumbels) / temperature)
+
+            # straight-through estimator trick
+            codevector_idx = codevector_probs.argmax(axis=-1)
+            codevector_probs_hard = jax.nn.one_hot(codevector_idx, codevector_probs.shape[-1]) * 1.0
+            codevector_probs = codevector_probs_hard - jax.lax.stop_gradient(codevector_probs) + codevector_probs
 
             # compute perplexity
             codevector_soft_dist = nn.softmax(
@@ -1097,6 +1114,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        gumbels=None,
     ):
         r"""
         Returns:
@@ -1123,8 +1141,9 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
 
         # quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1], deterministic=deterministic)
+
         quantized_features, codevector_perplexity = self.quantizer(
-            extract_features, mask_time_indices, deterministic=deterministic, temperature=gumbel_temperature
+            extract_features, mask_time_indices, deterministic=deterministic, temperature=gumbel_temperature, gumbels=gumbels
         )
         quantized_features = self.project_q(quantized_features)
 
@@ -1171,6 +1190,7 @@ class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
         dropout_rng: jax.random.PRNGKey = None,
         gumbel_rng: jax.random.PRNGKey = None,
         train: bool = False,
+        gumbels=None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1206,6 +1226,7 @@ class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
             output_attentions,
             output_hidden_states,
             return_dict,
+            gumbels,
             rngs=rngs,
         )
 

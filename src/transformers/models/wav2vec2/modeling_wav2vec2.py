@@ -118,6 +118,8 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     contrastive_loss: Optional[torch.FloatTensor] = None
     diversity_loss: Optional[torch.FloatTensor] = None
     neg_is_pos: Optional[torch.FloatTensor] = None
+    sampled_negative_indices: Optional[torch.FloatTensor] = None
+    gumbels: Optional[torch.FloatTensor] = None
 
 
 def _compute_mask_indices(
@@ -153,6 +155,8 @@ def _compute_mask_indices(
         no_overlap: if false, will switch to an alternative recursive algorithm that prevents spans from overlapping
         min_space: only used if no_overlap is True, this is how many elements to keep unmasked between spans
     """
+
+    np.random.seed(0)
 
     bsz, all_sz = shape
     mask = np.full((bsz, all_sz), False)
@@ -838,6 +842,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
+
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
@@ -940,10 +945,37 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         hidden_states = hidden_states.view(batch_size * sequence_length * self.num_groups, -1)
 
         if self.training:
+            logits = hidden_states.float()
+            tau = self.temperature
+            dim = -1
+
             # sample code vector probs via gumbel in differentiateable way
-            codevector_probs = nn.functional.gumbel_softmax(
-                hidden_states.float(), tau=self.temperature, hard=True
-            ).type_as(hidden_states)
+            torch.manual_seed(0)
+            gumbels_prob = (torch.empty_like(logits, memory_format=torch.legacy_contiguous_format).exponential_().log())  # ~Gumbel(0,1)
+            print("logs", logits.sum())
+            print("gumbels_prob", gumbels_prob.sum())
+            gumbels = (logits + gumbels_prob) / tau  # ~Gumbel(logits,tau)
+            print("gumbels 2 soft", gumbels)
+            print("gumbels 2", gumbels.sum())
+            y_soft = gumbels.softmax(dim)
+
+            print("y_soft mean", y_soft.mean())
+            print("y_soft var", y_soft.var())
+            print("y_soft", y_soft)
+            print("y_soft shape", y_soft.shape)
+
+            # Straight through.
+            index = y_soft.max(dim, keepdim=True)[1]
+            y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
+            codevector_probs = y_hard - y_soft.detach() + y_soft
+
+            print("hello", y_hard.cumsum(-1).sum(-1).sum())
+
+            codevector_probs.type_as(hidden_states)
+
+#            codevector_probs = nn.functional.gumbel_softmax(
+#                hidden_states.float(), tau=self.temperature, hard=True
+#            ).type_as(hidden_states)
 
             # compute perplexity
             codevector_soft_dist = torch.softmax(
@@ -970,7 +1002,9 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
             .view(batch_size, sequence_length, -1)
         )
 
-        return codevectors, perplexity
+        print("hf codevectors", codevectors.sum())
+
+        return codevectors, perplexity, gumbels_prob
 
 
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
@@ -1301,7 +1335,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             2, 0, 1, 3
         )
 
-        return sampled_negatives
+        return sampled_negatives, sampled_negative_indices
 
     @staticmethod
     def compute_contrastive_logits(
@@ -1315,6 +1349,10 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         `[positive_feature, negative_features]` and `[predicted_features]`. Additionally, temperature can be applied.
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
+
+        print("transformer_features", predicted_features.sum())
+        print("target_features", target_features.sum())
+        print("negative_features", negative_features.sum())
 
         logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1).type_as(
             target_features
@@ -1406,13 +1444,19 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         # 2. quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1])
 
+        print("PT transformer_features", transformer_features.sum())
+
         # only use masked indices
         extract_features = extract_features[mask_time_indices].view(extract_features.size(0), -1, extract_features.size(-1))
         transformer_features = transformer_features[mask_time_indices].view(transformer_features.size(0), -1, transformer_features.size(-1))
 
 #        quantized_features, codevector_perplexity = self.quantizer(extract_features, mask_time_indices)
-        quantized_features, codevector_perplexity = self.quantizer(extract_features)
+        quantized_features, codevector_perplexity, gumbels = self.quantizer(extract_features)
+
         quantized_features = self.project_q(quantized_features)
+
+        print("codevector_perplexity", codevector_perplexity)
+        print("quantized_features", quantized_features.sum())
 
         loss = None
         if self.training:
@@ -1423,7 +1467,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
                 # compute reduced attention_mask correponding to feature vectors
 #                attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
-            negative_quantized_features = self._sample_negatives(
+            negative_quantized_features, sampled_negative_indices = self._sample_negatives(
 #                quantized_features, self.config.num_negatives, attention_mask=attention_mask
                 quantized_features, self.config.num_negatives
             )
@@ -1436,6 +1480,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
                 transformer_features,
                 self.config.contrastive_logits_temperature,
             )
+
+            print("loss logits", logits.sum())
 
             # 5. if a negative vector is identical to the positive (i.e. when codebook utilization is low),
             # its cosine similarity will be masked
@@ -1472,6 +1518,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             contrastive_loss=contrastive_loss,
             diversity_loss=diversity_loss,
             neg_is_pos=neg_is_pos,
+            sampled_negative_indices=sampled_negative_indices,
+            gumbels=gumbels,
         )
 
 
