@@ -16,8 +16,8 @@ Perceiver
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Perceiver model was proposed in `<INSERT PAPER NAME HERE>
-<<INSERT PAPER LINK HERE>>`__  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The Perceiver model was proposed in `<INSERT PAPER NAME HERE> <<INSERT PAPER LINK HERE>>`__ by <INSERT AUTHORS HERE>.
+<INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
 
@@ -27,9 +27,8 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by `<INSERT YOUR HF USERNAME HERE> 
-<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>>`__. The original code can be found `here 
-<<INSERT LINK TO GITHUB REPO HERE>>`__.
+This model was contributed by `<INSERT YOUR HF USERNAME HERE> <https://huggingface.co/<INSERT YOUR HF USERNAME
+HERE>>`__. The original code can be found `here <<INSERT LINK TO GITHUB REPO HERE>>`__.
 
 PerceiverConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
