@@ -78,7 +78,7 @@ class ObjectDetectionPipeline(Pipeline):
             pass
         else:
             raise ValueError(
-                "Incorrect format used for image. Should be an url linking to an image, a local path, or a PIL image."
+                "Incorrect format used for image. Should be a URL linking to an image, a local path, or a PIL image."
             )
         image = image.convert("RGB")
         return image
