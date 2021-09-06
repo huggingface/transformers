@@ -138,6 +138,14 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     {% endif -%}
 
+    { % if cookiecutter.is_encoder_decoder_model == "False" %}
+    { % - else %}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model"
+    }
+    { % - endif %}
+
     def __init__(
         self,
         {% if cookiecutter.is_encoder_decoder_model == "False" -%}
@@ -184,18 +192,6 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         eos_token_id=2,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-            {% else -%}
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            {% endif -%}
-            **kwargs
-        )
-
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         {% if cookiecutter.is_encoder_decoder_model == "False" -%}
@@ -233,13 +229,16 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
 
         {% endif -%}
 
-    {% if cookiecutter.is_encoder_decoder_model == "False" %}
-    {%- else %}
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            { % if cookiecutter.is_encoder_decoder_model == "False" - %}
+            { % else - %}
+            is_encoder_decoder = is_encoder_decoder,
+                                 decoder_start_token_id = decoder_start_token_id,
+                                                          { % endif - %}
+            ** kwargs
+            )
 
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-    {%- endif %}
+
