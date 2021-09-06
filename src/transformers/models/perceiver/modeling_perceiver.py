@@ -16,33 +16,16 @@
 
 
 import math
-import os
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -68,7 +51,7 @@ class PerceiverEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.latents = nn.Embedding(config.num_latents, config.hidden_size)
+        self.latents = nn.Parameter(torch.randn(config.num_latents, config.hidden_size))
         self.position_embeddings = nn.Parameter(torch.zeros(1, config.num_latents, config.hidden_size))
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -77,7 +60,7 @@ class PerceiverEmbeddings(nn.Module):
 
     def forward(self, batch_size):
         embeddings = self.latents.expand(batch_size, -1, -1)  # Thanks, Phil Wang
-        embeddings += self.position_embeddings
+        embeddings = embeddings + self.position_embeddings
 
         return embeddings
 
@@ -124,8 +107,8 @@ class PerceiverSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
+        inputs=None,
+        inputs_mask=None,
         output_attentions=False,
     ):
         mixed_query_layer = self.query(hidden_states)
@@ -133,12 +116,12 @@ class PerceiverSelfAttention(nn.Module):
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
+        is_cross_attention = inputs is not None
 
         if is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-            attention_mask = encoder_attention_mask
+            key_layer = self.transpose_for_scores(self.key(inputs))
+            value_layer = self.transpose_for_scores(self.value(inputs))
+            attention_mask = inputs_mask
         else:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -235,16 +218,16 @@ class PerceiverAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
+        inputs=None,
+        inputs_mask=None,
         output_attentions=False,
     ):
         self_outputs = self.self(
             hidden_states,
             attention_mask,
             head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
+            inputs,
+            inputs_mask,
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -295,8 +278,8 @@ class PerceiverLayer(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
+        inputs=None,
+        inputs_mask=None,
         output_attentions=False,
     ):
         self_attention_outputs = self.attention(
@@ -336,7 +319,7 @@ class PerceiverEncoder(nn.Module):
         for _ in range(config.num_self_attends_per_block):
             layer = PerceiverLayer(config)
             self_attends.append(layer)
-            
+
         self.self_attends = nn.ModuleList(self_attends)
 
     def forward(
@@ -344,8 +327,8 @@ class PerceiverEncoder(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
+        inputs=None,
+        inputs_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -354,13 +337,13 @@ class PerceiverEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions else None
 
-        # Apply the cross-attention between the latents (hidden_states) and inputs (encoder_hidden_states):
+        # Apply the cross-attention between the latents (hidden_states) and inputs:
         layer_outputs = self.cross_attend(
             hidden_states,
             attention_mask=None,
             head_mask=None,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            inputs=inputs,
+            inputs_mask=inputs_mask,
             output_attentions=output_attentions,
         )
         hidden_states = layer_outputs[0]
@@ -380,8 +363,8 @@ class PerceiverEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
+                    inputs,
+                    inputs_mask,
                     output_attentions,
                 )
 
@@ -403,7 +386,7 @@ class PerceiverEncoder(nn.Module):
                 ]
                 if v is not None
             )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithCrossAttentions(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
@@ -418,7 +401,6 @@ class PerceiverPreTrainedModel(PreTrainedModel):
     """
 
     config_class = PerceiverConfig
-    load_tf_weights = load_tf_weights_in_perceiver
     base_model_prefix = "perceiver"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -516,7 +498,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=BaseModelOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -536,7 +518,6 @@ class PerceiverModel(PerceiverPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size = inputs.shape[0]
-        device = inputs.device
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -545,15 +526,14 @@ class PerceiverModel(PerceiverPreTrainedModel):
         # and head_mask is converted to shape [num_blocks x batch x num_heads x N x N]
         head_mask = self.get_head_mask(head_mask, self.config.num_blocks)
 
-        embedding_output = self.embeddings(
-            batch_size=batch_size,
-        )
+        embedding_output = self.embeddings(batch_size=batch_size)
+
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=None,
             head_mask=head_mask,
-            encoder_hidden_states=inputs,
-            encoder_attention_mask=attention_mask,
+            inputs=inputs,
+            inputs_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -563,7 +543,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithCrossAttentions(
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,

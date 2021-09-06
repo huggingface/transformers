@@ -299,6 +299,15 @@ class PegasusTokenizerFast:
         requires_backends(cls, ["tokenizers"])
 
 
+class PerceiverTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tokenizers"])
+
+
 class ReformerTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
