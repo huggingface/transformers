@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 import datasets
 import numpy as np
 from datasets import ClassLabel, load_dataset, load_metric
+from tqdm import tqdm
 
 import jax
 import jax.numpy as jnp
@@ -557,8 +558,10 @@ def main():
     state = replicate(state)
 
     train_time = 0
-    total_steps = (len(train_dataset) // train_batch_size) * num_epochs
-    for epoch in range(0, num_epochs):
+    step_per_epoch = len(train_dataset) // train_batch_size
+    total_steps = step_per_epoch * num_epochs
+    epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
+    for epoch in epochs:
 
         train_start = time.time()
         train_metrics = []
@@ -567,11 +570,18 @@ def main():
         rng, _ = jax.random.split(rng)
 
         # train
-        for step, batch in enumerate(train_data_collator(train_dataset, train_batch_size)):
+        for step, batch in enumerate(
+            tqdm(
+                train_data_collator(train_dataset, train_batch_size),
+                total=step_per_epoch,
+                desc="Training...",
+                position=1,
+            )
+        ):
             state, train_metric, dropout_rngs = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(train_metric)
 
-            cur_step = epoch * (len(train_dataset) // train_batch_size) + step
+            cur_step = epoch * step_per_epoch + step
 
             if cur_step % training_args.logging_steps == 0 and cur_step > 0:
                 # Save metrics
@@ -580,7 +590,7 @@ def main():
                 if jax.process_index() == 0:
                     write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
-                logger.info(
+                epochs.write(
                     f"Step... ({cur_step}/{total_steps} | Training Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
                 )
 
@@ -590,7 +600,12 @@ def main():
 
                 eval_metrics = {}
                 # evaluate
-                for batch in eval_data_collator(eval_dataset, eval_batch_size):
+                for batch in tqdm(
+                    eval_data_collator(eval_dataset, eval_batch_size),
+                    total=len(eval_dataset) // eval_batch_size,
+                    desc="Evaluating ...",
+                    position=2,
+                ):
                     labels = batch.pop("labels")
                     predictions = p_eval_step(state, batch)
                     predictions = np.array([pred for pred in chain(*predictions)])
@@ -643,6 +658,7 @@ def main():
                         push_to_hub=training_args.push_to_hub,
                         commit_message=f"Saving weights and logs of step {cur_step}",
                     )
+        epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
 
 
 if __name__ == "__main__":
