@@ -102,6 +102,10 @@ class FunnelConfig(PretrainedConfig):
             Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
     """
     model_type = "funnel"
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "n_head",
+    }
 
     def __init__(
         self,
@@ -129,8 +133,6 @@ class FunnelConfig(PretrainedConfig):
         pool_q_only=True,
         **kwargs
     ):
-        super().__init__(**kwargs)
-
         self.vocab_size = vocab_size
         self.block_sizes = block_sizes
         self.block_repeats = [1] * len(block_sizes) if block_repeats is None else block_repeats
@@ -165,18 +167,22 @@ class FunnelConfig(PretrainedConfig):
         self.truncate_seq = truncate_seq
         self.pool_q_only = pool_q_only
 
-    @property
-    def hidden_size(self):
-        return self.d_model
-
-    @property
-    def num_attention_heads(self):
-        return self.n_head
+        super().__init__(**kwargs)
 
     @property
     def num_hidden_layers(self):
         return sum(self.block_sizes)
 
+    @num_hidden_layers.setter
+    def num_hidden_layers(self, value):
+        raise NotImplementedError(
+            "This model does not support the setting of `num_hidden_layers`. Please set `block_sizes`."
+        )
+
     @property
     def num_blocks(self):
         return len(self.block_sizes)
+
+    @num_blocks.setter
+    def num_blocks(self, value):
+        raise NotImplementedError("This model does not support the setting of `num_blocks`. Please set `block_sizes`.")
