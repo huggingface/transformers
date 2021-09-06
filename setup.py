@@ -115,7 +115,7 @@ _deps = [
     "onnxruntime>=1.4.0",
     "optuna",
     "optax>=0.0.8",
-    "packaging",
+    "packaging>=20.0",
     "parameterized",
     "protobuf",
     "psutil",

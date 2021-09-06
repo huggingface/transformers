@@ -33,7 +33,7 @@ deps = {
     "onnxruntime": "onnxruntime>=1.4.0",
     "optuna": "optuna",
     "optax": "optax>=0.0.8",
-    "packaging": "packaging",
+    "packaging": "packaging>=20.0",
     "parameterized": "parameterized",
     "protobuf": "protobuf",
     "psutil": "psutil",
