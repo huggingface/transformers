@@ -835,9 +835,13 @@ class CLIPConverter(Converter):
             )
         )
 
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        tokenizer.normalizer = normalizers.BertNormalizer()
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
+            add_prefix_space=False,
+        )
+        # tokenizer.decoder = decoders.BPEDecoder()
         tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
 
         return tokenizer
 

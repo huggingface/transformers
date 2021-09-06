@@ -113,6 +113,7 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",  # hack to enable padding
         add_prefix_space=False,
+        do_lower_case=True,
         **kwargs
     ):
         super().__init__(
@@ -124,16 +125,22 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
+            do_lower_case=do_lower_case,
             **kwargs,
         )
 
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+        if (
+            pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space
+            or pre_tok_state.get("lowercase", do_lower_case) != do_lower_case
+        ):
             pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
             pre_tok_state["add_prefix_space"] = add_prefix_space
+            pre_tok_state["lowercase"] = do_lower_case
             self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
         self.add_prefix_space = add_prefix_space
+        self.do_lower_case = do_lower_case
 
     # Very ugly hack to enable padding
     @property
