@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import datasets
+import numpy as np
 from datasets import Dataset, load_dataset
 from tqdm import tqdm
 
@@ -195,7 +196,7 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
 
     for idx in batch_idx:
         batch = dataset[idx]
-        batch = {k: jnp.array(v) for k, v in batch.items()}
+        batch = {k: np.array(v) for k, v in batch.items()}
 
         yield batch
 
