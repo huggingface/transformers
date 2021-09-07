@@ -1,8 +1,6 @@
 import os
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from torch.functional import Tensor
-
 import requests
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
@@ -156,16 +154,19 @@ class ObjectDetectionPipeline(Pipeline):
 
         return annotations
 
-    def _get_bounding_box(self, box: Tensor) -> Dict[str, int]:
+    def _get_bounding_box(self, box: torch.Tensor) -> Dict[str, int]:
         """
         Turns list [xmin, xmax, ymin, ymax] into dict { "xmin": xmin, ... }
 
         Args:
-            box (tensor): Tensor containing the coordinates in corners format.
+            box (torch.Tensor): Tensor containing the coordinates in corners format.
 
         Returns:
             bbox (Dict[str, int]): Dict containing the coordinates in corners format.
         """
+        if self.framework != "pt":
+            # guarding `box: torch.Tensor`
+            raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")
         xmin, ymin, xmax, ymax = box.int().tolist()
         bbox = {
             "xmin": xmin,
