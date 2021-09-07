@@ -62,7 +62,7 @@ class PerceiverEmbeddings(nn.Module):
 
 
 class PerceiverSelfAttention(nn.Module):
-    """Multi-headed {cross, self}-attention."""
+    """Multi-headed {cross, self}-attention. Can be used both in the encoder as well as in the decoder."""
 
     def __init__(
         self,
@@ -86,7 +86,7 @@ class PerceiverSelfAttention(nn.Module):
 
         # Projection matrices
         self.query = nn.Linear(q_dim, qk_channels)
-        self.key = nn.Linear(kv_dim, qk_channels, kv_dim)
+        self.key = nn.Linear(kv_dim, qk_channels)
         self.value = nn.Linear(kv_dim, v_channels)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
