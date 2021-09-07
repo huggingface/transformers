@@ -237,14 +237,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             else:
                 tok_string = bytes([ord(token)])
             bstring += tok_string
-        # XXX: This is most likely incorrect, we want utf-8 errors
-        # to be triggered. However transformers test suite will
-        # try to decode every ID within the tokenizer on their own
-        # meaning it will attempt to try and decode invalid utf-8.
-        # Ignoring errors means passing tests, meanwhile correctly
-        # raising the errors means editing the automated tests to
-        # support that behavior (decoding an arbitrary ID might be invalid).
-        string = bstring.decode("utf-8", errors="ignore")
+        string = bstring.decode("utf-8")
         return string
 
     # ByT5Tokenizer has no vocab file
