@@ -1132,6 +1132,7 @@ if is_torch_available():
             "TapasForSequenceClassification",
             "TapasModel",
             "TapasPreTrainedModel",
+            "load_tf_weights_in_tapas",
         ]
     )
     _import_structure["models.transfo_xl"].extend(
@@ -2778,6 +2779,7 @@ if TYPE_CHECKING:
             TapasForSequenceClassification,
             TapasModel,
             TapasPreTrainedModel,
+            load_tf_weights_in_tapas,
         )
         from .models.transfo_xl import (
             TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
