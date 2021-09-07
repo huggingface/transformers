@@ -35,31 +35,22 @@ FULL_COPIES = {"examples/tensorflow/question-answering/utils_qa.py": "examples/p
 
 LOCALIZED_READMES = {
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
-    
-    #"README.md" : { 
+    # "README.md" : {
     #    "start_prompt" : "🤗 Transformers currently provides the following architectures",
     #    "end_prompt" : "1. Want to contribute a new model?",
-    #    "format_model_list" : "**[{0}]({1})** (from {2}) released with the paper {3} by {4}."
-    #},, , , 
-    "README_zh-hans.md" : {
-        "start_prompt" : "🤗 Transformers 目前支持如下的架构",
-        "end_prompt" : "1. 想要贡献新的模型？",
-        "format_model_list" : "**[{title}]({model_link})** (来自 {paper_institutions}) 伴随论文 {paper_title_link} 由 {paper_authors} 发布。 {supplements}"
+    #    "format_model_list" : "**[{title}]({model_link})** (from {paper_institutions}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+    # },
+    "README_zh-hans.md": {
+        "start_prompt": "🤗 Transformers 目前支持如下的架构",
+        "end_prompt": "1. 想要贡献新的模型？",
+        "format_model_list": "**[{title}]({model_link})** (来自 {paper_institutions}) 伴随论文 {paper_title_link} 由 {paper_authors} 发布。{supplements}",
     },
-    "README_zh-hant.md" : {
-        "start_prompt" : "🤗 Transformers 目前支援以下的架構",
-        "end_prompt" : "1. 想要貢獻新的模型？",
-        "format_model_list" : "**[{title}]({model_link})** (from {paper_institutions}) released with the paper {paper_title_link} by {paper_authors}. {supplements}"
+    "README_zh-hant.md": {
+        "start_prompt": "🤗 Transformers 目前支援以下的架構",
+        "end_prompt": "1. 想要貢獻新的模型？",
+        "format_model_list": "**[{title}]({model_link})** (from {paper_institutions}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
     },
-
 }
-
-LOCALIZED_COPIES = [
-    ("README.md" , ""),
-    ("" , "**[{0}]({1})** (from {2}) released with the paper {3} by {4}."),
-    (".md" , "**[{0}]({1})** (from {2}) released with the paper {3} by {4}."),
-]
-
 
 def _should_continue(line, indent):
     return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\):\s*$", line) is not None
@@ -327,31 +318,37 @@ def convert_to_rst(model_list, max_per_line=None):
 
 def convert_to_localized_md(model_list, localized_model_list, format_str):
     """Convert `model_list` to each localized README."""
-    
-    # TODO: supplements regex needs to be fixed.
-    _re = re.compile(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*by (?<! [A-Z]\.)(.*)(?=\. )\. ([^\n]*)")
 
     def _rep(match):
         title, model_link, paper_institutions, paper_title_link, paper_authors, supplements = match.groups()
         return format_str.format(
-            title=title, 
+            title=title,
             model_link=model_link,
             paper_institutions=paper_institutions,
             paper_title_link=paper_title_link,
             paper_authors=paper_authors,
-            supplements=supplements
+            supplements=" " + supplements if len(supplements) != 0 else "",
         )
-    
-    localized_model_index = { re.search(r"\*\*\[([^\]]*)", line).groups()[0] : line for line in  localized_model_list.strip().split('\n')}
 
-    for model in model_list.strip().split('\n'):
+    _re = re.compile(
+        r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
+    )
+
+    num_models_equal = True
+    localized_model_index = {
+        re.search(r"\*\*\[([^\]]*)", line).groups()[0]: line for line in localized_model_list.strip().split("\n")
+    }
+
+    for model in model_list.strip().split("\n"):
         title = re.search(r"\*\*\[([^\]]*)", model).groups()[0]
         if title not in localized_model_index:
-            localized_model_index[title] = re.sub(_re, _rep, model)
+            num_models_equal = False
+            # add an anchor white space behind model string for regex.
+            localized_model_index[title] = re.sub(_re, _rep, model + " ")
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
-    
-    return "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
+
+    return num_models_equal, "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
 
 
 def _find_text_in_file(filename, start_prompt, end_prompt):
@@ -390,21 +387,24 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
     md_list = get_model_list(
         filename="README.md",
         start_prompt="🤗 Transformers currently provides the following architectures",
-        end_prompt="1. Want to contribute a new model?"
+        end_prompt="1. Want to contribute a new model?",
     )
-    
+
     converted_rst_list = convert_to_rst(md_list, max_per_line=max_per_line)
 
     converted_md_lists = []
     for filename, value in LOCALIZED_READMES.items():
-        _start_prompt, _end_prompt, _format_model_list = value['start_prompt'], value['end_prompt'], value['format_model_list']
-        
-        _localized_md_list = get_model_list(filename, _start_prompt, _end_prompt)
-        converted_md_lists.append(
-            (filename, _localized_md_list, convert_to_localized_md(md_list, _localized_md_list, _format_model_list), _start_prompt, _end_prompt)
+        _start_prompt, _end_prompt, _format_model_list = (
+            value["start_prompt"],
+            value["end_prompt"],
+            value["format_model_list"],
         )
 
-    """
+        localized_md_list = get_model_list(filename, _start_prompt, _end_prompt)
+        num_models_equal, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
+
+        converted_md_lists.append((filename, num_models_equal, converted_md_list, _start_prompt, _end_prompt))
+
     if converted_rst_list != rst_list:
         if overwrite:
             with open(os.path.join(PATH_TO_DOCS, "index.rst"), "w", encoding="utf-8", newline="\n") as f:
@@ -414,16 +414,13 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
                 "The model list in the README changed and the list in `index.rst` has not been updated. Run "
                 "`make fix-copies` to fix this."
             )
-    """
 
     for converted_md_list in converted_md_lists:
-        filename, localized_md, converted_md, _start_prompt, _end_prompt = converted_md_list
-        if converted_md != localized_md:
+        filename, num_models_equal, converted_md, _start_prompt, _end_prompt = converted_md_list
+        if not num_models_equal:
             if overwrite:
                 _, start_index, end_index, lines = _find_text_in_file(
-                    filename=os.path.join(REPO_PATH, filename),
-                    start_prompt=_start_prompt,
-                    end_prompt=_end_prompt        
+                    filename=os.path.join(REPO_PATH, filename), start_prompt=_start_prompt, end_prompt=_end_prompt
                 )
                 with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n") as f:
                     f.writelines(lines[:start_index] + [converted_md] + lines[end_index:])
@@ -441,5 +438,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite)
-    #check_full_copies(args.fix_and_overwrite)
-
+    check_full_copies(args.fix_and_overwrite)
