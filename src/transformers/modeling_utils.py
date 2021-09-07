@@ -1171,6 +1171,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         _fast_init = kwargs.pop("_fast_init", True)
         torch_dtype = kwargs.pop("torch_dtype", None)
 
+        # XXX: make a param
+        low_cpu_mem_usage = True
+
         from_pt = not (from_tf | from_flax)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
@@ -1309,7 +1312,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
-            del state_dict # save memory - will reload again
+            if low_cpu_mem_usage:
+                # leaks?
+                # state_dict_keys = state_dict.keys()
+                state_dict_keys = [x for x in state_dict.keys()]
+                del state_dict # save memory - will reload again
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1361,10 +1368,33 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise
         elif from_pt:
 
-            # drop storage on CPU
-            model = model.to(device='meta')
-            # only now can load state_dict
-            state_dict = torch.load(resolved_archive_file, map_location="cpu")
+            if low_cpu_mem_usage:
+
+                # drop storage on CPU
+                # model = model.to(device='meta')
+
+                # dematerialize param storage for keys that are going to be replaced by state_dict, by
+                # putting those on the meta device
+                for k in state_dict_keys:
+                    split_name = k.split(".")
+                    #print(split_name)
+                    m = model
+                    matched = True
+                    while len(split_name) > 1:
+                        if hasattr(m, split_name[0]):
+                            m = getattr(m, split_name[0])
+                            del split_name[0]
+                        else:
+                            matched = False
+                            break
+                    if matched:
+                        m = m.to(device='meta')
+
+                for n,p in model.named_parameters():
+                    print(f"{p.device} {n}")
+
+                # only now can load state_dict
+                state_dict = torch.load(resolved_archive_file, map_location="cpu")
 
             model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_state_dict_into_model(
                 model,
@@ -1373,15 +1403,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ignore_mismatched_sizes=ignore_mismatched_sizes,
                 _fast_init=_fast_init,
             )
-            print("UNEXPECTED_KEYS", unexpected_keys)
-            print("MISMATCHED_KEYS", mismatched_keys)
 
-            # materialize sd keys one by one on CPU
-            def slam_dict(mod, state_dict):
+            if low_cpu_mem_usage:
+
+                # XXX: why do we load sd twice?
+
+                # materialize sd keys one by one on CPU
                 for k, p in state_dict.items():
                     split_name = k.split(".")
-                    print(split_name)
-                    m = mod
+                    #print(split_name)
+                    m = model
                     matched = True
                     while len(split_name) > 1:
                         if hasattr(m, split_name[0]):
@@ -1392,7 +1423,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             break
                     if matched:
                         setattr(m, split_name[0], torch.nn.Parameter(p))
-            slam_dict(model, state_dict)
+
+                # XXX: wrong?
+                del state_dict
 
             # XXX: could there be any other non-state_dict entries that are still on device=meta? other than
             # 1. state_dict
@@ -1502,10 +1535,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
             )
             for module in uninitialized_modules:
-                # XXX: untested
-                # put the params that aren't going to be replaced by state_dict to CPU before running init
-                for p in module.parameters(recursive=False):
-                    p = p.to(device='cpu')
+                # # XXX: untested
+                # # put the params that aren't going to be replaced by state_dict to CPU before running init
+                # for p in module.parameters(recursive=False):
+                #     p = p.to(device='cpu')
                 model._init_weights(module)
 
         # copy state_dict so _load_from_state_dict can modify it
