@@ -1005,6 +1005,10 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
 
+            if module.bias is not None:
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size))
+                nn.init.uniform_(module.bias, a=-k, b=k)
+
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
         Computes the output length of the convolutional layers
