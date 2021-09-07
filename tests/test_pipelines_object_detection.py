@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_datasets,
+    require_timm,
     require_tf,
     require_torch,
     require_vision,
@@ -46,6 +47,7 @@ else:
 
 
 @require_vision
+@require_timm
 @require_torch
 @is_pipeline_test
 class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
