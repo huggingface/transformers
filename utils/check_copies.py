@@ -326,7 +326,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
             paper_institutions=paper_institutions,
             paper_title_link=paper_title_link,
             paper_authors=paper_authors,
-            supplements=" " + supplements if len(supplements) != 0 else "",
+            supplements=" " + supplements.strip() if len(supplements) != 0 else "",
         )
 
     _re = re.compile(
