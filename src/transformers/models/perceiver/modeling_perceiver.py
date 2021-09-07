@@ -188,13 +188,9 @@ class PerceiverSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.d_latents, config.d_latents)
-        self.LayerNorm = nn.LayerNorm(config.d_latents, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
 
 
@@ -276,7 +272,8 @@ class PerceiverMLP(nn.Module):
             self.intermediate_act_fn = config.hidden_act
         self.dense2 = nn.Linear(config.d_latents, config.d_latents)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states):
+        input_tensor = hidden_states
         hidden_states = self.dense1(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.dense2(hidden_states) + input_tensor
@@ -328,7 +325,7 @@ class PerceiverLayer(nn.Module):
             inputs_mask,
             output_attentions=output_attentions,
         )
-        attention_output = self_attention_outputs[0]
+        attention_output = self_attention_outputs[0] + hidden_states
 
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -340,8 +337,8 @@ class PerceiverLayer(nn.Module):
         return outputs
 
     def feed_forward_chunk(self, attention_output):
-        layer_output = self.mlp(attention_output)
-        layer_output = self.layernorm(layer_output)
+        layer_output = self.layernorm(attention_output)
+        layer_output = self.mlp(layer_output)
         return layer_output
 
 

@@ -44,11 +44,13 @@ class PerceiverConfig(PretrainedConfig):
             Dimension of the latent embeddings.
         d_model (:obj:`int`, `optional`, defaults to 768):
             Dimension of the inputs.
-        num_blocks (:obj:`int`, `optional`, defaults to 8):
+        num_blocks (:obj:`int`, `optional`, defaults to 1):
             Number of blocks in the Transformer encoder.
-        num_self_attends_per_block (:obj:`int`, `optional`, defaults to 6):
+        num_self_attends_per_block (:obj:`int`, `optional`, defaults to 26):
             The number of self-attention layers per block.
-        num_cross_attention_heads (:obj:`int`, `optional`, defaults to 1):
+        num_self_attention_heads (:obj:`int`, `optional`, defaults to 8):
+            Number of attention heads for each self-attention layer in the Transformer encoder.
+        num_cross_attention_heads (:obj:`int`, `optional`, defaults to 8):
             Number of attention heads for each cross-attention layer in the Transformer encoder.
         widening_factor (:obj:`int`, `optional`, defaults to 1):
             Dimension of the feed-forward layer in the Transformer encoder.
@@ -88,10 +90,10 @@ class PerceiverConfig(PretrainedConfig):
         num_latents=256,
         d_latents=1280,
         d_model=768,
-        num_blocks=8,
-        num_self_attends_per_block=6,
+        num_blocks=1,
+        num_self_attends_per_block=26,
         num_self_attention_heads=8,
-        num_cross_attention_heads=1,
+        num_cross_attention_heads=8,
         widening_factor=1,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
