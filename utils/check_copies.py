@@ -18,8 +18,6 @@ import glob
 import os
 import re
 
-from collections import OrderedDict
-
 import black
 
 
@@ -51,6 +49,7 @@ LOCALIZED_READMES = {
         "format_model_list": "**[{title}]({model_link})** (from {paper_institutions}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
     },
 }
+
 
 def _should_continue(line, indent):
     return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\):\s*$", line) is not None
@@ -379,6 +378,8 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
 
 def check_model_list_copy(overwrite=False, max_per_line=119):
     """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
+
+    # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     rst_list, start_index, end_index, lines = _find_text_in_file(
         filename=os.path.join(PATH_TO_DOCS, "index.rst"),
         start_prompt="    This list is updated automatically from the README",
