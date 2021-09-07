@@ -492,7 +492,7 @@ class FlaxPegasusEncoderLayerCollection(nn.Module):
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
-        
+
         hidden_states = self.final_layer_norm(hidden_states)
 
         if output_hidden_states:
@@ -649,7 +649,7 @@ class FlaxPegasusDecoderLayerCollection(nn.Module):
 
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
-        
+
         hidden_states = self.final_layer_norm(hidden_states)
 
         # add hidden states from the last decoder layer
