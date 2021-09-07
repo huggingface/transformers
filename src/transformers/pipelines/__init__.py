@@ -314,10 +314,10 @@ def pipeline(
 
             - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`.
             - :obj:`"text-classification"`: will return a :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification") will return a
+            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification"`) will return a
               :class:`~transformers.TextClassificationPipeline`.
             - :obj:`"token-classification"`: will return a :class:`~transformers.TokenClassificationPipeline`.
-            - :obj:`"ner"` (alias of :obj:`"token-classification"): will return a
+            - :obj:`"ner"` (alias of :obj:`"token-classification"`): will return a
               :class:`~transformers.TokenClassificationPipeline`.
             - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`.
             - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
@@ -454,8 +454,15 @@ def pipeline(
 
     model_config = model.config
 
-    load_tokenizer = type(model_config) in TOKENIZER_MAPPING
-    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING
+    load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
+    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
+
+    if task in {"audio-classification"}:
+        # Audio classification will never require a tokenizer.
+        # the model on the other hand might have a tokenizer, but
+        # the files could be missing from the hub, instead of failing
+        # on such repos, we just force to not load it.
+        load_tokenizer = False
 
     if load_tokenizer:
         # Try to infer tokenizer from model or config name (if provided as str)
