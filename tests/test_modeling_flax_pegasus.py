@@ -308,10 +308,8 @@ class FlaxPegasusModelIntegrationTest(unittest.TestCase):
         tok = PegasusTokenizer.from_pretrained("google/pegasus-large")
 
         batch_input = [
-            # string 1,
-            # string 2,
-            # string 3,
-            # string 4,
+            'Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators."',
+            "height of 300 metres. Due to the addition of a broadcasting aerial at the top of the tower in 1957, it is now taller than the Chrysler Building by 5.2 metres (17 ft). Excluding transmitters, the Eiffel Tower is the second tallest free-standing structure in France after the Millau Viaduct.",
         ]
 
         # The below article tests that we don't add any hypotheses outside of the top n_beams
@@ -331,10 +329,8 @@ class FlaxPegasusModelIntegrationTest(unittest.TestCase):
         )
 
         EXPECTED = [
-            # here expected 1,
-            # here expected 2,
-            # here expected 3,
-            # here expected 4,
+            'Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators."',
+            "The tower is 324 metres (1,063 ft) tall, about the same height as an 81-storey building, and the tallest structure in Paris.",
         ]
 
         generated = tok.batch_decode(

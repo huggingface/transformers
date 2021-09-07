@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 2021, Google and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021, Google and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -105,10 +105,6 @@ PEGASUS_INPUTS_DOCSTRING = r"""
             details.
 
             `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
-
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
-            the right for denoising pre-training following the paper.
         decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -173,10 +169,6 @@ PEGASUS_DECODE_INPUTS_DOCSTRING = r"""
             details.
 
             `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
-
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
-            the right for denoising pre-training following the paper.
         encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`):
             Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
@@ -225,6 +217,7 @@ def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_tok
     return shifted_input_ids
 
 
+# Copied from transformers.models.marian.modeling_flax_marian.create_sinusoidal_positions
 def create_sinusoidal_positions(n_pos, dim, dtype):
     position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     sentinel = dim // 2 + dim % 2
@@ -401,6 +394,7 @@ class FlaxPegasusAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartEncoderLayer with MBart->Pegasus
 class FlaxPegasusEncoderLayer(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32
@@ -437,7 +431,6 @@ class FlaxPegasusEncoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
-
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
 
@@ -457,6 +450,7 @@ class FlaxPegasusEncoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayerCollection with Bart->Pegasus
 class FlaxPegasusEncoderLayerCollection(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -467,6 +461,7 @@ class FlaxPegasusEncoderLayerCollection(nn.Module):
             for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
@@ -497,6 +492,8 @@ class FlaxPegasusEncoderLayerCollection(nn.Module):
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
+        
+        hidden_states = self.final_layer_norm(hidden_states)
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -511,6 +508,7 @@ class FlaxPegasusEncoderLayerCollection(nn.Module):
         )
 
 
+# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartDecoderLayer with MBart->Pegasus
 class FlaxPegasusDecoderLayer(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32
@@ -570,8 +568,8 @@ class FlaxPegasusDecoderLayer(nn.Module):
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -597,6 +595,7 @@ class FlaxPegasusDecoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayerCollection with Bart->Pegasus
 class FlaxPegasusDecoderLayerCollection(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -607,6 +606,7 @@ class FlaxPegasusDecoderLayerCollection(nn.Module):
             for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.decoder_layerdrop
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
@@ -649,6 +649,8 @@ class FlaxPegasusDecoderLayerCollection(nn.Module):
 
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
+        
+        hidden_states = self.final_layer_norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -665,35 +667,6 @@ class FlaxPegasusDecoderLayerCollection(nn.Module):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
-
-
-class FlaxPegasusClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    config: PegasusConfig
-    inner_dim: int
-    num_classes: int
-    pooler_dropout: float
-    dtype: jnp.dtype = jnp.float32
-
-    def setup(self):
-        self.dense = nn.Dense(
-            self.inner_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
-        )
-        self.dropout = nn.Dropout(rate=self.pooler_dropout)
-        self.out_proj = nn.Dense(
-            self.num_classes,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-        )
-
-    def __call__(self, hidden_states: jnp.ndarray, deterministic: bool):
-        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = jnp.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        hidden_states = self.out_proj(hidden_states)
-        return hidden_states
 
 
 class FlaxPegasusEncoder(nn.Module):
@@ -717,9 +690,6 @@ class FlaxPegasusEncoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        # Pegasus is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
         self.embed_positions = create_sinusoidal_positions(
             self.config.max_position_embeddings, embed_dim, dtype=self.dtype
         )
@@ -746,7 +716,6 @@ class FlaxPegasusEncoder(nn.Module):
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-        hidden_states = self.layer_norm(hidden_states)
         outputs = self.layers(
             hidden_states,
             attention_mask,
@@ -755,7 +724,6 @@ class FlaxPegasusEncoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         if not return_dict:
             return outputs
 
@@ -787,15 +755,11 @@ class FlaxPegasusDecoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        # Pegasus is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
         self.embed_positions = create_sinusoidal_positions(
             self.config.max_position_embeddings, embed_dim, dtype=self.dtype
         )
 
         self.layers = FlaxPegasusDecoderLayerCollection(self.config, self.dtype)
-        self.layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
@@ -819,9 +783,7 @@ class FlaxPegasusDecoder(nn.Module):
         positions = jnp.take(self.embed_positions, position_ids, axis=0)
 
         hidden_states = inputs_embeds + positions
-
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-        hidden_states = self.layer_norm(hidden_states)
         outputs = self.layers(
             hidden_states,
             attention_mask,
@@ -933,8 +895,6 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
-        # make sure initialization pass will work for FlaxPegasusForSequenceClassificationModule
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
         decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)
