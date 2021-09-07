@@ -1631,6 +1631,9 @@ class TokenizerTesterMixin:
 
     @require_tokenizers
     def test_added_token_are_matched_longest_first(self):
+        if not self.test_slow_tokenizer:
+            self.skipTest("This test is only for slow tokenizers")
+            return
         tokenizers = self.get_tokenizers(fast=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
