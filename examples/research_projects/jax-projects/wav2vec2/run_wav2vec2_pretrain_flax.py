@@ -515,12 +515,16 @@ def main():
 
             # get weighted average loss over all devices
             loss = jax.lax.psum(loss, "batch") / global_sample_size
+#            loss = loss / sample_size
 
             # add more metrics
             logs["code_ppl"] = outputs.codevector_perplexity
             logs["gumbel_temp"] = gumbel_temperature
             logs["contrast_loss"] = jax.lax.psum(contrastive_loss, "batch") / global_sample_size
             logs["diversity_loss"] = jax.lax.psum(diversity_loss, "batch") / global_sample_size * diversity_loss_weight
+
+#            logs["contrast_loss"] = contrastive_loss / sample_size
+#            logs["diversity_loss"] = diversity_loss / sample_size
             logs["%_mask_idx"] = sample_size / batch["mask_time_indices"].reshape(-1).shape[0]
 
             return loss, logs
