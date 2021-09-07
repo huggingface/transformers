@@ -36,11 +36,11 @@ Tips:
 - GPT-2 was trained with a causal language modeling (CLM) objective and is therefore powerful at predicting the next
   token in a sequence. Leveraging this feature allows GPT-2 to generate syntactically coherent text as it can be
   observed in the `run_generation.py` example script.
-- The model can take the `past_key_values` (for PyTorch) or `past` (for TF) as input, which is the previously 
-  computed key/value attention pairs. Using this (`past_key_values` or `past`) value prevents the model from 
-  re-computing pre-computed values in the context of text generation. For PyTorch, see `past_key_values` 
-  argument of the :meth:`~transformers.GPT2Model.forward` method, or for TF the `past` argument
-  of the :meth:`~transformers.TFGPT2Model.call` method for more information on its usage.
+- The model can take the `past_key_values` (for PyTorch) or `past` (for TF) as input, which is the previously computed
+  key/value attention pairs. Using this (`past_key_values` or `past`) value prevents the model from re-computing
+  pre-computed values in the context of text generation. For PyTorch, see `past_key_values` argument of the
+  :meth:`~transformers.GPT2Model.forward` method, or for TF the `past` argument of the
+  :meth:`~transformers.TFGPT2Model.call` method for more information on its usage.
 
 `Write With Transformer <https://transformer.huggingface.co/doc/gpt2-large>`__ is a webapp created and hosted by
 Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
