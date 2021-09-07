@@ -22,7 +22,13 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-from ...file_utils import HF_MODULES_CACHE, TRANSFORMERS_DYNAMIC_MODULE_NAME, cached_path, hf_bucket_url, is_offline_mode
+from ...file_utils import (
+    HF_MODULES_CACHE,
+    TRANSFORMERS_DYNAMIC_MODULE_NAME,
+    cached_path,
+    hf_bucket_url,
+    is_offline_mode,
+)
 from ...utils import logging
 
 
@@ -65,7 +71,7 @@ def check_imports(filename):
     """
     with open(filename, "r", encoding="utf-8") as f:
         content = f.read()
-    
+
     # Imports of the form `import xxx`
     imports = re.findall("^\s*import\s+(\S+)\s*$", content, flags=re.MULTILINE)
     # Imports of the form `from xxx import yyy`
@@ -81,7 +87,7 @@ def check_imports(filename):
             importlib.import_module(imp)
         except ImportError:
             missing_packages.append(imp)
-    
+
     if len(missing_packages) > 0:
         raise ImportError(
             "This modeling file requires the following packages that were not found in your environment: "
@@ -193,7 +199,7 @@ def get_class_from_dynamic_module(
     except EnvironmentError:
         logger.error(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
         raise
-    
+
     # Check we have all the requirements in our environment
     check_imports(resolved_module_file)
 
