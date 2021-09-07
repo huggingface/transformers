@@ -16,10 +16,13 @@
 import importlib
 from collections import OrderedDict
 
+from transformers.models.auto.dynamic import get_class_from_dynamic_module
+
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import copy_func
 from ...utils import logging
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
+from .dynamic import get_class_from_dynamic_module
 
 
 logger = logging.get_logger(__name__)
@@ -382,8 +385,17 @@ class _BaseAutoModelClass:
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
-
-        if type(config) in cls._model_mapping.keys():
+        if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
+            class_ref = config.auto_map[cls.__name__]
+            module_file, class_name = class_ref.split(".")
+            model_class = get_class_from_dynamic_module(
+                pretrained_model_name_or_path,
+                module_file + ".py",
+                class_name,
+                **kwargs
+            )
+            return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
             return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
