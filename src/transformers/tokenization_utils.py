@@ -119,7 +119,8 @@ class Trie:
 
         # This will contain every indices where we need
         # to cut.
-        offsets = []
+        # We force to cut at offset 0 and len(text) (added later)
+        offsets = [0]
 
         # This is used by the lookahead which needs to skip over
         # some text where the full match exceeded the place in the initial
@@ -160,8 +161,8 @@ class Trie:
                             trie_pointer = trie_pointer[next_char]
                             lookahead_index += 1
                             if "" in trie_pointer:
-                                end = lookahead_index + 1
-                                skip = lookahead_index + 1
+                                end = lookahead_index
+                                skip = lookahead_index
 
                             if lookahead_index == len(text):
                                 # End of string
@@ -200,6 +201,7 @@ class Trie:
         # We have all the offsets now, we just need to do the actual splitting.
         # We need to eventually add the first part of the string and the eventual
         # last part.
+        offsets.append(len(text))
         tokens = []
         start = 0
         for end in offsets:
@@ -210,9 +212,7 @@ class Trie:
                 continue
             tokens.append(text[start:end])
             start = end
-        if start != len(text):
-            # We're missing the last piece
-            tokens.append(text[start:])
+
         return tokens
 
 

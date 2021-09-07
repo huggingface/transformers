@@ -1634,8 +1634,12 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(fast=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                tokenizer.add_tokens([AddedToken("extra_id_1")])
-                tokenizer.add_tokens([AddedToken("extra_id_100")])
+                try:
+                    tokenizer.add_tokens([AddedToken("extra_id_1")])
+                    tokenizer.add_tokens([AddedToken("extra_id_100")])
+                except Exception:
+                    # Canine cannot add tokens which are not codepoints
+                    self.skipTest("Cannot add those Added tokens")
 
                 # XXX: This used to split on `extra_id_1` first we're matching
                 # longest first now.
