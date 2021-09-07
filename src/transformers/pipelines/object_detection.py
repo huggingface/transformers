@@ -154,7 +154,7 @@ class ObjectDetectionPipeline(Pipeline):
 
         return annotations
 
-    def _get_bounding_box(self, box: torch.Tensor) -> Dict[str, int]:
+    def _get_bounding_box(self, box: "torch.Tensor") -> Dict[str, int]:
         """
         Turns list [xmin, xmax, ymin, ymax] into dict { "xmin": xmin, ... }
 
@@ -165,7 +165,7 @@ class ObjectDetectionPipeline(Pipeline):
             bbox (Dict[str, int]): Dict containing the coordinates in corners format.
         """
         if self.framework != "pt":
-            # guarding `box: torch.Tensor`
+            # guarding `box: "torch.Tensor"`
             raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")
         xmin, ymin, xmax, ymax = box.int().tolist()
         bbox = {
