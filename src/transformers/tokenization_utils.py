@@ -92,6 +92,7 @@ class Trie:
         This trie will match the longest possible word first !
 
         Example::
+        
             >>> trie = Trie()
             >>> trie.split("[CLS] This is a extra_id_100")
             ["[CLS] This is a extra_id_100"]
