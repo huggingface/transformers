@@ -1518,6 +1518,7 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     progress = tqdm(
         unit="B",
         unit_scale=True,
+        unit_divisor=1024,
         total=total,
         initial=resume_size,
         desc="Downloading",
