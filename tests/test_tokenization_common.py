@@ -1630,6 +1630,27 @@ class TokenizerTesterMixin:
                     )
 
     @require_tokenizers
+    def test_added_token_are_matched_longest_first(self):
+        tokenizers = self.get_tokenizers(fast=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokenizer.add_tokens([AddedToken("extra_id_1")])
+                tokenizer.add_tokens([AddedToken("extra_id_100")])
+
+                # XXX: This used to split on `extra_id_1` first we're matching
+                # longest first now.
+                tokens = tokenizer.tokenize("This is some extra_id_100")
+                self.assertIn("extra_id_100", tokens)
+
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokenizer.add_tokens([AddedToken("extra_id_100")])
+                tokenizer.add_tokens([AddedToken("extra_id_1")])
+
+                tokens = tokenizer.tokenize("This is some extra_id_100")
+                self.assertIn("extra_id_100", tokens)
+
+    @require_tokenizers
     def test_added_token_serializable(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
