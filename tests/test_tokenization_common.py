@@ -52,7 +52,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_utils import AddedToken, Trie
 
 
 if TYPE_CHECKING:
@@ -3401,3 +3401,21 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
             new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+
+
+class TrieTest(unittest.TestCase):
+    def test_trie(self):
+        trie = Trie()
+        trie.add("Hello 友達")
+        self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}})
+        trie.add("Hello")
+        trie.data
+        self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}})
+
+    def test_trie_split(self):
+        trie = Trie()
+        self.assertEqual(trie.split("[CLS] This is a extra_id_100"), ["[CLS] This is a extra_id_100"])
+        trie.add("[CLS]")
+        trie.add("extra_id_1")
+        trie.add("extra_id_100")
+        self.assertEqual(trie.split("[CLS] This is a extra_id_100"), ["[CLS]", " This is a ", "extra_id_100"])

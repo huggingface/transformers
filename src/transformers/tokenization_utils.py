@@ -92,7 +92,7 @@ class Trie:
         This trie will match the longest possible word first !
 
         Example::
-        
+
             >>> trie = Trie()
             >>> trie.split("[CLS] This is a extra_id_100")
             ["[CLS] This is a extra_id_100"]
@@ -155,7 +155,7 @@ class Trie:
                         # Important in case of extra_id_1 vs extra_id_100
                         lookahead_index = current + 1
                         end = current + 1
-                        next_char = current_char
+                        next_char = text[lookahead_index] if lookahead_index < len(text) else None
                         while next_char in trie_pointer:
                             trie_pointer = trie_pointer[next_char]
                             lookahead_index += 1
