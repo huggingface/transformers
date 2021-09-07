@@ -773,34 +773,15 @@ class Pipeline(_ScikitCompat):
         Return:
             :obj:`Dict[str, torch.Tensor]`: The same as :obj:`inputs` but on the proper device.
         """
-        return self._ensure_tensor_on_device(inputs)
+        return self._ensure_tensor_on_device(inputs, self.device)
 
-    def _ensure_tensor_on_device(self, inputs):
+    def _ensure_tensor_on_device(self, inputs, device):
         if isinstance(inputs, dict):
-            return {name: self.ensure_tensor_on_cpu(tensor) for name, tensor in inputs.items()}
+            return {name: self._ensure_tensor_on_device(tensor, device) for name, tensor in inputs.items()}
         elif isinstance(inputs, list):
-            return [self.ensure_tensor_on_cpu(item) for item in inputs]
+            return [self._ensure_tensor_on_device(item, device) for item in inputs]
         elif isinstance(inputs, torch.Tensor):
             return inputs.to(self.device)
-        else:
-            return inputs
-
-    def ensure_tensor_on_cpu(self, inputs):
-        """
-        Ensure PyTorch tensors are on cpu.
-
-        Args:
-            inputs (keyword arguments that should be :obj:`torch.Tensor`, the rest is ignored): The tensor are placed back on cpu.
-
-        Return:
-            :obj:`Dict[str, torch.Tensor]`: The same as :obj:`inputs` but on cpu.
-        """
-        if isinstance(inputs, dict):
-            return {name: self.ensure_tensor_on_cpu(tensor) for name, tensor in inputs.items()}
-        elif isinstance(inputs, list):
-            return [self.ensure_tensor_on_cpu(item) for item in inputs]
-        elif isinstance(inputs, torch.Tensor):
-            return inputs.cpu()
         else:
             return inputs
 
@@ -875,9 +856,9 @@ class Pipeline(_ScikitCompat):
                 model_outputs = self._forward(model_inputs, **forward_params)
             elif self.framework == "pt":
                 with torch.no_grad():
-                    model_inputs = self.ensure_tensor_on_device(**model_inputs)
+                    model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                     model_outputs = self._forward(model_inputs, **forward_params)
-                    model_inputs = self.ensure_tensor_on_cpu(model_outputs)
+                    model_inputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
             else:
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs
