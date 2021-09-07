@@ -51,8 +51,8 @@ class PerceiverEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.latents = nn.Parameter(torch.randn(config.num_latents, config.hidden_size))
-        self.position_embeddings = nn.Parameter(torch.zeros(1, config.num_latents, config.hidden_size))
+        self.latents = nn.Parameter(torch.randn(config.num_latents, config.d_latents))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, config.num_latents, config.d_latents))
 
     def forward(self, batch_size):
         embeddings = self.latents.expand(batch_size, -1, -1)  # Thanks, Phil Wang
@@ -62,36 +62,37 @@ class PerceiverEmbeddings(nn.Module):
 
 
 class PerceiverSelfAttention(nn.Module):
-    def __init__(self, config, is_cross_attention=False):
+    """Multi-headed {cross, self}-attention."""
+
+    def __init__(
+        self,
+        config,
+        is_cross_attention=False,
+        qk_channels=None,
+        v_channels=None,
+        num_heads=1,
+        q_dim=None,
+        kv_dim=None,
+    ):
         super().__init__()
-        if is_cross_attention:
-            if config.hidden_size % config.num_cross_attention_heads != 0 and not hasattr(config, "embedding_size"):
-                raise ValueError(
-                    f"The hidden size ({config.hidden_size}) is not a multiple of the number of cross-attention "
-                    f"heads ({config.num_cross_attention_heads})"
-                )
-        else:
-            if config.hidden_size % config.num_self_attention_heads != 0 and not hasattr(config, "embedding_size"):
-                raise ValueError(
-                    f"The hidden size ({config.hidden_size}) is not a multiple of the number of self-attention "
-                    f"heads ({config.num_self_attention_heads})"
-                )
+        self.num_heads = num_heads
+        if qk_channels % num_heads != 0:
+            raise ValueError(f"qk_channels ({qk_channels}) must be divisible by" f" num_heads ({num_heads}).")
+        if v_channels % num_heads != 0:
+            raise ValueError(f"v_channels ({v_channels}) must be divisible by" f" num_heads ({num_heads}).")
 
-        self.num_attention_heads = (
-            config.num_cross_attention_heads if is_cross_attention else config.num_self_attention_heads
-        )
-        self.attention_head_size = int(config.hidden_size / self.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.qk_channels_per_head = qk_channels // num_heads
+        self.v_channels_per_head = v_channels // num_heads
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        # Projection matrices
+        self.query = nn.Linear(q_dim, qk_channels)
+        self.key = nn.Linear(kv_dim, qk_channels, kv_dim)
+        self.value = nn.Linear(kv_dim, v_channels)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.config = config
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+    def transpose_for_scores(self, x, channels_per_head):
+        new_x_shape = x.size()[:-1] + (self.num_heads, channels_per_head)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -104,27 +105,35 @@ class PerceiverSelfAttention(nn.Module):
         inputs_mask=None,
         output_attentions=False,
     ):
-        mixed_query_layer = self.query(hidden_states)
-
+        # Project queries, keys and values to a common feature dimension.
         # If this is instantiated as a cross-attention module, the keys
         # and values come from the inputs; the attention mask needs to be
         # such that the inputs's non-relevant tokens are not attended to.
         is_cross_attention = inputs is not None
+        queries = self.query(hidden_states)
 
         if is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(inputs))
-            value_layer = self.transpose_for_scores(self.value(inputs))
+            keys = self.key(inputs)
+            values = self.value(inputs)
             attention_mask = inputs_mask
         else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            keys = self.key(hidden_states)
+            values = self.value(hidden_states)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        # Reshape channels for multi-head attention.
+        # We reshape from (batch_size, time, channels) to (batch_size, num_heads, time, channels per head)
+        queries = self.transpose_for_scores(queries, self.qk_channels_per_head)
+        keys = self.transpose_for_scores(keys, self.qk_channels_per_head)
+        values = self.transpose_for_scores(values, self.v_channels_per_head)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        # Take the dot product between the queries and keys to get the raw attention scores.
+        attention_scores = torch.matmul(queries, keys.transpose(-1, -2))
 
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        batch_size, num_heads, seq_len, q_head_dim = queries.shape
+        _, _, _, v_head_dim = values.shape
+        hiddens = self.num_heads * v_head_dim
+
+        attention_scores = attention_scores / math.sqrt(q_head_dim)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in PerceiverModel forward() function)
             attention_scores = attention_scores + attention_mask
@@ -140,19 +149,11 @@ class PerceiverSelfAttention(nn.Module):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = torch.matmul(attention_probs, values)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        new_context_layer_shape = context_layer.size()[:-2] + (hiddens,)
         context_layer = context_layer.view(*new_context_layer_shape)
-
-        # Optionally include a residual to the query.
-        # Consider omitting the residual if the semantics of query and output
-        # are different, e.g. if queries are positions and outputs are pixels.
-        if is_cross_attention and self.config.use_query_residual:
-            context_layer = query_layer + context_layer
-        else:
-            pass
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -162,8 +163,8 @@ class PerceiverSelfAttention(nn.Module):
 class PerceiverSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dense = nn.Linear(config.d_latents, config.d_latents)
+        self.LayerNorm = nn.LayerNorm(config.d_latents, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -174,9 +175,26 @@ class PerceiverSelfOutput(nn.Module):
 
 
 class PerceiverAttention(nn.Module):
-    def __init__(self, config, is_cross_attention=False):
+    def __init__(
+        self,
+        config,
+        is_cross_attention=False,
+        qk_channels=None,
+        v_channels=None,
+        num_heads=1,
+        q_dim=None,
+        kv_dim=None,
+    ):
         super().__init__()
-        self.self = PerceiverSelfAttention(config, is_cross_attention=is_cross_attention)
+        self.self = PerceiverSelfAttention(
+            config,
+            is_cross_attention=is_cross_attention,
+            qk_channels=qk_channels,
+            v_channels=v_channels,
+            num_heads=num_heads,
+            q_dim=q_dim,
+            kv_dim=kv_dim,
+        )
         self.output = PerceiverSelfOutput(config)
         self.pruned_heads = set()
 
@@ -223,7 +241,7 @@ class PerceiverAttention(nn.Module):
 class PerceiverIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.dense = nn.Linear(config.d_latents, config.intermediate_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -238,8 +256,8 @@ class PerceiverIntermediate(nn.Module):
 class PerceiverOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dense = nn.Linear(config.intermediate_size, config.d_latents)
+        self.LayerNorm = nn.LayerNorm(config.d_latents, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -250,11 +268,28 @@ class PerceiverOutput(nn.Module):
 
 
 class PerceiverLayer(nn.Module):
-    def __init__(self, config, is_cross_attention=False):
+    def __init__(
+        self,
+        config,
+        is_cross_attention=False,
+        qk_channels=None,
+        v_channels=None,
+        num_heads=1,
+        q_dim=None,
+        kv_dim=None,
+    ):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = PerceiverAttention(config, is_cross_attention=is_cross_attention)
+        self.attention = PerceiverAttention(
+            config,
+            is_cross_attention=is_cross_attention,
+            qk_channels=qk_channels,
+            v_channels=v_channels,
+            num_heads=num_heads,
+            q_dim=q_dim,
+            kv_dim=kv_dim,
+        )
         self.intermediate = PerceiverIntermediate(config)
         self.output = PerceiverOutput(config)
 
@@ -298,13 +333,29 @@ class PerceiverEncoder(nn.Module):
         self.config = config
 
         # Construct the cross attention layer.
-        self.cross_attend = PerceiverLayer(config, is_cross_attention=True)
+        self.cross_attend = PerceiverLayer(
+            config,
+            is_cross_attention=True,
+            qk_channels=config.num_cross_attention_heads * 32,
+            v_channels=config.d_latents,
+            num_heads=config.num_cross_attention_heads,
+            q_dim=config.d_latents,
+            kv_dim=config.d_model,
+        )
 
         # Construct a single block of self-attention layers.
         # We get deeper architectures by applying this block more than once.
         self_attends = []
         for _ in range(config.num_self_attends_per_block):
-            layer = PerceiverLayer(config)
+            layer = PerceiverLayer(
+                config,
+                is_cross_attention=False,
+                qk_channels=config.num_self_attention_heads * 32,
+                v_channels=config.d_latents,
+                num_heads=config.num_self_attention_heads,
+                q_dim=config.d_latents,
+                kv_dim=config.d_latents,
+            )
             self_attends.append(layer)
 
         self.self_attends = nn.ModuleList(self_attends)

@@ -40,8 +40,10 @@ class PerceiverConfig(PretrainedConfig):
     Args:
         num_latents (:obj:`int`, `optional`, defaults to 512):
             The number of latents.
-        hidden_size (:obj:`int`, `optional`, defaults to 1024):
+        d_latents (:obj:`int`, `optional`, defaults to 1024):
             Dimension of the latent embeddings.
+        d_model (:obj:`int`, `optional`, defaults to 768):
+            Dimension of the inputs.
         num_blocks (:obj:`int`, `optional`, defaults to 8):
             Number of blocks in the Transformer encoder.
         num_self_attends_per_block (:obj:`int`, `optional`, defaults to 6):
@@ -84,7 +86,8 @@ class PerceiverConfig(PretrainedConfig):
     def __init__(
         self,
         num_latents=512,
-        hidden_size=1024,
+        d_latents=1024,
+        d_model=768,
         num_blocks=8,
         num_self_attends_per_block=6,
         num_self_attention_heads=8,
@@ -97,13 +100,13 @@ class PerceiverConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         is_encoder_decoder=False,
-        use_query_residual=False,
         **kwargs
     ):
         super().__init__(**kwargs)
 
         self.num_latents = num_latents
-        self.hidden_size = hidden_size
+        self.d_latents = d_latents
+        self.d_model = d_model
         self.num_blocks = num_blocks
         self.num_self_attends_per_block = num_self_attends_per_block
         self.num_self_attention_heads = num_self_attention_heads
@@ -115,4 +118,3 @@ class PerceiverConfig(PretrainedConfig):
         self.position_embedding_init_scale = position_embedding_init_scale
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.use_query_residual = use_query_residual
