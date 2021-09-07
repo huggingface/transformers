@@ -53,9 +53,6 @@ class ModelArguments:
     freeze_feature_extractor: Optional[bool] = field(
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
-    gradient_checkpointing: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
-    )
     verbose_logging: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether to log verbose messages or not."},
@@ -264,7 +261,7 @@ def compute_contrastive_loss(
     ).transpose(2, 0, 1, 3)
 
     target_features = jnp.concatenate([quantized_features[None, :], quantized_negatives], axis=0)
-    loss_logits = optax.cosine_similarity(transformer_features, target_features)
+    loss_logits = optax.cosine_similarity(transformer_features, target_features, epsilon=1e-8)
     # => Shape [1, num_negatives] x batch_size x seq_length
     loss_logits = loss_logits / logits_temp
 
@@ -272,7 +269,7 @@ def compute_contrastive_loss(
     neg_is_pos = jnp.concatenate([jnp.full((1,) + loss_logits.shape[1:], False), neg_is_pos], axis=0)
 
     # make sure incorrectly sampled vectors don't contribute to loss
-    loss_logits = jnp.where(neg_is_pos, -1e9, loss_logits)
+    loss_logits = jnp.where(neg_is_pos, -1e20, loss_logits)
 
     # => Shape batch_size*sequence_length x [1, num_negatives]
     num_losses = batch_size * sequence_length
@@ -508,31 +505,34 @@ def main():
             )
 
             # higher codevector_perplexity leads to lower diversity loss
-            diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
-
-            # make sure that diversity loss is multiplied by `sample_size` since contrastive_loss is `sum`-reduced instead of averaged
-            # also multiply diversity_loss_weight
-            # \alpha * L_d (Eq. 2 from paper: https://arxiv.org/pdf/2006.11477.pdf)
-            diversity_loss = diversity_loss * sample_size * diversity_loss_weight
+            diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors * sample_size
 
             # L = L_m + \alpha * L_d (Eq. 2 from paper: https://arxiv.org/pdf/2006.11477.pdf)
-            loss = contrastive_loss + diversity_loss
+            loss = contrastive_loss + diversity_loss_weight * diversity_loss
 
-            # average loss over all loss samples
-            loss = loss / sample_size
+            # get overall sample size across all devices
+            global_sample_size = jax.lax.psum(sample_size, "batch")
 
-            # add more loss
+            # get weighted average loss over all devices
+            loss = jax.lax.psum(loss, "batch") / global_sample_size
+
+            # add more metrics
             logs["code_ppl"] = outputs.codevector_perplexity
             logs["gumbel_temp"] = gumbel_temperature
-            logs["contrast_loss"] = contrastive_loss / sample_size
-            logs["diversity_loss"] = diversity_loss / sample_size
+            logs["contrast_loss"] = jax.lax.psum(contrastive_loss) / global_sample_size
+            logs["diversity_loss"] = jax.lax.psum(diversity_loss) / global_sample_size
             logs["%_mask_idx"] = sample_size / batch["mask_time_indices"].reshape(-1).shape[0]
 
             return loss, logs
 
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
         (loss, logs), grad = grad_fn(state.params)
+
+        # average gradients
+        # TODO(PVP) - gradients should already be averaged here - is this necessary?
         grad = jax.lax.pmean(grad, "batch")
+
+        # apply gradients
         new_state = state.apply_gradients(grads=grad)
 
         metrics = {"loss": loss, "learn_rate": linear_decay_lr_schedule_fn(state.step)}
