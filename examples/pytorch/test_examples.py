@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import sys
-from unittest.case import skip
 from unittest.mock import patch
 
 import torch
