@@ -73,9 +73,18 @@ class PerceiverSelfAttention(nn.Module):
         num_heads=1,
         q_dim=None,
         kv_dim=None,
+        use_query_residual=False,
     ):
         super().__init__()
         self.num_heads = num_heads
+        # Q and K must have the same number of channels.
+        # Default to preserving Q's input's shape.
+        if qk_channels is None:
+            qk_channels = q_dim
+        # V's num_channels determines the shape of the output of QKV-attention.
+        # Default to the same number of channels used in the key-query operation.
+        if v_channels is None:
+            v_channels = qk_channels
         if qk_channels % num_heads != 0:
             raise ValueError(f"qk_channels ({qk_channels}) must be divisible by" f" num_heads ({num_heads}).")
         if v_channels % num_heads != 0:
@@ -84,12 +93,17 @@ class PerceiverSelfAttention(nn.Module):
         self.qk_channels_per_head = qk_channels // num_heads
         self.v_channels_per_head = v_channels // num_heads
 
+        # Layer normalization
+        self.layernorm = nn.LayerNorm(q_dim)
+        self.layernorm2 = nn.LayerNorm(kv_dim) if is_cross_attention else nn.Identity()
+
         # Projection matrices
         self.query = nn.Linear(q_dim, qk_channels)
         self.key = nn.Linear(kv_dim, qk_channels)
         self.value = nn.Linear(kv_dim, v_channels)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.use_query_residual = True if not is_cross_attention else use_query_residual
 
     def transpose_for_scores(self, x, channels_per_head):
         new_x_shape = x.size()[:-1] + (self.num_heads, channels_per_head)
@@ -105,6 +119,10 @@ class PerceiverSelfAttention(nn.Module):
         inputs_mask=None,
         output_attentions=False,
     ):
+        original_hidden_states = hidden_states
+        hidden_states = self.layernorm(hidden_states)
+        inputs = self.layernorm2(inputs)
+
         # Project queries, keys and values to a common feature dimension.
         # If this is instantiated as a cross-attention module, the keys
         # and values come from the inputs; the attention mask needs to be
@@ -155,6 +173,12 @@ class PerceiverSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (hiddens,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
+        # Optionally include a residual to the original queries.
+        # Consider omitting the residual if the semantics of query and output
+        # are different, e.g. if queries are positions and outputs are pixels.
+        if self.use_query_residual:
+            context_layer = original_hidden_states + context_layer
+
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
@@ -167,10 +191,10 @@ class PerceiverSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.d_latents, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
 
 
@@ -184,6 +208,7 @@ class PerceiverAttention(nn.Module):
         num_heads=1,
         q_dim=None,
         kv_dim=None,
+        use_query_residual=False,
     ):
         super().__init__()
         self.self = PerceiverSelfAttention(
@@ -194,6 +219,7 @@ class PerceiverAttention(nn.Module):
             num_heads=num_heads,
             q_dim=q_dim,
             kv_dim=kv_dim,
+            use_query_residual=use_query_residual,
         )
         self.output = PerceiverSelfOutput(config)
         self.pruned_heads = set()
@@ -233,37 +259,27 @@ class PerceiverAttention(nn.Module):
             inputs_mask,
             output_attentions,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
+        attention_output = self.output(self_outputs[0])
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
-class PerceiverIntermediate(nn.Module):
+class PerceiverMLP(nn.Module):
+    """A Transformer-style dense module to follow attention."""
+
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.d_latents, config.intermediate_size)
+        self.dense1 = nn.Linear(config.d_latents, config.widening_factor * config.d_latents)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-
-class PerceiverOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.d_latents)
-        self.LayerNorm = nn.LayerNorm(config.d_latents, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dense2 = nn.Linear(config.d_latents, config.d_latents)
 
     def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.dense1(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.dense2(hidden_states) + input_tensor
         return hidden_states
 
 
@@ -277,6 +293,7 @@ class PerceiverLayer(nn.Module):
         num_heads=1,
         q_dim=None,
         kv_dim=None,
+        use_query_residual=False,
     ):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -289,9 +306,10 @@ class PerceiverLayer(nn.Module):
             num_heads=num_heads,
             q_dim=q_dim,
             kv_dim=kv_dim,
+            use_query_residual=use_query_residual,
         )
-        self.intermediate = PerceiverIntermediate(config)
-        self.output = PerceiverOutput(config)
+        self.layernorm = nn.LayerNorm(config.d_latents)
+        self.mlp = PerceiverMLP(config)
 
     def forward(
         self,
@@ -322,15 +340,29 @@ class PerceiverLayer(nn.Module):
         return outputs
 
     def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
+        layer_output = self.mlp(attention_output)
+        layer_output = self.layernorm(layer_output)
         return layer_output
 
 
 class PerceiverEncoder(nn.Module):
+    """The Perceiver Encoder: a scalable, fully attentional encoder."""
+
     def __init__(self, config):
         super().__init__()
         self.config = config
+
+        # Check that we can use multihead-attention with these shapes.
+        if config.d_latents % config.num_self_attention_heads != 0:
+            raise ValueError(
+                f"num_z_channels ({config.d_latents}) must be divisible by"
+                f" num_self_attend_heads ({config.num_self_attention_heads})."
+            )
+        if config.d_latents % config.num_cross_attention_heads != 0:
+            raise ValueError(
+                f"num_z_channels ({config.d_latents}) must be divisible by"
+                f" num_cross_attend_heads ({config.num_cross_attention_heads})."
+            )
 
         # Construct the cross attention layer.
         self.cross_attend = PerceiverLayer(
@@ -341,6 +373,7 @@ class PerceiverEncoder(nn.Module):
             num_heads=config.num_cross_attention_heads,
             q_dim=config.d_latents,
             kv_dim=config.d_model,
+            use_query_residual=config.use_query_residual,
         )
 
         # Construct a single block of self-attention layers.

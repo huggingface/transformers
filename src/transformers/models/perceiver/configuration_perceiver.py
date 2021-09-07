@@ -38,9 +38,9 @@ class PerceiverConfig(PretrainedConfig):
 
 
     Args:
-        num_latents (:obj:`int`, `optional`, defaults to 512):
+        num_latents (:obj:`int`, `optional`, defaults to 256):
             The number of latents.
-        d_latents (:obj:`int`, `optional`, defaults to 1024):
+        d_latents (:obj:`int`, `optional`, defaults to 1280):
             Dimension of the latent embeddings.
         d_model (:obj:`int`, `optional`, defaults to 768):
             Dimension of the inputs.
@@ -50,8 +50,8 @@ class PerceiverConfig(PretrainedConfig):
             The number of self-attention layers per block.
         num_cross_attention_heads (:obj:`int`, `optional`, defaults to 1):
             Number of attention heads for each cross-attention layer in the Transformer encoder.
-        intermediate_size (:obj:`int`, `optional`, defaults to 1024):
-            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        widening_factor (:obj:`int`, `optional`, defaults to 1):
+            Dimension of the feed-forward layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
@@ -66,7 +66,7 @@ class PerceiverConfig(PretrainedConfig):
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         use_query_residual (:obj:`float`, `optional`, defaults to :obj:`False`):
-            Whether to add a query residual in the cross-attention layer.
+            Whether to add a query residual in the cross-attention layer(s).
 
     Example::
 
@@ -85,14 +85,14 @@ class PerceiverConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_latents=512,
-        d_latents=1024,
+        num_latents=256,
+        d_latents=1280,
         d_model=768,
         num_blocks=8,
         num_self_attends_per_block=6,
         num_self_attention_heads=8,
         num_cross_attention_heads=1,
-        intermediate_size=1024,
+        widening_factor=1,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -100,6 +100,7 @@ class PerceiverConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         is_encoder_decoder=False,
+        use_query_residual=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -111,10 +112,11 @@ class PerceiverConfig(PretrainedConfig):
         self.num_self_attends_per_block = num_self_attends_per_block
         self.num_self_attention_heads = num_self_attention_heads
         self.num_cross_attention_heads = num_cross_attention_heads
-        self.intermediate_size = intermediate_size
+        self.widening_factor = widening_factor
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.position_embedding_init_scale = position_embedding_init_scale
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.use_query_residual = use_query_residual
