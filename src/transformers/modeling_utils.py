@@ -1173,7 +1173,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         _fast_init = kwargs.pop("_fast_init", True)
         torch_dtype = kwargs.pop("torch_dtype", None)
         low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", False)
-
+        # XXX: low_cpu_mem_usage requires pt-1.9.0 or higher and no deepspeed
         from_pt = not (from_tf | from_flax)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
