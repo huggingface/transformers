@@ -265,11 +265,11 @@ def compute_contrastive_loss(
     # => Shape [1, num_negatives] x batch_size x seq_length
     loss_logits = loss_logits / logits_temp
 
-    neg_is_pos = (quantized_features == quantized_negatives).all(-1)
+    neg_is_pos = (jax.numpy.abs((quantized_negatives - quantized_features)).sum(-1) < 1e-2)
     neg_is_pos = jnp.concatenate([jnp.full((1,) + loss_logits.shape[1:], False), neg_is_pos], axis=0)
 
     # make sure incorrectly sampled vectors don't contribute to loss
-    loss_logits = jnp.where(neg_is_pos, -1e20, loss_logits)
+    loss_logits = jnp.where(neg_is_pos, -1e9, loss_logits)
 
     # => Shape batch_size*sequence_length x [1, num_negatives]
     num_losses = batch_size * sequence_length
