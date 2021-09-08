@@ -1728,7 +1728,7 @@ For example for a pretrained model:
 .. code-block:: python
 
     from transformers.deepspeed import HfDeepSpeedConfig
-    from transformers import AutoModel
+    from transformers import AutoModel, deepspeed
 
     ds_config = { ... } # deepspeed config object or path to the file
     # must run before instantiating the model
@@ -1741,7 +1741,7 @@ or for non-pretrained model:
 .. code-block:: python
 
     from transformers.deepspeed import HfDeepSpeedConfig
-    from transformers import AutoModel, AutoConfig
+    from transformers import AutoModel, AutoConfig, deepspeed
 
     ds_config = { ... } # deepspeed config object or path to the file
     # must run before instantiating the model
