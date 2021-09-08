@@ -52,11 +52,9 @@ class PerceiverEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.latents = nn.Parameter(torch.randn(config.num_latents, config.d_latents))
-        # self.position_embeddings = nn.Parameter(torch.zeros(1, config.num_latents, config.d_latents))
 
     def forward(self, batch_size):
         embeddings = self.latents.expand(batch_size, -1, -1)  # Thanks, Phil Wang
-        # embeddings = embeddings + self.position_embeddings
 
         return embeddings
 

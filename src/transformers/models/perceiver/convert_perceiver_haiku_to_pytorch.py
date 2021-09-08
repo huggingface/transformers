@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn as nn
 
 import haiku as hk
 from transformers import PerceiverConfig, PerceiverModel
@@ -31,12 +32,58 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
+def prepare_dummy_inputs():
+    # here we prepare a dummy input for MLM
+    def to_int(inputs: str) -> np.ndarray:
+        if isinstance(inputs, str):
+            inputs = inputs.encode("utf-8")
+        encoded = np.frombuffer(inputs, np.uint8).astype(np.int32)
+        encoded = encoded + 6
+        return encoded.astype(np.int32)
+
+    def pad(max_sequence_length: int, inputs, input_mask):
+        input_len = inputs.shape[1]
+        assert input_len <= max_sequence_length
+        pad_len = max_sequence_length - input_len
+        padded_inputs = np.pad(inputs, pad_width=((0, 0), (0, pad_len)), constant_values=0)
+        padded_mask = np.pad(input_mask, pad_width=((0, 0), (0, pad_len)), constant_values=0)
+        return padded_inputs, padded_mask
+
+    input_str = "This is an incomplete sentence where some words are missing."
+    input_tokens = to_int(input_str)
+
+    # Mask " missing.". Note that the model performs much better if the masked chunk
+    # starts with a space.
+    input_tokens[51:60] = 3
+    inputs = input_tokens[None]
+    input_mask = np.ones_like(inputs)
+    inputs, input_mask = pad(2048, inputs, input_mask)
+    inputs = torch.from_numpy(inputs)
+    input_mask = torch.from_numpy(input_mask)
+
+    return inputs, input_mask
+
+
+class TextPreProcessor(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.embeddings = nn.Embedding(num_embeddings=262, embedding_dim=768)
+        self.position_embeddings = nn.Parameter(torch.zeros(1, 2048, 768))
+
+    def __call__(self, inputs):
+
+        embeddings = self.embeddings(inputs)
+        embeddings = embeddings + self.position_embeddings
+
+        return embeddings
+
+
 def rename_keys(state_dict):
     for name in list(state_dict):
         param = state_dict.pop(name)
 
-        # for now, let's ignore the following parameters
-        if "decoder" in name or (name in ["trainable_position_encoding/pos_embs", "embed/embeddings"]):
+        # for now, let's skip the decoder parameters
+        if "decoder" in name:
             print("Skipping parameter:", name)
             continue
 
@@ -135,11 +182,25 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
     model = PerceiverModel(config)
     model.eval()
 
-    # load weights
+    # rename keys
     rename_keys(state_dict)
+
+    # prepare input, by embedding it
+    inputs, input_mask = prepare_dummy_inputs()
+    preprocessor = TextPreProcessor()
+    preprocessor.embeddings.weight = nn.Parameter(state_dict["embed.embeddings"])
+    del state_dict["embed.embeddings"]
+    preprocessor.position_embeddings.weight = nn.Parameter(state_dict["trainable_position_encoding.pos_embs"])
+    del state_dict["trainable_position_encoding.pos_embs"]
+    inputs = preprocessor(inputs)
+
+    # load weights
     model.load_state_dict(state_dict)
 
+    # forward pass
     # TODO: verify output
+    outputs = model(inputs=inputs, attention_mask=input_mask)
+    print("Shape of outputs:", outputs.last_hidden_state.shape)
 
     # Finally, save files
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
