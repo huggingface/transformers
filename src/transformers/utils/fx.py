@@ -1,7 +1,9 @@
 import copy
 import functools
 import inspect
-from typing import Any, Dict, List, Optional, Union
+import operator
+import random
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from packaging import version
@@ -26,10 +28,33 @@ from .. import (
     PreTrainedModel,
     logging,
 )
+from ..models.albert import AlbertModel
 from ..models.auto import get_values
+from ..models.bert import BertModel
+from ..models.distilbert import DistilBertModel
+from ..models.electra import ElectraModel
+from ..models.gpt2 import GPT2Model
+from ..models.gpt_neo import GPTNeoModel
+from ..models.gptj import GPTJModel
+from ..models.megatron_bert import MegatronBertModel
+from ..models.mobilebert import MobileBertModel
+from ..models.t5 import T5Model
 
 
 logger = logging.get_logger(__name__)
+
+SUPPORTED_ARCHITECTURES = (
+    AlbertModel,
+    BertModel,
+    DistilBertModel,
+    ElectraModel,
+    GPT2Model,
+    GPTJModel,
+    GPTNeoModel,
+    MegatronBertModel,
+    MobileBertModel,
+    T5Model,
+)
 
 
 class HFProxy(Proxy):
@@ -252,6 +277,8 @@ class HFTracer(Tracer):
             setattr(model, cache_name, getattr(clone, cache_name))
 
     def trace(self, root: PreTrainedModel, concrete_args: Optional[Dict[str, Any]] = None, method_names=None) -> Graph:
+        # if not isinstance(root, SUPPORTED_ARCHITECTURES):
+        #     raise ValueError(f"{type(root)} not supported, supported architectures: {','.join(SUPPORTED_ARCHITECTURES)}")
         sig = inspect.signature(root.forward)
         input_names = sig.parameters.keys() - concrete_args.keys()
 
@@ -318,6 +345,310 @@ class HFTracer(Tracer):
         return super().create_arg(a)
 
 
+def _insert_batch_size_node(gm: GraphModule) -> Tuple[GraphModule, Node]:
+    """Helper function that inserts a node that retrieves the batch size dynamically from the input of the model."""
+    graph = gm.graph
+    input_names = gm.dummy_inputs.keys()
+    batch_size_node = None
+    for node in graph.nodes:
+        if node.op == "placeholder" and node.name in input_names:
+            with graph.inserting_after(node):
+                batch_size_node = graph.call_method("size", args=(node, 0))
+
+    if batch_size_node is None:
+        raise ValueError("Could not insert the node that computes the batch size")
+
+    graph.lint()
+    gm.recompile()
+
+    return gm, batch_size_node
+
+
+def _insert_encoder_sequence_length_node(gm: GraphModule) -> Tuple[GraphModule, Node]:
+    """
+    Helper function that inserts a node that retrieves the encoder sequence length dynamically from the input of the
+    model.
+    """
+    graph = gm.graph
+    input_names = gm.dummy_inputs.keys()
+    encoder_sequence_length_node = None
+    for node in graph.nodes:
+        if (node.op == "placeholder") and ("decoder" not in node.name) and (node.name in input_names):
+            with graph.inserting_after(node):
+                encoder_sequence_length_node = graph.call_method("size", args=(node, 1 if gm.num_choices < 0 else 2))
+
+    if encoder_sequence_length_node is None:
+        raise ValueError("Could not insert the node that computes the encoder sequence length")
+
+    graph.lint()
+    gm.recompile()
+
+    return gm, encoder_sequence_length_node
+
+
+def _change_view_methods(gm: GraphModule, mapping: Union[Dict[Node, int], Dict[int, Node]]) -> GraphModule:
+    """
+    Changes arguments of view ops that refer to static batch size / sequence lengths to make them refer to the
+    batch_size / sequence_length nodes.
+    """
+    graph = gm.graph
+    for node in graph.nodes:
+        if node.op == "call_method" and node.target == "view":
+            if isinstance(node.args[1], tuple):
+                node.args = (node.args[0], *node.args[1])
+            node.args = tuple((mapping.get(arg, arg) for arg in node.args))
+    graph.lint()
+    gm.recompile()
+    return gm
+
+
+def _do_something(gm: GraphModule, mapping) -> GraphModule:
+    # TODO: is this really useful compared to patch_arguments?
+    graph = gm.graph
+    for node in graph.nodes:
+        if node.op == "call_function" and node.target == operator.getitem:
+            indices = node.args[1]
+            if isinstance(indices, tuple):
+                new_indices = []
+                for idx in indices:
+                    if isinstance(idx, slice):
+                        new_indices.append(
+                            slice(
+                                mapping.get(idx.start, idx.start),
+                                mapping.get(idx.stop, idx.stop),
+                                mapping.get(idx.step, idx.step),
+                            )
+                        )
+                    elif isinstance(idx, int):
+                        new_indices.append(mapping.get(idx, idx))
+                    else:
+                        new_indices.append(idx)
+
+                node.args = (node.args[0], tuple(new_indices))
+            else:
+                node.args = (node.args[0], mapping.get(node.args[1], node.args[1]))
+
+        graph.lint()
+        gm.recompile()
+
+        return gm
+
+
+def _register_position_ids_and_replace(gm: GraphModule, sequence_length_node) -> GraphModule:
+    """
+    Redefines position_ids (as tracing with static shapes can introduce optimizations that fix position_ids to a value
+    not suitable for dynamic input shapes), and replaces old position_ids usage by the redefined version.
+    """
+
+    graph = gm.graph
+
+    any_buffer = next(gm.buffers())
+    position_ids = torch.arange(gm.config.max_position_embeddings).expand(1, -1).to(any_buffer.device)
+    partial_position_ids = position_ids[:, : gm.static_sequence_length[0]]
+    position_ids_buffer_name = None
+    for name, buffer in gm.named_buffers():
+        if (
+            isinstance(buffer, torch.Tensor)
+            and partial_position_ids.size() == buffer.size()
+            and torch.all(partial_position_ids == buffer)
+        ):
+            position_ids_buffer_name = name
+            gm.register_buffer(name, position_ids)
+
+    inserted = False
+    position_ids_node = None
+    for node in graph.nodes:
+        arg_names = [arg.name if isinstance(arg, Node) else "" for arg in node.args]
+        if position_ids_buffer_name in arg_names:
+            if not inserted:
+                with graph.inserting_before(node):
+                    get_position_ids = graph.get_attr(position_ids_buffer_name)
+                with graph.inserting_after(get_position_ids):
+                    position_ids_args = [
+                        get_position_ids,
+                        (slice(None, None, None), slice(None, sequence_length_node, None)),
+                    ]
+                    position_ids_node = graph.call_function(operator.getitem, args=tuple(position_ids_args))
+                inserted = True
+
+            index = arg_names.index(position_ids_buffer_name)
+            old_position_ids_node = node.args[index]
+            old_position_ids_node.replace_all_uses_with(position_ids_node)
+
+    graph.lint()
+    gm.recompile()
+
+    return gm
+
+
+def transform_to_dynamic_input(gm: GraphModule, is_retracing=False) -> GraphModule:
+    """Transformation that enables traced models to perform inference on dynamic input shapes."""
+    graph = gm.graph
+    input_names = gm.dummy_inputs.keys()
+    static2dynamic = {}
+
+    # Inserting the nodes that will fetch the batch size and sequence lengths dynamically.
+    if gm.use_dynamic_batch_size:
+        _, batch_size_node = _insert_batch_size_node(gm)
+        static2dynamic[gm.static_batch_size] = batch_size_node
+        if gm.num_choices > 0:
+            with graph.inserting_after(batch_size_node):
+                static2dynamic[gm.static_batch_size * gm.num_choices] = graph.call_function(
+                    operator.mul, args=(batch_size_node, gm.num_choices)
+                )
+            graph.lint()
+            gm.recompile()
+
+    if gm.use_dynamic_sequence_length:
+        _, encoder_sequence_length_node = _insert_encoder_sequence_length_node(gm)
+        static2dynamic[gm.static_sequence_length[0]] = encoder_sequence_length_node
+
+        # TODO: do the same for the decoder.
+        pass
+
+    gm = _change_view_methods(gm, static2dynamic)
+    gm = _do_something(gm, static2dynamic)
+
+    if (
+        gm.use_dynamic_sequence_length
+        and "position_ids" not in input_names
+        and hasattr(gm.config, "max_position_embeddings")
+    ):
+        gm = _register_position_ids_and_replace(gm, encoder_sequence_length_node)
+
+    # for node in graph.nodes:
+
+    # if dynamic_batch_size or dynamic_encoder_sequence_length:
+    #     bs = mapping.get(gm.static_batch_size, gm.static_batch_size)
+    #     encoder_seqlen = mapping.get(gm.static_sequence_length[0], gm.static_sequence_length[0])
+    #     with graph.inserting_after(bs if isinstance(bs, Node) else encoder_seqlen):
+    #         mapping[gm.static_batch_size * gm.static_sequence_length[0]] = graph.call_function(
+    #             operator.mul,
+    #             args=(bs, encoder_seqlen)
+    #         )
+
+    # import pdb; pdb.set_trace()
+
+    # if (
+    #     need_to_insert_decoder_shape_node
+    #     and node.op == "placeholder"
+    #     and "decoder" in node.name
+    #     and node.name in input_names
+    # ):
+    #     with graph.inserting_after(node):
+    #         if static_decoder_sequence_length > 0:
+    #             decoder_sequence_length_node = graph.call_method("size", args=(node, 1))
+    #             mapping[static_decoder_sequence_length] = decoder_sequence_length_node
+    #     need_to_insert_decoder_shape_node = False
+
+    graph.lint()
+    gm.recompile()
+
+    gm.static2dynamic = static2dynamic
+    gm.dynamic2static = {v: k for (k, v) in static2dynamic.items()}
+
+    return gm
+
+
+def patch_arguments(gm: GraphModule, mapping) -> GraphModule:
+    """Helper function that patches node arguments (supports regular types, tuples and slices) using the mapping."""
+
+    def _patch_slice(s, mapping):
+        return slice(mapping.get(s.start, s.start), mapping.get(s.stop, s.stop), mapping.get(s.step, s.step))
+
+    graph = gm.graph
+    supported_types = (Node, str, int, float)
+    for node in graph.nodes:
+        new_args = []
+        for arg in node.args:
+            if isinstance(arg, tuple):
+                new_arg = []
+                for a in arg:
+                    if isinstance(a, slice):
+                        print("node", node)
+                        new_arg.append(_patch_slice(a, mapping))
+                    else:
+                        new_arg.append(mapping.get(a, a))
+                new_args.append(tuple(new_arg))
+            elif isinstance(arg, slice):
+                new_args.append(_patch_slice(arg, mapping))
+            elif isinstance(arg, supported_types):
+                new_args.append(mapping.get(arg, arg))
+            else:
+                new_args.append(arg)
+        node.args = tuple(new_args)
+
+    graph.lint()
+    gm.recompile()
+
+    return gm
+
+
+def prepare_for_retracing(gm: GraphModule) -> Tuple[GraphModule, Dict[str, Any]]:
+    """
+    Prepares a GraphModule produced by symbolic_trace for retracing by:
+
+        - Caching all the attributes specific to the way the model was initially traced
+        - Patching back the model to a "static input shapes" version if it was traced to accept dynamic input shapes
+    For instance, the need to retrace a GraphModule can happen when applying quantization.
+    """
+    attributes_to_keep = [
+        "config",
+        "num_choices",
+        "dummy_inputs",
+        "use_dynamic_batch_size",
+        "use_dynamic_sequence_length",
+        "static_batch_size",
+        "static_sequence_length",
+        "static2dynamic",
+        "dynamic2static",
+    ]
+    attributes = {k: getattr(gm, k, None) for k in attributes_to_keep}
+    gm = patch_arguments(gm, gm.dynamic2static)
+
+    return gm, attributes
+
+
+def restore_after_retracing(gm: GraphModule, attributes: Dict[str, Any]) -> GraphModule:
+    """Restores a GraphModule that was retraced to its initial state in terms of static / dynamic input shapes."""
+    for name, attr in attributes.items():
+        setattr(gm, name, attr)
+
+    gm = transform_to_dynamic_input(gm, is_retracing=True)
+    gm = patch_arguments(gm, gm.static2dynamic)
+
+    return gm
+
+
+def retrace_graph_with(
+    gm: GraphModule, tracer: Tracer = None, func: Callable[[GraphModule], GraphModule] = None
+) -> GraphModule:
+    """
+    Retraces a GraphModule by either using a tracer or a function using a tracer (for instance
+    torch.quantization.quantize_fx.prepare_fx). It takes care of preparing the model for retracing, retracing it and
+    restoring anything necessary after the retrace.
+    """
+    if tracer is None and func is None:
+        raise ValueError("either a tracer or a function using a tracer must be provided.")
+    elif tracer is not None and func is not None:
+        raise ValueError("either provide a tracer or a function using a tracer, but not both.")
+    else:
+        gm, attributes = prepare_for_retracing(gm)
+        tracing_func = tracer.trace if tracer else func
+        traced = tracing_func(gm)
+        traced = restore_after_retracing(traced, attributes)
+        return traced
+
+
+def _generate_random_int(low=3, high=100, forbidden_values=None):
+    if forbidden_values is None:
+        forbidden_values = []
+    value = random.randint(low, high)
+    while value in forbidden_values:
+        value = random.randint(low, high)
+    return value
+
+
 def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
@@ -363,9 +694,46 @@ def symbolic_trace(
     # TODO: how to handle the case of the "return_dict" parameter.
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
+    # Preparing HFTracer batch_size and sequence_lenght values for potential dynamic axes.
+    use_dynamic_batch_size = batch_size <= 0
+    if isinstance(sequence_length, (list, tuple)):
+        use_dynamic_sequence_length = sequence_length[0] <= 0 or sequence_length[1] <= 0
+    else:
+        use_dynamic_sequence_length = sequence_length <= 0
+
+    if use_dynamic_batch_size or use_dynamic_sequence_length:
+        forbidden_values = [
+            model.config.num_attention_heads,
+            model.config.hidden_size,
+            model.config.hidden_size // model.config.num_attention_heads,
+        ]
+        if use_dynamic_batch_size:
+            batch_size = _generate_random_int(forbidden_values=forbidden_values)
+        forbidden_values.append(batch_size)
+        if use_dynamic_sequence_length:
+            encoder_sequence_length = _generate_random_int(forbidden_values=forbidden_values)
+            forbidden_values.append(encoder_sequence_length)
+            decoder_sequence_length = _generate_random_int(forbidden_values=forbidden_values)
+            sequence_length = [encoder_sequence_length, decoder_sequence_length]
+
+    # Tracing.
     tracer = HFTracer(batch_size=batch_size, sequence_length=sequence_length, num_choices=num_choices)
 
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
+
+    traced.config = copy.deepcopy(model.config)
+    traced.num_choices = num_choices
+    traced.dummy_inputs = {}
+
+    for name in input_names:
+        traced.dummy_inputs.update(tracer._generate_dummy_input(model, name))
+
+    traced.use_dynamic_batch_size = use_dynamic_batch_size
+    traced.use_dynamic_sequence_length = use_dynamic_sequence_length
+    traced.static_batch_size = batch_size
+    traced.static_sequence_length = sequence_length
+
+    traced = transform_to_dynamic_input(traced)
 
     return traced

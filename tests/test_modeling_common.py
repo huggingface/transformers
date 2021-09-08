@@ -606,7 +606,14 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+    def test_torch_fx_dynamic_axes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        import pdb
+
+        pdb.set_trace()
+        self._create_and_check_torch_fx_tracing(config, inputs_dict, dynamic_axes=True)
+
+    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False, dynamic_axes=False):
         if not is_torch_fx_available():
             return
 
@@ -639,12 +646,11 @@ class ModelTesterMixin:
                     traced_model = symbolic_trace(
                         model,
                         input_names,
-                        batch_size=batch_size,
-                        sequence_length=[encoder_sequence_length, decoder_sequence_length],
+                        batch_size=batch_size if not dynamic_axes else -1,
+                        sequence_length=[encoder_sequence_length, decoder_sequence_length] if not dynamic_axes else -1,
                     )
 
                     traced_output = traced_model(**filtered_inputs)
-
                 else:
                     input_names = ["input_ids", "attention_mask", "token_type_ids"]
                     input_ids = inputs["input_ids"]
@@ -678,8 +684,8 @@ class ModelTesterMixin:
                     traced_model = symbolic_trace(
                         model,
                         input_names,
-                        batch_size=batch_size,
-                        sequence_length=sequence_length,
+                        batch_size=batch_size if not dynamic_axes else -1,
+                        sequence_length=sequence_length if not dynamic_axes else -1,
                         num_choices=num_choices,
                     )
                     traced_output = traced_model(**filtered_inputs)
