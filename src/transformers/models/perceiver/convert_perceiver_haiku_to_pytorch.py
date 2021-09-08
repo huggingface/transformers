@@ -68,12 +68,13 @@ class TextPreProcessor(nn.Module):
     def __init__(self):
         super().__init__()
         self.embeddings = nn.Embedding(num_embeddings=262, embedding_dim=768)
-        self.position_embeddings = nn.Parameter(torch.zeros(1, 2048, 768))
+        self.position_embeddings = nn.Embedding(2048, 768)
 
     def __call__(self, inputs):
 
         embeddings = self.embeddings(inputs)
-        embeddings = embeddings + self.position_embeddings
+        position_ids = torch.arange(0, 2048)
+        embeddings = embeddings + self.position_embeddings(position_ids)
 
         return embeddings
 
@@ -193,6 +194,9 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
     preprocessor.position_embeddings.weight = nn.Parameter(state_dict["trainable_position_encoding.pos_embs"])
     del state_dict["trainable_position_encoding.pos_embs"]
     inputs = preprocessor(inputs)
+
+    print("Shape of embedded inputs:", inputs.shape)
+    print("Embedded inputs:", inputs[0, :3, :3])
 
     # load weights
     model.load_state_dict(state_dict)
