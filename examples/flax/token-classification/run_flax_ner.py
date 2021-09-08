@@ -44,7 +44,8 @@ from transformers import (
     HfArgumentParser,
     TrainingArguments,
 )
-from transformers.utils.versions import check_min_version, require_version
+from transformers.utils import check_min_version
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
