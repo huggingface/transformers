@@ -38,14 +38,6 @@ Next we clone the model repository to add the tokenizer and model files.
 git clone https://huggingface.co/<your-username>/bert-ner-conll2003-test
 ```
 
-To ensure that all tensorboard traces will be uploaded correctly, we need to 
-track them. You can run the following command inside your model repo to do so.
-
-```
-cd bert-ner-conll2003-test
-git lfs track "*tfevents*"
-```
-
 Great, we have set up our model repository. During training, we will automatically
 push the training logs and model weights to the repo.
 
