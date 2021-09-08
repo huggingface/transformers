@@ -277,11 +277,6 @@ _default_endpoint = "https://moon-staging.huggingface.co" if _staging_mode else 
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", _default_endpoint)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
-PRESET_MIRROR_DICT = {
-    "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
-    "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
-}
-
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
@@ -1262,12 +1257,16 @@ def hf_bucket_url(
         filename = f"{subfolder}/{filename}"
 
     if mirror:
-        endpoint = PRESET_MIRROR_DICT.get(mirror, mirror)
+        logger.warning(
+            "Deprecated: The mirroring is deprecated."
+            "Tuna and BFSU mirrors are no longer available."
+            "We will soon provide a self-hosted alternative."
+        )
         legacy_format = "/" not in model_id
         if legacy_format:
-            return f"{endpoint}/{model_id}-{filename}"
+            return f"{mirror}/{model_id}-{filename}"
         else:
-            return f"{endpoint}/{model_id}/{filename}"
+            return f"{mirror}/{model_id}/{filename}"
 
     if revision is None:
         revision = "main"
