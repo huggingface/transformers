@@ -1174,9 +1174,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         torch_dtype = kwargs.pop("torch_dtype", None)
         low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", False)
 
-        # XXX: make a param
-        low_cpu_mem_usage = True
-
         from_pt = not (from_tf | from_flax)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
@@ -1398,7 +1395,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             break
                     if matched:
                         # print(k)
+
+                        # XXX: the approach of switching the whole sub-module to meta, is fragile
+                        # since if this sub-module inits some buffer that is not in the state_dict,
+                        # the code will break once we try to use this module, since that buffer will
+                        # remain on meta. Instead we should be able to switch to meta specific
+                        # params that we know will be replaced by loaded state_dict data, but I'm
+                        # yet to find how to do that and be able to re-attach them back into the
+                        # model without pytorch crashing.
                         m.to("meta")
+
                         # p = getattr(m, split_name[0])
                         # print(p.device)
                         # p = p.to(device='meta')
