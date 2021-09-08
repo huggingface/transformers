@@ -19,7 +19,7 @@ import librosa
 import optax
 from flax import jax_utils, traverse_util
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard
+from flax.training.common_utils import get_metrics, shard
 from transformers import (
     FlaxWav2Vec2ForPreTraining,
     HfArgumentParser,
@@ -272,7 +272,7 @@ def compute_contrastive_loss(
     loss_logits = jnp.where(neg_is_pos, -1e9, loss_logits)
 
     # => Shape batch_size*sequence_length x [1, num_negatives]
-    predictions = loss_logits.transpose(1, 2, 0).reshape(-1, loss_logits.shape[0])
+    predictions = loss_logits.transpose(2, 1, 0).reshape(-1, loss_logits.shape[0])
 
     target_mask = mask_time_indices.transpose(1, 0).flatten()
 
@@ -280,7 +280,7 @@ def compute_contrastive_loss(
     contrastive_loss = contrastive_loss.sum()
 
     # logs during training
-    accuracy = (predictions.argmax(-1) == 0).sum() / num_losses
+    accuracy = ((predictions.argmax(-1) * target_mask) == 0).sum() / target_mask.sum()
     neg_is_pos_real = jnp.where(jnp.broadcast_to(mask_time_indices[None, :, :], neg_is_pos.shape), neg_is_pos, 0)
     percentage_zeroed_out_vectors = neg_is_pos_real.sum() / (num_negatives * mask_time_indices.sum())
     logs = {"acc": accuracy, "%_neg_is_pos": percentage_zeroed_out_vectors}
@@ -535,10 +535,13 @@ def main():
         # TODO(PVP) - gradients should already be averaged here - is this necessary?
         grad = jax.lax.pmean(grad, "batch")
 
+        # compute gradient norm for monitoring
+        grad_norm = jnp.linalg.norm(jax.tree_util.tree_leaves(jax.tree_map(jnp.linalg.norm, grad)))
+
         # apply gradients
         new_state = state.apply_gradients(grads=grad)
 
-        metrics = {"loss": loss, "learn_rate": linear_decay_lr_schedule_fn(state.step)}
+        metrics = {"loss": loss, "learn_rate": linear_decay_lr_schedule_fn(state.step), "grad_norm": grad_norm}
         metrics.update(logs)
 
         metrics = jax.lax.pmean(metrics, axis_name="batch")
