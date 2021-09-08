@@ -1285,12 +1285,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if state_dict is None:
                 try:
                     state_dict = torch.load(resolved_archive_file, map_location="cpu")
-                except Exception:
-                    raise OSError(
-                        f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
-                        f"at '{resolved_archive_file}'"
-                        "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
-                    )
+                except Exception as e:
+                    try:
+                        with open(resolved_archive_file) as f:
+                            if f.read().startswith("version"):
+                                raise OSError(
+                                    "You seem to have cloned a repository without having git-lfs installed. Please install "
+                                    "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
+                                    "you cloned."
+                                )
+                            else:
+                                raise ValueError from e
+                    except (UnicodeDecodeError, ValueError):
+                        raise OSError(
+                            f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
+                            f"at '{resolved_archive_file}'"
+                            "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
+                        )
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
