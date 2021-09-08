@@ -898,7 +898,7 @@ class Pipeline(_ScikitCompat):
                 return outputs
             else:
                 return self.run_multi(inputs, preprocess_params, forward_params, postprocess_params)
-        elif Dataset and isinstance(inputs, Dataset):
+        elif Dataset is not None and isinstance(inputs, Dataset):
             return self.get_iterator(inputs, num_workers, preprocess_params, forward_params, postprocess_params)
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
