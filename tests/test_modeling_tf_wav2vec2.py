@@ -516,9 +516,7 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(2)
 
-        input_values = processor(
-            input_speech, return_tensors="tf", padding=True, truncation=True, sampling_rate=16000
-        ).input_values
+        input_values = processor(input_speech, return_tensors="tf", padding=True, sampling_rate=16000).input_values
 
         logits = model(input_values).logits
 
@@ -537,14 +535,14 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
 
-        inputs = processor(input_speech, return_tensors="tf", padding=True, truncation=True)
+        inputs = processor(input_speech, return_tensors="tf", padding=True, sampling_rate=16000)
 
         input_values = inputs.input_values
         attention_mask = inputs.attention_mask
 
         logits = model(input_values, attention_mask=attention_mask).logits
 
-        predicted_ids = tf.argmax(logits, dim=-1)
+        predicted_ids = tf.argmax(logits, axis=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
 
         EXPECTED_TRANSCRIPTIONS = [
