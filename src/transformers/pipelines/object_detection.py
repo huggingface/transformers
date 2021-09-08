@@ -165,7 +165,6 @@ class ObjectDetectionPipeline(Pipeline):
             bbox (Dict[str, int]): Dict containing the coordinates in corners format.
         """
         if self.framework != "pt":
-            # guarding `box: "torch.Tensor"`
             raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")
         xmin, ymin, xmax, ymax = box.int().tolist()
         bbox = {
