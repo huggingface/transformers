@@ -1101,9 +1101,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             _fast_init(:obj:`bool`, `optional`, defaults to `:obj:`True`):
                 Whether or not to disable fast initialization.
             low_cpu_mem_usage(:obj:`bool`, `optional`, defaults to `:obj:`False`):
-                Tries to not use more than 1x model size in CPU memory
+                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
             torch_dtype (:obj:`str` or :obj:`torch.dtype`, `optional`):
-                Whether or not to disable fast initialization.
                 Override the default ``torch.dtype`` and load the model under this dtype. If ``"auto"`` is passed the
                 dtype will be automatically derived from the model's weights.
 
@@ -1318,8 +1317,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if low_cpu_mem_usage:
                 # only float state_dict keys (that can be fed to nn.Parameter)
-                low_cpu_mem_state_dict_keys = [k for k,v in state_dict.items() if v.is_floating_point()]
-                del state_dict # save memory - will reload again
+                # XXX: this currently skips registered buffers
+                low_cpu_mem_state_dict_keys = [k for k,v in state_dict.items()]# if v.is_floating_point() or v.is_complex()]
+                del state_dict # save memory - will reload again later
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1395,10 +1395,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             matched = False
                             break
                     if matched:
-                        m = m.to(device='meta')
-
-                # for n,p in model.named_parameters():
-                #     print(f"{p.device} {n}")
+                        #print(k)
+                        m.to("meta")
+                        # p = getattr(m, split_name[0])
+                        # print(p.device)
+                        # p = p.to(device='meta')
+                        # print(p.device)
+                        # #setattr(m, split_name[0], getattr(m, split_name[0]).to(device='meta'))
+                        # #setattr(m, split_name[0], None)#p)
+                        # print(m)
 
                 # only now can load state_dict
                 state_dict = torch.load(resolved_archive_file, map_location="cpu")
@@ -1416,9 +1421,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             matched = False
                             break
                     if matched:
-                        setattr(m, split_name[0], torch.nn.Parameter(state_dict[k]))
+                        #print(k)
+                        persistent_buffers = {k: v for k, v in m._buffers.items() if k not in m._non_persistent_buffers_set}
+                        #print("KEYS", persistent_buffers.keys())
+                        #m.to("cpu")
+                        if split_name[0] in persistent_buffers:
+                            m._buffers[split_name[0]] = state_dict[k]
+                        else:
+                            setattr(m, split_name[0], torch.nn.Parameter(state_dict[k]))
 
                 del state_dict
+
+                # for n,p in model.named_parameters():
+                #     print(f"{p.device} {n}")
+
+                # for n,p in model.named_buffers():
+                #     print(f"{p.device} {n}")
 
             else:
 
