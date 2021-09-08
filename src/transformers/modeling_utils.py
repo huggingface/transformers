@@ -1318,8 +1318,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if low_cpu_mem_usage:
                 # only float state_dict keys (that can be fed to nn.Parameter)
                 # XXX: this currently skips registered buffers
-                low_cpu_mem_state_dict_keys = [k for k,v in state_dict.items()]# if v.is_floating_point() or v.is_complex()]
-                del state_dict # save memory - will reload again later
+                low_cpu_mem_state_dict_keys = [
+                    k for k, v in state_dict.items()
+                ]  # if v.is_floating_point() or v.is_complex()]
+                del state_dict  # save memory - will reload again later
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1384,7 +1386,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # putting those on the meta device
                 for k in low_cpu_mem_state_dict_keys:
                     split_name = k.split(".")
-                    #print(k)
+                    # print(k)
                     m = model
                     matched = True
                     while len(split_name) > 1:
@@ -1395,7 +1397,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             matched = False
                             break
                     if matched:
-                        #print(k)
+                        # print(k)
                         m.to("meta")
                         # p = getattr(m, split_name[0])
                         # print(p.device)
@@ -1421,10 +1423,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             matched = False
                             break
                     if matched:
-                        #print(k)
-                        persistent_buffers = {k: v for k, v in m._buffers.items() if k not in m._non_persistent_buffers_set}
-                        #print("KEYS", persistent_buffers.keys())
-                        #m.to("cpu")
+                        # print(k)
+                        persistent_buffers = {
+                            k: v for k, v in m._buffers.items() if k not in m._non_persistent_buffers_set
+                        }
+                        # print("KEYS", persistent_buffers.keys())
+                        # m.to("cpu")
                         if split_name[0] in persistent_buffers:
                             m._buffers[split_name[0]] = state_dict[k]
                         else:
