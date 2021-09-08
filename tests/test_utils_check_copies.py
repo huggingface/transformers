@@ -133,4 +133,11 @@ class CopyCheckTester(unittest.TestCase):
         )
 
         self.assertFalse(num_models_equal)
-        self.assertTrue(converted_md_list == converted_md_list_sample)
+        self.assertEqual(converted_md_list, converted_md_list_sample)
+
+        num_models_equal, converted_md_list = check_copies.convert_to_localized_md(
+            md_list, converted_md_list, localized_readme["format_model_list"]
+        )
+
+        # Check whether the number of models is equal to README.md after conversion.
+        self.assertTrue(num_models_equal)

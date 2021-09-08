@@ -33,20 +33,20 @@ FULL_COPIES = {"examples/tensorflow/question-answering/utils_qa.py": "examples/p
 
 LOCALIZED_READMES = {
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
-    # "README.md" : {
-    #    "start_prompt" : "🤗 Transformers currently provides the following architectures",
-    #    "end_prompt" : "1. Want to contribute a new model?",
-    #    "format_model_list" : "**[{title}]({model_link})** (from {paper_institutions}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
-    # },
+    "README.md": {
+        "start_prompt": "🤗 Transformers currently provides the following architectures",
+        "end_prompt": "1. Want to contribute a new model?",
+        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+    },
     "README_zh-hans.md": {
         "start_prompt": "🤗 Transformers 目前支持如下的架构",
         "end_prompt": "1. 想要贡献新的模型？",
-        "format_model_list": "**[{title}]({model_link})** (来自 {paper_institutions}) 伴随论文 {paper_title_link} 由 {paper_authors} 发布。{supplements}",
+        "format_model_list": "**[{title}]({model_link})** (来自 {paper_affiliations}) 伴随论文 {paper_title_link} 由 {paper_authors} 发布。{supplements}",
     },
     "README_zh-hant.md": {
         "start_prompt": "🤗 Transformers 目前支援以下的架構",
         "end_prompt": "1. 想要貢獻新的模型？",
-        "format_model_list": "**[{title}]({model_link})** (from {paper_institutions}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
     },
 }
 
@@ -319,31 +319,42 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
     """Convert `model_list` to each localized README."""
 
     def _rep(match):
-        title, model_link, paper_institutions, paper_title_link, paper_authors, supplements = match.groups()
+        title, model_link, paper_affiliations, paper_title_link, paper_authors, supplements = match.groups()
         return format_str.format(
             title=title,
             model_link=model_link,
-            paper_institutions=paper_institutions,
+            paper_affiliations=paper_affiliations,
             paper_title_link=paper_title_link,
             paper_authors=paper_authors,
             supplements=" " + supplements.strip() if len(supplements) != 0 else "",
         )
 
-    _re = re.compile(
-        r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
+    # This regex captures metadata from an English model description, including model title, model link,
+    # affiliations of the paper, title of the paper, authors of the paper, and supplemental data (see DistilBERT for exmaple).
+    _re_capture_meta = re.compile(
+        r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
 
     num_models_equal = True
-    localized_model_index = {
-        re.search(r"\*\*\[([^\]]*)", line).groups()[0]: line for line in localized_model_list.strip().split("\n")
-    }
+
+    if len(localized_model_list) == 0:
+        localized_model_index = {}
+    else:
+        try:
+            localized_model_index = {
+                re.search(r"\*\*\[([^\]]*)", line).groups()[0]: line
+                for line in localized_model_list.strip().split("\n")
+            }
+        except AttributeError:
+            raise AttributeError("A model name in localized READMEs cannot be recognized.")
 
     for model in model_list.strip().split("\n"):
         title = re.search(r"\*\*\[([^\]]*)", model).groups()[0]
         if title not in localized_model_index:
             num_models_equal = False
-            # add an anchor white space behind model string for regex.
-            localized_model_index[title] = re.sub(_re, _rep, model + " ")
+            # Add an anchor white space behind a model description string for regex.
+            # If metadata cannot be captured, the English version will be directly copied.
+            localized_model_index[title] = re.sub(_re_capture_meta, _rep, model + " ")
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
@@ -387,19 +398,17 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
     )
     md_list = get_model_list(
         filename="README.md",
-        start_prompt="🤗 Transformers currently provides the following architectures",
-        end_prompt="1. Want to contribute a new model?",
+        start_prompt=LOCALIZED_READMES["README.md"]["start_prompt"],
+        end_prompt=LOCALIZED_READMES["README.md"]["end_prompt"],
     )
 
     converted_rst_list = convert_to_rst(md_list, max_per_line=max_per_line)
 
     converted_md_lists = []
     for filename, value in LOCALIZED_READMES.items():
-        _start_prompt, _end_prompt, _format_model_list = (
-            value["start_prompt"],
-            value["end_prompt"],
-            value["format_model_list"],
-        )
+        _start_prompt = value["start_prompt"]
+        _end_prompt = value["end_prompt"]
+        _format_model_list = value["format_model_list"]
 
         localized_md_list = get_model_list(filename, _start_prompt, _end_prompt)
         num_models_equal, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
