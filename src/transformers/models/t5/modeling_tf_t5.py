@@ -882,12 +882,13 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         shifted_input_ids = tf.where(
             shifted_input_ids == -100,
             tf.cast(tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids.dtype),
-            shifted_input_ids
+            shifted_input_ids,
         )
 
         # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids,
-                                                        tf.constant(0, dtype=shifted_input_ids.dtype))
+        assert_gte0 = tf.debugging.assert_greater_equal(
+            shifted_input_ids, tf.constant(0, dtype=shifted_input_ids.dtype)
+        )
 
         # Make sure the assertion op is called by wrapping the result in an identity no-op
         with tf.control_dependencies([assert_gte0]):
