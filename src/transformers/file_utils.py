@@ -1257,11 +1257,8 @@ def hf_bucket_url(
         filename = f"{subfolder}/{filename}"
 
     if mirror:
-        logger.warning(
-            "Deprecated: The mirroring is deprecated."
-            "Tuna and BFSU mirrors are no longer available."
-            "We will soon provide a self-hosted alternative."
-        )
+        if mirror in ["tuna", "bfsu"]:
+            raise ValueError("The Tuna and BFSU mirrors are no longer available. Try removing the mirror argument.")
         legacy_format = "/" not in model_id
         if legacy_format:
             return f"{mirror}/{model_id}-{filename}"
