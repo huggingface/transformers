@@ -120,6 +120,11 @@ def get_class_from_dynamic_module(
     """
     Extracts a class from a module file, present in the local folder or repository of a model.
 
+    .. warning::
+
+        Calling this function will execute the code in the module file found locally or downloaded from the Hub. It
+        should therefore only be called on trusted repos.
+
     Args:
         pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
             This can be either:
