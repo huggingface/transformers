@@ -94,7 +94,7 @@ class PerceiverSelfAttention(nn.Module):
         self.v_channels_per_head = v_channels // num_heads
 
         # Layer normalization
-        self.layernorm = nn.LayerNorm(q_dim)
+        self.layernorm1 = nn.LayerNorm(q_dim)
         self.layernorm2 = nn.LayerNorm(kv_dim) if is_cross_attention else nn.Identity()
 
         # Projection matrices
@@ -120,7 +120,7 @@ class PerceiverSelfAttention(nn.Module):
         output_attentions=False,
     ):
         original_hidden_states = hidden_states
-        hidden_states = self.layernorm(hidden_states)
+        hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
 
         # Project queries, keys and values to a common feature dimension.
@@ -363,7 +363,7 @@ class PerceiverEncoder(nn.Module):
             )
 
         # Construct the cross attention layer.
-        self.cross_attend = PerceiverLayer(
+        self.cross_attention = PerceiverLayer(
             config,
             is_cross_attention=True,
             qk_channels=config.num_cross_attention_heads * 32,
@@ -409,7 +409,7 @@ class PerceiverEncoder(nn.Module):
         all_cross_attentions = () if output_attentions else None
 
         # Apply the cross-attention between the latents (hidden_states) and inputs:
-        layer_outputs = self.cross_attend(
+        layer_outputs = self.cross_attention(
             hidden_states,
             attention_mask=None,
             head_mask=None,
