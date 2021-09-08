@@ -263,9 +263,9 @@ class PerceiverAttention(nn.Module):
 class PerceiverMLP(nn.Module):
     """A Transformer-style dense module to follow attention."""
 
-    def __init__(self, config):
+    def __init__(self, config, widening_factor):
         super().__init__()
-        self.dense1 = nn.Linear(config.d_latents, config.widening_factor * config.d_latents)
+        self.dense1 = nn.Linear(config.d_latents, widening_factor * config.d_latents)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -291,6 +291,7 @@ class PerceiverLayer(nn.Module):
         q_dim=None,
         kv_dim=None,
         use_query_residual=False,
+        widening_factor=4,
     ):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -306,7 +307,7 @@ class PerceiverLayer(nn.Module):
             use_query_residual=use_query_residual,
         )
         self.layernorm = nn.LayerNorm(config.d_latents)
-        self.mlp = PerceiverMLP(config)
+        self.mlp = PerceiverMLP(config, widening_factor=widening_factor)
 
     def forward(
         self,
@@ -371,6 +372,7 @@ class PerceiverEncoder(nn.Module):
             q_dim=config.d_latents,
             kv_dim=config.d_model,
             use_query_residual=config.use_query_residual,
+            widening_factor=config.cross_attention_widening_factor,
         )
 
         # Construct a single block of self-attention layers.
@@ -385,6 +387,7 @@ class PerceiverEncoder(nn.Module):
                 num_heads=config.num_self_attention_heads,
                 q_dim=config.d_latents,
                 kv_dim=config.d_latents,
+                widening_factor=config.self_attention_widening_factor,
             )
             self_attends.append(layer)
 
@@ -537,10 +540,12 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
     PERCEIVER_START_DOCSTRING,
 )
 class PerceiverModel(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, input_preprocessor=None, output_postprocessor=None):
         super().__init__(config)
         self.config = config
 
+        self.input_preprocessor = input_preprocessor
+        self.output_postprocessor = output_postprocessor
         self.embeddings = PerceiverEmbeddings(config)
         self.encoder = PerceiverEncoder(config)
 
@@ -590,7 +595,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_blocks x num_heads]
         # and head_mask is converted to shape [num_blocks x batch x num_heads x N x N]
-        head_mask = self.get_head_mask(head_mask, self.config.num_blocks)
+        head_mask = self.get_head_mask(head_mask, self.config.num_blocks * self.config.num_self_attends_per_block)
 
         embedding_output = self.embeddings(batch_size=batch_size)
 

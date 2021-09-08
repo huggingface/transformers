@@ -1134,7 +1134,6 @@ if is_torch_available():
     _import_structure["models.perceiver"].extend(
         [
             "PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PerceiverForCausalLM",
             "PerceiverForMaskedLM",
             "PerceiverForMultipleChoice",
             "PerceiverForQuestionAnswering",
@@ -1143,7 +1142,6 @@ if is_torch_available():
             "PerceiverLayer",
             "PerceiverModel",
             "PerceiverPreTrainedModel",
-            "load_tf_weights_in_perceiver",
         ]
     )
     _import_structure["models.prophetnet"].extend(
@@ -2427,7 +2425,6 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5TokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
-        from .models.perceiver import PerceiverTokenizerFast
         from .models.reformer import ReformerTokenizerFast
         from .models.rembert import RemBertTokenizerFast
         from .models.retribert import RetriBertTokenizerFast
@@ -3004,7 +3001,6 @@ if TYPE_CHECKING:
         )
         from .models.perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PerceiverForCausalLM,
             PerceiverForMaskedLM,
             PerceiverForMultipleChoice,
             PerceiverForQuestionAnswering,
@@ -3013,7 +3009,6 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
-            load_tf_weights_in_perceiver,
         )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -25,13 +25,9 @@ _import_structure = {
     "tokenization_perceiver": ["PerceiverTokenizer"],
 }
 
-if is_tokenizers_available():
-    _import_structure["tokenization_perceiver_fast"] = ["PerceiverTokenizerFast"]
-
 if is_torch_available():
     _import_structure["modeling_perceiver"] = [
         "PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PerceiverForCausalLM",
         "PerceiverForMaskedLM",
         "PerceiverForMultipleChoice",
         "PerceiverForQuestionAnswering",
@@ -40,7 +36,6 @@ if is_torch_available():
         "PerceiverLayer",
         "PerceiverModel",
         "PerceiverPreTrainedModel",
-        "load_tf_weights_in_perceiver",
     ]
 
 
@@ -48,13 +43,9 @@ if TYPE_CHECKING:
     from .configuration_perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig
     from .tokenization_perceiver import PerceiverTokenizer
 
-    if is_tokenizers_available():
-        from .tokenization_perceiver_fast import PerceiverTokenizerFast
-
     if is_torch_available():
         from .modeling_perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PerceiverForCausalLM,
             PerceiverForMaskedLM,
             PerceiverForMultipleChoice,
             PerceiverForQuestionAnswering,
@@ -63,7 +54,6 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
-            load_tf_weights_in_perceiver,
         )
 
 

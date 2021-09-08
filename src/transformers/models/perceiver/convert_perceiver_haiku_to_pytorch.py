@@ -21,6 +21,7 @@ import pickle
 from pathlib import Path
 
 import torch
+import haiku as hk
 
 from transformers import PerceiverConfig, PerceiverModel
 from transformers.utils import logging

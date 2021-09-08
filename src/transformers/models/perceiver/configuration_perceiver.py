@@ -52,8 +52,10 @@ class PerceiverConfig(PretrainedConfig):
             Number of attention heads for each self-attention layer in the Transformer encoder.
         num_cross_attention_heads (:obj:`int`, `optional`, defaults to 8):
             Number of attention heads for each cross-attention layer in the Transformer encoder.
-        widening_factor (:obj:`int`, `optional`, defaults to 1):
-            Dimension of the feed-forward layer in the Transformer encoder.
+        self_attention_widening_factor (:obj:`int`, `optional`, defaults to 1):
+            Dimension of the feed-forward layer in the cross-attention layer of the Transformer encoder.
+        cross_attention_widening_factor (:obj:`int`, `optional`, defaults to 1):
+            Dimension of the feed-forward layer in the self-attention layers of the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
@@ -94,7 +96,8 @@ class PerceiverConfig(PretrainedConfig):
         num_self_attends_per_block=26,
         num_self_attention_heads=8,
         num_cross_attention_heads=8,
-        widening_factor=1,
+        self_attention_widening_factor=1,
+        cross_attention_widening_factor=1,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -114,7 +117,8 @@ class PerceiverConfig(PretrainedConfig):
         self.num_self_attends_per_block = num_self_attends_per_block
         self.num_self_attention_heads = num_self_attention_heads
         self.num_cross_attention_heads = num_cross_attention_heads
-        self.widening_factor = widening_factor
+        self.self_attention_widening_factor = self_attention_widening_factor
+        self.cross_attention_widening_factor = cross_attention_widening_factor
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
