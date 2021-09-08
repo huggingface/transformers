@@ -122,7 +122,7 @@ class PLBartConfig(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         classifier_dropout=0.0,
-        scale_embedding=False,
+        scale_embedding=True,
         gradient_checkpointing=False,
         pad_token_id=1,
         bos_token_id=0,
