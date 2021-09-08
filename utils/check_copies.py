@@ -330,7 +330,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
         )
 
     # This regex captures metadata from an English model description, including model title, model link,
-    # affiliations of the paper, title of the paper, authors of the paper, and supplemental data (see DistilBERT for exmaple).
+    # affiliations of the paper, title of the paper, authors of the paper, and supplemental data (see DistilBERT for example).
     _re_capture_meta = re.compile(
         r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
