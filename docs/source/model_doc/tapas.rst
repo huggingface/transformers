@@ -424,7 +424,7 @@ here for the weak supervision for aggregation case):
         ... )
         >>> model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config)
 
-        >>> optimizer = Adam(learning_rate=5e-5)
+        >>> optimizer = tf.keras.optimizers.Adam(learning_rate=5e-5)
 
         >>> for epoch in range(2):  # loop over the dataset multiple times
         ...    for idx, batch in enumerate(train_dataloader):
