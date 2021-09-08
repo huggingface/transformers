@@ -1285,7 +1285,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if state_dict is None:
                 try:
                     state_dict = torch.load(resolved_archive_file, map_location="cpu")
-                except Exception:
+                except Exception as e:
                     try:
                         with open(resolved_archive_file) as f:
                             if f.read().startswith("version"):
@@ -1295,7 +1295,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     "you cloned."
                                 )
                             else:
-                                raise ValueError
+                                raise ValueError from e
                     except (UnicodeDecodeError, ValueError):
                         raise OSError(
                             f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "

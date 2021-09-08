@@ -349,7 +349,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             with open(resolved_archive_file, "rb") as state_f:
                 try:
                     state = from_bytes(cls, state_f.read())
-                except (UnpicklingError, msgpack.exceptions.ExtraData):
+                except (UnpicklingError, msgpack.exceptions.ExtraData) as e:
                     try:
                         with open(resolved_archive_file) as f:
                             if f.read().startswith("version"):
@@ -359,7 +359,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                                     "you cloned."
                                 )
                             else:
-                                raise ValueError
+                                raise ValueError from e
                     except (UnicodeDecodeError, ValueError):
                         raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
             # make sure all arrays are stored as jnp.arrays

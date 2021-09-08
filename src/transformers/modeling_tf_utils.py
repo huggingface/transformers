@@ -1334,7 +1334,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 ignore_mismatched_sizes=ignore_mismatched_sizes,
                 _prefix=load_weight_prefix,
             )
-        except OSError:
+        except OSError as e:
             try:
                 with open(resolved_archive_file) as f:
                     if f.read().startswith("version"):
@@ -1344,7 +1344,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             "you cloned."
                         )
                     else:
-                        raise ValueError
+                        raise ValueError from e
             except (UnicodeDecodeError, ValueError):
                 raise OSError(
                     "Unable to load weights from h5 file. "
