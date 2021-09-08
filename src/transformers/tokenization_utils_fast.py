@@ -666,7 +666,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["continuing_subword_prefix"] = tokenizer_json["model"]["continuing_subword_prefix"]
         if (
             tokenizer_json["model"]["type"] == "BPE"
-            and "end_of_work_suffix" not in kwargs
+            and "end_of_word_suffix" not in kwargs
             and tokenizer_json["model"]["end_of_word_suffix"] is not None
         ):
             kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
