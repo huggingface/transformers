@@ -39,6 +39,7 @@ if is_torch_available():
         FNetForSequenceClassification,
         FNetForTokenClassification,
         FNetModel,
+        FNetTokenizer,
     )
     from transformers.models.fnet.modeling_fnet import (
         FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -485,7 +486,9 @@ class FNetModelIntegrationTest(unittest.TestCase):
         """
 
         model = FNetForMaskedLM.from_pretrained("google/fnet-base")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        model.to(torch_device)
+
+        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]], device=torch_device)
         output = model(input_ids)[0]
 
         vocab_size = 32000
@@ -494,35 +497,66 @@ class FNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-1.7819, -7.7384, -7.5002], [-3.4746, -8.5943, -7.7762], [-3.2052, -9.0771, -8.3468]]]
+            [[[-1.7819, -7.7384, -7.5002], [-3.4746, -8.5943, -7.7762], [-3.2052, -9.0771, -8.3468]]],
+            device=torch_device,
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow
+    def test_inference_long_sentence(self):
+        model = FNetForMaskedLM.from_pretrained("google/fnet-base")
+        model.to(torch_device)
+        tokenizer = FNetTokenizer.from_pretrained("google/fnet-base")
+
+        inputs = tokenizer(
+            "the man worked as a [MASK].",
+            "this is his [MASK].",
+            return_tensors="pt",
+            padding="max_length",
+            max_length=512,
+        )
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+
+        logits = model(**inputs).logits
+        results_first_mask = logits[0, 6].topk(5).indices
+        results_second_mask = logits[0, 12].topk(5).indices
+
+        self.assertEqual(
+            list(tokenizer.decode(x) for x in results_first_mask), ["man", "child", "teacher", "person", "woman"]
+        )
+        self.assertEqual(
+            list(tokenizer.decode(x) for x in results_second_mask), ["job", "work", "story", "wife", "name"]
+        )
+
+    @slow
     def test_inference_for_next_sentence_prediction(self):
         model = FNetForNextSentencePrediction.from_pretrained("google/fnet-base")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        model.to(torch_device)
+
+        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]], device=torch_device)
         output = model(input_ids)[0]
 
         expected_shape = torch.Size((1, 2))
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-0.2234, -0.0226]])
+        expected_slice = torch.tensor([[-0.2234, -0.0226]], device=torch_device)
 
         self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
 
     @slow
     def test_inference_model(self):
         model = FNetModel.from_pretrained("google/fnet-base")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        model.to(torch_device)
+
+        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]], device=torch_device)
         output = model(input_ids)[0]
 
         expected_shape = torch.Size((1, 6, model.config.hidden_size))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[4.1541, -0.1051, -0.1667], [-0.9144, 0.2939, -0.0086], [-0.8472, -0.7281, 0.0256]]]
+            [[[4.1541, -0.1051, -0.1667], [-0.9144, 0.2939, -0.0086], [-0.8472, -0.7281, 0.0256]]], device=torch_device
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
