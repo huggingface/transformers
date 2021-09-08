@@ -250,10 +250,10 @@ def create_learning_rate_fn(
     return schedule_fn
 
 
-def train_data_collator(dataset: Dataset, batch_size: int):
+def train_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
     """Returns shuffled batches of size `batch_size` from truncated `train dataset`, sharded over all local devices."""
     steps_per_epoch = len(dataset) // batch_size
-    perms = np.random.permutation(len(dataset))
+    perms = jax.random.permutation(rng, len(dataset))
     perms = perms[: steps_per_epoch * batch_size]  # Skip incomplete batch.
     perms = perms.reshape((steps_per_epoch, batch_size))
 
@@ -570,12 +570,12 @@ def main():
         train_metrics = []
 
         # Create sampling rng
-        rng, _ = jax.random.split(rng)
+        rng, input_rng = jax.random.split(rng)
 
         # train
         for step, batch in enumerate(
             tqdm(
-                train_data_collator(train_dataset, train_batch_size),
+                train_data_collator(input_rng, train_dataset, train_batch_size),
                 total=step_per_epoch,
                 desc="Training...",
                 position=1,
