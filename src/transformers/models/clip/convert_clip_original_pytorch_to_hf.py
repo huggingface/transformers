@@ -117,7 +117,7 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
 
     hf_model = CLIPModel(config).eval()
 
-    pt_model, _ = load(checkpoint_path, jit=False)
+    pt_model, _ = load(checkpoint_path, device="cpu", jit=False)
     pt_model = pt_model.eval()
 
     copy_text_model_and_projection(hf_model, pt_model)
