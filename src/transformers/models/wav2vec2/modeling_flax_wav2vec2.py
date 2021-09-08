@@ -348,8 +348,11 @@ def _sample_negative_indices(
     # get `num_negatives` random vector indices from the same utterance
     sampled_negative_indices = np.zeros(shape=(batch_size, sequence_length, num_negatives), dtype=np.int32)
 
+    if mask_time_indices is None:
+        mask_time_indices = np.ones(shape=(batch_size, sequence_length), dtype=np.bool)
+
     for batch_idx in range(batch_size):
-        high = mask_time_indices[batch_idx].sum() - 1 if mask_time_indices is not None else sequence_length - 1
+        high = mask_time_indices[batch_idx].sum() - 1
         mapped_masked_indices = sequence_length_range[mask_time_indices[batch_idx]]
 
         feature_indices = np.broadcast_to(np.arange(high + 1)[:, None], (high + 1, num_negatives))

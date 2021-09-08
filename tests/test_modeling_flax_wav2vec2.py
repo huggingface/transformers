@@ -21,7 +21,7 @@ import numpy as np
 from transformers import Wav2Vec2Config, is_flax_available
 from transformers.testing_utils import require_datasets, require_flax, require_soundfile, slow
 
-from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, random_attention_mask
+from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
@@ -289,6 +289,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
         negative_indices = _sample_negative_indices(features.shape, num_negatives)
 
         features = features.reshape(-1, hidden_size)  # BTC => (BxT)C
+
         # take negative vectors from sampled indices
         sampled_negatives = features[negative_indices.reshape(-1)]
         negatives = sampled_negatives.reshape(batch_size, sequence_length, num_negatives, hidden_size).transpose(
@@ -307,7 +308,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
     def test_sample_negatives_with_attn_mask(self):
         batch_size = 2
-        sequence_length = 10
+        sequence_length = 100
         hidden_size = 4
         num_negatives = 3
 
@@ -316,19 +317,16 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
         )  # each value in vector consits of same value
 
         # second half of last input tensor is padded
-        attention_mask = np.ones((batch_size, sequence_length), dtype=np.int8)
-        attention_mask[-1, sequence_length // 2 :] = 0
-
-        forbidden_indices = (
-            np.arange(sequence_length // 2, sequence_length, dtype=np.int32) + (batch_size - 1) * sequence_length
-        ).tolist()
+        mask_time_indices = ids_tensor((batch_size, sequence_length), 2).astype(np.bool)
+        mask_time_indices[:, -5:] = 1
 
         features = np.broadcast_to(features[None, :], (batch_size, sequence_length, hidden_size))
 
-        negative_indices = _sample_negative_indices(features.shape, num_negatives, attention_mask=attention_mask)
+        negative_indices = _sample_negative_indices(features.shape, num_negatives, mask_time_indices=mask_time_indices)
+        allowed_negative_indices = np.arange(batch_size * sequence_length)[mask_time_indices.flatten()]
 
         # make sure that no padding tokens are sampled
-        self.assertTrue(all([idx not in negative_indices for idx in forbidden_indices]))
+        self.assertTrue(all([idx in allowed_negative_indices for idx in negative_indices[mask_time_indices].flatten()]))
 
         features = features.reshape(-1, hidden_size)  # BTC => (BxT)C
         # take negative vectors from sampled indices
@@ -341,7 +339,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
         # make sure no negatively sampled vector is actually a positive one
         for negative in negatives:
-            self.assertTrue(((negative - features.reshape(negative.shape)) == 0).sum() == 0.0)
+            self.assertTrue(((negative[mask_time_indices] - features.reshape(negative.shape)[mask_time_indices]) == 0).sum() == 0.0)
 
         # make sure that full vectors are sampled and not just slices of vectors
         # => this means that `unique()` yields a single value for `hidden_size` dim
