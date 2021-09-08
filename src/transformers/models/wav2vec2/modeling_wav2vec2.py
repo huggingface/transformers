@@ -945,13 +945,13 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         hidden_states = hidden_states.view(batch_size * sequence_length * self.num_groups, -1)
 
         if self.training:
+            # sample code vector probs via gumbel in differentiateable way
             logits = hidden_states.float()
             tau = self.temperature
             dim = -1
 
-            # sample code vector probs via gumbel in differentiateable way
-            torch.manual_seed(0)
-            gumbels_prob = (torch.empty_like(logits, memory_format=torch.legacy_contiguous_format).exponential_().log())  # ~Gumbel(0,1)
+#            torch.manual_seed(0)
+            gumbels_prob = (-torch.empty_like(logits, memory_format=torch.legacy_contiguous_format).exponential_().log())  # ~Gumbel(0,1)
             print("logs", logits.sum())
             print("gumbels_prob", gumbels_prob.sum())
             gumbels = (logits + gumbels_prob) / tau  # ~Gumbel(logits,tau)
@@ -1490,6 +1490,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             if neg_is_pos.any():
                 logits[1:][neg_is_pos] = float("-inf")
 
+            print("neg is pos", neg_is_pos.sum())
+
             # 6. compute contrastive loss \mathbf{L}_m = cross_entropy(logs) =
             # -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))
             preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
@@ -1499,6 +1501,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # 7. compute diversity loss: \mathbf{L}_d
             num_codevectors = self.config.num_codevectors_per_group * self.config.num_codevector_groups
             diversity_loss = ((num_codevectors - codevector_perplexity) / num_codevectors) * mask_time_indices.sum()
+
+            print("Contrastive loss", contrastive_loss)
+            print("Diversity loss", self.config.diversity_loss_weight * diversity_loss)
 
             # 8. \mathbf{L} = \mathbf{L}_m + \alpha * \mathbf{L}_d
             loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
