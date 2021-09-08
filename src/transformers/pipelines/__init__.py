@@ -44,6 +44,7 @@ from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
+from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
@@ -91,6 +92,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoModelForImageClassification,
         AutoModelForMaskedLM,
+        AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
@@ -228,6 +230,12 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {"model": {"pt": "google/vit-base-patch16-224"}},
+    },
+    "object-detection": {
+        "impl": ObjectDetectionPipeline,
+        "tf": (),
+        "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/detr-resnet-50"}},
     },
 }
 
