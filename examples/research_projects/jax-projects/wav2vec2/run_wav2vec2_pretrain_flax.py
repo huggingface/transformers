@@ -272,12 +272,11 @@ def compute_contrastive_loss(
     loss_logits = jnp.where(neg_is_pos, -1e9, loss_logits)
 
     # => Shape batch_size*sequence_length x [1, num_negatives]
-    num_losses = batch_size * sequence_length
-    predictions = loss_logits.transpose(1, 2, 0).reshape(num_losses, loss_logits.shape[0])
-    targets = jnp.zeros_like(num_losses)
+    predictions = loss_logits.transpose(1, 2, 0).reshape(-1, loss_logits.shape[0])
 
-    target_mask = mask_time_indices.reshape(num_losses)
-    contrastive_loss = optax.softmax_cross_entropy(predictions, onehot(targets, predictions.shape[-1])) * target_mask
+    target_mask = mask_time_indices.transpose(1, 0).flatten()
+
+    contrastive_loss = -jax.nn.log_softmax(predictions)[:, 0] * target_mask
     contrastive_loss = contrastive_loss.sum()
 
     # logs during training
