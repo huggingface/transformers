@@ -94,8 +94,9 @@ def rename_keys(state_dict):
     for name in list(state_dict):
         param = state_dict.pop(name)
         
-        # for now, let's ignore decoder weights
-        if "decoder" in name:
+        # for now, let's ignore the following parameters
+        if "decoder" in name or (name in ["trainable_position_encoding/pos_embs", "embed/embeddings"]):
+            print("Skipping parameter:", name)
             continue
         
         # replace latent embeddings
@@ -123,11 +124,11 @@ def rename_keys(state_dict):
         
         # in HuggingFace, the layernorms for queries + keys are called "layernorm1" and "layernorm2"
         if "cross_attention" in name and "layer_norm_1" in name:
-            name = name.replace("layer_norm_1", "attention.layernorm2")
+            name = name.replace("layer_norm_1", "attention.self.layernorm2")
         if "cross_attention" in name and "layer_norm" in name:
-            name = name.replace("layer_norm", "attention.layernorm1")
+            name = name.replace("layer_norm", "attention.self.layernorm1")
         if "self_attention" in name and "layer_norm" in name:
-            name = name.replace("layer_norm", "attention.layernorm1")
+            name = name.replace("layer_norm", "attention.self.layernorm1")
         
         # replace special characters by dots
         name = name.replace("-", ".")
@@ -165,7 +166,7 @@ def rename_keys(state_dict):
           if "linear_1.w" in name:
             name = name.replace("linear_1.w", "dense2.weight")
         
-        # finally, set value
+        # finally, TRANSPOSE if kernel, and set value
         if name[-6:] == "weight":
             param = np.transpose(param)
 
@@ -203,7 +204,7 @@ def convert_perceiver_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     rename_keys(state_dict)
     model.load_state_dict(state_dict)
 
-    # Verify output
+    # TODO: verify output
 
     # Finally, save files
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -221,7 +222,7 @@ if __name__ == "__main__":
         help="URL of a Perceiver checkpoint you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model directory, provided as a string."
     )
 
     args = parser.parse_args()
