@@ -618,7 +618,6 @@ class BertPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertModel # Modified
 class BertModel(PreTrainedModel):
     """
     Same as the original BertModel but remvoe docstrings and inherit PreTrainedModel directly.
