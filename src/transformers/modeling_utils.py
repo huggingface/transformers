@@ -46,6 +46,7 @@ from .file_utils import (
 )
 from .generation_utils import GenerationMixin
 from .utils import logging
+from .utils.versions import require_version_core
 
 
 logger = logging.get_logger(__name__)
@@ -1102,6 +1103,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Whether or not to disable fast initialization.
             low_cpu_mem_usage(:obj:`bool`, `optional`, defaults to `:obj:`False`):
                 Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                This is an experimental feature and a subject to change at any moment.
             torch_dtype (:obj:`str` or :obj:`torch.dtype`, `optional`):
                 Override the default ``torch.dtype`` and load the model under this dtype. If ``"auto"`` is passed the
                 dtype will be automatically derived from the model's weights.
@@ -1173,7 +1175,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         _fast_init = kwargs.pop("_fast_init", True)
         torch_dtype = kwargs.pop("torch_dtype", None)
         low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", False)
-        # XXX: low_cpu_mem_usage requires pt-1.9.0 or higher and no deepspeed
+
         from_pt = not (from_tf | from_flax)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
@@ -1287,7 +1289,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if from_pt:
             if state_dict is None:
                 try:
-
                     state_dict = torch.load(resolved_archive_file, map_location="cpu")
                 except Exception:
                     raise OSError(
@@ -1313,12 +1314,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
             if low_cpu_mem_usage:
-                # only float state_dict keys (that can be fed to nn.Parameter)
-                # XXX: this currently skips registered buffers
-                low_cpu_mem_state_dict_keys = [
-                    k for k, v in state_dict.items()
-                ]  # if v.is_floating_point() or v.is_complex()]
-                del state_dict  # save memory - will reload again later
+                require_version_core("torch>=1.9")
+                if is_deepspeed_zero3_enabled():
+                    raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
+
+                # save the keys
+                loaded_state_dict_keys = [k for k in state_dict.keys()]
+                del state_dict  # free CPU memory - will reload again later
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1371,85 +1373,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif from_pt:
 
             if low_cpu_mem_usage:
-
-                # print(model)
-                # for n,p in model.named_parameters():
-                #     print(f"{p.device} {p.dtype} {n}")
-
-                # drop storage on CPU
-                # model = model.to(device='meta')
-
-                # dematerialize param storage for keys that are going to be replaced by state_dict, by
-                # putting those on the meta device
-                for k in low_cpu_mem_state_dict_keys:
-                    split_name = k.split(".")
-                    # print(k)
-                    m = model
-                    matched = True
-                    while len(split_name) > 1:
-                        if hasattr(m, split_name[0]):
-                            m = getattr(m, split_name[0])
-                            del split_name[0]
-                        else:
-                            matched = False
-                            break
-                    if matched:
-                        # print(k)
-
-                        # XXX: the approach of switching the whole sub-module to meta, is fragile
-                        # since if this sub-module inits some buffer that is not in the state_dict,
-                        # the code will break once we try to use this module, since that buffer will
-                        # remain on meta. Instead we should be able to switch to meta specific
-                        # params that we know will be replaced by loaded state_dict data, but I'm
-                        # yet to find how to do that and be able to re-attach them back into the
-                        # model without pytorch crashing.
-                        m.to("meta")
-
-                        # p = getattr(m, split_name[0])
-                        # print(p.device)
-                        # p = p.to(device='meta')
-                        # print(p.device)
-                        # #setattr(m, split_name[0], getattr(m, split_name[0]).to(device='meta'))
-                        # #setattr(m, split_name[0], None)#p)
-                        # print(m)
-
-                # only now can load state_dict
-                state_dict = torch.load(resolved_archive_file, map_location="cpu")
-
-                # materialize float sd keys one by one on CPU
-                for k in low_cpu_mem_state_dict_keys:
-                    split_name = k.split(".")
-                    m = model
-                    matched = True
-                    while len(split_name) > 1:
-                        if hasattr(m, split_name[0]):
-                            m = getattr(m, split_name[0])
-                            del split_name[0]
-                        else:
-                            matched = False
-                            break
-                    if matched:
-                        # print(k)
-                        persistent_buffers = {
-                            k: v for k, v in m._buffers.items() if k not in m._non_persistent_buffers_set
-                        }
-                        # print("KEYS", persistent_buffers.keys())
-                        # m.to("cpu")
-                        if split_name[0] in persistent_buffers:
-                            m._buffers[split_name[0]] = state_dict[k]
-                        else:
-                            setattr(m, split_name[0], torch.nn.Parameter(state_dict[k]))
-
-                del state_dict
-
-                # for n,p in model.named_parameters():
-                #     print(f"{p.device} {n}")
-
-                # for n,p in model.named_buffers():
-                #     print(f"{p.device} {n}")
-
+                cls._low_cpu_mem_usage_load(model, loaded_state_dict_keys, resolved_archive_file)
             else:
-
                 model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_state_dict_into_model(
                     model,
                     state_dict,
@@ -1573,7 +1498,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         def load(module: nn.Module, prefix=""):
             local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
             args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
-
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 
@@ -1666,6 +1590,64 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 retrieved_modules.append(module)
 
         return retrieved_modules
+
+    @classmethod
+    def _low_cpu_mem_usage_load(cls, model, loaded_state_dict_keys, resolved_archive_file):
+
+        # dematerialize param storage for keys that are going to be replaced by state_dict, by
+        # putting those on the meta device
+        for k in loaded_state_dict_keys:
+            split_name = k.split(".")
+            # print(k)
+            m = model
+            matched = True
+            while len(split_name) > 1:
+                if hasattr(m, split_name[0]):
+                    m = getattr(m, split_name[0])
+                    del split_name[0]
+                else:
+                    matched = False
+                    break
+            if matched:
+                # selectively switch to the meta device only those params/buffers that will
+                # be next replaced from state_dict. This a complex way to do p.to_("meta")
+                # since we have no in-place to_ for tensors.
+                to_meta_objs = []
+                for n, p in m.named_parameters():
+                    if n == split_name[0]:
+                        to_meta_objs.append(p.data_ptr())
+
+                def selective_to_meta(p):
+                    if p.data_ptr() in to_meta_objs:
+                        return p.to("meta")
+                    else:
+                        return p
+
+                m._apply(selective_to_meta)
+
+        # only now can load state_dict
+        state_dict = torch.load(resolved_archive_file, map_location="cpu")
+
+        # materialize float sd keys one by one on CPU
+        for k in loaded_state_dict_keys:
+            split_name = k.split(".")
+            m = model
+            matched = True
+            while len(split_name) > 1:
+                if hasattr(m, split_name[0]):
+                    m = getattr(m, split_name[0])
+                    del split_name[0]
+                else:
+                    matched = False
+                    break
+            if matched:
+                persistent_buffers = {k: v for k, v in m._buffers.items() if k not in m._non_persistent_buffers_set}
+                if split_name[0] in persistent_buffers:
+                    m._buffers[split_name[0]] = state_dict[k]
+                else:
+                    setattr(m, split_name[0], torch.nn.Parameter(state_dict[k]))
+
+        del state_dict
 
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
