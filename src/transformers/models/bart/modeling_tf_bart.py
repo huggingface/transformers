@@ -61,6 +61,8 @@ LARGE_NEGATIVE = -1e8
 
 
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
+    decoder_start_token_id = tf.cast(decoder_start_token_id, input_ids.dtype)
     start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
     shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
     # replace possible -100 values in labels by `pad_token_id`
@@ -70,7 +72,7 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
 
     if tf.executing_eagerly():
         # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0))
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
 
         # Make sure the assertion op is called by wrapping the result in an identity no-op
         with tf.control_dependencies([assert_gte0]):
