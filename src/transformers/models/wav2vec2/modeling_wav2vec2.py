@@ -1006,7 +1006,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size))
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
