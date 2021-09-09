@@ -2582,12 +2582,6 @@ class Trainer:
             self.tokenizer.save_pretrained(output_dir)
         # Same for the training arguments
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
-        # Model card
-        if self.args.hub_model_id is None:
-            model_name = Path(self.args.output_dir).name
-        else:
-            model_name = self.args.hub_model_id.split("/")[-1]
-        self.create_model_card(model_name=model_name)
 
         try:
             if self.args.hub_strategy == HubStrategy.CHECKPOINT:
