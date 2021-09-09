@@ -20,7 +20,7 @@ from typing import Dict, List, Tuple
 
 from transformers import FNetConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device, require_tokenizers
+from transformers.testing_utils import require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -523,12 +523,8 @@ class FNetModelIntegrationTest(unittest.TestCase):
         predictions_mask_1 = tokenizer.decode(logits[0, 6].topk(5).indices)
         predictions_mask_2 = tokenizer.decode(logits[0, 12].topk(5).indices)
 
-        self.assertEqual(
-            predictions_mask_1.split(" "), ["man", "child", "teacher", "woman", "model"]
-        )
-        self.assertEqual(
-            predictions_mask_2.split(" "), ["work", "wife", "job", "story", "name"]
-        )
+        self.assertEqual(predictions_mask_1.split(" "), ["man", "child", "teacher", "woman", "model"])
+        self.assertEqual(predictions_mask_2.split(" "), ["work", "wife", "job", "story", "name"])
 
     @slow
     def test_inference_for_next_sentence_prediction(self):
