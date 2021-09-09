@@ -20,7 +20,7 @@ from typing import Dict, List, Tuple
 
 from transformers import FNetConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device, require_tokenizers
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -39,7 +39,7 @@ if is_torch_available():
         FNetForSequenceClassification,
         FNetForTokenClassification,
         FNetModel,
-        FNetTokenizer,
+        FNetTokenizerFast,
     )
     from transformers.models.fnet.modeling_fnet import (
         FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -504,10 +504,11 @@ class FNetModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow
+    @require_tokenizers
     def test_inference_long_sentence(self):
         model = FNetForMaskedLM.from_pretrained("google/fnet-base")
         model.to(torch_device)
-        tokenizer = FNetTokenizer.from_pretrained("google/fnet-base")
+        tokenizer = FNetTokenizerFast.from_pretrained("google/fnet-base")
 
         inputs = tokenizer(
             "the man worked as a [MASK].",
@@ -519,14 +520,14 @@ class FNetModelIntegrationTest(unittest.TestCase):
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
 
         logits = model(**inputs).logits
-        results_first_mask = logits[0, 6].topk(5).indices
-        results_second_mask = logits[0, 12].topk(5).indices
+        predictions_mask_1 = tokenizer.decode(logits[0, 6].topk(5).indices)
+        predictions_mask_2 = tokenizer.decode(logits[0, 12].topk(5).indices)
 
         self.assertEqual(
-            list(tokenizer.decode(x) for x in results_first_mask), ["man", "child", "teacher", "person", "woman"]
+            predictions_mask_1.split(" "), ["man", "child", "teacher", "woman", "model"]
         )
         self.assertEqual(
-            list(tokenizer.decode(x) for x in results_second_mask), ["job", "work", "story", "wife", "name"]
+            predictions_mask_2.split(" "), ["work", "wife", "job", "story", "name"]
         )
 
     @slow
