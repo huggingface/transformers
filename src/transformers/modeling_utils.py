@@ -1479,10 +1479,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
             )
             for module in uninitialized_modules:
-                # # XXX: untested
-                # # put the params that aren't going to be replaced by state_dict to CPU before running init
-                # for p in module.parameters(recursive=False):
-                #     p = p.to(device='cpu')
                 model._init_weights(module)
 
         # copy state_dict so _load_from_state_dict can modify it
@@ -1598,11 +1594,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # putting those on the meta device
         for k in loaded_state_dict_keys:
             split_name = k.split(".")
-            # print(k)
             m = model
-            matched = True
+            matched = False
             while len(split_name) > 1:
                 if hasattr(m, split_name[0]):
+                    matched = True
                     m = getattr(m, split_name[0])
                     del split_name[0]
                 else:
@@ -1632,9 +1628,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         for k in loaded_state_dict_keys:
             split_name = k.split(".")
             m = model
-            matched = True
+            matched = False
             while len(split_name) > 1:
                 if hasattr(m, split_name[0]):
+                    matched = True
                     m = getattr(m, split_name[0])
                     del split_name[0]
                 else:
