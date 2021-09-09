@@ -45,7 +45,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
             framework="pt",
-            device=0,
+            # XXX: For future PR, we need to test on GPU as it's the main
+            # usage for this feature (for speed).
         )
         dataset = datasets.load_dataset("Narsil/asr_dummy", name="asr", split="test")
         dataset = KeyDataset(dataset, "file")
