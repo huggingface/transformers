@@ -47,6 +47,7 @@ if is_torch_available():
     from ..models.auto.modeling_auto import AutoModel
 else:
     Dataset = None
+    KeyDataset = None
 
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
