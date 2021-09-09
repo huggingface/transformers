@@ -120,13 +120,13 @@ class ObjectDetectionPipeline(Pipeline):
         images = [self.load_image(image) for image in images]
 
         with torch.no_grad():
-            inputs = self.feature_extractor(images=images, return_tensors="pt")
-            outputs = self.model(**inputs)
-
             if self.framework == "pt":
                 target_sizes = torch.IntTensor([[im.height, im.width] for im in images])
             else:
                 raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")
+
+            inputs = self.feature_extractor(images=images, return_tensors="pt")
+            outputs = self.model(**inputs)
 
             raw_annotations = self.feature_extractor.post_process(outputs, target_sizes)
             annotations = []
