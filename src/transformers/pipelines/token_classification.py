@@ -411,7 +411,8 @@ class TokenClassificationPipeline(Pipeline):
             tag = entity_name[2:]
         else:
             # It's not in B-, I- format
-            bi = "B"
+            # Default to I- for continuation.
+            bi = "I"
             tag = entity_name
         return bi, tag
 
