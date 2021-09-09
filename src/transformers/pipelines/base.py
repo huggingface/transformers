@@ -20,6 +20,7 @@ import pickle
 import sys
 import warnings
 from abc import ABC, abstractmethod
+from collections import UserDict
 from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
@@ -776,10 +777,12 @@ class Pipeline(_ScikitCompat):
         return self._ensure_tensor_on_device(inputs, self.device)
 
     def _ensure_tensor_on_device(self, inputs, device):
-        if isinstance(inputs, dict):
+        if isinstance(inputs, (dict, UserDict)):
             return {name: self._ensure_tensor_on_device(tensor, device) for name, tensor in inputs.items()}
         elif isinstance(inputs, list):
             return [self._ensure_tensor_on_device(item, device) for item in inputs]
+        elif isinstance(inputs, tuple):
+            return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
         elif isinstance(inputs, torch.Tensor):
             return inputs.to(self.device)
         else:
@@ -812,7 +815,8 @@ class Pipeline(_ScikitCompat):
         """
         _sanitize_parameters will be called with any excessive named arguments from either `__init__` or `__call__`
         methods. It should return 3 dictionnaries of the resolved parameters used by the various `preprocess`,
-        `forward` and `postprocess` methods.
+        `forward` and `postprocess` methods. Do not fill dictionnaries if the caller didn't specify a kwargs. This
+        let's you keep defaults in function signatures, which is more "natural".
 
         It is not meant to be called directly, it will be automatically called and the final parameters resolved by
         `__init__` and `__call__`
@@ -828,15 +832,6 @@ class Pipeline(_ScikitCompat):
         raise NotImplementedError("preprocess not implemented")
 
     @abstractmethod
-    def postprocess(self, model_outputs: ModelOutput, **postprocess_parameters: Dict) -> Any:
-        """
-        Postprocess will receive the raw outputs of the `_forward` method, generally tensors, and reformat them into
-        something more friendly. Generally it will output a list or a dict or results (containing just strings and
-        numbers).
-        """
-        raise NotImplementedError("postprocess not implemented")
-
-    @abstractmethod
     def _forward(self, input_tensors: Dict[str, GenericTensor], **forward_parameters: Dict) -> ModelOutput:
         """
         _forward will receive the prepared dictionnary from `preprocess` and run it on the model. This method might
@@ -848,6 +843,15 @@ class Pipeline(_ScikitCompat):
         of the code (leading to faster inference).
         """
         raise NotImplementedError("_forward not implemented")
+
+    @abstractmethod
+    def postprocess(self, model_outputs: ModelOutput, **postprocess_parameters: Dict) -> Any:
+        """
+        Postprocess will receive the raw outputs of the `_forward` method, generally tensors, and reformat them into
+        something more friendly. Generally it will output a list or a dict or results (containing just strings and
+        numbers).
+        """
+        raise NotImplementedError("postprocess not implemented")
 
     def forward(self, model_inputs, **forward_params):
         with self.device_placement():
