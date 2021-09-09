@@ -148,6 +148,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             if len(token) > 1:
                 self.unique_no_split_tokens.append(token)
 
+        self._create_trie(self.unique_no_split_tokens)
+
     @property
     def word_delimiter_token(self) -> str:
         """
@@ -329,6 +331,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             if len(token) > 1:
                 self._additional_special_tokens.append(AddedToken(token))
                 _insert_one_token_to_ordered_list(self.unique_no_split_tokens, token)
+
+        self._create_trie(self.unique_no_split_tokens)
 
         return len(tokens_to_add)
 
