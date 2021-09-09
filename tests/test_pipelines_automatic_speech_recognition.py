@@ -18,10 +18,7 @@ import pytest
 
 from transformers import AutoFeatureExtractor, AutoTokenizer, Speech2TextForConditionalGeneration, Wav2Vec2ForCTC
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.pipelines.base import KeyDataset
 from transformers.testing_utils import is_pipeline_test, require_datasets, require_torch, require_torchaudio, slow
-
-from .test_pipelines_common import ANY
 
 
 # We can't use this mixin because it assumes TF support.
@@ -34,24 +31,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_pt_defaults(self):
         pipeline("automatic-speech-recognition", framework="pt")
-
-    @require_torch
-    @require_datasets
-    def test_pipeline_iteration(self):
-        import datasets
-
-        speech_recognizer = pipeline(
-            task="automatic-speech-recognition",
-            model="facebook/s2t-small-mustc-en-fr-st",
-            tokenizer="facebook/s2t-small-mustc-en-fr-st",
-            framework="pt",
-            # XXX: For future PR, we need to test on GPU as it's the main
-            # usage for this feature (for speed).
-        )
-        dataset = datasets.load_dataset("Narsil/asr_dummy", name="asr", split="test")
-        dataset = KeyDataset(dataset, "file")
-        for output in speech_recognizer(dataset):
-            self.assertEqual(output, {"text": ANY(str)})
 
     @require_torch
     def test_torch_small(self):
