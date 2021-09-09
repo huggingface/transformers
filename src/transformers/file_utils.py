@@ -2238,3 +2238,13 @@ class PushToHubMixin:
                 commit_message = "add model"
 
         return repo.push_to_hub(commit_message=commit_message)
+
+
+def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
+    if token is None:
+        token = HfFolder.get_token()
+    if organization is None:
+        username = HfApi().whoami(token)["name"]
+        return f"{username}/{model_id}"
+    else:
+        return f"{organization}/{model_id}"

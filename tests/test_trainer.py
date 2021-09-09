@@ -1299,7 +1299,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             trainer = get_regression_trainer(
                 output_dir=os.path.join(tmp_dir, "test-trainer"),
                 push_to_hub=True,
-                push_to_hub_token=self._token,
+                hub_token=self._token,
             )
             url = trainer.push_to_hub()
 
@@ -1321,8 +1321,8 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             trainer = get_regression_trainer(
                 output_dir=os.path.join(tmp_dir, "test-trainer-org"),
                 push_to_hub=True,
-                push_to_hub_organization="valid_org",
-                push_to_hub_token=self._token,
+                hub_model_id="valid_org/test-trainer-org",
+                hub_token=self._token,
             )
             url = trainer.push_to_hub()
 
