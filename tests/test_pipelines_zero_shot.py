@@ -106,6 +106,20 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
         self.assertEqual(original_entailment, zero_shot_classifier.entailment_id)
 
     @require_torch
+    def test_truncation(self):
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="pt",
+        )
+        # There was a regression in 4.10 for this
+        # Adding a test so we don't make the mistake again.
+        # https://github.com/huggingface/transformers/issues/13381#issuecomment-912343499
+        zero_shot_classifier(
+            "Who are you voting for in 2020?" * 100, candidate_labels=["politics", "public health", "science"]
+        )
+
+    @require_torch
     def test_small_model_pt(self):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
