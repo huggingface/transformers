@@ -839,9 +839,19 @@ class CLIPConverter(Converter):
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
             add_prefix_space=False,
         )
-        # tokenizer.decoder = decoders.BPEDecoder()
-        tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
+        tokenizer.decoder = decoders.BPEDecoder()
+        # tokenizer.decoder = decoders.ByteLevel()
+
+        bos = self.original_tokenizer.bos_token
+        eos = self.original_tokenizer.eos_token
+        special_tokens = [
+            (bos, self.original_tokenizer.bos_token_id),
+            (eos, self.original_tokenizer.eos_token_id),
+        ]
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=[bos, "$A", eos], pair=[bos, "$A", "$B", eos], special_tokens=special_tokens
+        )
+        # tokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
 
         return tokenizer
 
