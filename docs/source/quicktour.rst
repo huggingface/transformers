@@ -67,7 +67,8 @@ make them readable. For instance:
     >>> classifier('We are very happy to show you the 🤗 Transformers library.')
     [{'label': 'POSITIVE', 'score': 0.9998}]
 
-That's encouraging! You can use it on a list of sentences, which will be preprocessed then fed to the model, returning a list of dictionaries like this one:
+That's encouraging! You can use it on a list of sentences, which will be preprocessed then fed to the model, returning
+a list of dictionaries like this one:
 
 .. code-block::
 

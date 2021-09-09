@@ -46,12 +46,10 @@ The pipeline abstraction
 The `pipeline` abstraction is a wrapper around all the other available pipelines. It is instantiated as any other
 pipeline but requires an additional argument which is the `task`.
 
-Simple call on one item:
-.. code-block::
+Simple call on one item: .. code-block::
 
-    >>> pipe = pipeline("text-classification")
-    >>> pipe("This restaurant is awesome")
-    [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
+    >>> pipe = pipeline("text-classification") >>> pipe("This restaurant is awesome") [{'label': 'POSITIVE', 'score':
+    0.9998743534088135}]
 
 To call a pipeline on many items, you can either call with a `list`.
 
@@ -63,10 +61,9 @@ To call a pipeline on many items, you can either call with a `list`.
      {'label': 'NEGATIVE', 'score': 0.9996669292449951}]
 
 
-To iterate of full datasets it is recommended to use a :obj:`dataset` directly.
-This means you don't need to allocate the whole dataset at once, nor do you need
-to do batching yourself. This should work just as fast as custom loops on GPU.
-If it doesn't don't hesitate to create an issue.
+To iterate of full datasets it is recommended to use a :obj:`dataset` directly. This means you don't need to allocate
+the whole dataset at once, nor do you need to do batching yourself. This should work just as fast as custom loops on
+GPU. If it doesn't don't hesitate to create an issue.
 
 .. code-block::
 
