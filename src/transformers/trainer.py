@@ -2586,7 +2586,12 @@ class Trainer:
         try:
             if self.args.hub_strategy == HubStrategy.CHECKPOINT:
                 # Temporarily move the checkpoint just saved for the push
-                shutil.move(checkpoint_folder, os.path.join(output_dir, "last-checkpoint"))
+                tmp_checkpoint = os.path.join(output_dir, "last-checkpoint")
+                # We have to remove the "last-checkpoint" dir if it exists, otherwise the checkpoint is moved as a
+                # subfolder.
+                if os.path.isdir(tmp_checkpoint):
+                    shutil.rmtree(tmp_checkpoint)
+                shutil.move(checkpoint_folder, tmp_checkpoint)
 
             if self.args.save_strategy == IntervalStrategy.STEPS:
                 commit_message = f"Training in progress, step {self.state.global_step}"
@@ -2596,7 +2601,7 @@ class Trainer:
         finally:
             if self.args.hub_strategy == HubStrategy.CHECKPOINT:
                 # Move back the checkpoint to its place
-                shutil.move(os.path.join(output_dir, "last-checkpoint"), checkpoint_folder)
+                shutil.move(tmp_checkpoint, checkpoint_folder)
 
     def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
         """
