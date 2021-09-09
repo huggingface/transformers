@@ -460,7 +460,6 @@ class FlaxPegasusEncoderLayerCollection(nn.Module):
             for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
-        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
@@ -491,8 +490,6 @@ class FlaxPegasusEncoderLayerCollection(nn.Module):
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
-
-        hidden_states = self.final_layer_norm(hidden_states)
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -604,7 +601,6 @@ class FlaxPegasusDecoderLayerCollection(nn.Module):
             for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.decoder_layerdrop
-        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
@@ -648,8 +644,6 @@ class FlaxPegasusDecoderLayerCollection(nn.Module):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
-        hidden_states = self.final_layer_norm(hidden_states)
-
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -692,7 +686,6 @@ class FlaxPegasusEncoder(nn.Module):
             self.config.max_position_embeddings, embed_dim, dtype=self.dtype
         )
         self.layers = FlaxPegasusEncoderLayerCollection(self.config, self.dtype)
-        self.layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
