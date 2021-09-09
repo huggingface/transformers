@@ -97,6 +97,9 @@ class ProphetNetConfig(PretrainedConfig):
     """
     model_type = "prophetnet"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_attention_heads": "num_encoder_attention_heads",
+    }
 
     def __init__(
         self,
@@ -129,15 +132,6 @@ class ProphetNetConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            add_cross_attention=add_cross_attention,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -167,10 +161,22 @@ class ProphetNetConfig(PretrainedConfig):
         # 4 Training Args (should be removed soon)
         self.gradient_checkpointing = gradient_checkpointing
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.num_encoder_attention_heads
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            add_cross_attention=add_cross_attention,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )
 
     @property
     def num_hidden_layers(self) -> int:
         return self.num_encoder_layers + self.num_decoder_layers
+
+    @num_hidden_layers.setter
+    def num_hidden_layers(self, value):
+        raise NotImplementedError(
+            "This model does not support the setting of `num_hidden_layers`. Please set `num_encoder_layers` and `num_decoder_layers`."
+        )

@@ -415,6 +415,15 @@ class AutoModelForNextSentencePrediction:
         requires_backends(cls, ["torch"])
 
 
+class AutoModelForObjectDetection:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class AutoModelForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3435,6 +3444,10 @@ class TapasPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
+
+def load_tf_weights_in_tapas(*args, **kwargs):
+    requires_backends(load_tf_weights_in_tapas, ["torch"])
 
 
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
