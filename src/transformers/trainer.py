@@ -51,6 +51,8 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
+from huggingface_hub import Repository
+
 from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
@@ -60,7 +62,7 @@ from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
     WEIGHTS_NAME,
-    PushToHubMixin,
+    get_full_repo_name,
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
@@ -2478,14 +2480,16 @@ class Trainer:
         """
         if not self.args.should_save:
             return
-        use_auth_token = True if self.args.push_to_hub_token is None else self.args.push_to_hub_token
-        repo_url = PushToHubMixin._get_repo_url_from_name(
-            self.args.push_to_hub_model_id,
-            organization=self.args.push_to_hub_organization,
+        use_auth_token = True if self.args.hub_token is None else self.args.hub_token
+        if self.args.hub_model_id is None:
+            repo_name = get_full_repo_name(Path(self.args.output_dir).name, token=self.args.hub_token)
+        else:
+            repo_name = self.args.hub_model_id
+
+        self.repo = Repository(
+            self.args.output_dir,
+            clone_from=repo_name,
             use_auth_token=use_auth_token,
-        )
-        self.repo = PushToHubMixin._create_or_get_repo(
-            self.args.output_dir, repo_url=repo_url, use_auth_token=use_auth_token
         )
 
         # By default, ignore the checkpoint folders
@@ -2523,7 +2527,7 @@ class Trainer:
 
     def push_to_hub(self, commit_message: Optional[str] = "add model", **kwargs) -> str:
         """
-        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.push_to_hub_model_id`.
+        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
         Parameters:
             commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
@@ -2536,7 +2540,11 @@ class Trainer:
         """
 
         if self.args.should_save:
-            self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
+            if self.args.hub_model_id is None:
+                model_name = Path(self.args.output_dir).name
+            else:
+                model_name = self.args.hub_model_id.split("/")[-1]
+            self.create_model_card(model_name=model_name, **kwargs)
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
         self.save_model()
