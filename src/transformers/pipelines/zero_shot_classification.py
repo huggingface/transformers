@@ -88,7 +88,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         hypothesis_template,
         padding=True,
         add_special_tokens=True,
-        truncation=TruncationStrategy.DO_NOT_TRUNCATE,
+        truncation=TruncationStrategy.ONLY_FIRST,
         **kwargs
     ):
         """
@@ -113,13 +113,31 @@ class ZeroShotClassificationPipeline(Pipeline):
                 )
                 inputs.append(model_input)
         else:
-            inputs = self.tokenizer(
-                sequence_pairs,
-                add_special_tokens=add_special_tokens,
-                return_tensors=return_tensors,
-                padding=padding,
-                truncation=truncation,
-            )
+            try:
+                inputs = self.tokenizer(
+                    sequence_pairs,
+                    add_special_tokens=add_special_tokens,
+                    return_tensors=return_tensors,
+                    padding=padding,
+                    truncation=truncation,
+                )
+            except Exception as e:
+                if "too short" in str(e):
+                    # tokenizers might yell that we want to truncate
+                    # to a value that is not even reached by the input.
+                    # In that case we don't want to truncate.
+                    # It seems there's not a really better way to catch that
+                    # exception.
+
+                    inputs = self.tokenizer(
+                        sequence_pairs,
+                        add_special_tokens=add_special_tokens,
+                        return_tensors=return_tensors,
+                        padding=padding,
+                        truncation=TruncationStrategy.DO_NOT_TRUNCATE,
+                    )
+                else:
+                    raise e
 
         return inputs
 
