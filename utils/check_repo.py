@@ -34,6 +34,7 @@ PATH_TO_DOC = "docs/source"
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
     "DPRSpanPredictor",
+    "RealmBertModel",
     "T5Stack",
     "TFDPRSpanPredictor",
 ]
@@ -71,6 +72,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
+    "RealmBertModel",  # Building part of bigger (tested) model.
     "RealmRetriever",  # Submodels have been tested.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "TFDPREncoder",  # Building part of bigger (tested) model.

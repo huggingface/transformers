@@ -618,7 +618,7 @@ class BertPooler(nn.Module):
         return pooled_output
 
 
-class BertModel(PreTrainedModel):
+class RealmBertModel(PreTrainedModel):
     """
     Same as the original BertModel but remvoe docstrings and inherit PreTrainedModel directly.
     """
@@ -977,7 +977,7 @@ class RealmEmbedder(RealmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = BertModel(self.config)
+        self.bert = RealmBertModel(self.config)
         self.cls = RealmRetrieverProjection(self.config)
         self.init_weights()
 
@@ -1165,7 +1165,7 @@ class RealmRetriever(RealmPreTrainedModel):
 class RealmEncoder(RealmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.bert = BertModel(self.config)
+        self.bert = RealmBertModel(self.config)
         self.cls = RealmOnlyMLMHead(self.config)
         self.init_weights()
 
