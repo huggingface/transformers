@@ -205,4 +205,4 @@ class CommonPipelineTest(unittest.TestCase):
         )
         dataset = MyDataset()
         for output in text_classifier(dataset):
-            self.assertEqual(output, {"text": ANY(str)})
+            self.assertEqual(output, {"label": ANY(str), "score": ANY(float)})
