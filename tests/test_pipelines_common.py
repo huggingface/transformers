@@ -185,7 +185,7 @@ class PipelineTestCaseMeta(type):
 class CommonPipelineTest(unittest.TestCase):
     @require_torch
     def test_pipeline_iteration(self):
-        from torch import Dataset
+        from torch.utils.data import Dataset
 
         class MyDataset(Dataset):
             data = [
