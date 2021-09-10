@@ -24,7 +24,13 @@ import torch
 import torch.nn as nn
 
 import haiku as hk
-from transformers import PerceiverBasicDecoder, PerceiverConfig, PerceiverModel, PerceiverTextPreprocessor, PerceiverTextPostprocessor
+from transformers import (
+    PerceiverBasicDecoder,
+    PerceiverConfig,
+    PerceiverModel,
+    PerceiverTextPostprocessor,
+    PerceiverTextPreprocessor,
+)
 from transformers.utils import logging
 
 
@@ -33,10 +39,10 @@ logger = logging.get_logger(__name__)
 
 
 def to_string(inputs: np.ndarray) -> str:
-    inputs_no_special = (
-        inputs[inputs >= 6] - 6)
+    inputs_no_special = inputs[inputs >= 6] - 6
     decoded_bytes = inputs_no_special.astype(np.uint8).tobytes()
-    return decoded_bytes.decode('utf-8', errors='replace')
+    return decoded_bytes.decode("utf-8", errors="replace")
+
 
 def prepare_dummy_inputs():
     # here we prepare a dummy input for MLM
@@ -78,7 +84,9 @@ def rename_keys(state_dict):
         name = name.replace("perceiver_encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
 
         # rename decoder queries
-        name = name.replace("basic_decoder/~/trainable_position_encoding/pos_embs", "decoder.output_position_encodings.weight")
+        name = name.replace(
+            "basic_decoder/~/trainable_position_encoding/pos_embs", "decoder.output_position_encodings.weight"
+        )
 
         # rename embedding decoder bias
         name = name.replace("embedding_decoder/bias", "output_postprocessor.bias")
@@ -183,11 +191,20 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
     # load HuggingFace model
     config = PerceiverConfig()
     preprocessor = PerceiverTextPreprocessor(config, vocab_size=262, seq_len=2048)
-    decoder = PerceiverBasicDecoder(config, output_num_channels=1280, output_index_dims=2048, 
-                                        qk_channels=8 * 32, v_channels=config.d_model, num_heads=8,
-                                        use_query_residual=False, final_project=False)
+    decoder = PerceiverBasicDecoder(
+        config,
+        output_num_channels=1280,
+        output_index_dims=2048,
+        qk_channels=8 * 32,
+        v_channels=config.d_model,
+        num_heads=8,
+        use_query_residual=False,
+        final_project=False,
+    )
     postprocessor = PerceiverTextPostprocessor(config, vocab_size=262)
-    model = PerceiverModel(config, input_preprocessor=preprocessor, decoder=decoder, output_postprocessor=postprocessor)
+    model = PerceiverModel(
+        config, input_preprocessor=preprocessor, decoder=decoder, output_postprocessor=postprocessor
+    )
     model.eval()
 
     # load weights
@@ -199,7 +216,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
 
     # verify outputs
     print("Shape of outputs:", outputs.shape)
-    print("First elements of outputs:", outputs[0,:3,:3])
+    print("First elements of outputs:", outputs[0, :3, :3])
 
     masked_tokens_predictions = outputs[0, 51:60].argmax(dim=-1)
     print("Greedy predictions:")

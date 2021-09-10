@@ -49,9 +49,7 @@ class PerceiverTextPostprocessor(nn.Module):
 
     def __call__(self, hidden_states, embedding_layer):
         batch_size, seq_len, d_model = hidden_states.shape
-        output = torch.matmul(
-            hidden_states.reshape([-1, d_model]), embedding_layer.weight.T  # Flatten batch dim
-        )
+        output = torch.matmul(hidden_states.reshape([-1, d_model]), embedding_layer.weight.T)  # Flatten batch dim
         output = output + self.bias
 
         return output.reshape([batch_size, seq_len, self.vocab_size])

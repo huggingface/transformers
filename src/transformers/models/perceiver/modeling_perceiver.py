@@ -676,18 +676,18 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-        print("Encoder outputs:", sequence_output[0,:3,:3])
+        print("Encoder outputs:", sequence_output[0, :3, :3])
 
         outputs = None
         if self.decoder:
-            decoder_query = self.decoder.decoder_query(batch_size) # shape (batch_size, seq_len, d_model)
+            decoder_query = self.decoder.decoder_query(batch_size)  # shape (batch_size, seq_len, d_model)
             outputs = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
-        
+
             if self.output_postprocessor:
                 outputs = self.output_postprocessor(outputs, embedding_layer=self.input_preprocessor.embeddings)
-        
+
         return outputs
-        
+
         # if not return_dict:
         #     return (sequence_output,) + encoder_outputs[1:]
 

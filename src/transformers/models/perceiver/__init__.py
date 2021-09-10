@@ -34,7 +34,7 @@ if is_torch_available():
         "PerceiverPreTrainedModel",
     ]
 
-    _import_structure["processing_perceiver"] = ["PerceiverTextPreprocessor", "PerceiverTextPostprocessor"]
+    _import_structure["processing_perceiver"] = ["PerceiverTextPostprocessor", "PerceiverTextPreprocessor"]
 
 
 if TYPE_CHECKING:

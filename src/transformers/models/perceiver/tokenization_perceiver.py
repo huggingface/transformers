@@ -35,16 +35,20 @@ class PerceiverTokenizer(PreTrainedTokenizer):
     Args:
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
             The token used for padding, for example when batching sequences of different lengths.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"[BOS]"`):
             ...
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"[EOS]"`):
             The end of sequence token.
 
             .. note::
 
                 When building a sequence using special tokens, this is not the token that is used for the end of
                 sequence. The token used is the :obj:`sep_token`.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
+            ...
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+            ...
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
             ...
 
     """
@@ -59,6 +63,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         cls_token="[CLS]",
         sep_token="[SEP]",
+        model_max_length=2048,
         **kwargs
     ) -> None:
 
@@ -76,6 +81,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             cls_token=cls_token,
             sep_token=sep_token,
+            model_max_length=model_max_length,
             **kwargs,
         )
 
