@@ -111,6 +111,8 @@ class PLBartLearnedPositionalEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int):
         # PLBart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
+        
+        # TODO: Check if `padding_idx` is needed as an 
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
