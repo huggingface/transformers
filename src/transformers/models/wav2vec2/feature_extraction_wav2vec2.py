@@ -79,15 +79,22 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         self.do_normalize = do_normalize
 
     @staticmethod
-    def zero_mean_unit_var_norm(input_values: List[np.ndarray], attention_mask: List[np.ndarray]) -> List[np.ndarray]:
+    def zero_mean_unit_var_norm(
+        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
+    ) -> List[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
-
         if attention_mask is not None:
-            normed_input_values = [
-                (x - x[:i].mean()) / np.sqrt(x[:i].var() + 1e-7) for x, i in zip(input_values, attention_mask.sum(-1))
-            ]
+            attention_mask = np.array(attention_mask, np.bool)
+            normed_input_values = []
+
+            for vector, length in zip(input_values, attention_mask.sum(-1)):
+                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                if length > normed_slice.shape[0]:
+                    normed_slice[length:] = padding_value
+
+                normed_input_values.append(normed_slice)
         else:
             normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
 
@@ -214,7 +221,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         # zero-mean and unit-variance normalization
         if self.do_normalize:
             attention_mask = (
-                np.array(attention_mask, dtype=np.bool)
+                attention_mask
                 if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
                 else None
             )

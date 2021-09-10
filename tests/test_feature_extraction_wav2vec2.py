@@ -124,8 +124,8 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
 
-        paddings = ["longest", "do_not_pad", "max_length"]
-        max_lengths = [None, None, 1600]
+        paddings = ["longest", "max_length", "do_not_pad"]
+        max_lengths = [None, 1600, None]
         for max_length, padding in zip(max_lengths, paddings):
             processed = feat_extract(speech_inputs, padding=padding, max_length=max_length, return_tensors="np")
             input_values = processed.input_values
@@ -143,8 +143,8 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         lengths = range(800, 1400, 200)
         speech_inputs = [floats_list((1, x))[0] for x in lengths]
 
-        paddings = ["longest", "do_not_pad", "max_length"]
-        max_lengths = [None, None, 1600]
+        paddings = ["longest", "max_length", "do_not_pad"]
+        max_lengths = [None, 1600, None]
 
         for max_length, padding in zip(max_lengths, paddings):
             processed = feat_extract(speech_inputs, max_length=max_length, padding=padding)
