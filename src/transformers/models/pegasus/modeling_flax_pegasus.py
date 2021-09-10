@@ -686,6 +686,7 @@ class FlaxPegasusEncoder(nn.Module):
             self.config.max_position_embeddings, embed_dim, dtype=self.dtype
         )
         self.layers = FlaxPegasusEncoderLayerCollection(self.config, self.dtype)
+        self.layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
@@ -715,11 +716,14 @@ class FlaxPegasusEncoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        last_hidden_state = outputs[0]
+        last_hidden_state = self.layer_norm(last_hidden_state)
+
         if not return_dict:
-            return outputs
+            return (last_hidden_state,) + outputs[1:]
 
         return FlaxBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
+            last_hidden_state=last_hidden_state,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -751,6 +755,7 @@ class FlaxPegasusDecoder(nn.Module):
         )
 
         self.layers = FlaxPegasusDecoderLayerCollection(self.config, self.dtype)
+        self.layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
@@ -786,11 +791,14 @@ class FlaxPegasusDecoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        last_hidden_state = outputs[0]
+        last_hidden_state = self.layer_norm(last_hidden_state)
+
         if not return_dict:
-            return outputs
+            return (last_hidden_state,) + outputs[1:]
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=outputs.last_hidden_state,
+            last_hidden_state=last_hidden_state,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
