@@ -26,6 +26,7 @@ from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     config_class_to_model_type,
+    model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
 
@@ -33,10 +34,15 @@ from .configuration_auto import (
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitFeatureExtractor"),
+        ("detr", "DetrFeatureExtractor"),
         ("deit", "DeiTFeatureExtractor"),
+        ("hubert", "Wav2Vec2FeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("vit", "ViTFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
+        ("detr", "DetrFeatureExtractor"),
+        ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
+        ("clip", "CLIPFeatureExtractor"),
     ]
 )
 
@@ -46,10 +52,13 @@ FEATURE_EXTRACTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FEATURE_EXTRA
 def feature_extractor_class_from_name(class_name: str):
     for module_name, extractors in FEATURE_EXTRACTOR_MAPPING_NAMES.items():
         if class_name in extractors:
+            module_name = model_type_to_module_name(module_name)
+
+            module = importlib.import_module(f".{module_name}", "transformers.models")
+            return getattr(module, class_name)
             break
 
-    module = importlib.import_module(f".{module_name}", "transformers.models")
-    return getattr(module, class_name)
+    return None
 
 
 class AutoFeatureExtractor:
@@ -156,11 +165,11 @@ class AutoFeatureExtractor:
 
         model_type = config_class_to_model_type(type(config).__name__)
 
-        if model_type is not None:
-            return FEATURE_EXTRACTOR_MAPPING[type(config)].from_dict(config_dict, **kwargs)
-        elif "feature_extractor_type" in config_dict:
+        if "feature_extractor_type" in config_dict:
             feature_extractor_class = feature_extractor_class_from_name(config_dict["feature_extractor_type"])
             return feature_extractor_class.from_dict(config_dict, **kwargs)
+        elif model_type is not None:
+            return FEATURE_EXTRACTOR_MAPPING[type(config)].from_dict(config_dict, **kwargs)
 
         raise ValueError(
             f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a `feature_extractor_type` key in "

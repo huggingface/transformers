@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 
-from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, PreTrainedTokenizer
+from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -76,8 +76,8 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     @require_torch
     def test_small_model_pt(self):
         model = "anton-l/wav2vec2-random-tiny-classifier"
-        tokenizer = PreTrainedTokenizer()
-        audio_classifier = pipeline("audio-classification", model=model, tokenizer=tokenizer)
+
+        audio_classifier = pipeline("audio-classification", model=model)
 
         audio = np.ones((8000,))
         output = audio_classifier(audio, top_k=4)
@@ -98,8 +98,8 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         import datasets
 
         model = "superb/wav2vec2-base-superb-ks"
-        tokenizer = PreTrainedTokenizer()
-        audio_classifier = pipeline("audio-classification", model=model, tokenizer=tokenizer)
+
+        audio_classifier = pipeline("audio-classification", model=model)
         dataset = datasets.load_dataset("anton-l/superb_dummy", "ks", split="test")
 
         audio = np.array(dataset[3]["speech"], dtype=np.float32)
