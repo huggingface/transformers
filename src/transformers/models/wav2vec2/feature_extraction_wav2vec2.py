@@ -79,9 +79,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         self.do_normalize = do_normalize
 
     @staticmethod
-    def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value=0.0
-    ) -> List[np.ndarray]:
+    def zero_mean_unit_var_norm(input_values: List[np.ndarray], attention_mask: List[np.ndarray]) -> List[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
