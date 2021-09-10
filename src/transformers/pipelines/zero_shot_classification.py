@@ -78,12 +78,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         return -1
 
     def _parse_and_tokenize(
-        self,
-        sequence_pairs,
-        padding=True,
-        add_special_tokens=True,
-        truncation=TruncationStrategy.ONLY_FIRST,
-        **kwargs
+        self, sequence_pairs, padding=True, add_special_tokens=True, truncation=TruncationStrategy.ONLY_FIRST, **kwargs
     ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
