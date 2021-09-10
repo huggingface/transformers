@@ -676,15 +676,22 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
+        outputs = None
+        if self.decoder:
+            decoder_query = self.decoder.decoder_query(batch_size) # shape (batch_size, seq_len, d_model)
+            outputs = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
+        
+        return outputs
+        
+        # if not return_dict:
+        #     return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithCrossAttentions(
-            last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
-        )
+        # return BaseModelOutputWithCrossAttentions(
+        #     last_hidden_state=sequence_output,
+        #     hidden_states=encoder_outputs.hidden_states,
+        #     attentions=encoder_outputs.attentions,
+        #     cross_attentions=encoder_outputs.cross_attentions,
+        # )
 
 
 class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
@@ -729,6 +736,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
 
     def __init__(
         self,
+        config,
         output_num_channels,
         position_encoding_type="trainable",
         # Ignored if position_encoding_type == 'none':
@@ -740,14 +748,17 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         use_query_residual=False,
         final_project=True,
     ):
-        super().__init__(name=name)
+        super().__init__()
 
         # If `none`, the decoder will not construct any position encodings.
         # You should construct your own when quering the decoder.
         self.output_position_encodings = None
         if position_encoding_type != "none":
+            if output_index_dims is None:
+                raise ValueError("You must specify output_index_dims")
             self.output_position_encodings = nn.Embedding(output_index_dims, config.d_model)
         self.decoding_cross_attention = PerceiverLayer(
+            config,
             is_cross_attention=True,
             qk_channels=qk_channels,
             v_channels=v_channels,
@@ -762,9 +773,9 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
     def output_shape(self, inputs):
         return ((inputs[0], self._subsampled_index_dims, self._output_num_channels), None)
 
-    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
+    def decoder_query(self, batch_size):
         assert self._position_encoding_type != "none"  # Queries come from elsewhere
-        pos_emb = self.output_position_encodings(batch_size=inputs.shape[0])
+        pos_emb = self.output_position_encodings.expand(batch_size, -1, -1)
         return pos_emb
 
     def forward(self, query, z, query_mask=None):
@@ -777,7 +788,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             attention_mask=query_mask,
             head_mask=None,
             inputs=z,
-            inputs_mask=inputs_mask,
+            inputs_mask=None,
             output_attentions=output_attentions,
         )
         output = layer_outputs[0]

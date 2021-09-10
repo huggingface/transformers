@@ -24,7 +24,7 @@ import torch
 import torch.nn as nn
 
 import haiku as hk
-from transformers import PerceiverConfig, PerceiverModel, PerceiverTextPreprocessor
+from transformers import PerceiverBasicDecoder, PerceiverConfig, PerceiverModel, PerceiverTextPreprocessor, PerceiverTextPostprocessor
 from transformers.utils import logging
 
 
@@ -173,7 +173,9 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
 
     # load HuggingFace model
     config = PerceiverConfig()
-    preprocessor = PerceiverTextPreprocessor(config=config, vocab_size=262, seq_len=2048)
+    preprocessor = PerceiverTextPreprocessor(config, vocab_size=262, seq_len=2048)
+    #decoder = PerceiverBasicDecoder(config, output_num_channels=1280, output_index_dims=2048)
+    postprocessor = PerceiverTextPostprocessor(config, embedding_matrix=preprocessor.embeddings)
     model = PerceiverModel(config, input_preprocessor=preprocessor)
     model.eval()
 

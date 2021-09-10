@@ -35,3 +35,23 @@ class PerceiverTextPreprocessor(nn.Module):
         embeddings = embeddings + self.position_embeddings(position_ids)
 
         return embeddings
+
+
+class PerceiverTextPostprocessor(nn.Module):
+    """Module to decode embeddings."""
+
+    def __init__(self, config, embedding_matrix):
+        """Constructs the module."""
+        super().__init__()
+        self.classifier = embedding_matrix
+        self.vocab_size, self.d_model = embedding_matrix.weight.shape
+        self.bias = nn.Parameter(torch.zeros(self.vocab_size))
+
+    def __call__(self, hidden_states):
+        batch_size, seq_len, _ = hidden_states.shape
+        output = torch.matmul(
+            hidden_states.reshape([-1, self.d_model]), torch.transpose(self.classifier)  # Flatten batch dim
+        )
+        output = output + bias
+
+        return output.reshape([batch_size, seq_len, self.vocab_size])
