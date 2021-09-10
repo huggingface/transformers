@@ -142,8 +142,12 @@ class GPTNeoSelfAttention(nn.Module):
         bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
             1, 1, max_positions, max_positions
         )
+
+        # local causal self attention is a sliding window where each token can only attend to the previous
+        # window_size tokens. This is implemented by updating the causal mask such that for each token
+        # all other tokens are masked except the previous window_size tokens.
         if attention_type == "local":
-            bias = bias ^ torch.tril(bias, -config.window_size)
+            bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
 
         self.register_buffer("bias", bias)
         self.register_buffer("masked_bias", torch.tensor(-1e9))
