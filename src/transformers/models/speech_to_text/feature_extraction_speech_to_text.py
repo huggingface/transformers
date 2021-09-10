@@ -233,12 +233,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             **kwargs,
         )
 
-        #        if "attention_mask" in padded_inputs:
-        #            input_lengths = padded_inputs["attention_mask"].sum(-1)
-        #        else:
-        #            padded_input_values = padded_inputs["input_features"]
-        #            input_lengths = [padded_input_values.shape[-1] for _ in range(padded_input_values.shape[0])]
-
         # make sure list is in array format
         input_features = padded_inputs.get("input_features")
         if isinstance(input_features[0], list):
