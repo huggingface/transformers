@@ -42,6 +42,7 @@ from ...modeling_flax_outputs import (
 from ...modeling_flax_utils import (
     ACT2FN,
     FlaxPreTrainedModel,
+    add_start_docstrings_to_model_forward,
     append_call_sample_docstring,
     append_replace_return_docstrings,
     overwrite_call_docstring,
@@ -450,6 +451,7 @@ class FlaxPegasusEncoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayerCollection with Bart->Pegasus
 class FlaxPegasusEncoderLayerCollection(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -591,6 +593,7 @@ class FlaxPegasusDecoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayerCollection with Bart->Pegasus
 class FlaxPegasusDecoderLayerCollection(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -805,6 +808,7 @@ class FlaxPegasusDecoder(nn.Module):
         )
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartModule with Bart->Pegasus
 class FlaxPegasusModule(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1130,6 +1134,7 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
+    @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -1205,6 +1210,7 @@ append_call_sample_docstring(
 )
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule with Bart->Pegasus
 class FlaxPegasusForConditionalGenerationModule(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32
