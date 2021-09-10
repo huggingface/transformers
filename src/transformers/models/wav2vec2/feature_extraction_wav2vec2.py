@@ -86,7 +86,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         Every array in the list is normalized to have zero mean and unit variance
         """
 
-        if attention_mask is not None and any(0 in mask for mask in attention_mask):
+        if attention_mask is not None:
             normed_input_values = np.asarray(
                 [
                     (x - np.mean(x[:i])) / np.sqrt(np.var(x[:i]) + 1e-7)
@@ -97,8 +97,6 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         else:
             normed_input_values = np.asarray([(x - np.mean(x)) / np.sqrt(np.var(x) + 1e-7) for x in input_values])
 
-        if isinstance(input_values[0], np.ndarray):
-            input_values = [x.astype(np.float32) for x in input_values]
 
         return normed_input_values
 
