@@ -1314,13 +1314,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
             if low_cpu_mem_usage:
-                require_version_core("torch>=1.9")
-                if is_deepspeed_zero3_enabled():
-                    raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
-
-                # save the keys
-                loaded_state_dict_keys = [k for k in state_dict.keys()]
-                del state_dict  # free CPU memory - will reload again later
+                loaded_state_dict_keys = cls._load_state_dict_into_model_low_mem_p1(state_dict)
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1373,7 +1367,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif from_pt:
 
             if low_cpu_mem_usage:
-                cls._low_cpu_mem_usage_load(model, loaded_state_dict_keys, resolved_archive_file)
+                cls._load_state_dict_into_model_low_mem_p2(model, loaded_state_dict_keys, resolved_archive_file)
             else:
                 model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_state_dict_into_model(
                     model,
@@ -1588,61 +1582,78 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return retrieved_modules
 
     @classmethod
-    def _low_cpu_mem_usage_load(cls, model, loaded_state_dict_keys, resolved_archive_file):
+    def _load_state_dict_into_model_low_mem_p1(cls, state_dict):
+        """
+        This is an experimental 2-part function that loads the model using ~1.x model size CPU memory
+
+        Part 1:
+
+        1. save which state_dict keys we have
+        2. drop state_dict
+        """
+        require_version_core("torch>=1.9")
+        if is_deepspeed_zero3_enabled():
+            raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
+
+        # save the keys
+        loaded_state_dict_keys = [k for k in state_dict.keys()]
+        del state_dict  # free CPU memory - will reload again later
+        return loaded_state_dict_keys
+
+    @classmethod
+    def _load_state_dict_into_model_low_mem_p2(cls, model, loaded_state_dict_keys, resolved_archive_file):
+        """
+        This is an experimental 2-part function that loads the model using ~1.x model size CPU memory
+
+        Part 2:
+
+        3. switch to the meta device all params/buffers that are going to be replaced from the loaded state_dict
+        4. load state_dict 2nd time
+        5. replace the params/buffers from the state_dict
+
+        Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
+        """
+
+        # a helper util to find the last sub-module and the param/buffer name
+        def find_submodule_and_param_name(model, long_key):
+            split_key = long_key.split(".")
+            submodule = model
+            while len(split_key) > 1:
+                if hasattr(submodule, split_key[0]):
+                    submodule = getattr(submodule, split_key[0])
+                    del split_key[0]
+                else:
+                    submodule = None
+                    break
+            return submodule, split_key[0]
 
         # dematerialize param storage for keys that are going to be replaced by state_dict, by
         # putting those on the meta device
         for k in loaded_state_dict_keys:
-            split_name = k.split(".")
-            m = model
-            matched = False
-            while len(split_name) > 1:
-                if hasattr(m, split_name[0]):
-                    matched = True
-                    m = getattr(m, split_name[0])
-                    del split_name[0]
-                else:
-                    matched = False
-                    break
-            if matched:
+            submodule, param_name = find_submodule_and_param_name(model, k)
+            if submodule is not None:
                 # selectively switch to the meta device only those params/buffers that will
                 # be next replaced from state_dict. This a complex way to do p.to_("meta")
                 # since we have no in-place to_ for tensors.
-                to_meta_objs = []
-                for n, p in m.named_parameters():
-                    if n == split_name[0]:
-                        to_meta_objs.append(p.data_ptr())
-
-                def selective_to_meta(p):
-                    if p.data_ptr() in to_meta_objs:
-                        return p.to("meta")
-                    else:
-                        return p
-
-                m._apply(selective_to_meta)
+                new_val = getattr(submodule, param_name)
+                if isinstance(new_val, torch.nn.Parameter):
+                    # isinstance returns False for Params on meta device, so switch after the check
+                    new_val = torch.nn.Parameter(new_val.to("meta"))
+                else:
+                    new_val = new_val.to("meta")
+                setattr(submodule, param_name, new_val)
 
         # only now can load state_dict
         state_dict = torch.load(resolved_archive_file, map_location="cpu")
 
-        # materialize float sd keys one by one on CPU
+        # materialize state_dict entries one by one on CPU
         for k in loaded_state_dict_keys:
-            split_name = k.split(".")
-            m = model
-            matched = False
-            while len(split_name) > 1:
-                if hasattr(m, split_name[0]):
-                    matched = True
-                    m = getattr(m, split_name[0])
-                    del split_name[0]
-                else:
-                    matched = False
-                    break
-            if matched:
-                persistent_buffers = {k: v for k, v in m._buffers.items() if k not in m._non_persistent_buffers_set}
-                if split_name[0] in persistent_buffers:
-                    m._buffers[split_name[0]] = state_dict[k]
-                else:
-                    setattr(m, split_name[0], torch.nn.Parameter(state_dict[k]))
+            submodule, param_name = find_submodule_and_param_name(model, k)
+            if submodule is not None:
+                new_val = state_dict[k]
+                if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
+                    new_val = torch.nn.Parameter(new_val)
+                setattr(submodule, param_name, new_val)
 
         del state_dict
 
