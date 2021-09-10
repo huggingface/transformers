@@ -24,7 +24,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import BaseModelOutputWithCrossAttentions
+from ...modeling_outputs import BaseModelOutputWithCrossAttentions, MaskedLMOutput
 from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
@@ -517,7 +517,6 @@ class PerceiverPreTrainedModel(PreTrainedModel):
 
     config_class = PerceiverConfig
     base_model_prefix = "perceiver"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -559,11 +558,6 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-
-            `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
@@ -623,7 +617,6 @@ class PerceiverModel(PerceiverPreTrainedModel):
         self,
         inputs=None,
         attention_mask=None,
-        position_ids=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -697,6 +690,81 @@ class PerceiverModel(PerceiverPreTrainedModel):
         #     attentions=encoder_outputs.attentions,
         #     cross_attentions=encoder_outputs.cross_attentions,
         # )
+
+
+@add_start_docstrings("""Example use of Perceiver for masked language modeling. """, PERCEIVER_START_DOCSTRING)
+class PerceiverForMaskedLM(PerceiverPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.preprocessor = PerceiverTextPreprocessor(config, vocab_size=262, seq_len=2048)
+        self.decoder = PerceiverBasicDecoder(
+            config,
+            output_num_channels=1280,
+            output_index_dims=2048,
+            qk_channels=8 * 32,
+            v_channels=config.d_model,
+            num_heads=8,
+            use_query_residual=False,
+            final_project=False,
+        )
+        self.postprocessor = PerceiverTextPostprocessor(config, vocab_size=262)
+        self.model = PerceiverModel(
+            config, input_preprocessor=self.preprocessor, decoder=self.decoder, output_postprocessor=self.postprocessor
+        )
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=MaskedLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        prediction_scores = self.model(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
+        )
+
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if not return_dict:
+            output = (prediction_scores,) + outputs[2:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
+        return MaskedLMOutput(
+            loss=masked_lm_loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
