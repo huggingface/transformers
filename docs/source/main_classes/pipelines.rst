@@ -46,10 +46,13 @@ The pipeline abstraction
 The `pipeline` abstraction is a wrapper around all the other available pipelines. It is instantiated as any other
 pipeline but requires an additional argument which is the `task`.
 
-Simple call on one item: .. code-block::
+Simple call on one item:
 
-    >>> pipe = pipeline("text-classification") >>> pipe("This restaurant is awesome") [{'label': 'POSITIVE', 'score':
-    0.9998743534088135}]
+.. code-block::
+
+    >>> pipe = pipeline("text-classification")
+    >>> pipe("This restaurant is awesome")
+    [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
 
 To call a pipeline on many items, you can either call with a `list`.
 
