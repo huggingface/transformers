@@ -1919,7 +1919,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         logits = logits.numpy()
         if logits_agg is not None:
             logits_agg = logits_agg.numpy()
-        data = data.convert_to_tensors("np")
+        data = {key: value.numpy() for key, value in data.items() if key != "training"}
         # input data is of type float32
         # np.log(np.finfo(np.float32).max) = 88.72284
         # Any value over 88.72284 will overflow when passed through the exponential, sending a warning
