@@ -249,18 +249,22 @@ def check_task(task: str) -> Tuple[Dict, Any]:
         task (:obj:`str`):
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
-            - :obj:`"feature-extraction"`
-            - :obj:`"text-classification"`
-            - :obj:`"sentiment-analysis"` (alias of :obj:`"text-classification")
-            - :obj:`"token-classification"`
-            - :obj:`"ner"` (alias of :obj:`"token-classification")
-            - :obj:`"question-answering"`
-            - :obj:`"fill-mask"`
-            - :obj:`"summarization"`
-            - :obj:`"translation_xx_to_yy"`
-            - :obj:`"translation"`
-            - :obj:`"text-generation"`
+            - :obj:`"audio-classification"`
+            - :obj:`"automatic-speech-recognition"`
             - :obj:`"conversational"`
+            - :obj:`"feature-extraction"`
+            - :obj:`"fill-mask"`
+            - :obj:`"image-classification"`
+            - :obj:`"question-answering"`
+            - :obj:`"table-question-answering"`
+            - :obj:`"text2text-generation"`
+            - :obj:`"text-classification"` (alias :obj:`"sentiment-analysis" available)
+            - :obj:`"text-generation"`
+            - :obj:`"token-classification"` (alias :obj:`"ner"` available)
+            - :obj:`"translation"`
+            - :obj:`"translation_xx_to_yy"`
+            - :obj:`"summarization"`
+            - :obj:`"zero-shot-classification"`
 
     Returns:
         (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None)) The actual dictionary required to initialize the
@@ -312,21 +316,26 @@ def pipeline(
         task (:obj:`str`):
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
-            - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`.
-            - :obj:`"text-classification"`: will return a :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification"`) will return a
-              :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"token-classification"`: will return a :class:`~transformers.TokenClassificationPipeline`.
-            - :obj:`"ner"` (alias of :obj:`"token-classification"`): will return a
-              :class:`~transformers.TokenClassificationPipeline`.
-            - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`.
-            - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
-            - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
-            - :obj:`"translation_xx_to_yy"`: will return a :class:`~transformers.TranslationPipeline`.
-            - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`.
-            - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`.
-            - :obj:`"zero-shot-classification:`: will return a :class:`~transformers.ZeroShotClassificationPipeline`.
-            - :obj:`"conversational"`: will return a :class:`~transformers.ConversationalPipeline`.
+            - :obj:`"audio-classification"`: will return a :class:`~transformers.AudioClassificationPipeline`:.
+            - :obj:`"automatic-speech-recognition"`: will return a
+              :class:`~transformers.AutomaticSpeechRecognitionPipeline`:.
+            - :obj:`"conversational"`: will return a :class:`~transformers.ConversationalPipeline`:.
+            - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`:.
+            - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`:.
+            - :obj:`"image-classification"`: will return a :class:`~transformers.ImageClassificationPipeline`:.
+            - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`:.
+            - :obj:`"table-question-answering"`: will return a :class:`~transformers.TableQuestionAnsweringPipeline`:.
+            - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`:.
+            - :obj:`"text-classification"` (alias :obj:`"sentiment-analysis" available): will return a
+              :class:`~transformers.TextClassificationPipeline`:.
+            - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`:.
+            - :obj:`"token-classification"` (alias :obj:`"ner"` available): will return a
+              :class:`~transformers.TokenClassificationPipeline`:.
+            - :obj:`"translation"`: will return a :class:`~transformers.TranslationPipeline`:.
+            - :obj:`"translation_xx_to_yy"`: will return a :class:`~transformers.TranslationPipeline`:.
+            - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`:.
+            - :obj:`"zero-shot-classification"`: will return a :class:`~transformers.ZeroShotClassificationPipeline`:.
+
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
             actual instance of a pretrained model inheriting from :class:`~transformers.PreTrainedModel` (for PyTorch)

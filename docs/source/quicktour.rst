@@ -67,8 +67,8 @@ make them readable. For instance:
     >>> classifier('We are very happy to show you the 🤗 Transformers library.')
     [{'label': 'POSITIVE', 'score': 0.9998}]
 
-That's encouraging! You can use it on a list of sentences, which will be preprocessed then fed to the model as a
-`batch`, returning a list of dictionaries like this one:
+That's encouraging! You can use it on a list of sentences, which will be preprocessed then fed to the model, returning
+a list of dictionaries like this one:
 
 .. code-block::
 
@@ -78,6 +78,8 @@ That's encouraging! You can use it on a list of sentences, which will be preproc
     ...     print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
     label: POSITIVE, with score: 0.9998
     label: NEGATIVE, with score: 0.5309
+
+To use with a large dataset, look at :doc:`iterating over a pipeline <./main_classes/pipelines>`
 
 You can see the second sentence has been classified as negative (it needs to be positive or negative) but its score is
 fairly neutral.

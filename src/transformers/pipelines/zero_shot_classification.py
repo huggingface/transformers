@@ -2,14 +2,11 @@ from typing import List, Union
 
 import numpy as np
 
-from ..file_utils import add_end_docstrings, is_torch_available
+from ..file_utils import add_end_docstrings
 from ..tokenization_utils import TruncationStrategy
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -22,7 +19,7 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
 
     def _parse_labels(self, labels):
         if isinstance(labels, str):
-            labels = [label.strip() for label in labels.split(",")]
+            labels = [label.strip() for label in labels.split(",") if label.strip()]
         return labels
 
     def __call__(self, sequences, labels, hypothesis_template):
@@ -38,13 +35,12 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
 
         if isinstance(sequences, str):
             sequences = [sequences]
-        labels = self._parse_labels(labels)
 
         sequence_pairs = []
         for sequence in sequences:
             sequence_pairs.extend([[sequence, hypothesis_template.format(label)] for label in labels])
 
-        return sequence_pairs
+        return sequence_pairs, sequences
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
@@ -66,8 +62,8 @@ class ZeroShotClassificationPipeline(Pipeline):
     """
 
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
-        super().__init__(*args, **kwargs)
         self._args_parser = args_parser
+        super().__init__(*args, **kwargs)
         if self.entailment_id == -1:
             logger.warning(
                 "Failed to determine 'entailment' label id from the label2id mapping in the model config. Setting to "
@@ -82,19 +78,11 @@ class ZeroShotClassificationPipeline(Pipeline):
         return -1
 
     def _parse_and_tokenize(
-        self,
-        sequences,
-        candidate_labels,
-        hypothesis_template,
-        padding=True,
-        add_special_tokens=True,
-        truncation=TruncationStrategy.ONLY_FIRST,
-        **kwargs
+        self, sequence_pairs, padding=True, add_special_tokens=True, truncation=TruncationStrategy.ONLY_FIRST, **kwargs
     ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
-        sequence_pairs = self._args_parser(sequences, candidate_labels, hypothesis_template)
         return_tensors = self.framework
         if getattr(self.tokenizer, "pad_token", None) is None:
             # XXX some tokenizers do not have a padding token, we use simple lists
@@ -141,55 +129,27 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         return inputs
 
-    def _forward(self, inputs, return_tensors=False):
-        """
-        Internal framework specific forward dispatching
+    def _sanitize_parameters(self, **kwargs):
+        if kwargs.get("multi_class", None) is not None:
+            kwargs["multi_label"] = kwargs["multi_class"]
+            logger.warning(
+                "The `multi_class` argument has been deprecated and renamed to `multi_label`. "
+                "`multi_class` will be removed in a future version of Transformers."
+            )
+        preprocess_params = {}
+        if "candidate_labels" in kwargs:
+            preprocess_params["candidate_labels"] = self._args_parser._parse_labels(kwargs["candidate_labels"])
+        if "hypothesis_template" in kwargs:
+            preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
 
-        Args:
-            inputs: dict holding all the keyword arguments for required by the model forward method.
-            return_tensors: Whether to return native framework (pt/tf) tensors rather than numpy array
-
-        Returns:
-            Numpy array
-        """
-        # Encode for forward
-        with self.device_placement():
-            if self.framework == "tf":
-                if isinstance(inputs, list):
-                    predictions = []
-                    for input_ in inputs:
-                        prediction = self.model(input_.data, training=False)[0]
-                        predictions.append(prediction)
-                else:
-                    predictions = self.model(inputs.data, training=False)[0]
-            else:
-                with torch.no_grad():
-                    if isinstance(inputs, list):
-                        predictions = []
-                        for input_ in inputs:
-                            model_input = self.ensure_tensor_on_device(**input_)
-                            prediction = self.model(**model_input)[0].cpu()
-                            predictions.append(prediction)
-
-                    else:
-                        inputs = self.ensure_tensor_on_device(**inputs)
-                        predictions = self.model(**inputs)[0].cpu()
-
-        if return_tensors:
-            return predictions
-        else:
-            if isinstance(predictions, list):
-                predictions = np.array([p.numpy() for p in predictions])
-            else:
-                predictions = predictions.numpy()
-            return predictions
+        postprocess_params = {}
+        if "multi_label" in kwargs:
+            postprocess_params["multi_label"] = kwargs["multi_label"]
+        return preprocess_params, {}, postprocess_params
 
     def __call__(
         self,
         sequences: Union[str, List[str]],
-        candidate_labels,
-        hypothesis_template="This example is {}.",
-        multi_label=False,
         **kwargs,
     ):
         """
@@ -222,53 +182,78 @@ class ZeroShotClassificationPipeline(Pipeline):
             - **labels** (:obj:`List[str]`) -- The labels sorted by order of likelihood.
             - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
         """
-        if "multi_class" in kwargs and kwargs["multi_class"] is not None:
-            multi_label = kwargs.pop("multi_class")
-            logger.warning(
-                "The `multi_class` argument has been deprecated and renamed to `multi_label`. "
-                "`multi_class` will be removed in a future version of Transformers."
-            )
 
-        if sequences and isinstance(sequences, str):
-            sequences = [sequences]
+        result = super().__call__(sequences, **kwargs)
+        if len(result) == 1:
+            return result[0]
+        return result
 
-        outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
-        if isinstance(outputs, list):
-            # XXX: Some tokenizers cannot handle batching because they don't
-            # have pad_token, so outputs will be a list, however, because outputs
-            # is only n logits and sequence_length is not present anymore, we
-            # can recreate a tensor out of outputs.
-            outputs = np.array(outputs)
-        num_sequences = len(sequences)
-        candidate_labels = self._args_parser._parse_labels(candidate_labels)
-        reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))
+    def preprocess(self, inputs, candidate_labels=None, hypothesis_template="This example is {}."):
+        sequence_pairs, sequences = self._args_parser(inputs, candidate_labels, hypothesis_template)
+        model_inputs = self._parse_and_tokenize(sequence_pairs)
 
-        if len(candidate_labels) == 1:
-            multi_label = True
+        prepared_inputs = {
+            "candidate_labels": candidate_labels,
+            "sequences": sequences,
+            "inputs": model_inputs,
+        }
+        return prepared_inputs
 
-        if not multi_label:
-            # softmax the "entailment" logits over all candidate labels
-            entail_logits = reshaped_outputs[..., self.entailment_id]
-            scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
+    def _forward(self, inputs):
+        candidate_labels = inputs["candidate_labels"]
+        sequences = inputs["sequences"]
+        model_inputs = inputs["inputs"]
+        if isinstance(model_inputs, list):
+            outputs = []
+            for input_ in model_inputs:
+                prediction = self.model(**input_)[0].cpu()
+                outputs.append(prediction)
         else:
+            outputs = self.model(**model_inputs)
+
+        model_outputs = {"candidate_labels": candidate_labels, "sequences": sequences, "outputs": outputs}
+        return model_outputs
+
+    def postprocess(self, model_outputs, multi_label=False):
+        candidate_labels = model_outputs["candidate_labels"]
+        sequences = model_outputs["sequences"]
+        outputs = model_outputs["outputs"]
+
+        if self.framework == "pt":
+            if isinstance(outputs, list):
+                logits = np.concatenate([output.cpu().numpy() for output in outputs], axis=0)
+            else:
+                logits = outputs["logits"].cpu().numpy()
+        else:
+            if isinstance(outputs, list):
+                logits = np.concatenate([output.numpy() for output in outputs], axis=0)
+            else:
+                logits = outputs["logits"].numpy()
+        N = logits.shape[0]
+        n = len(candidate_labels)
+        num_sequences = N // n
+        reshaped_outputs = logits.reshape((num_sequences, n, -1))
+
+        if multi_label or len(candidate_labels) == 1:
             # softmax over the entailment vs. contradiction dim for each label independently
             entailment_id = self.entailment_id
             contradiction_id = -1 if entailment_id == 0 else 0
             entail_contr_logits = reshaped_outputs[..., [contradiction_id, entailment_id]]
             scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
             scores = scores[..., 1]
+        else:
+            # softmax the "entailment" logits over all candidate labels
+            entail_logits = reshaped_outputs[..., self.entailment_id]
+            scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
 
         result = []
         for iseq in range(num_sequences):
             top_inds = list(reversed(scores[iseq].argsort()))
             result.append(
                 {
-                    "sequence": sequences if isinstance(sequences, str) else sequences[iseq],
+                    "sequence": sequences[iseq],
                     "labels": [candidate_labels[i] for i in top_inds],
-                    "scores": scores[iseq][top_inds].tolist(),
+                    "scores": scores[iseq, top_inds].tolist(),
                 }
             )
-
-        if len(result) == 1:
-            return result[0]
         return result
