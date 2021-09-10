@@ -778,8 +778,14 @@ class Pipeline(_ScikitCompat):
         return self._ensure_tensor_on_device(inputs, self.device)
 
     def _ensure_tensor_on_device(self, inputs, device):
-        if isinstance(inputs, (dict, UserDict)):
+        if isinstance(inputs, ModelOutput):
+            return ModelOutput(
+                {name: self._ensure_tensor_on_device(tensor, device) for name, tensor in inputs.items()}
+            )
+        elif isinstance(inputs, dict):
             return {name: self._ensure_tensor_on_device(tensor, device) for name, tensor in inputs.items()}
+        elif isinstance(inputs, UserDict):
+            return UserDict({name: self._ensure_tensor_on_device(tensor, device) for name, tensor in inputs.items()})
         elif isinstance(inputs, list):
             return [self._ensure_tensor_on_device(item, device) for item in inputs]
         elif isinstance(inputs, tuple):
