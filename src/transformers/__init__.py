@@ -297,6 +297,11 @@ _import_structure = {
         "UniSpeechSatConfig",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
+    "models.vision_text_dual_encoder": [
+        "VISION_TEXT_DUAL_ENCODER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VisionTextDualEncoderConfig",
+        "VisionTextDualEncoderTokenizer",
+    ],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
@@ -397,6 +402,7 @@ else:
 if is_tokenizers_available():
     # Fast tokenizers
     _import_structure["models.fnet"].append("FNetTokenizerFast")
+    _import_structure["models.vision_text_dual_encoder"].append("VisionTextDualEncoderTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -602,6 +608,7 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1307,6 +1314,21 @@ if is_torch_available():
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
+    _import_structure["models.vision_text_dual_encoder"].extend(
+        [
+            "VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VisionTextDualEncoderForCausalLM",
+            "VisionTextDualEncoderForMaskedLM",
+            "VisionTextDualEncoderForMultipleChoice",
+            "VisionTextDualEncoderForQuestionAnswering",
+            "VisionTextDualEncoderForSequenceClassification",
+            "VisionTextDualEncoderForTokenClassification",
+            "VisionTextDualEncoderLayer",
+            "VisionTextDualEncoderModel",
+            "VisionTextDualEncoderPreTrainedModel",
+            "load_tf_weights_in_vision_text_dual_encoder",
+        ]
+    )
     _import_structure["models.visual_bert"].extend(
         [
             "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1896,6 +1918,7 @@ if is_flax_available():
     )
 
     # Flax models structure
+
     _import_structure["models.bart"].extend(
         [
             "FlaxBartForConditionalGeneration",
@@ -2013,6 +2036,19 @@ if is_flax_available():
     )
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
+    _import_structure["models.vision_text_dual_encoder"].extend(
+        [
+            "FlaxVisionTextDualEncoderForCausalLM",
+            "FlaxVisionTextDualEncoderForMaskedLM",
+            "FlaxVisionTextDualEncoderForMultipleChoice",
+            "FlaxVisionTextDualEncoderForQuestionAnswering",
+            "FlaxVisionTextDualEncoderForSequenceClassification",
+            "FlaxVisionTextDualEncoderForTokenClassification",
+            "FlaxVisionTextDualEncoderLayer",
+            "FlaxVisionTextDualEncoderModel",
+            "FlaxVisionTextDualEncoderPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
@@ -2253,6 +2289,11 @@ if TYPE_CHECKING:
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
+    from .models.vision_text_dual_encoder import (
+        VISION_TEXT_DUAL_ENCODER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VisionTextDualEncoderConfig,
+        VisionTextDualEncoderTokenizer,
+    )
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
@@ -2388,6 +2429,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.vision_text_dual_encoder import VisionTextDualEncoderTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -2468,6 +2510,7 @@ if TYPE_CHECKING:
         from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3097,6 +3140,20 @@ if TYPE_CHECKING:
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.visual_bert import (
+        from .models.vision_text_dual_encoder import (
+            VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VisionTextDualEncoderForCausalLM,
+            VisionTextDualEncoderForMaskedLM,
+            VisionTextDualEncoderForMultipleChoice,
+            VisionTextDualEncoderForQuestionAnswering,
+            VisionTextDualEncoderForSequenceClassification,
+            VisionTextDualEncoderForTokenClassification,
+            VisionTextDualEncoderLayer,
+            VisionTextDualEncoderModel,
+            VisionTextDualEncoderPreTrainedModel,
+            load_tf_weights_in_vision_text_dual_encoder,
+        )
+        from .models.visual_bert import (  # load_tf_weights_in_visual_bert,
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VisualBertForMultipleChoice,
             VisualBertForPreTraining,
@@ -3543,6 +3600,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tf_objects import *
 
     if is_flax_available():
+
         from .generation_flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
@@ -3676,6 +3734,17 @@ if TYPE_CHECKING:
         )
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
+        from .models.vision_text_dual_encoder import (
+            FlaxVisionTextDualEncoderForCausalLM,
+            FlaxVisionTextDualEncoderForMaskedLM,
+            FlaxVisionTextDualEncoderForMultipleChoice,
+            FlaxVisionTextDualEncoderForQuestionAnswering,
+            FlaxVisionTextDualEncoderForSequenceClassification,
+            FlaxVisionTextDualEncoderForTokenClassification,
+            FlaxVisionTextDualEncoderLayer,
+            FlaxVisionTextDualEncoderModel,
+            FlaxVisionTextDualEncoderPreTrainedModel,
+        )
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,

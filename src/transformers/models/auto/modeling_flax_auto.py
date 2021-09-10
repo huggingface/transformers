@@ -28,7 +28,11 @@ logger = logging.get_logger(__name__)
 FLAX_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+<<<<<<< HEAD
         ("pegasus", "FlaxPegasusModel"),
+=======
+        ("vision_text_dual_encoder", "FlaxVisionTextDualEncoderModel"),
+>>>>>>> init vision_text_dual_encoder
         ("distilbert", "FlaxDistilBertModel"),
         ("albert", "FlaxAlbertModel"),
         ("roberta", "FlaxRobertaModel"),
@@ -68,6 +72,8 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+        ("vision_text_dual_encoder", "FlaxVisionTextDualEncoderForMaskedLM"),
+        ("vision_text_dual_encoder", "FlaxVisionTextDualEncoderForMaskedLM"),
         ("distilbert", "FlaxDistilBertForMaskedLM"),
         ("albert", "FlaxAlbertForMaskedLM"),
         ("roberta", "FlaxRobertaForMaskedLM"),
@@ -109,6 +115,7 @@ FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("vision_text_dual_encoder", "FlaxVisionTextDualEncoderForCausalLM"),
         ("gpt2", "FlaxGPT2LMHeadModel"),
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
     ]
@@ -117,6 +124,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("vision_text_dual_encoder", "FlaxVisionTextDualEncoderForSequenceClassification"),
         ("distilbert", "FlaxDistilBertForSequenceClassification"),
         ("albert", "FlaxAlbertForSequenceClassification"),
         ("roberta", "FlaxRobertaForSequenceClassification"),
@@ -131,6 +139,7 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("vision_text_dual_encoder", "FlaxVisionTextDualEncoderForQuestionAnswering"),
         ("distilbert", "FlaxDistilBertForQuestionAnswering"),
         ("albert", "FlaxAlbertForQuestionAnswering"),
         ("roberta", "FlaxRobertaForQuestionAnswering"),
@@ -145,6 +154,7 @@ FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+        ("vision_text_dual_encoder", "FlaxVisionTextDualEncoderForTokenClassification"),
         ("distilbert", "FlaxDistilBertForTokenClassification"),
         ("albert", "FlaxAlbertForTokenClassification"),
         ("roberta", "FlaxRobertaForTokenClassification"),
@@ -157,6 +167,7 @@ FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        ("vision_text_dual_encoder", "FlaxVisionTextDualEncoderForMultipleChoice"),
         ("distilbert", "FlaxDistilBertForMultipleChoice"),
         ("albert", "FlaxAlbertForMultipleChoice"),
         ("roberta", "FlaxRobertaForMultipleChoice"),
