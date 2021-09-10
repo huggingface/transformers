@@ -47,7 +47,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 SPIECE_UNDERLINE = "▁"
 
 
-# TODO: Need to check the special tokens once. And verify this tokenizer will work for our case.
 class FNetTokenizer(PreTrainedTokenizer):
     """
     Construct an FNet tokenizer. Adapted from :class:`~transformers.AlbertTokenizer`. Based on `SentencePiece
