@@ -210,7 +210,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             raw_speech = [np.asarray(speech) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.float64:
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
             raw_speech = raw_speech.astype(np.float32)
 
         # always return batch
