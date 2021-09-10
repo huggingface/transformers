@@ -93,21 +93,38 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = FNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁this", "▁is", "▁a", "▁test"])
+        self.assertListEqual(tokens, ["▁", "T", "his", "▁is", "▁a", "▁test"])
 
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [48, 25, 21, 1289])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [13, 1, 4398, 25, 21, 1289])
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
         self.assertListEqual(
-            tokens, ["▁i", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "é", "."]
+            tokens,
+            ["▁", "I", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "é", "."],
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
-        self.assertListEqual(ids, [31, 23, 386, 19, 561, 3050, 15, 17, 48, 25, 8256, 18, 1, 9])
+        self.assertListEqual(ids, [13, 1, 23, 386, 19, 561, 3050, 15, 17, 48, 25, 8256, 18, 1, 9])
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
         self.assertListEqual(
             back_tokens,
-            ["▁i", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "<unk>", "."],
+            [
+                "▁",
+                "<unk>",
+                "▁was",
+                "▁born",
+                "▁in",
+                "▁9",
+                "2000",
+                ",",
+                "▁and",
+                "▁this",
+                "▁is",
+                "▁fal",
+                "s",
+                "<unk>",
+                ".",
+            ],
         )
 
     def test_sequence_builders(self):
