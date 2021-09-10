@@ -62,6 +62,12 @@ import shutil
 from distutils.core import Command
 from pathlib import Path
 
+import sys
+
+if sys.version_info.major != 3:
+    print('This Python is only compatible with Python 3, but you are running '
+          'Python {}. The installation will likely fail.'.format(sys.version_info.major))
+
 from setuptools import find_packages, setup
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
