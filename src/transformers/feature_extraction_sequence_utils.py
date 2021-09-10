@@ -341,7 +341,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         return processed_features
 
-    def _get_padding_strategies(self, padding=False, max_length=None, pad_to_multiple_of=None, **kwargs):
+    def _get_padding_strategies(self, padding=False, max_length=None):
         """
         Find the correct padding strategy
         """
