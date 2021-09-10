@@ -1,16 +1,12 @@
 import os
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 import requests
 
-from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
-
-if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
 
 if is_vision_available():
     from PIL import Image
@@ -40,23 +36,14 @@ class ObjectDetectionPipeline(Pipeline):
     <https://huggingface.co/models?filter=object-detection>`__.
     """
 
-    def __init__(
-        self,
-        model: "PreTrainedModel",
-        feature_extractor: PreTrainedFeatureExtractor,
-        framework: Optional[str] = None,
-        **kwargs
-    ):
-        super().__init__(model, feature_extractor=feature_extractor, framework=framework, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
-
         self.check_model_type(MODEL_FOR_OBJECT_DETECTION_MAPPING)
-
-        self.feature_extractor = feature_extractor
 
     @staticmethod
     def load_image(image: Union[str, "Image.Image"]):
@@ -80,11 +67,13 @@ class ObjectDetectionPipeline(Pipeline):
         image = image.convert("RGB")
         return image
 
-    def __call__(
-        self,
-        images: Union[str, List[str], "Image", List["Image"]],
-        threshold: Optional[float] = 0.9,
-    ) -> Union[Predictions, List[Prediction]]:
+    def _sanitize_parameters(self, **kwargs):
+        postprocess_kwargs = {}
+        if "threshold" in kwargs:
+            postprocess_kwargs["threshold"] = kwargs["threshold"]
+        return {}, {}, postprocess_kwargs
+
+    def __call__(self, *args, **kwargs) -> Union[Predictions, List[Prediction]]:
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
@@ -112,47 +101,42 @@ class ObjectDetectionPipeline(Pipeline):
             - **score** (:obj:`float`) -- The score attributed by the model for that label.
             - **box** (:obj:`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
-        is_batched = isinstance(images, list)
 
-        if not is_batched:
-            images = [images]
+        return super().__call__(*args, **kwargs)
 
-        images = [self.load_image(image) for image in images]
+    def preprocess(self, image):
+        image = self.load_image(image)
+        target_size = torch.IntTensor([[image.height, image.width]])
+        inputs = self.feature_extractor(images=[image], return_tensors="pt")
+        inputs["target_size"] = target_size
+        return inputs
 
-        with torch.no_grad():
-            inputs = self.feature_extractor(images=images, return_tensors="pt")
-            outputs = self.model(**inputs)
+    def _forward(self, model_inputs):
+        target_size = model_inputs.pop("target_size")
+        outputs = self.model(**model_inputs)
+        model_outputs = {"outputs": outputs, "target_size": target_size}
+        return model_outputs
 
-            if self.framework == "pt":
-                target_sizes = torch.IntTensor([[im.height, im.width] for im in images])
-            else:
-                raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")
+    def postprocess(self, model_outputs, threshold=0.9):
+        raw_annotations = self.feature_extractor.post_process(model_outputs["outputs"], model_outputs["target_size"])
+        raw_annotation = raw_annotations[0]
+        keep = raw_annotation["scores"] > threshold
+        scores = raw_annotation["scores"][keep]
+        labels = raw_annotation["labels"][keep]
+        boxes = raw_annotation["boxes"][keep]
 
-            raw_annotations = self.feature_extractor.post_process(outputs, target_sizes)
-            annotations = []
-            for annotation in raw_annotations:
-                keep = annotation["scores"] > threshold
-                scores = annotation["scores"][keep]
-                labels = annotation["labels"][keep]
-                boxes = annotation["boxes"][keep]
+        raw_annotation["scores"] = scores.tolist()
+        raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
+        raw_annotation["boxes"] = [self._get_bounding_box(box) for box in boxes]
 
-                annotation["scores"] = scores.tolist()
-                annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
-                annotation["boxes"] = [self._get_bounding_box(box) for box in boxes]
+        # {"scores": [...], ...} --> [{"score":x, ...}, ...]
+        keys = ["score", "label", "box"]
+        annotation = [
+            dict(zip(keys, vals))
+            for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["boxes"])
+        ]
 
-                # {"scores": [...], ...} --> [{"score":x, ...}, ...]
-                keys = ["score", "label", "box"]
-                annotation = [
-                    dict(zip(keys, vals))
-                    for vals in zip(annotation["scores"], annotation["labels"], annotation["boxes"])
-                ]
-
-                annotations.append(annotation)
-
-        if not is_batched:
-            return annotations[0]
-
-        return annotations
+        return annotation
 
     def _get_bounding_box(self, box: "torch.Tensor") -> Dict[str, int]:
         """

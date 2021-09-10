@@ -108,8 +108,8 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
 
         # but we do for this one
         translator = pipeline(task="translation_en_to_de")
-        self.assertEquals(translator.src_lang, "en")
-        self.assertEquals(translator.tgt_lang, "de")
+        self.assertEqual(translator._preprocess_params["src_lang"], "en")
+        self.assertEqual(translator._preprocess_params["tgt_lang"], "de")
 
     @require_torch
     @slow
@@ -137,8 +137,8 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
     def test_translation_on_odd_language(self):
         model = "patrickvonplaten/t5-tiny-random"
         translator = pipeline(task="translation_cn_to_ar", model=model)
-        self.assertEquals(translator.src_lang, "cn")
-        self.assertEquals(translator.tgt_lang, "ar")
+        self.assertEqual(translator._preprocess_params["src_lang"], "cn")
+        self.assertEqual(translator._preprocess_params["tgt_lang"], "ar")
 
     @require_torch
     def test_translation_default_language_selection(self):
@@ -146,8 +146,8 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
         with pytest.warns(UserWarning, match=r".*translation_en_to_de.*"):
             translator = pipeline(task="translation", model=model)
         self.assertEqual(translator.task, "translation_en_to_de")
-        self.assertEqual(translator.src_lang, "en")
-        self.assertEqual(translator.tgt_lang, "de")
+        self.assertEqual(translator._preprocess_params["src_lang"], "en")
+        self.assertEqual(translator._preprocess_params["tgt_lang"], "de")
 
     @require_torch
     def test_translation_with_no_language_no_model_fails(self):

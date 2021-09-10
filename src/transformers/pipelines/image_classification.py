@@ -1,24 +1,17 @@
 import os
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import List, Union
 
 import requests
 
-from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
-if TYPE_CHECKING:
-    from ..modeling_tf_utils import TFPreTrainedModel
-    from ..modeling_utils import PreTrainedModel
-
 if is_vision_available():
     from PIL import Image
 
 if is_torch_available():
-    import torch
-
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
 logger = logging.get_logger(__name__)
@@ -37,23 +30,14 @@ class ImageClassificationPipeline(Pipeline):
     <https://huggingface.co/models?filter=image-classification>`__.
     """
 
-    def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        feature_extractor: PreTrainedFeatureExtractor,
-        framework: Optional[str] = None,
-        **kwargs
-    ):
-        super().__init__(model, feature_extractor=feature_extractor, framework=framework, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
-
         self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
-
-        self.feature_extractor = feature_extractor
 
     @staticmethod
     def load_image(image: Union[str, "Image.Image"]):
@@ -77,7 +61,13 @@ class ImageClassificationPipeline(Pipeline):
         image = image.convert("RGB")
         return image
 
-    def __call__(self, images: Union[str, List[str], "Image", List["Image"]], top_k=5):
+    def _sanitize_parameters(self, top_k=None):
+        postprocess_params = {}
+        if top_k is not None:
+            postprocess_params["top_k"] = top_k
+        return {}, {}, postprocess_params
+
+    def __call__(self, images: Union[str, List[str], "Image", List["Image"]], **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 
@@ -106,34 +96,23 @@ class ImageClassificationPipeline(Pipeline):
             - **label** (:obj:`str`) -- The label identified by the model.
             - **score** (:obj:`int`) -- The score attributed by the model for that label.
         """
-        is_batched = isinstance(images, list)
+        return super().__call__(images, **kwargs)
 
-        if not is_batched:
-            images = [images]
+    def preprocess(self, image):
+        image = self.load_image(image)
+        model_inputs = self.feature_extractor(images=image, return_tensors="pt")
+        return model_inputs
 
-        images = [self.load_image(image) for image in images]
+    def _forward(self, model_inputs):
+        model_outputs = self.model(**model_inputs)
+        return model_outputs
 
+    def postprocess(self, model_outputs, top_k=5):
         if top_k > self.model.config.num_labels:
             top_k = self.model.config.num_labels
+        probs = model_outputs.logits.softmax(-1)[0]
+        scores, ids = probs.topk(top_k)
 
-        with torch.no_grad():
-            inputs = self.feature_extractor(images=images, return_tensors="pt")
-            outputs = self.model(**inputs)
-
-            probs = outputs.logits.softmax(-1)
-            scores, ids = probs.topk(top_k)
-
-            scores = scores.tolist()
-            ids = ids.tolist()
-
-        if not is_batched:
-            scores, ids = scores[0], ids[0]
-            labels = [{"score": score, "label": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
-        else:
-            labels = []
-            for scores, ids in zip(scores, ids):
-                labels.append(
-                    [{"score": score, "label": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
-                )
-
-        return labels
+        scores = scores.tolist()
+        ids = ids.tolist()
+        return [{"score": score, "label": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]

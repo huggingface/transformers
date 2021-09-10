@@ -506,6 +506,7 @@ Flax), PyTorch, and/or TensorFlow.
     migration
     contributing
     add_new_model
+    add_new_pipeline
     fast_tokenizers
     performance
     parallelism

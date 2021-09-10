@@ -15,11 +15,13 @@
 import importlib
 import logging
 import string
+import unittest
 from abc import abstractmethod
 from functools import lru_cache
 from unittest import skipIf
 
-from transformers import FEATURE_EXTRACTOR_MAPPING, TOKENIZER_MAPPING, AutoFeatureExtractor, AutoTokenizer
+from transformers import FEATURE_EXTRACTOR_MAPPING, TOKENIZER_MAPPING, AutoFeatureExtractor, AutoTokenizer, pipeline
+from transformers.testing_utils import is_pipeline_test, require_torch
 
 
 logger = logging.getLogger(__name__)
@@ -177,3 +179,30 @@ class PipelineTestCaseMeta(type):
         dct["test_small_model_tf"] = dct.get("test_small_model_tf", inner)
 
         return type.__new__(mcs, name, bases, dct)
+
+
+@is_pipeline_test
+class CommonPipelineTest(unittest.TestCase):
+    @require_torch
+    def test_pipeline_iteration(self):
+        from torch.utils.data import Dataset
+
+        class MyDataset(Dataset):
+            data = [
+                "This is a test",
+                "This restaurant is great",
+                "This restaurant is awful",
+            ]
+
+            def __len__(self):
+                return 3
+
+            def __getitem__(self, i):
+                return self.data[i]
+
+        text_classifier = pipeline(
+            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="pt"
+        )
+        dataset = MyDataset()
+        for output in text_classifier(dataset):
+            self.assertEqual(output, {"label": ANY(str), "score": ANY(float)})

@@ -186,7 +186,7 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             ],
         )
 
-        outputs = fill_masker([f"This is a {tokenizer.mask_token}", f"Another {tokenizer.mask_token}"])
+        outputs = fill_masker([f"This is a {tokenizer.mask_token}", f"Another {tokenizer.mask_token} great test."])
         self.assertEqual(
             outputs,
             [
