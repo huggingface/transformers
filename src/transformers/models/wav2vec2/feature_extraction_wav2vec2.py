@@ -207,10 +207,10 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         elif (
             not isinstance(input_values, np.ndarray)
             and isinstance(input_values[0], np.ndarray)
-            and input_values[0].dtype is np.float64
+            and input_values[0].dtype is np.dtype(np.float64)
         ):
             padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
-        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.float64:
+        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
             padded_inputs["input_values"] = input_values.astype(np.float32)
 
         # convert attention_mask to correct format
