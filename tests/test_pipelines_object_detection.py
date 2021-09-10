@@ -113,6 +113,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
 
         outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.0)
 
+        print(outputs)
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
