@@ -222,8 +222,11 @@ class TFSequenceClassificationLoss:
 
 class TFMultipleChoiceLoss:
     """Loss function suitable for multiple choice tasks."""
+
     def compute_loss(self, labels, logits):
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
         return loss_fn(labels, logits)
 
 
