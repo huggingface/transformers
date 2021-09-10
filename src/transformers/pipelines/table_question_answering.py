@@ -184,7 +184,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
             input_ids = inputs["input_ids"]
             attention_mask = inputs["attention_mask"]
-            token_type_ids = inputs["token_type_ids"]
+            token_type_ids = inputs["token_type_ids"].numpy()
             token_type_ids_example = None
 
             for index in range(batch_size):
@@ -194,7 +194,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
                     prev_labels_example = token_type_ids_example[:, 3]  # shape (seq_len,)
                     model_labels = np.zeros_like(prev_labels_example, dtype=np.int32)  # shape (seq_len,)
 
-                    token_type_ids_example = token_type_ids[index].numpy()  # shape (seq_len, 7)
+                    token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
                     for i in range(model_labels.shape[0]):
                         segment_id = token_type_ids_example[:, 0].tolist()[i]
                         col_id = token_type_ids_example[:, 1].tolist()[i] - 1
@@ -224,7 +224,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
                 probabilities = dist_per_token.probs_parameter() * tf.cast(attention_mask_example, tf.float32)
 
                 coords_to_probs = collections.defaultdict(list)
-                token_type_ids_example = token_type_ids_example.numpy()
+                token_type_ids_example = token_type_ids_example
                 for i, p in enumerate(tf.squeeze(probabilities).numpy().tolist()):
                     segment_id = token_type_ids_example[:, 0].tolist()[i]
                     col = token_type_ids_example[:, 1].tolist()[i] - 1
