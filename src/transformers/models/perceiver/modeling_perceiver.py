@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Deepmind The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Deepmind and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -582,7 +582,7 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Perceiver Model transformer outputting raw hidden-states without any specific head on top.",
+    """The Perceiver: a scalable, fully attentional architecture.""",
     PERCEIVER_START_DOCSTRING,
 )
 class PerceiverModel(PerceiverPreTrainedModel):
@@ -637,7 +637,11 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         if inputs is None:
             raise ValueError("You must specify inputs")
-        elif inputs.size()[-1] != self.config.d_model:
+
+        if self.input_preprocessor is not None:
+            inputs = self.input_preprocessor(inputs)
+
+        if inputs.size()[-1] != self.config.d_model:
             raise ValueError("Make sure the dimensionality of the inputs corresponds to config.d_model")
         else:
             input_shape = inputs.size()

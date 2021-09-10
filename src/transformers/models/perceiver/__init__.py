@@ -38,6 +38,8 @@ if is_torch_available():
         "PerceiverPreTrainedModel",
     ]
 
+    _import_structure["processing_perceiver"] = ["PerceiverTextPreprocessor"]
+
 
 if TYPE_CHECKING:
     from .configuration_perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig
@@ -55,6 +57,7 @@ if TYPE_CHECKING:
             PerceiverModel,
             PerceiverPreTrainedModel,
         )
+        from .processing_perceiver import PerceiverTextPreprocessor
 
 
 else:

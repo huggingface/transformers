@@ -1142,6 +1142,7 @@ if is_torch_available():
             "PerceiverLayer",
             "PerceiverModel",
             "PerceiverPreTrainedModel",
+            "PerceiverTextPreprocessor",
         ]
     )
     _import_structure["models.prophetnet"].extend(
@@ -3009,6 +3010,7 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
+            PerceiverTextPreprocessor,
         )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,

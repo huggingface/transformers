@@ -24,7 +24,7 @@ import torch
 import torch.nn as nn
 
 import haiku as hk
-from transformers import PerceiverConfig, PerceiverModel
+from transformers import PerceiverConfig, PerceiverModel, PerceiverTextPreprocessor
 from transformers.utils import logging
 
 
@@ -64,21 +64,6 @@ def prepare_dummy_inputs():
     return inputs, input_mask
 
 
-class TextPreProcessor(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.embeddings = nn.Embedding(num_embeddings=262, embedding_dim=768)
-        self.position_embeddings = nn.Embedding(2048, 768)
-
-    def __call__(self, inputs):
-
-        embeddings = self.embeddings(inputs)
-        position_ids = torch.arange(0, 2048)
-        embeddings = embeddings + self.position_embeddings(position_ids)
-
-        return embeddings
-
-
 def rename_keys(state_dict):
     for name in list(state_dict):
         param = state_dict.pop(name)
@@ -90,6 +75,10 @@ def rename_keys(state_dict):
 
         # rename latent embeddings
         name = name.replace("perceiver_encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
+        
+        # rename preprocessor embeddings
+        name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
+        name = name.replace("trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight")
 
         # rename prefix
         if "perceiver_encoder" in name:
@@ -156,9 +145,10 @@ def rename_keys(state_dict):
                 name = name.replace("linear_1.w", "dense2.weight")
 
         # finally, TRANSPOSE if kernel, and set value
-        if name[-6:] == "weight":
+        if name[-6:] == "weight" and "input_preprocessor" not in name:
             param = np.transpose(param)
 
+        # preprocessor embeddings need special treatment
         state_dict[name] = torch.from_numpy(param)
 
 
@@ -178,31 +168,20 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
         for param_name, param in parameters.items():
             state_dict[scope_name + "/" + param_name] = param
 
-    # load HuggingFace model
-    config = PerceiverConfig()
-    model = PerceiverModel(config)
-    model.eval()
-
     # rename keys
     rename_keys(state_dict)
 
-    # prepare input, by embedding it
-    inputs, input_mask = prepare_dummy_inputs()
-    preprocessor = TextPreProcessor()
-    preprocessor.embeddings.weight = nn.Parameter(state_dict["embed.embeddings"])
-    del state_dict["embed.embeddings"]
-    preprocessor.position_embeddings.weight = nn.Parameter(state_dict["trainable_position_encoding.pos_embs"])
-    del state_dict["trainable_position_encoding.pos_embs"]
-    inputs = preprocessor(inputs)
-
-    print("Shape of embedded inputs:", inputs.shape)
-    print("Embedded inputs:", inputs[0, :3, :3])
+    # load HuggingFace model
+    config = PerceiverConfig()
+    preprocessor = PerceiverTextPreprocessor(config=config, vocab_size=262, seq_len=2048)
+    model = PerceiverModel(config, input_preprocessor=preprocessor)
+    model.eval()
 
     # load weights
     model.load_state_dict(state_dict)
 
-    # forward pass
-    # TODO: verify output
+    # forward pass on dummy input
+    inputs, input_mask = prepare_dummy_inputs()
     outputs = model(inputs=inputs, attention_mask=input_mask)
     print("Shape of outputs:", outputs.last_hidden_state.shape)
 
