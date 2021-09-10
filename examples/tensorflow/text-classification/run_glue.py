@@ -100,7 +100,7 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.10.0.dev0")
+check_min_version("4.11.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -354,6 +354,9 @@ def main():
             label_to_id = {label: i for i, label in enumerate(label_list)}
     if label_to_id is not None:
         config.label2id = label_to_id
+        config.id2label = {id: label for label, id in config.label2id.items()}
+    elif data_args.task_name is not None and not is_regression:
+        config.label2id = {l: i for i, l in enumerate(label_list)}
         config.id2label = {id: label for label, id in config.label2id.items()}
 
     if data_args.max_seq_length > tokenizer.model_max_length:

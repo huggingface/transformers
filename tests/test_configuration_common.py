@@ -34,11 +34,39 @@ class ConfigTester(object):
 
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
+        common_properties = ["hidden_size", "num_attention_heads", "num_hidden_layers"]
+
+        # Add common fields for text models
         if self.has_text_modality:
-            self.parent.assertTrue(hasattr(config, "vocab_size"))
-        self.parent.assertTrue(hasattr(config, "hidden_size"))
-        self.parent.assertTrue(hasattr(config, "num_attention_heads"))
-        self.parent.assertTrue(hasattr(config, "num_hidden_layers"))
+            common_properties.extend(["vocab_size"])
+
+        # Test that config has the common properties as getters
+        for prop in common_properties:
+            self.parent.assertTrue(hasattr(config, prop), msg=f"`{prop}` does not exist")
+
+        # Test that config has the common properties as setter
+        for idx, name in enumerate(common_properties):
+            try:
+                setattr(config, name, idx)
+                self.parent.assertEqual(
+                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
+                )
+            except NotImplementedError:
+                # Some models might not be able to implement setters for common_properties
+                # In that case, a NotImplementedError is raised
+                pass
+
+        # Test if config class can be called with Config(prop_name=..)
+        for idx, name in enumerate(common_properties):
+            try:
+                config = self.config_class(**{name: idx})
+                self.parent.assertEqual(
+                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
+                )
+            except NotImplementedError:
+                # Some models might not be able to implement setters for common_properties
+                # In that case, a NotImplementedError is raised
+                pass
 
     def create_and_test_config_to_json_string(self):
         config = self.config_class(**self.inputs_dict)

@@ -141,7 +141,7 @@ class Seq2SeqTrainer(Trainer):
             )
         return scheduler
 
-    def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
+    def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
             return None
         elif is_torch_tpu_available():

@@ -146,6 +146,12 @@ class XLMConfig(PretrainedConfig):
     """
 
     model_type = "xlm"
+    attribute_map = {
+        "hidden_size": "emb_dim",
+        "num_attention_heads": "n_heads",
+        "num_hidden_layers": "n_layers",
+        "n_words": "vocab_size",  # For backward compatibility
+    }
 
     def __init__(
         self,
@@ -185,7 +191,6 @@ class XLMConfig(PretrainedConfig):
         **kwargs
     ):
         """Constructs XLMConfig."""
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.emb_dim = emb_dim
         self.n_layers = n_layers
@@ -221,22 +226,4 @@ class XLMConfig(PretrainedConfig):
         if "n_words" in kwargs:
             self.n_words = kwargs["n_words"]
 
-    @property
-    def n_words(self):  # For backward compatibility
-        return self.vocab_size
-
-    @n_words.setter
-    def n_words(self, value):  # For backward compatibility
-        self.vocab_size = value
-
-    @property
-    def hidden_size(self):
-        return self.emb_dim
-
-    @property
-    def num_attention_heads(self):
-        return self.n_heads
-
-    @property
-    def num_hidden_layers(self):
-        return self.n_layers
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)

@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import is_flax_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
+from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, require_torch, slow
 
 
 if is_flax_available():
@@ -28,6 +28,7 @@ if is_flax_available():
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@require_flax
 class MT5IntegrationTest(unittest.TestCase):
     @slow
     def test_small_integration_test(self):

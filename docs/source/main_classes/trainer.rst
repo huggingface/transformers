@@ -64,9 +64,9 @@ classification:
 
     class MultilabelTrainer(Trainer):
         def compute_loss(self, model, inputs, return_outputs=False):
-            labels = inputs.pop("labels")
+            labels = inputs.get("labels")
             outputs = model(**inputs)
-            logits = outputs.logits
+            logits = outputs.get('logits')
             loss_fct = nn.BCEWithLogitsLoss()
             loss = loss_fct(logits.view(-1, self.model.config.num_labels),
                             labels.float().view(-1, self.model.config.num_labels))
@@ -197,7 +197,7 @@ which should make the "stop and resume" style of training as close as possible t
 However, due to various default non-deterministic pytorch settings this might not fully work. If you want full
 determinism please refer to `Controlling sources of randomness
 <https://pytorch.org/docs/stable/notes/randomness.html>`__. As explained in the document, that some of those settings
-that make things determinstic (.e.g., ``torch.backends.cudnn.deterministic``) may slow things down, therefore this
+that make things deterministic (.e.g., ``torch.backends.cudnn.deterministic``) may slow things down, therefore this
 can't be done by default, but you can enable those yourself if needed.
 
 

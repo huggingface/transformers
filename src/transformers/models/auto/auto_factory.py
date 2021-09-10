@@ -498,6 +498,15 @@ class _LazyAutoMapping(OrderedDict):
             if key in self._model_mapping.keys()
         ]
 
+    def get(self, key, default):
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
+
+    def __bool__(self):
+        return bool(self.keys())
+
     def values(self):
         return [
             self._load_attr_from_module(key, name)

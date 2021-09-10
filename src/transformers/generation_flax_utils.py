@@ -190,7 +190,7 @@ class FlaxGenerationMixin:
 
         Parameters:
 
-            input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
@@ -231,7 +231,7 @@ class FlaxGenerationMixin:
             >>> model = FlaxAutoModelForCausalLM.from_pretrained("distilgpt2")
             >>> input_context = "The dog"
             >>> # encode input context
-            >>> input_ids = tokenizer(input_context, return_tensors="jax").input_ids
+            >>> input_ids = tokenizer(input_context, return_tensors="np").input_ids
             >>> # generate candidates using sampling
             >>> outputs = model.generate(input_ids=input_ids, max_length=20, top_k=30, do_sample=True)
             >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))

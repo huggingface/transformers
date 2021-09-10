@@ -20,11 +20,14 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
+from ...file_utils import CONFIG_NAME
 
 
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("gptj", "GPTJConfig"),
+        ("layoutlmv2", "LayoutLMv2Config"),
         ("beit", "BeitConfig"),
         ("rembert", "RemBertConfig"),
         ("visual_bert", "VisualBertConfig"),
@@ -37,6 +40,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("detr", "DetrConfig"),
         ("gpt_neo", "GPTNeoConfig"),
         ("big_bird", "BigBirdConfig"),
+        ("speech_to_text_2", "Speech2Text2Config"),
         ("speech_to_text", "Speech2TextConfig"),
         ("vit", "ViTConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
@@ -80,6 +84,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xlm", "XLMConfig"),
         ("ctrl", "CTRLConfig"),
         ("electra", "ElectraConfig"),
+        ("speech-encoder-decoder", "SpeechEncoderDecoderConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("funnel", "FunnelConfig"),
         ("lxmert", "LxmertConfig"),
@@ -87,12 +92,15 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("layoutlm", "LayoutLMConfig"),
         ("rag", "RagConfig"),
         ("tapas", "TapasConfig"),
+        ("splinter", "SplinterConfig"),
     ]
 )
 
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+        ("gptj", "GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("layoutlmv2", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -107,6 +115,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("megatron-bert", "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("speech_to_text", "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("speech_to_text_2", "SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit", "VIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("m2m_100", "M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -147,14 +156,17 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("tapas", "TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("gptj", "GPT-J"),
         ("beit", "BeiT"),
         ("rembert", "RemBERT"),
+        ("layoutlmv2", "LayoutLMv2"),
         ("visual_bert", "VisualBert"),
         ("canine", "Canine"),
         ("roformer", "RoFormer"),
@@ -165,6 +177,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("detr", "DETR"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
+        ("speech_to_text_2", "Speech2Text2"),
         ("speech_to_text", "Speech2Text"),
         ("vit", "ViT"),
         ("wav2vec2", "Wav2Vec2"),
@@ -202,6 +215,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ctrl", "CTRL"),
         ("electra", "ELECTRA"),
         ("encoder-decoder", "Encoder decoder"),
+        ("speech-encoder-decoder", "Speech Encoder decoder"),
         ("funnel", "Funnel Transformer"),
         ("lxmert", "LXMERT"),
         ("deberta-v2", "DeBERTa-v2"),
@@ -222,6 +236,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("bert-japanese", "BertJapanese"),
         ("byt5", "ByT5"),
         ("mbart50", "mBART-50"),
+        ("splinter", "Splinter"),
     ]
 )
 
@@ -517,6 +532,6 @@ class AutoConfig:
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "
-            "Should have a `model_type` key in its config.json, or contain one of the following strings "
+            f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
             f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
         )
