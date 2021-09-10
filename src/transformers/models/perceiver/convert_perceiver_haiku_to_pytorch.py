@@ -75,7 +75,7 @@ def rename_keys(state_dict):
 
         # rename latent embeddings
         name = name.replace("perceiver_encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
-        
+
         # rename preprocessor embeddings
         name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
         name = name.replace("trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight")

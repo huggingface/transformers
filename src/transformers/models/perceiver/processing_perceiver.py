@@ -15,10 +15,13 @@
 """
 IO pre- and post-processor classes for Perceiver.
 """
-import torch.nn as nn
 import torch
+import torch.nn as nn
+
 
 class PerceiverTextPreprocessor(nn.Module):
+    """Text preprocessing for Perceiver Encoder."""
+
     def __init__(self, config, vocab_size, seq_len):
         super().__init__()
         self.embeddings = nn.Embedding(num_embeddings=vocab_size, embedding_dim=config.d_model)

@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,11 +28,7 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_perceiver"] = [
         "PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PerceiverForMaskedLM",
-        "PerceiverForMultipleChoice",
-        "PerceiverForQuestionAnswering",
-        "PerceiverForSequenceClassification",
-        "PerceiverForTokenClassification",
+        "PerceiverBasicDecoder",
         "PerceiverLayer",
         "PerceiverModel",
         "PerceiverPreTrainedModel",
@@ -48,11 +44,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PerceiverForMaskedLM,
-            PerceiverForMultipleChoice,
-            PerceiverForQuestionAnswering,
-            PerceiverForSequenceClassification,
-            PerceiverForTokenClassification,
+            PerceiverBasicDecoder,
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
