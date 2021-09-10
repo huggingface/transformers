@@ -38,7 +38,6 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
@@ -793,8 +792,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
         # GPT2Attention mask.
         if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
+            assert batch_size > 0, "batch_size has to be defined and > 0"
             attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -920,11 +918,7 @@ class GPT2Model(GPT2PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
@@ -984,15 +978,24 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+        n_positions = self.config.n_positions
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+            past = tuple([tuple([key[:, :, -n_positions + 1 :] for key in p]) for p in past])
+
+        if input_ids.shape[-1] > n_positions:
+            logger.warning("Context is too long, clipping leftmost values")
+        input_ids = input_ids[:, -n_positions:]
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
+
+        if attention_mask is not None:
+            attention_mask = attention_mask[:, -n_positions:]
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -1157,15 +1160,25 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+        n_positions = self.config.n_positions
+
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+            past = tuple([tuple([key[:, :, -n_positions + 1 :] for key in p]) for p in past])
+
+        if input_ids is not None and input_ids.shape[-1] > n_positions:
+            logger.warning("Context is too long, clipping leftmost values")
+            input_ids = input_ids[:, -n_positions + 1 :]
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
+
+        if attention_mask is not None and attention_mask.shape[1] > n_positions:
+            attention_mask = attention_mask[:, -n_positions + 1 :]
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
