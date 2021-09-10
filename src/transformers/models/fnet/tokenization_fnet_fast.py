@@ -68,7 +68,7 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to lowercase the input when tokenizing.
         remove_space (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
-        keep_accents (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        keep_accents (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to keep accents when tokenizing.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
@@ -99,7 +99,7 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
         tokenizer_file=None,
         do_lower_case=False,
         remove_space=True,
-        keep_accents=False,
+        keep_accents=True,
         unk_token="<unk>",
         sep_token="[SEP]",
         pad_token="<pad>",
