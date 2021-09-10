@@ -87,16 +87,11 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         """
 
         if attention_mask is not None:
-            normed_input_values = np.asarray(
-                [
-                    (x - np.mean(x[:i])) / np.sqrt(np.var(x[:i]) + 1e-7)
-                    for x, i in zip(input_values, attention_mask.sum(-1))
-                ]
-            )
-            normed_input_values[(1 - attention_mask).astype(np.bool)] = padding_value
+            normed_input_values = [
+                (x - x[:i].mean()) / np.sqrt(x[:i].var() + 1e-7) for x, i in zip(input_values, attention_mask.sum(-1))
+            ]
         else:
-            normed_input_values = np.asarray([(x - np.mean(x)) / np.sqrt(np.var(x) + 1e-7) for x in input_values])
-
+            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
 
         return normed_input_values
 
@@ -184,14 +179,6 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
         )
 
-        # make sure input is in list format
-        if is_batched and not isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.float64:
-            raw_speech = raw_speech.astype(np.float32)
-
         # always return batch
         if not is_batched:
             raw_speech = [raw_speech]
@@ -208,10 +195,31 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
         )
 
+        # convert input values to correct format
+        input_values = padded_inputs["input_values"]
+        if not isinstance(input_values[0], np.ndarray):
+            padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
+        elif (
+            not isinstance(input_values, np.ndarray)
+            and isinstance(input_values[0], np.ndarray)
+            and input_values[0].dtype is np.float64
+        ):
+            padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
+        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.float64:
+            padded_inputs["input_values"] = input_values.astype(np.float32)
+
+        # convert attention_mask to correct format
         attention_mask = padded_inputs.get("attention_mask")
+        if attention_mask is not None:
+            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.bool) for array in attention_mask]
 
         # zero-mean and unit-variance normalization
         if self.do_normalize:
+            attention_mask = (
+                np.array(attention_mask, dtype=np.bool)
+                if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
+                else None
+            )
             padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
                 padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
             )
