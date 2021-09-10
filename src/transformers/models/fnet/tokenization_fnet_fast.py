@@ -64,7 +64,7 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
         vocab_file (:obj:`str`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to lowercase the input when tokenizing.
         remove_space (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
@@ -97,7 +97,7 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
         self,
         vocab_file=None,
         tokenizer_file=None,
-        do_lower_case=True,
+        do_lower_case=False,
         remove_space=True,
         keep_accents=False,
         unk_token="<unk>",
