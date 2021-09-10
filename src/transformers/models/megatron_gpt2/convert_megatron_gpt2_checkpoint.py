@@ -65,6 +65,7 @@ def fix_query_key_value_ordering(param, checkpoint_version, num_splits, num_head
         param = param.transpose(0, 2)
         param = param.transpose(1, 2).contiguous()
     elif checkpoint_version >= 2.0:
+        print(f"hidden_size={hidden_size}")
         # other versions store [num_heads * num_splits * hidden_size, :]
         saved_shape = (num_heads, num_splits, hidden_size) + input_shape[1:]
         param = param.view(*saved_shape)
@@ -79,6 +80,20 @@ def fix_query_key_value_ordering(param, checkpoint_version, num_splits, num_head
 def convert_megatron_checkpoint(args, input_state_dict, config):
     # The converted output model.
     output_state_dict = {}
+
+    nargs = input_state_dict["args"]
+    from pprint import pprint
+    pprint(vars(nargs))
+
+    config.vocab_size = nargs.padded_vocab_size
+    config.n_positions = nargs.seq_length
+    config.n_ctx = nargs.seq_length
+    config.n_embd = nargs.hidden_size # max_position_embeddings
+    config.n_layer = nargs.num_layers
+    config.n_head = nargs.num_attention_heads
+    config.n_inner = nargs.ffn_hidden_size
+
+    pprint(config)
 
     # The number of heads.
     heads = config.n_head
@@ -97,18 +112,20 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     # The embeddings.
     embeddings = lm["embedding"]
 
+    #print(embeddings.keys())
+
     # The word embeddings.
-    word_embeddings = embeddings["word_embeddings"]["weight"]
+    word_embeddings = embeddings["word_embeddings.weight"]
     # Truncate the embedding table to vocab_size rows.
     word_embeddings = word_embeddings[: config.vocab_size, :]
     output_state_dict["transformer.wte.weight"] = word_embeddings
 
     # The position embeddings.
-    pos_embeddings = embeddings["position_embeddings"]["weight"]
+    pos_embeddings = embeddings["position_embeddings.weight"]
     # Read the hidden dimension.
     n_embed = pos_embeddings.size(0)
     # DEBUG.
-    assert n_embed == heads * hidden_size_per_head
+    #assert n_embed == heads * hidden_size_per_head, f"n_embed={n_embed}, heads={heads}*hidden_size_per_head={hidden_size_per_head}"
     # Store the position embeddings.
     output_state_dict["transformer.wpe.weight"] = pos_embeddings
 
@@ -229,10 +246,12 @@ def main():
     basename = os.path.dirname(args.path_to_checkpoint)
 
     # Load the model.
-    print(f"Extracting PyTorch state dictionary from {args.path_to_checkpoint}")
-    with zipfile.ZipFile(args.path_to_checkpoint, "r") as checkpoint:
-        with checkpoint.open("release/mp_rank_00/model_optim_rng.pt") as pytorch_dict:
-            input_state_dict = torch.load(pytorch_dict, map_location="cpu")
+    # print(f"Extracting PyTorch state dictionary from {args.path_to_checkpoint}")
+    # with zipfile.ZipFile(args.path_to_checkpoint, "r") as checkpoint:
+    #     with checkpoint.open("release/mp_rank_00/model_optim_rng.pt") as pytorch_dict:
+    #         input_state_dict = torch.load(pytorch_dict, map_location="cpu")
+
+    input_state_dict = torch.load(args.path_to_checkpoint, map_location="cpu")
 
     # Read the config, or default to the model released by NVIDIA.
     if args.config_file == "":
