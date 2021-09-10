@@ -92,7 +92,7 @@ tokenizer.train_from_iterator(batch_iterator(), vocab_size=50265, min_frequency=
 ])
 
 # Save files to disk
-tokenizer.save("./")
+tokenizer.save("./tokenizer.json")
 ```
 
 ### Create configuration
@@ -241,7 +241,7 @@ Finally, we can run the example script to pretrain the model:
 
 ```bash
 ./run_clm_flax.py \
-    --output_dir="./l" \
+    --output_dir="./" \
     --model_type="gpt2" \
     --config_name="./" \
     --tokenizer_name="./" \
