@@ -15,6 +15,7 @@
 """ PyTorch Perceiver model. """
 
 
+import abc
 import math
 
 import torch
@@ -126,9 +127,9 @@ class PerceiverSelfAttention(nn.Module):
         is_cross_attention = inputs is not None
         queries = self.query(hidden_states)
 
-        print("First few elements of queries after layernorm:", hidden_states[0,:3,:3])
+        print("First few elements of queries after layernorm:", hidden_states[0, :3, :3])
         if is_cross_attention:
-            print("First few elements of keys + values after layernorm:", inputs[0,:3,:3])
+            print("First few elements of keys + values after layernorm:", inputs[0, :3, :3])
 
         if is_cross_attention:
             keys = self.key(inputs)
@@ -151,8 +152,8 @@ class PerceiverSelfAttention(nn.Module):
         # Take the dot product between the queries and keys to get the raw attention scores.
         attention_scores = torch.matmul(queries, keys.transpose(-1, -2))
 
-        #print("Shape of attention scores:", attention_scores.shape)
-        #print("First few elements of attention scores:", attention_scores[0, :3, :3, :3])
+        # print("Shape of attention scores:", attention_scores.shape)
+        # print("First few elements of attention scores:", attention_scores[0, :3, :3, :3])
 
         batch_size, num_heads, seq_len, q_head_dim = queries.shape
         _, _, _, v_head_dim = values.shape
@@ -160,8 +161,8 @@ class PerceiverSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(q_head_dim)
 
-        #print("Shape of attention scores:", attention_scores.shape)
-        #print("First few elements of attention scores after scaling:", attention_scores[0, :3, :3, :3])
+        # print("Shape of attention scores:", attention_scores.shape)
+        # print("First few elements of attention scores after scaling:", attention_scores[0, :3, :3, :3])
 
         # if is_cross_attention:
         #     print("Inputs mask:", inputs_mask)
@@ -172,8 +173,8 @@ class PerceiverSelfAttention(nn.Module):
             # Apply the attention mask is (precomputed for all layers in PerceiverModel forward() function)
             attention_scores = attention_scores + attention_mask
 
-        #print("Attention scores after applying mask:", attention_scores[0, :3, :3, :3])
-        #print("Sum of attention scores after applying mask:", attention_scores.sum())
+        # print("Attention scores after applying mask:", attention_scores[0, :3, :3, :3])
+        # print("Sum of attention scores after applying mask:", attention_scores.sum())
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -221,6 +222,7 @@ class PerceiverAttention(nn.Module):
         num_heads=1,
         q_dim=None,
         kv_dim=None,
+        use_query_residual=True,
     ):
         super().__init__()
         self.self = PerceiverSelfAttention(
@@ -233,9 +235,7 @@ class PerceiverAttention(nn.Module):
             kv_dim=kv_dim,
         )
         self.output = PerceiverSelfOutput(config)
-        # in the self-attention layers, a query residual is always added,
-        # however in the cross-attention layers, 
-        self.use_query_residual = config.use_query_residual if is_cross_attention else True
+        self.use_query_residual = use_query_residual
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -277,7 +277,7 @@ class PerceiverAttention(nn.Module):
         # Output projection
         attention_output = self.output(self_outputs[0])
 
-        print("Result after conv1d:", attention_output[0,:3,:3])
+        print("Result after conv1d:", attention_output[0, :3, :3])
 
         # Optionally include a residual to the original queries.
         # Consider omitting the residual if the semantics of query and output
@@ -321,6 +321,7 @@ class PerceiverLayer(nn.Module):
         q_dim=None,
         kv_dim=None,
         widening_factor=4,
+        use_query_residual=True,
     ):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -333,6 +334,7 @@ class PerceiverLayer(nn.Module):
             num_heads=num_heads,
             q_dim=q_dim,
             kv_dim=kv_dim,
+            use_query_residual=use_query_residual,
         )
         self.layernorm = nn.LayerNorm(config.d_latents)
         self.mlp = PerceiverMLP(config, widening_factor=widening_factor)
@@ -364,7 +366,7 @@ class PerceiverLayer(nn.Module):
 
         layer_output = layer_output + attention_output  # residual connection
 
-        #print("Output after MLP:", layer_output[0, :3, :3])
+        # print("Output after MLP:", layer_output[0, :3, :3])
 
         outputs = (layer_output,) + outputs
 
@@ -373,7 +375,7 @@ class PerceiverLayer(nn.Module):
     def feed_forward_chunk(self, attention_output):
         layer_output = self.layernorm(attention_output)
 
-        #print("Output after layernorm before MLP:", layer_output[0, :3, :3])
+        # print("Output after layernorm before MLP:", layer_output[0, :3, :3])
 
         layer_output = self.mlp(layer_output)
 
@@ -409,6 +411,7 @@ class PerceiverEncoder(nn.Module):
             q_dim=config.d_latents,
             kv_dim=config.d_model,
             widening_factor=config.cross_attention_widening_factor,
+            use_query_residual=config.use_query_residual,
         )
 
         # Construct a single block of self-attention layers.
@@ -467,7 +470,7 @@ class PerceiverEncoder(nn.Module):
         for _ in range(self.config.num_blocks):
             for i, layer_module in enumerate(self.self_attends):
                 print(f"Block {i} -----------------------------------------------")
-                print(f"Hidden states before block {i}:", hidden_states[0,:3,:3])
+                print(f"Hidden states before block {i}:", hidden_states[0, :3, :3])
                 if output_hidden_states:
                     all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -583,7 +586,7 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
     PERCEIVER_START_DOCSTRING,
 )
 class PerceiverModel(PerceiverPreTrainedModel):
-    def __init__(self, config, input_preprocessor=None, output_postprocessor=None):
+    def __init__(self, config, decoder=None, input_preprocessor=None, output_postprocessor=None):
         super().__init__(config)
         self.config = config
 
@@ -591,6 +594,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         self.output_postprocessor = output_postprocessor
         self.embeddings = PerceiverEmbeddings(config)
         self.encoder = PerceiverEncoder(config)
+        self.decoder = decoder
 
         self.init_weights()
 
@@ -677,3 +681,101 @@ class PerceiverModel(PerceiverPreTrainedModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
+
+
+class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
+    """Perceiver abstract decoder."""
+
+    @abc.abstractmethod
+    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def output_shape(self, inputs):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def forward(self, query, z, *, is_training, query_mask=None):
+        raise NotImplementedError
+
+
+class PerceiverProjectionDecoder(PerceiverAbstractDecoder):
+    """Baseline projection decoder (no cross-attention)."""
+
+    def __init__(self, config):
+        super().__init__(name=name)
+        self.classifier = nn.Linear(config.d_latents, config.num_labels)
+
+    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
+        return None
+
+    def output_shape(self, inputs):
+        return ((inputs.shape[0], self.num_labels), None)
+
+    def forward(self, query, z, *, is_training, query_mask=None):
+        # (batch_size, num_latents, d_latents) -> (batch_size, d_latents)
+        z = torch.mean(z, dim=1)
+        # (batch_size, d_latents) -> (batch_size, config.num_labels)
+        logits = self.classifier(z)
+        return logits
+
+
+class PerceiverBasicDecoder(PerceiverAbstractDecoder):
+    """Cross-attention-based decoder."""
+
+    def __init__(
+        self,
+        output_num_channels,
+        position_encoding_type="trainable",
+        # Ignored if position_encoding_type == 'none':
+        output_index_dims=None,
+        qk_channels=None,
+        v_channels=None,
+        num_heads=1,
+        widening_factor=1,
+        use_query_residual=False,
+        final_project=True,
+    ):
+        super().__init__(name=name)
+
+        # If `none`, the decoder will not construct any position encodings.
+        # You should construct your own when quering the decoder.
+        self.output_position_encodings = None
+        if position_encoding_type != "none":
+            self.output_position_encodings = nn.Embedding(output_index_dims, config.d_model)
+        self.decoding_cross_attention = PerceiverLayer(
+            is_cross_attention=True,
+            qk_channels=qk_channels,
+            v_channels=v_channels,
+            num_heads=num_heads,
+            q_dim=config.d_model,
+            kv_dim=config.d_latents,
+            widening_factor=widening_factor,
+            use_query_residual=use_query_residual,
+        )
+        self.final_layer = nn.Linear(config.d_model, output_num_channels) if final_project else nn.Identity()
+
+    def output_shape(self, inputs):
+        return ((inputs[0], self._subsampled_index_dims, self._output_num_channels), None)
+
+    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
+        assert self._position_encoding_type != "none"  # Queries come from elsewhere
+        pos_emb = self.output_position_encodings(batch_size=inputs.shape[0])
+        return pos_emb
+
+    def forward(self, query, z, query_mask=None):
+        # Cross-attention decoding.
+        # key, value: B x N x K; query: B x M x K
+        # Attention maps -> B x N x M
+        # Output -> B x M x K
+        layer_outputs = self.decoding_cross_attention(
+            query,
+            attention_mask=query_mask,
+            head_mask=None,
+            inputs=z,
+            inputs_mask=inputs_mask,
+            output_attentions=output_attentions,
+        )
+        output = layer_outputs[0]
+        output = final_layer(output)
+        return output
