@@ -203,9 +203,9 @@ class PerceiverSelfAttention(nn.Module):
 
 
 class PerceiverSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, input_size):
         super().__init__()
-        self.dense = nn.Linear(config.d_latents, config.d_latents)
+        self.dense = nn.Linear(input_size, input_size)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -234,7 +234,7 @@ class PerceiverAttention(nn.Module):
             q_dim=q_dim,
             kv_dim=kv_dim,
         )
-        self.output = PerceiverSelfOutput(config)
+        self.output = PerceiverSelfOutput(config, input_size=q_dim)
         self.use_query_residual = use_query_residual
         self.pruned_heads = set()
 
@@ -294,14 +294,14 @@ class PerceiverAttention(nn.Module):
 class PerceiverMLP(nn.Module):
     """A Transformer-style dense module to follow attention."""
 
-    def __init__(self, config, widening_factor):
+    def __init__(self, config, input_size, widening_factor):
         super().__init__()
-        self.dense1 = nn.Linear(config.d_latents, widening_factor * config.d_latents)
+        self.dense1 = nn.Linear(input_size, widening_factor * input_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
-        self.dense2 = nn.Linear(config.d_latents, config.d_latents)
+        self.dense2 = nn.Linear(input_size, input_size)
 
     def forward(self, hidden_states):
         hidden_states = self.dense1(hidden_states)
@@ -336,8 +336,8 @@ class PerceiverLayer(nn.Module):
             kv_dim=kv_dim,
             use_query_residual=use_query_residual,
         )
-        self.layernorm = nn.LayerNorm(config.d_latents)
-        self.mlp = PerceiverMLP(config, widening_factor=widening_factor)
+        self.layernorm = nn.LayerNorm(q_dim)
+        self.mlp = PerceiverMLP(config, input_size=q_dim, widening_factor=widening_factor)
 
     def forward(
         self,
@@ -681,6 +681,9 @@ class PerceiverModel(PerceiverPreTrainedModel):
             decoder_query = self.decoder.decoder_query(batch_size) # shape (batch_size, seq_len, d_model)
             outputs = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
         
+            if self.output_postprocessor:
+                outputs = self.output_postprocessor(outputs, embedding_layer=self.input_preprocessor.embeddings)
+        
         return outputs
         
         # if not return_dict:
@@ -753,6 +756,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         # If `none`, the decoder will not construct any position encodings.
         # You should construct your own when quering the decoder.
         self.output_position_encodings = None
+        self.position_encoding_type = position_encoding_type
         if position_encoding_type != "none":
             if output_index_dims is None:
                 raise ValueError("You must specify output_index_dims")
@@ -774,11 +778,11 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         return ((inputs[0], self._subsampled_index_dims, self._output_num_channels), None)
 
     def decoder_query(self, batch_size):
-        assert self._position_encoding_type != "none"  # Queries come from elsewhere
-        pos_emb = self.output_position_encodings.expand(batch_size, -1, -1)
+        assert self.position_encoding_type != "none"  # Queries come from elsewhere
+        pos_emb = self.output_position_encodings.weight.expand(batch_size, -1, -1)
         return pos_emb
 
-    def forward(self, query, z, query_mask=None):
+    def forward(self, query, z, query_mask=None, output_attentions=False):
         # Cross-attention decoding.
         # key, value: B x N x K; query: B x M x K
         # Attention maps -> B x N x M
@@ -792,5 +796,5 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             output_attentions=output_attentions,
         )
         output = layer_outputs[0]
-        output = final_layer(output)
+        output = self.final_layer(output)
         return output

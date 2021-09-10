@@ -68,25 +68,28 @@ def rename_keys(state_dict):
     for name in list(state_dict):
         param = state_dict.pop(name)
 
-        # for now, let's skip the decoder parameters
-        if "decoder" in name:
-            print("Skipping parameter:", name)
-            continue
-
         # rename latent embeddings
         name = name.replace("perceiver_encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
+
+        # rename decoder queries
+        name = name.replace("basic_decoder/~/trainable_position_encoding/pos_embs", "decoder.output_position_encodings.weight")
+
+        # rename embedding decoder bias
+        name = name.replace("embedding_decoder/bias", "output_postprocessor.bias")
 
         # rename preprocessor embeddings
         name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
         name = name.replace("trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight")
 
-        # rename prefix
-        if "perceiver_encoder" in name:
+        # rename prefixes
+        if name.startswith("perceiver_encoder/~/"):
             if "self_attention" in name:
                 suffix = "self_attends."
             else:
                 suffix = ""
             name = name.replace("perceiver_encoder/~/", "encoder." + suffix)
+        if name.startswith("basic_decoder/cross_attention/"):
+            name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
         # rename layernorm parameters
         if "offset" in name:
             name = name.replace("offset", "bias")
@@ -144,8 +147,8 @@ def rename_keys(state_dict):
             if "linear_1.w" in name:
                 name = name.replace("linear_1.w", "dense2.weight")
 
-        # finally, TRANSPOSE if kernel, and set value
-        if name[-6:] == "weight" and "input_preprocessor" not in name:
+        # finally, TRANSPOSE if kernel and not embedding layer, and set value
+        if name[-6:] == "weight" and "input_preprocessor" not in name and "output_position_encodings" not in name:
             param = np.transpose(param)
 
         # preprocessor embeddings need special treatment
@@ -174,9 +177,10 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
     # load HuggingFace model
     config = PerceiverConfig()
     preprocessor = PerceiverTextPreprocessor(config, vocab_size=262, seq_len=2048)
-    #decoder = PerceiverBasicDecoder(config, output_num_channels=1280, output_index_dims=2048)
-    postprocessor = PerceiverTextPostprocessor(config, embedding_matrix=preprocessor.embeddings)
-    model = PerceiverModel(config, input_preprocessor=preprocessor)
+    decoder = PerceiverBasicDecoder(config, output_num_channels=1280, output_index_dims=2048, 
+                                        qk_channels=8 * 32, v_channels=config.d_model, use_query_residual=False, final_project=False)
+    postprocessor = PerceiverTextPostprocessor(config, vocab_size=262)
+    model = PerceiverModel(config, input_preprocessor=preprocessor, decoder=decoder, output_postprocessor=postprocessor)
     model.eval()
 
     # load weights
@@ -185,7 +189,6 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
     # forward pass on dummy input
     inputs, input_mask = prepare_dummy_inputs()
     outputs = model(inputs=inputs, attention_mask=input_mask)
-    print("Shape of outputs:", outputs.last_hidden_state.shape)
 
     # Finally, save files
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
