@@ -676,6 +676,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
+        print("Encoder outputs:", sequence_output[0,:3,:3])
+
         outputs = None
         if self.decoder:
             decoder_query = self.decoder.decoder_query(batch_size) # shape (batch_size, seq_len, d_model)

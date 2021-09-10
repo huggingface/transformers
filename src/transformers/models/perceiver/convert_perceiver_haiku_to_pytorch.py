@@ -32,6 +32,12 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
+def to_string(inputs: np.ndarray) -> str:
+    inputs_no_special = (
+        inputs[inputs >= 6] - 6)
+    decoded_bytes = inputs_no_special.astype(np.uint8).tobytes()
+    return decoded_bytes.decode('utf-8', errors='replace')
+
 def prepare_dummy_inputs():
     # here we prepare a dummy input for MLM
     def to_int(inputs: str) -> np.ndarray:
@@ -178,7 +184,8 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
     config = PerceiverConfig()
     preprocessor = PerceiverTextPreprocessor(config, vocab_size=262, seq_len=2048)
     decoder = PerceiverBasicDecoder(config, output_num_channels=1280, output_index_dims=2048, 
-                                        qk_channels=8 * 32, v_channels=config.d_model, use_query_residual=False, final_project=False)
+                                        qk_channels=8 * 32, v_channels=config.d_model, num_heads=8,
+                                        use_query_residual=False, final_project=False)
     postprocessor = PerceiverTextPostprocessor(config, vocab_size=262)
     model = PerceiverModel(config, input_preprocessor=preprocessor, decoder=decoder, output_postprocessor=postprocessor)
     model.eval()
@@ -189,6 +196,17 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
     # forward pass on dummy input
     inputs, input_mask = prepare_dummy_inputs()
     outputs = model(inputs=inputs, attention_mask=input_mask)
+
+    # verify outputs
+    print("Shape of outputs:", outputs.shape)
+    print("First elements of outputs:", outputs[0,:3,:3])
+
+    masked_tokens_predictions = outputs[0, 51:60].argmax(dim=-1)
+    print("Greedy predictions:")
+    print(masked_tokens_predictions)
+    print()
+    print("Predicted string:")
+    print(to_string(masked_tokens_predictions.numpy()))
 
     # Finally, save files
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
