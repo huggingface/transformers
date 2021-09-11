@@ -815,7 +815,6 @@ class FlaxBeitForImageClassificationModule(nn.Module):
 
         outputs = self.beit(
             pixel_values,
-            bool_masked_pos=bool_masked_pos,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
