@@ -1743,9 +1743,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return cls._from_pretrained(
             resolved_vocab_files,
             pretrained_model_name_or_path,
-            use_auth_token,
             init_configuration,
             *init_inputs,
+            use_auth_token=use_auth_token,
             **kwargs,
         )
 
@@ -1754,9 +1754,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         cls,
         resolved_vocab_files,
         pretrained_model_name_or_path,
-        use_auth_token,
         init_configuration,
         *init_inputs,
+        use_auth_token=None,
         **kwargs
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
