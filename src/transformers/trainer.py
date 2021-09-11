@@ -2559,7 +2559,7 @@ class Trainer:
             try:
                 self.repo.push_to_hub(commit_message="update model card README.md")
             except Exception as exc:
-                logger.error(f"Error pushing update to the model card. Please read logs and retry. ${exc}")
+                logger.error(f"Error pushing update to the model card. Please read logs and retry.\n{exc}")
 
         return git_head_commit_url
 
