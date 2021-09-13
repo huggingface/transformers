@@ -278,7 +278,7 @@ class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("microsoft/beit-base-patch16-224", from_pt=True)
+            model = model_class_name.from_pretrained("microsoft/beit-base-patch16-224")
             outputs = model(np.ones((1, 3, 224, 224)))
             self.assertIsNotNone(outputs)
 
@@ -299,7 +299,7 @@ class FlaxBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_masked_image_modeling_head(self):
-        model = FlaxBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
+        model = FlaxBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -324,7 +324,7 @@ class FlaxBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = FlaxBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224", from_pt=True)
+        model = FlaxBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -347,9 +347,7 @@ class FlaxBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_22k(self):
-        model = FlaxBeitForImageClassification.from_pretrained(
-            "microsoft/beit-large-patch16-224-pt22k-ft22k", from_pt=True
-        )
+        model = FlaxBeitForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
