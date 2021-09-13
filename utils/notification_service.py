@@ -160,7 +160,7 @@ if __name__ == "__main__":
     if scheduled:
         title = "🤗 Results of the scheduled tests."
     else:
-        title = "🤗 Self-push results",
+        title = ("🤗 Self-push results",)
 
     if len(arguments):
         title = f"*[{arguments}]* " + title
