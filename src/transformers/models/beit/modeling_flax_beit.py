@@ -152,9 +152,9 @@ class FlaxBeitPatchEmbeddings(nn.Module):
         )
 
     def __call__(self, pixel_values):
-        x = self.projection(pixel_values)
-        batch_size, _, _, channels = x.shape
-        return jnp.reshape(x, (batch_size, -1, channels))
+        embeddings = self.projection(pixel_values)
+        batch_size, _, _, channels = embeddings.shape
+        return jnp.reshape(embeddings, (batch_size, -1, channels))
 
 
 class FlaxBeitEmbeddings(nn.Module):
