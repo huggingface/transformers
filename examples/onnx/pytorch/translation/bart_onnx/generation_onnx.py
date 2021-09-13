@@ -7,7 +7,6 @@ from transformers import (
 )
 
 # from transformers.modeling_bart import AttentionForONNX     # Transformers 3.5.1
-from transformers.models.bart.modeling_bart import AttentionForONNX
 from transformers.generation_utils import GenerationMixin
 from transformers.generation_logits_process import LogitsProcessorList
 
@@ -16,21 +15,22 @@ from typing import Optional, List, Tuple
 def unpack_past(past):
     keys = []
     values = []
-    for i, p in enumerate(past):
-        for j, q in enumerate(p):
-            values.append(q)
+    if past is not None:
+        for i, p in enumerate(past):
+            for j, q in enumerate(p):
+                values.append(q)
 
-        # # Transformers 3.5.1
-        # if 'self' in p:
-        #     values.append(p['self']['prev_key'])
-        #     values.append(p['self']['prev_value'])
-        #     keys.append('self_prev_key_' + str(i))
-        #     keys.append('self_prev_value_' + str(i))
-        # if 'encoder_decoder' in p:
-        #     values.append(p['encoder_decoder']['prev_key'])
-        #     values.append(p['encoder_decoder']['prev_value'])
-        #     keys.append('enc_dec_prev_key_' + str(i))
-        #     keys.append('enc_dec_prev_value_' + str(i))
+            # # Transformers 3.5.1
+            # if 'self' in p:
+            #     values.append(p['self']['prev_key'])
+            #     values.append(p['self']['prev_value'])
+            #     keys.append('self_prev_key_' + str(i))
+            #     keys.append('self_prev_value_' + str(i))
+            # if 'encoder_decoder' in p:
+            #     values.append(p['encoder_decoder']['prev_key'])
+            #     values.append(p['encoder_decoder']['prev_value'])
+            #     keys.append('enc_dec_prev_key_' + str(i))
+            #     keys.append('enc_dec_prev_value_' + str(i))
 
     return keys, values
 
@@ -39,13 +39,7 @@ class DecoderForONNX(torch.nn.Module):
         super().__init__()
         self.decoder = decoder
 
-    def forward(self, input_ids, encoder_state, attention_mask, use_past, past):
-        print("====== DecoderForONNX forward.")
-        grouped_past_values = []
-        i = 0
-        while i < len(past):
-            grouped_past_values.append(list(past[i:i + 4]))
-            i += 4
+    def forward(self, input_ids, encoder_state, attention_mask, past = None):
 
         # # Transformers 3.5.1
         # last_hidden_state, past_key_values = self.decoder(
@@ -59,64 +53,37 @@ class DecoderForONNX(torch.nn.Module):
         #     use_past=use_past,
         # )
 
-        print("====== DecoderForONNX - len(past): ", len(past))
-        print("====== DecoderForONNX - len(grouped_past_values): ", len(grouped_past_values))
+        if past is not None:
+            print("======== Past is not None.")
 
         last_hidden_state, past_key_values = self.decoder(
             input_ids=input_ids,
-            attention_mask=attention_mask,
             encoder_hidden_states=encoder_state,
             encoder_attention_mask=attention_mask,
-            head_mask=None,
-            cross_attn_head_mask=None,
-            past_key_values=grouped_past_values,
-            use_cache=True,
-            return_dict=False
+            past_key_values=past,
+            return_dict=False,
         )
 
         past_values = []
         for past in past_key_values:
-            # past_values = past_values + past # Transformers 3.5.1
+        # #     # past_values = past_values + past # Transformers 3.5.1
             past_values = past_values + list(past)
-        print("===== forward len(past_values): ", len(past_values))
-        return last_hidden_state, past_values
+        return last_hidden_state, past_key_values
 
 def create_traced_encoder(encoder, input_ids, attention_mask):
     return torch.jit.trace(encoder, (input_ids, attention_mask))
 
-def create_traced_decoder(decoder, input_ids, encoder_state, attention_mask, past):
-    def create_script_attn_from_attn(layer, attn_m, is_enc_dec):
-        embed_dim = layer.embed_dim
-        num_heads = attn_m.num_heads
-        dropout = attn_m.dropout
-
-        attn_state = attn_m.state_dict()
-        device = attn_state['k_proj.weight'].device
-        attn_state['k_v_proj.k_proj.weight'] = attn_state.pop('k_proj.weight')
-        attn_state['k_v_proj.k_proj.bias'] = attn_state.pop('k_proj.bias')
-        attn_state['k_v_proj.v_proj.weight'] = attn_state.pop('v_proj.weight')
-        attn_state['k_v_proj.v_proj.bias'] = attn_state.pop('v_proj.bias')
-        new_attn = AttentionForONNX(embed_dim, num_heads, dropout, encoder_decoder_attention=is_enc_dec)
-        new_attn.load_state_dict(attn_state)
-        new_attn.to(device)
-        return new_attn
-
+def create_traced_decoder(decoder, input_ids, encoder_state, attention_mask, past = None):
     decoder_c = copy.deepcopy(decoder)
-
-    for layer in decoder_c.layers:
-        # layer.self_attn = create_script_attn_from_attn(layer, layer.self_attn, False)       # Transformers 3.5.1
-        # layer.encoder_attn = create_script_attn_from_attn(layer, layer.encoder_attn, True)  # Transformers 3.5.1
-        layer.eval()
-
     decoder_for_onnx = DecoderForONNX(decoder_c)
     past_keys, past_values = unpack_past(past)
-    # print('calling decoderForONNX')
-    # decoder_outputs = decoder_for_onnx(input_ids, encoder_state, attention_mask, torch.tensor(False), *past_values)
-
-    print("====== create_traced_decoder len(past_values): ", len(past_values))
 
     # Do this twice so we got 2 different decoders for further work.
-    return torch.jit.trace(decoder_for_onnx, (input_ids, encoder_state, attention_mask, torch.tensor(False), past_values))
+    if past_values is None or len(past_values) == 0:
+        return torch.jit.trace(decoder_for_onnx, (input_ids, encoder_state, attention_mask))
+    else:
+        test_module = torch.jit.trace(decoder_for_onnx, (input_ids, encoder_state, attention_mask, past_values))
+        return test_module
 
 class BartConfigTS(BartConfig, torch.nn.Module):
     def init_module(self):
@@ -190,30 +157,30 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         self.encoder = create_traced_encoder(model.get_encoder(), input_ids, attention_mask)
         encoder_outputs = model.get_encoder()(input_ids, attention_mask=attention_mask, return_dict=True)
         decoder = model.model.decoder
-        decoder_outputs = decoder(input_ids, attention_mask, encoder_outputs['last_hidden_state'], None, None, None, use_cache=True)
-        # decoder_outputs = decoder(input_ids, encoder_outputs['last_hidden_state'], attention_mask, None, None, use_cache=True)      # Transformers 3.5.1
+        decoder_outputs = decoder(input_ids, attention_mask, encoder_outputs['last_hidden_state'], None, None, None)
+        self.decoder_no_past = create_traced_decoder(model.model.decoder, input_ids, encoder_outputs['last_hidden_state'], attention_mask)
         self.decoder_with_past = create_traced_decoder(model.model.decoder, input_ids, encoder_outputs['last_hidden_state'], attention_mask, decoder_outputs[1])
-        # self.decoder_no_past
+
     def _encoder_forward(self, input_ids, attention_mask):
         return self.encoder(input_ids, attention_mask)[0]
 
     def _decoder_forward(self, input_ids, encoder_output, attention_mask, past: List[torch.Tensor]):
-        if len(past) > 0:
-            use_past = torch.tensor(True)
-        else:
-            use_past = torch.tensor(False)
-            past = [torch.ones(1, 8, 1, 64) for _ in range(self.decoder_layers * 4)]
-
-        # decoder_output, past = self.decoder(input_ids, encoder_output, attention_mask, use_past, past)  # Transformers 3.5.1
         # Update here to use different decoder for different values of past.
-        # Weight duplication process.
-        decoder_output, past = self.decoder(
-                                input_ids=input_ids,
-                                encoder_state=encoder_output,
-                                attention_mask=attention_mask,
-                                use_past=use_past,
-                                past=past)
-    
+        past = None
+        if past is None or len(past) == 0:
+            print("========= call decoder_no_past =========")
+            decoder_output, past = self.decoder_no_past(
+                            input_ids=input_ids,
+                            encoder_state=encoder_output,
+                            attention_mask=attention_mask)
+        else:
+            print("========= call decoder_with_past =========")
+            decoder_output, past = self.decoder_with_past(
+                            input_ids=input_ids,
+                            encoder_state=encoder_output,
+                            attention_mask=attention_mask,
+                            past=past)
+
         lm_logits = F.linear(decoder_output, self.final_logits_weight, bias=self.final_logits_bias)
 
         return lm_logits, past
@@ -604,7 +571,8 @@ class BARTBeamSearchGenerator(BARTGenerator):
 
         past: List[torch.Tensor] = []
         while cur_len < max_length:
-            logits, past = self._decoder_forward(input_ids, encoder_output, attention_mask, past)
+            logits, _ = self._decoder_forward(input_ids, encoder_output, attention_mask, past)
+            # logits = self._decoder_forward(input_ids, encoder_output, attention_mask, past)
             next_token_logits = logits[:, -1, :]
 
             # adjust tokens for Bart, *e.g.*
@@ -643,8 +611,8 @@ class BARTBeamSearchGenerator(BARTGenerator):
 
             cur_len = cur_len + 1
 
-            if len(past) > 0:
-                past = self._reorder_cache(past, beam_idx)
+            # if len(past) > 0:
+            #     past = self._reorder_cache(past, beam_idx)
 
             if self.beam_scorer.is_done():
                 break

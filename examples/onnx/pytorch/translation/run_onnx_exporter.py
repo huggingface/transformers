@@ -134,6 +134,10 @@ def export_and_validate_model(model, tokenizer, output_obj, num_beams, max_lengt
                         early_stopping=True,
                         decoder_start_token_id=model.config.decoder_start_token_id)
 
+        # my_model = BARTBeamSearchGenerator(model)
+        # results = my_model(inputs['input_ids'], inputs['attention_mask'], num_beams, max_length, model.config.decoder_start_token_id)
+
+        # results = onnx_bart(inputs['input_ids'], inputs['attention_mask'], torch.tensor(num_beams), torch.tensor(max_length), torch.tensor(model.config.decoder_start_token_id))
         if not ort_sess:
             torch.onnx.export(onnx_bart,
                 (inputs['input_ids'], inputs['attention_mask'], num_beams, max_length, model.config.decoder_start_token_id),
@@ -164,7 +168,7 @@ def export_and_validate_model(model, tokenizer, output_obj, num_beams, max_lengt
 
             np.testing.assert_allclose(summary_ids.cpu().numpy(), ort_out[0], rtol=1e-3, atol=1e-3)
 
-            print("Pass - Results are matched.")
+            print("========= Pass - Results are matched! =========")
 
 
 def main():
