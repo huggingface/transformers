@@ -240,12 +240,12 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:
-            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.bool) for array in attention_mask]
+            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
 
         # Utterance-level cepstral mean and variance normalization
         if self.do_ceptral_normalize:
             attention_mask = (
-                np.array(attention_mask, dtype=np.bool)
+                np.array(attention_mask, dtype=np.int32)
                 if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
                 else None
             )
