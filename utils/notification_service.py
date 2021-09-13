@@ -155,7 +155,13 @@ if __name__ == "__main__":
         }
 
     client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
-    channel_id = os.environ["CI_SLACK_CHANNEL_ID_DAILY"] if scheduled else os.environ["CI_SLACK_CHANNEL_ID"]
+
+    if not scheduled:
+        channel_id = os.environ["CI_SLACK_CHANNEL_ID"]
+    elif scheduled and len(arguments):
+        channel_id = os.environ["CI_SLACK_CHANNEL_ID_PAST_FUTURE"]
+    else:
+        channel_id = os.environ["CI_SLACK_CHANNEL_ID_DAILY"]
 
     if scheduled:
         title = "🤗 Results of the scheduled tests."
