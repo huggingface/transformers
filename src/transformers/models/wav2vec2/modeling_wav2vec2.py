@@ -196,7 +196,6 @@ def _old_2_compute_mask_indices(
     attention_mask: Optional[torch.tensor] = None,
     min_masks: int = 0,
 ) -> np.ndarray:
-
     """
     Computes random mask spans for a given shape
 
@@ -1023,7 +1022,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size))
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
@@ -1156,7 +1155,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 (batch_size, sequence_length),
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
-                attention_mask=attention_mask,
             )
             mask_time_indices = torch.tensor(mask_time_indices, device=self.device)
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -1167,7 +1165,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 (batch_size, hidden_size),
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
-                attention_mask=attention_mask,
             )
             mask_time_indices = torch.tensor(mask_time_indices, device=self.device)
             hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
@@ -1433,8 +1430,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         # only use masked indices
         extract_features = extract_features[mask_time_indices].view(extract_features.size(0), -1, extract_features.size(-1))
         transformer_features = transformer_features[mask_time_indices].view(transformer_features.size(0), -1, transformer_features.size(-1))
-        attention_mask = attention_mask[mask_time_indices]
-
+        attention_mask = attention_mask[mask_time_indices].view(attention_mask.size(0), -1)
 
 #        quantized_features, codevector_perplexity = self.quantizer(extract_features, mask_time_indices)
 #        quantized_features, codevector_perplexity = self.quantizer(extract_features)
