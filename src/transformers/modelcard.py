@@ -315,6 +315,8 @@ def _insert_values_as_list(metadata, name, values):
         return metadata
     if isinstance(values, str):
         values = [values]
+    if None in values:
+        values.remove(None)
     if len(values) == 0:
         return metadata
     metadata[name] = values
@@ -438,7 +440,9 @@ class TrainingSummary:
                         }
                     )
 
-            model_index["results"].append(result)
+            # Remove partial results to avoid the model card being rejected.
+            if "task" in result and "dataset" in result and "metrics" in result:
+                model_index["results"].append(result)
 
         return [model_index]
 
