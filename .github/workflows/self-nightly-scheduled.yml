@@ -46,7 +46,7 @@ jobs:
 
             - name: Run all tests on GPU
               run: |
-                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_gpu tests
+                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_gpu tests -k distilbert
 
             - name: Failure short reports
               if: ${{ always() }}
@@ -62,7 +62,7 @@ jobs:
                   TRANSFORMERS_IS_CI: yes
               run: |
                   pip install -r examples/pytorch/_tests_requirements.txt
-                  python -m pytest -n 1 -v --dist=loadfile --make-reports=examples_torch_gpu examples
+                  python -m pytest -n 1 -v --dist=loadfile --make-reports=examples_torch_gpu examples -k distilbert
 
             - name: Failure short reports
               if: ${{ always() }}
@@ -73,7 +73,7 @@ jobs:
               env:
                   RUN_PIPELINE_TESTS: yes
               run: |
-                  python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests
+                  python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests -k distilbert
 
             - name: Failure short reports
               if: ${{ always() }}
@@ -105,7 +105,7 @@ jobs:
                   apt -y update && apt install -y libsndfile1-dev git
                   pip install --upgrade pip
                   pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
-                pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html -U
+                  pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html -U
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
@@ -118,7 +118,7 @@ jobs:
               env:
                   MKL_SERVICE_FORCE_INTEL: 1
               run: |
-                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_multi_gpu tests
+                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_multi_gpu tests -k distilbert
 
             - name: Failure short reports
               if: ${{ always() }}
@@ -129,7 +129,7 @@ jobs:
               env:
                   RUN_PIPELINE_TESTS: yes
               run: |
-                  python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
+                  python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests -k distilbert
 
             - name: Failure short reports
               if: ${{ always() }}
@@ -172,7 +172,7 @@ jobs:
 
             - name: Run all tests on GPU
               run: |
-                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended -k distilbert
 
             - name: Failure short reports
               if: ${{ always() }}
@@ -204,6 +204,7 @@ jobs:
                   apt -y update && apt install -y libaio-dev
                   pip install --upgrade pip
                   pip install .[testing,deepspeed,fairscale]
+                  pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html -U
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
@@ -214,8 +215,7 @@ jobs:
 
             - name: Run all tests on GPU
               run: |
-                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended
-                  pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html -U
+                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended -k distilbert
 
             - name: Failure short reports
               if: ${{ always() }}

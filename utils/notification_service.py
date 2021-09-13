@@ -38,7 +38,7 @@ def handle_test_results(test_results):
     return failed, success, time_spent
 
 
-def format_for_slack(total_results, results, scheduled: bool, title=None):
+def format_for_slack(total_results, results, scheduled: bool, title: str):
     print(total_results, results)
     header = {
         "type": "header",
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     if scheduled:
         title = "🤗 Results of the scheduled tests."
     else:
-        title = ("🤗 Self-push results",)
+        title = "🤗 Self-push results"
 
     if len(arguments):
         title = f"*[{arguments}]* " + title
@@ -196,7 +196,7 @@ if __name__ == "__main__":
                 total[result_key] += job_result[result_key]
 
         if total["failed"] != 0 or scheduled:
-            to_be_sent_to_slack = format_for_slack(total, results, scheduled)
+            to_be_sent_to_slack = format_for_slack(total, results, scheduled, title)
 
             result = client.chat_postMessage(
                 channel=channel_id,
