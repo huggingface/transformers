@@ -150,6 +150,10 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     # currently tokenizer cannot do encoding, but just decoding
+    def test_added_token_are_matched_longest_first(self):
+        pass
+
+    # currently tokenizer cannot do encoding, but just decoding
     @is_pt_tf_cross_test
     def test_batch_encode_plus_tensors(self):
         pass
