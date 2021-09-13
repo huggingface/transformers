@@ -1269,7 +1269,7 @@ class RealmEncoder(RealmPreTrainedModel):
                 raise ValueError(
                     "You have to specify `relevance_score` when `labels` is specified in order to compute loss."
                 )
-            
+
             batch_size, seq_length = labels.size()
 
             if mlm_mask is None:
@@ -1285,7 +1285,9 @@ class RealmEncoder(RealmPreTrainedModel):
             # [batch_size * num_candidates * joint_seq_len]
             mlm_targets = labels.tile(1, self.config.num_candidates).view(-1)
             # [batch_size, num_candidates, joint_seq_len]
-            masked_lm_log_prob = -loss_fct(mlm_logits, mlm_targets).view(batch_size, self.config.num_candidates, seq_length)
+            masked_lm_log_prob = -loss_fct(mlm_logits, mlm_targets).view(
+                batch_size, self.config.num_candidates, seq_length
+            )
             # [batch_size, num_candidates, 1]
             candidate_log_prob = candidate_score.log_softmax(-1).unsqueeze(-1)
             # [batch_size, num_candidates, joint_seq_len]
