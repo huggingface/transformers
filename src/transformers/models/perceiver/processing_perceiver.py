@@ -63,6 +63,7 @@ class PerceiverImagePreprocessor(nn.Module):
 
     def __init__(
         self,
+        config,
         prep_type="conv",
         spatial_downsample: int = 4,
         temporal_downsample: int = 1,
@@ -76,6 +77,7 @@ class PerceiverImagePreprocessor(nn.Module):
         concat_or_add_pos: str = "concat",
     ):
         super().__init__()
+        self.config = config
 
         if prep_type not in ("conv", "patches", "pixels", "conv1x1"):
             raise ValueError("Invalid prep_type!")
@@ -144,5 +146,6 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = self.convnet_1x1(inputs)
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
-        modality_sizes = None  # Size for each modality, only needed for multimodal
-        return inputs, modality_sizes, inputs_without_pos
+        return inputs
+        # modality_sizes = None  # Size for each modality, only needed for multimodal
+        # return inputs, modality_sizes, inputs_without_pos

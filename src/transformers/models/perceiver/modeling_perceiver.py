@@ -33,6 +33,7 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_perceiver import PerceiverConfig
+from .processing_perceiver import PerceiverTextPreprocessor, PerceiverTextPostprocessor, PerceiverImagePreprocessor
 
 
 logger = logging.get_logger(__name__)
@@ -628,6 +629,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        print("Shape of inputs:", inputs.shape)
+        
         if inputs is None:
             raise ValueError("You must specify inputs")
 
@@ -635,7 +638,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
             inputs = self.input_preprocessor(inputs)
 
         if inputs.size()[-1] != self.config.d_model:
-            raise ValueError("Make sure the dimensionality of the inputs corresponds to config.d_model")
+            raise ValueError(f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}")
         else:
             input_shape = inputs.size()
 
@@ -673,7 +676,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         outputs = None
         if self.decoder:
-            decoder_query = self.decoder.decoder_query(batch_size)  # shape (batch_size, seq_len, d_model)
+            decoder_query = self.decoder.decoder_query(inputs)  # shape (batch_size, seq_len, d_model)
             outputs = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
 
             if self.output_postprocessor:
@@ -767,74 +770,70 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         )
 
 
-# @add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
-# class PerceiverForImageClassification(PerceiverPreTrainedModel):
-#     def __init__(self, config):
-#         super().__init__(config)
+#@add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
+class PerceiverForImageClassification(PerceiverPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
 
-#         self.preprocessor = PerceiverImagePreprocessor(config)
-#         self.decoder = PerceiverClassificationDecoder(
-#             config,
-#             output_num_channels=config.d_latents,
-#             output_index_dims=seq_len,
-#             qk_channels=8 * 32,
-#             v_channels=config.d_model,
-#             num_heads=8,
-#             use_query_residual=False,
-#             final_project=False,
-#         )
-#         self.model = PerceiverModel(config, input_preprocessor=self.preprocessor, decoder=self.decoder)
+        self.num_labels = config.num_labels
+        self.preprocessor = PerceiverImagePreprocessor(config, 
+                                                        prep_type="conv1x1", 
+                                                        out_channels=256, 
+                                                        spatial_downsample=1, 
+                                                        concat_or_add_pos="concat")
+        self.decoder = PerceiverClassificationDecoder(config)
+        self.model = PerceiverModel(config, input_preprocessor=self.preprocessor, decoder=self.decoder)
 
-#         self.init_weights()
+        self.init_weights()
 
-#     @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-#     @add_code_sample_docstrings(
-#         tokenizer_class=_TOKENIZER_FOR_DOC,
-#         checkpoint=_CHECKPOINT_FOR_DOC,
-#         output_type=SequenceClassifierOutput,
-#         config_class=_CONFIG_FOR_DOC,
-#     )
-#     def forward(
-#         self,
-#         inputs=None,
-#         attention_mask=None,
-#         head_mask=None,
-#         output_attentions=None,
-#         output_hidden_states=None,
-#         labels=None,
-#         return_dict=None,
-#     ):
-#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # @add_code_sample_docstrings(
+    #     tokenizer_class=_TOKENIZER_FOR_DOC,
+    #     checkpoint=_CHECKPOINT_FOR_DOC,
+    #     output_type=SequenceClassifierOutput,
+    #     config_class=_CONFIG_FOR_DOC,
+    # )
+    def forward(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-#         logits = self.model(
-#             inputs=inputs,
-#             attention_mask=attention_mask,
-#             head_mask=head_mask,
-#             output_attentions=output_attentions,
-#             output_hidden_states=output_hidden_states,
-#             return_dict=return_dict,
-#         )
+        logits = self.model(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-#         loss = None
-#         if labels is not None:
-#             if self.num_labels == 1:
-#                 #  We are doing regression
-#                 loss_fct = MSELoss()
-#                 loss = loss_fct(logits.view(-1), labels.view(-1))
-#             else:
-#                 loss_fct = CrossEntropyLoss()
-#                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-#         if not return_dict:
-#             output = (logits,) + outputs[2:]
-#             return ((loss,) + output) if loss is not None else output
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
-#         return SequenceClassifierOutput(
-#             loss=loss,
-#             logits=logits,
-#             hidden_states=outputs.hidden_states,
-#             attentions=outputs.attentions,
-#         )
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=None, # TODO fill in once we have defined custom output class for PerceiverModel
+            attentions=None, # TODO fill in once we have defined custom output class for PerceiverModel
+        )
 
 
 class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
@@ -917,9 +916,12 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
     def output_shape(self, inputs):
         return ((inputs[0], self._subsampled_index_dims, self._output_num_channels), None)
 
-    def decoder_query(self, batch_size):
+    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         assert self.position_encoding_type != "none"  # Queries come from elsewhere
-        pos_emb = self.output_position_encodings.weight.expand(batch_size, -1, -1)
+        if subsampled_points is not None:
+            raise NotImplementedError("Subsampled points is not yet supported")
+        else:
+            pos_emb = self.output_position_encodings.weight.expand(inputs.shape[0], -1, -1)
         return pos_emb
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
@@ -947,12 +949,12 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
     (batch_size, num_labels). The queries are of shape (batch_size, 1, num_labels).
     """
 
-    def __init__(self, num_labels, **decoder_kwargs):
+    def __init__(self, config):
         super().__init__()
 
-        self.num_labels = num_labels
+        self.num_labels = config.num_labels
         self.decoder = PerceiverBasicDecoder(
-            output_num_channels=num_labels, output_index_dims=(1,), **decoder_kwargs  # Predict a single logit array.
+            config, output_num_channels=self.num_labels, output_index_dims=1,  # Predict a single logit array.
         )
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
