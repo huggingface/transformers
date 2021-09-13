@@ -29,13 +29,9 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        PerceiverForCausalLM,
         PerceiverForMaskedLM,
-        PerceiverForMultipleChoice,
-        PerceiverForQuestionAnswering,
-        PerceiverForSequenceClassification,
-        PerceiverForTokenClassification,
         PerceiverModel,
+        PerceiverTokenizer,
     )
     from transformers.models.perceiver.modeling_perceiver import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -363,11 +359,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         (
             PerceiverModel,
             PerceiverForMaskedLM,
-            PerceiverForCausalLM,
-            PerceiverForMultipleChoice,
-            PerceiverForQuestionAnswering,
-            PerceiverForSequenceClassification,
-            PerceiverForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -415,38 +406,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    def test_model_as_decoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
-
-    def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
-
-        input_mask = None
-
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -458,19 +417,29 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
+        
+        tokenizer = PerceiverTokenizer()
         model = PerceiverForMaskedLM.from_pretrained("deepmind/language-perceiver")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+        
+        # prepare inputs
+        text = "This is an incomplete sentence where some words are missing."
+        encoding = tokenizer(text, padding="max_length", return_tensors="pt")
+        
+        # forward pass
+        outputs = model(**encoding)
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+        # verify outputs
+        expected_shape = torch.Size((1, tokenizer.model_max_length, tokenizer.vocab_size))
+        self.assertEqual(outputs.shape, expected_shape)
 
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
-
-        # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+            [[-11.8336, -11.6850, -11.8483],
+        [-12.8149, -12.5863, -12.7904],
+        [-12.8440, -12.6410, -12.8646]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs[0, :3, :3], expected_slice, atol=1e-4))
+
+        expected_greedy_predictions = [ 38, 115, 111, 121, 121, 111, 116, 109,  52]
+        masked_tokens_predictions = outputs[0, 51:60].argmax(dim=-1).tolist()
+        self.assertListEqual(expected_greedy_predictions, masked_tokens_predictions)
