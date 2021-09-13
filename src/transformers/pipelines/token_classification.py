@@ -5,15 +5,15 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 from ..models.bert.tokenization_bert import BasicTokenizer
-from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import ExplicitEnum, add_end_docstrings
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline
 
 
-if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
-
-if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+# if is_tf_available():
+#     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+#
+# if is_torch_available():
+#     from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
 
 class TokenClassificationArgumentHandler(ArgumentHandler):
@@ -100,11 +100,11 @@ class TokenClassificationPipeline(Pipeline):
 
     def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.check_model_type(
-            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
-            if self.framework == "tf"
-            else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
-        )
+        # self.check_model_type(
+        #     TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+        #     if self.framework == "tf"
+        #     else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+        # )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser
