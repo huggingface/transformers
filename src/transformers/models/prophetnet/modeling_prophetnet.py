@@ -1812,7 +1812,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             >>> last_hidden_states = outputs.last_hidden_state  # main stream hidden states
             >>> last_hidden_states_ngram = outputs.last_hidden_state_ngram  # predict hidden states
         """
-        use_cache == use_cache if use_cache is not None else self.config.use_cache
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
