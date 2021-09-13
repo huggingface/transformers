@@ -1741,12 +1741,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 logger.info(f"loading file {file_path} from cache at {resolved_vocab_files[file_id]}")
 
         return cls._from_pretrained(
-            resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
+            resolved_vocab_files,
+            pretrained_model_name_or_path,
+            init_configuration,
+            *init_inputs,
+            use_auth_token=use_auth_token,
+            **kwargs,
         )
 
     @classmethod
     def _from_pretrained(
-        cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
+        cls,
+        resolved_vocab_files,
+        pretrained_model_name_or_path,
+        init_configuration,
+        *init_inputs,
+        use_auth_token=None,
+        **kwargs
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
         # file or if `from_slow` is set to True.
@@ -1784,7 +1795,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
             try:
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, use_auth_token=use_auth_token)
                 config_tokenizer_class = config.tokenizer_class
             except (OSError, ValueError, KeyError):
                 # skip if an error occurred.
