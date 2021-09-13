@@ -163,7 +163,7 @@ if __name__ == "__main__":
         title = "🤗 Self-push results"
 
     if len(arguments):
-        title = f"*[{arguments}]* " + title
+        title = f"{arguments} " + title
 
     try:
         results = {}
