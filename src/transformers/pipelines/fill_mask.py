@@ -219,4 +219,7 @@ class FillMaskPipeline(Pipeline):
             - **token** (:obj:`int`) -- The predicted token id (to replace the masked one).
             - **token** (:obj:`str`) -- The predicted token (to replace the masked one).
         """
-        return super().__call__(inputs, **kwargs)
+        outputs = super().__call__(inputs, **kwargs)
+        if isinstance(inputs, list) and len(inputs) == 1:
+            return outputs[0]
+        return outputs
