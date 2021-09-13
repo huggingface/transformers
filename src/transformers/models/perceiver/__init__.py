@@ -29,12 +29,19 @@ if is_torch_available():
     _import_structure["modeling_perceiver"] = [
         "PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PerceiverBasicDecoder",
+        "PerceiverClassificationDecoder",
+        "PerceiverForImageClassification",
+        "PerceiverForMaskedLM",
         "PerceiverLayer",
         "PerceiverModel",
         "PerceiverPreTrainedModel",
     ]
 
-    _import_structure["processing_perceiver"] = ["PerceiverTextPostprocessor", "PerceiverTextPreprocessor", "PerceiverImagePreprocessor",]
+    _import_structure["processing_perceiver"] = [
+        "PerceiverImagePreprocessor",
+        "PerceiverTextPostprocessor",
+        "PerceiverTextPreprocessor",
+    ]
 
 
 if TYPE_CHECKING:
@@ -45,11 +52,18 @@ if TYPE_CHECKING:
         from .modeling_perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
             PerceiverBasicDecoder,
+            PerceiverClassificationDecoder,
+            PerceiverForImageClassification,
+            PerceiverForMaskedLM,
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
         )
-        from .processing_perceiver import PerceiverTextPostprocessor, PerceiverTextPreprocessor, PerceiverImagePreprocessor
+        from .processing_perceiver import (
+            PerceiverImagePreprocessor,
+            PerceiverTextPostprocessor,
+            PerceiverTextPreprocessor,
+        )
 
 
 else:

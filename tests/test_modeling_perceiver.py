@@ -28,11 +28,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     import torch
 
-    from transformers import (
-        PerceiverForMaskedLM,
-        PerceiverModel,
-        PerceiverTokenizer,
-    )
+    from transformers import PerceiverForMaskedLM, PerceiverModel, PerceiverTokenizer
     from transformers.models.perceiver.modeling_perceiver import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -417,14 +413,14 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        
+
         tokenizer = PerceiverTokenizer()
         model = PerceiverForMaskedLM.from_pretrained("deepmind/language-perceiver")
-        
+
         # prepare inputs
         text = "This is an incomplete sentence where some words are missing."
         encoding = tokenizer(text, padding="max_length", return_tensors="pt")
-        
+
         # forward pass
         outputs = model(**encoding)
 
@@ -433,13 +429,11 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-11.8336, -11.6850, -11.8483],
-        [-12.8149, -12.5863, -12.7904],
-        [-12.8440, -12.6410, -12.8646]]
+            [[-11.8336, -11.6850, -11.8483], [-12.8149, -12.5863, -12.7904], [-12.8440, -12.6410, -12.8646]]
         )
 
         self.assertTrue(torch.allclose(outputs[0, :3, :3], expected_slice, atol=1e-4))
 
-        expected_greedy_predictions = [ 38, 115, 111, 121, 121, 111, 116, 109,  52]
+        expected_greedy_predictions = [38, 115, 111, 121, 121, 111, 116, 109, 52]
         masked_tokens_predictions = outputs[0, 51:60].argmax(dim=-1).tolist()
         self.assertListEqual(expected_greedy_predictions, masked_tokens_predictions)
