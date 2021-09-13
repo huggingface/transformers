@@ -96,6 +96,7 @@ class GPTNeoConfig(PretrainedConfig):
             >>> configuration = model.config
     """
     model_type = "gpt_neo"
+    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
