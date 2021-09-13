@@ -1314,7 +1314,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
             if low_cpu_mem_usage:
-                loaded_state_dict_keys = cls._load_state_dict_into_model_low_mem_p1(state_dict)
+                # save the keys
+                loaded_state_dict_keys = [k for k in state_dict.keys()]
+                del state_dict  # free CPU memory - will reload again later
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1367,7 +1369,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif from_pt:
 
             if low_cpu_mem_usage:
-                cls._load_state_dict_into_model_low_mem_p2(model, loaded_state_dict_keys, resolved_archive_file)
+                cls._load_state_dict_into_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file)
             else:
                 model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_state_dict_into_model(
                     model,
@@ -1582,30 +1584,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return retrieved_modules
 
     @classmethod
-    def _load_state_dict_into_model_low_mem_p1(cls, state_dict):
+    def _load_state_dict_into_model_low_mem(cls, model, loaded_state_dict_keys, resolved_archive_file):
         """
-        This is an experimental 2-part function that loads the model using ~1.x model size CPU memory
+        This is an experimental function that loads the model using ~1.x model size CPU memory
 
-        Part 1:
+        Before it gets called we do:
 
         1. save which state_dict keys we have
-        2. drop state_dict
-        """
-        require_version_core("torch>=1.9")
-        if is_deepspeed_zero3_enabled():
-            raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
+        2. drop state_dict before model is created, since the latter takes 1x model size memory
 
-        # save the keys
-        loaded_state_dict_keys = [k for k in state_dict.keys()]
-        del state_dict  # free CPU memory - will reload again later
-        return loaded_state_dict_keys
-
-    @classmethod
-    def _load_state_dict_into_model_low_mem_p2(cls, model, loaded_state_dict_keys, resolved_archive_file):
-        """
-        This is an experimental 2-part function that loads the model using ~1.x model size CPU memory
-
-        Part 2:
+        Here then we continue:
 
         3. switch to the meta device all params/buffers that are going to be replaced from the loaded state_dict
         4. load state_dict 2nd time
@@ -1613,6 +1601,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
         """
+
+        require_version_core("torch>=1.9")
+        if is_deepspeed_zero3_enabled():
+            raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
 
         # a helper util to find the last sub-module and the param/buffer name
         def find_submodule_and_param_name(model, long_key):
