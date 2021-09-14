@@ -39,44 +39,6 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def to_string(inputs: np.ndarray) -> str:
-    inputs_no_special = inputs[inputs >= 6] - 6
-    decoded_bytes = inputs_no_special.astype(np.uint8).tobytes()
-    return decoded_bytes.decode("utf-8", errors="replace")
-
-
-def prepare_dummy_inputs():
-    # here we prepare a dummy input for MLM
-    def to_int(inputs: str) -> np.ndarray:
-        if isinstance(inputs, str):
-            inputs = inputs.encode("utf-8")
-        encoded = np.frombuffer(inputs, np.uint8).astype(np.int32)
-        encoded = encoded + 6
-        return encoded.astype(np.int32)
-
-    def pad(max_sequence_length: int, inputs, input_mask):
-        input_len = inputs.shape[1]
-        assert input_len <= max_sequence_length
-        pad_len = max_sequence_length - input_len
-        padded_inputs = np.pad(inputs, pad_width=((0, 0), (0, pad_len)), constant_values=0)
-        padded_mask = np.pad(input_mask, pad_width=((0, 0), (0, pad_len)), constant_values=0)
-        return padded_inputs, padded_mask
-
-    input_str = "This is an incomplete sentence where some words are missing."
-    input_tokens = to_int(input_str)
-
-    # Mask " missing.". Note that the model performs much better if the masked chunk
-    # starts with a space.
-    input_tokens[51:60] = 3
-    inputs = input_tokens[None]
-    input_mask = np.ones_like(inputs)
-    inputs, input_mask = pad(2048, inputs, input_mask)
-    inputs = torch.from_numpy(inputs)
-    input_mask = torch.from_numpy(input_mask)
-
-    return inputs, input_mask
-
-
 def rename_keys(state_dict):
     for name in list(state_dict):
         param = state_dict.pop(name)
@@ -211,10 +173,15 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
     # load weights
     model.load_state_dict(state_dict)
 
-    # forward pass on dummy input
-    inputs, input_mask = prepare_dummy_inputs()
+    # prepare dummy input
+    tokenizer = PerceiverTokenizer.from_pretrained("/Users/NielsRogge/Documents/Perceiver/Tokenizer files")
+    text = "This is an incomplete sentence where some words are missing."
+    encoding = tokenizer(text, padding="max_length", return_tensors="pt")
+    # mask " missing.". Note that the model performs much better if the masked chunk starts with a space.
+    encoding.input_ids[0,51:60] = tokenizer.mask_token_id
 
-    outputs = model(inputs=inputs, attention_mask=input_mask)
+    # forward pass
+    outputs = model(inputs=encoding.input_ids, attention_mask=encoding.attention_mask)
 
     # verify outputs
     print("Shape of outputs:", outputs.shape)
@@ -225,7 +192,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
     print(masked_tokens_predictions)
     print()
     print("Predicted string:")
-    print(to_string(masked_tokens_predictions.numpy()))
+    print(tokenizer.decode(masked_tokens_predictions))
 
     # Finally, save files
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
