@@ -105,7 +105,7 @@ jobs:
                   apt -y update && apt install -y libsndfile1-dev git
                   pip install --upgrade pip
                   pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
-                pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html -U
+                  pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html -U
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
