@@ -33,7 +33,7 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_perceiver import PerceiverConfig
-from .processing_perceiver import PerceiverTextPreprocessor, PerceiverTextPostprocessor, PerceiverImagePreprocessor
+from .processing_perceiver import PerceiverImagePreprocessor, PerceiverTextPostprocessor, PerceiverTextPreprocessor
 
 
 logger = logging.get_logger(__name__)
@@ -630,7 +630,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         print("Shape of inputs:", inputs.shape)
-        
+
         if inputs is None:
             raise ValueError("You must specify inputs")
 
@@ -638,7 +638,9 @@ class PerceiverModel(PerceiverPreTrainedModel):
             inputs = self.input_preprocessor(inputs)
 
         if inputs.size()[-1] != self.config.d_model:
-            raise ValueError(f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}")
+            raise ValueError(
+                f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}"
+            )
         else:
             input_shape = inputs.size()
 
@@ -770,17 +772,15 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         )
 
 
-#@add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
+# @add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
 class PerceiverForImageClassification(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.preprocessor = PerceiverImagePreprocessor(config, 
-                                                        prep_type="conv1x1", 
-                                                        out_channels=256, 
-                                                        spatial_downsample=1, 
-                                                        concat_or_add_pos="concat")
+        self.preprocessor = PerceiverImagePreprocessor(
+            config, prep_type="conv1x1", out_channels=256, spatial_downsample=1, concat_or_add_pos="concat"
+        )
         self.decoder = PerceiverClassificationDecoder(config)
         self.model = PerceiverModel(config, input_preprocessor=self.preprocessor, decoder=self.decoder)
 
@@ -831,8 +831,8 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=None, # TODO fill in once we have defined custom output class for PerceiverModel
-            attentions=None, # TODO fill in once we have defined custom output class for PerceiverModel
+            hidden_states=None,  # TODO fill in once we have defined custom output class for PerceiverModel
+            attentions=None,  # TODO fill in once we have defined custom output class for PerceiverModel
         )
 
 
@@ -954,7 +954,9 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
 
         self.num_labels = config.num_labels
         self.decoder = PerceiverBasicDecoder(
-            config, output_num_channels=self.num_labels, output_index_dims=1,  # Predict a single logit array.
+            config,
+            output_num_channels=self.num_labels,
+            output_index_dims=1,  # Predict a single logit array.
         )
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):

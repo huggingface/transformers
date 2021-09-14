@@ -57,12 +57,12 @@ class PerceiverTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        pad_token="[PAD]",
-        bos_token="[BOS]",
-        eos_token="[EOS]",
-        mask_token="[MASK]",
-        cls_token="[CLS]",
-        sep_token="[SEP]",
+        pad_token="<pad>",
+        bos_token="<s>",
+        eos_token="</s>",
+        mask_token="<mask>",
+        cls_token="<cls>",
+        sep_token="<sep>",
         model_max_length=2048,
         **kwargs
     ) -> None:

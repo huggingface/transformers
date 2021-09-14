@@ -213,7 +213,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
 
     # forward pass on dummy input
     inputs, input_mask = prepare_dummy_inputs()
-    
+
     outputs = model(inputs=inputs, attention_mask=input_mask)
 
     # verify outputs

@@ -1,15 +1,16 @@
 import torch
-from transformers import PerceiverImagePreprocessor, PerceiverConfig, PerceiverForImageClassification
+
+from transformers import PerceiverConfig, PerceiverForImageClassification, PerceiverImagePreprocessor
 
 
 # TEST 1: testing PerceiverImagePreprocessor
 pixel_values = torch.randn((1, 3, 224, 224))
 config = PerceiverConfig()
-processor = PerceiverImagePreprocessor(config, 
-    prep_type="conv1x1", out_channels=256, spatial_downsample=1, concat_or_add_pos="concat"
+processor = PerceiverImagePreprocessor(
+    config, prep_type="conv1x1", out_channels=256, spatial_downsample=1, concat_or_add_pos="concat"
 )
 
-inputs  = processor(pixel_values)
+inputs = processor(pixel_values)
 print(inputs.shape)
 
 # TEST 2: testing PerceiverForImageClassification

@@ -72,9 +72,9 @@ class PerceiverConfig(PretrainedConfig):
         use_query_residual (:obj:`float`, `optional`, defaults to :obj:`True`):
             Whether to add a query residual in the cross-attention layer of the encoder.
         vocab_size (:obj:`int`, `optional`, defaults to 262):
-            Vocabulary size of the Perceiver model. 
+            Vocabulary size of the Perceiver model.
         seq_len (:obj:`int`, `optional`, defaults to 2048):
-            Sequence length of the Perceiver model. 
+            Sequence length of the Perceiver model.
 
     Example::
 
@@ -136,4 +136,3 @@ class PerceiverConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.seq_len = seq_len
         # image classification attributes
-        
