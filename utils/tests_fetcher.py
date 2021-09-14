@@ -417,26 +417,30 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
     # Grab the corresponding test files:
-    test_files_to_run = []
-    for f in impacted_files:
-        # Modified test files are always added
-        if f.startswith("tests/"):
-            test_files_to_run.append(f)
-        else:
-            new_tests = module_to_test_file(f)
-            if new_tests is not None:
-                if isinstance(new_tests, str):
-                    test_files_to_run.append(new_tests)
-                else:
-                    test_files_to_run.extend(new_tests)
+    if "setup.py" in impacted_files:
+        test_files_to_run = ["tests"]
+    else:
+        # Grab the corresponding test files:
+        test_files_to_run = []
+        for f in impacted_files:
+            # Modified test files are always added
+            if f.startswith("tests/"):
+                test_files_to_run.append(f)
+            else:
+                new_tests = module_to_test_file(f)
+                if new_tests is not None:
+                    if isinstance(new_tests, str):
+                        test_files_to_run.append(new_tests)
+                    else:
+                        test_files_to_run.extend(new_tests)
 
-    # Remove duplicates
-    test_files_to_run = sorted(list(set(test_files_to_run)))
-    # Make sure we did not end up with a test file that was removed
-    test_files_to_run = [f for f in test_files_to_run if os.path.isfile(f) or os.path.isdir(f)]
-    if filters is not None:
-        for filter in filters:
-            test_files_to_run = [f for f in test_files_to_run if f.startswith(filter)]
+        # Remove duplicates
+        test_files_to_run = sorted(list(set(test_files_to_run)))
+        # Make sure we did not end up with a test file that was removed
+        test_files_to_run = [f for f in test_files_to_run if os.path.isfile(f) or os.path.isdir(f)]
+        if filters is not None:
+            for filter in filters:
+                test_files_to_run = [f for f in test_files_to_run if f.startswith(filter)]
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
     if len(test_files_to_run) > 0:
