@@ -313,8 +313,6 @@ class FlaxPegasusModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("google/pegasus-large", from_pt=True)
-            # FlaxBartForSequenceClassification expects eos token in input_ids
-            input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
 
