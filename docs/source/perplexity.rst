@@ -110,6 +110,9 @@ available to condition on).
 
 .. code-block:: python
 
+    import torch
+    from tqdm import tqdm
+
     max_length = model.config.n_positions
     stride = 512
 
