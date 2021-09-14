@@ -131,38 +131,6 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             return ([0] * len(token_ids_0)) + [1]
         return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
-    def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
-        """Do not add eos again if user already added it."""
-        if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
-            warnings.warn(
-                f"This sequence already has {self.eos_token}. In future versions this behavior may lead to duplicated eos tokens being added."
-            )
-            return token_ids
-        else:
-            return token_ids + [self.eos_token_id]
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. The Perceiver
-        does not make use of token type ids, therefore a list of zeros is returned.
-
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            :obj:`List[int]`: List of zeros.
-        """
-        eos = [self.eos_token_id]
-
-        if token_ids_1 is None:
-            return len(token_ids_0 + eos) * [0]
-        return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
-
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:

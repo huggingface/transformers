@@ -697,21 +697,21 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
 @add_start_docstrings("""Example use of Perceiver for masked language modeling. """, PERCEIVER_START_DOCSTRING)
 class PerceiverForMaskedLM(PerceiverPreTrainedModel):
-    def __init__(self, config, vocab_size, seq_len):
+    def __init__(self, config):
         super().__init__(config)
 
-        self.preprocessor = PerceiverTextPreprocessor(config, vocab_size=vocab_size, seq_len=seq_len)
+        self.preprocessor = PerceiverTextPreprocessor(config)
         self.decoder = PerceiverBasicDecoder(
             config,
             output_num_channels=config.d_latents,
-            output_index_dims=seq_len,
+            output_index_dims=config.seq_len,
             qk_channels=8 * 32,
             v_channels=config.d_model,
             num_heads=8,
             use_query_residual=False,
             final_project=False,
         )
-        self.postprocessor = PerceiverTextPostprocessor(config, vocab_size=262)
+        self.postprocessor = PerceiverTextPostprocessor(config)
         self.model = PerceiverModel(
             config, input_preprocessor=self.preprocessor, decoder=self.decoder, output_postprocessor=self.postprocessor
         )

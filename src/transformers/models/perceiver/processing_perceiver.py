@@ -25,11 +25,11 @@ import torch.nn as nn
 class PerceiverTextPreprocessor(nn.Module):
     """Text preprocessing for Perceiver Encoder."""
 
-    def __init__(self, config, vocab_size, seq_len):
+    def __init__(self, config):
         super().__init__()
-        self.embeddings = nn.Embedding(num_embeddings=vocab_size, embedding_dim=config.d_model)
-        self.position_embeddings = nn.Embedding(seq_len, config.d_model)
-        self.seq_len = seq_len
+        self.embeddings = nn.Embedding(num_embeddings=config.vocab_size, embedding_dim=config.d_model)
+        self.position_embeddings = nn.Embedding(config.seq_len, config.d_model)
+        self.seq_len = config.seq_len
 
     def __call__(self, inputs):
 
@@ -43,11 +43,11 @@ class PerceiverTextPreprocessor(nn.Module):
 class PerceiverTextPostprocessor(nn.Module):
     """Module to decode embeddings."""
 
-    def __init__(self, config, vocab_size):
+    def __init__(self, config):
         """Constructs the module."""
         super().__init__()
         self.config = config
-        self.vocab_size = vocab_size
+        self.vocab_size = config.vocab_size
         self.bias = nn.Parameter(torch.zeros(self.vocab_size))
 
     def __call__(self, hidden_states, embedding_layer):

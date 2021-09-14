@@ -30,6 +30,7 @@ from transformers import (
     PerceiverModel,
     PerceiverTextPostprocessor,
     PerceiverTextPreprocessor,
+    PerceiverTokenizer,
 )
 from transformers.utils import logging
 
@@ -190,7 +191,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
 
     # load HuggingFace model
     config = PerceiverConfig()
-    preprocessor = PerceiverTextPreprocessor(config, vocab_size=262, seq_len=2048)
+    preprocessor = PerceiverTextPreprocessor(config)
     decoder = PerceiverBasicDecoder(
         config,
         output_num_channels=1280,
@@ -201,7 +202,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
         use_query_residual=False,
         final_project=False,
     )
-    postprocessor = PerceiverTextPostprocessor(config, vocab_size=262)
+    postprocessor = PerceiverTextPostprocessor(config)
     model = PerceiverModel(
         config, input_preprocessor=preprocessor, decoder=decoder, output_postprocessor=postprocessor
     )
@@ -212,6 +213,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
 
     # forward pass on dummy input
     inputs, input_mask = prepare_dummy_inputs()
+    
     outputs = model(inputs=inputs, attention_mask=input_mask)
 
     # verify outputs
