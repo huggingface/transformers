@@ -366,6 +366,15 @@ def main():
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
+    if (
+        hasattr(model.config, "max_position_embeddings")
+        and model.config.max_position_embeddings < data_args.max_source_length
+    ):
+        logger.info(
+            f"Increasing the model's number of position embedding vectors from {model.config.max_position_embedding} to {data_args.max_source_length}."
+        )
+        model.resize_token_embeddings(data_args.max_source_length)
+
     prefix = data_args.source_prefix if data_args.source_prefix is not None else ""
 
     # Preprocessing the datasets.
