@@ -281,7 +281,6 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "test_trainer_distributed.py",
         "test_trainer_tpu.py",
     ],
-    "train_pt_utils.py": "test_trainer_utils.py",
     "utils/versions.py": "test_versions_utils.py",
 }
 
@@ -427,9 +426,6 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
             # Modified test files are always added
             if f.startswith("tests/"):
                 test_files_to_run.append(f)
-            # Example files are tested separately
-            elif f.startswith("examples/pytorch"):
-                test_files_to_run.append("examples/pytorch/test_examples.py")
             else:
                 new_tests = module_to_test_file(f)
                 if new_tests is not None:
@@ -443,10 +439,8 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if os.path.isfile(f) or os.path.isdir(f)]
         if filters is not None:
-            filtered_files = []
             for filter in filters:
-                filtered_files.extend([f for f in test_files_to_run if f.startswith(filter)])
-            test_files_to_run = filtered_files
+                test_files_to_run = [f for f in test_files_to_run if f.startswith(filter)]
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
     if len(test_files_to_run) > 0:
@@ -468,11 +462,7 @@ if __name__ == "__main__":
         help="To fetch the tests between the current commit and the last commit",
     )
     parser.add_argument(
-        "--filters",
-        type=str,
-        nargs="*",
-        default=["tests"],
-        help="Only keep the test files matching one of those filters.",
+        "--filters", type=str, nargs="*", help="Only keep the test files matching one of those filters."
     )
     args = parser.parse_args()
     if args.sanity_check:
