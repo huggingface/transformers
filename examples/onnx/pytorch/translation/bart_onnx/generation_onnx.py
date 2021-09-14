@@ -56,6 +56,11 @@ class DecoderForONNX(torch.nn.Module):
         if past is not None:
             print("======== Past is not None.")
 
+        all_results = ()
+        if past is not None:
+            for i in range(len(past)):
+                all_results = all_results + (past[i],)
+
         last_hidden_state, past_key_values = self.decoder(
             input_ids=input_ids,
             encoder_hidden_states=encoder_state,
@@ -166,24 +171,29 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
 
     def _decoder_forward(self, input_ids, encoder_output, attention_mask, past: List[torch.Tensor]):
         # Update here to use different decoder for different values of past.
-        past = None
         if past is None or len(past) == 0:
             print("========= call decoder_no_past =========")
-            decoder_output, past = self.decoder_no_past(
+            decoder_output, past_new = self.decoder_no_past(
                             input_ids=input_ids,
                             encoder_state=encoder_output,
                             attention_mask=attention_mask)
         else:
             print("========= call decoder_with_past =========")
-            decoder_output, past = self.decoder_with_past(
+            decoder_output, past_new = self.decoder_with_past(
                             input_ids=input_ids,
                             encoder_state=encoder_output,
                             attention_mask=attention_mask,
                             past=past)
 
+        past_values = []
+        if past_new is not None:
+            for i, p in enumerate(past_new):
+                for j, q in enumerate(p):
+                    past_values.append(q)
+
         lm_logits = F.linear(decoder_output, self.final_logits_weight, bias=self.final_logits_bias)
 
-        return lm_logits, past
+        return lm_logits, past_values
 
     def greedy_search(self, input_ids, encoder_output, attention_mask, max_length, pad_token_id: int, eos_token_id: int):
         # init sequence length tensors
@@ -571,8 +581,7 @@ class BARTBeamSearchGenerator(BARTGenerator):
 
         past: List[torch.Tensor] = []
         while cur_len < max_length:
-            logits, _ = self._decoder_forward(input_ids, encoder_output, attention_mask, past)
-            # logits = self._decoder_forward(input_ids, encoder_output, attention_mask, past)
+            logits, past = self._decoder_forward(input_ids, encoder_output, attention_mask, past)
             next_token_logits = logits[:, -1, :]
 
             # adjust tokens for Bart, *e.g.*
@@ -611,8 +620,8 @@ class BARTBeamSearchGenerator(BARTGenerator):
 
             cur_len = cur_len + 1
 
-            # if len(past) > 0:
-            #     past = self._reorder_cache(past, beam_idx)
+            if len(past) > 0:
+                past = self._reorder_cache(past, beam_idx)
 
             if self.beam_scorer.is_done():
                 break

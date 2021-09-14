@@ -137,7 +137,7 @@ def export_and_validate_model(model, tokenizer, output_obj, num_beams, max_lengt
         # my_model = BARTBeamSearchGenerator(model)
         # results = my_model(inputs['input_ids'], inputs['attention_mask'], num_beams, max_length, model.config.decoder_start_token_id)
 
-        # results = onnx_bart(inputs['input_ids'], inputs['attention_mask'], torch.tensor(num_beams), torch.tensor(max_length), torch.tensor(model.config.decoder_start_token_id))
+        results = onnx_bart(inputs['input_ids'], inputs['attention_mask'], torch.tensor(num_beams), torch.tensor(max_length), torch.tensor(model.config.decoder_start_token_id))
         if not ort_sess:
             torch.onnx.export(onnx_bart,
                 (inputs['input_ids'], inputs['attention_mask'], num_beams, max_length, model.config.decoder_start_token_id),
