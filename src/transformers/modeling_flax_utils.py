@@ -147,9 +147,16 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             )
         self._params = params
 
-    def to_bf16(self, params: Union[Dict, FrozenDict], mask: Any = None):
+    def _cast_floating_to(self, params: Union[Dict, FrozenDict], dtype: jnp.dtype, mask: Any = None) -> Any:
+        
+        # taken from https://github.com/deepmind/jmp/blob/3a8318abc3292be38582794dbf7b094e6583b192/jmp/_src/policy.py#L27
+        def conditional_cast(params):
+            if isinstance(params, jnp.ndarray) and jnp.issubdtype(params.dtype, jnp.floating):
+                params = params.astype(dtype)
+            return params
+
         if mask is None:
-            return jax.tree_map(lambda x: x.astype(jnp.bfloat16) if x.dtype == jnp.float32 else x, params)
+            return jax.tree_map(conditional_cast, params)
 
         flat_params = flatten_dict(params)
         flat_mask, _ = jax.tree_flatten(mask)
@@ -157,15 +164,18 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         for masked, key in zip(flat_mask, flat_params.keys()):
             if masked:
                 param = flat_params[key]
-                flat_params[key] = param.astype(jnp.bfloat16) if param.dtype == jnp.float32 else param
+                flat_params[key] = conditional_cast(param)
 
         return unflatten_dict(flat_params)
 
-    def to_fp32(self, params: Union[Dict, FrozenDict]):
-        return jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, params)
+    def to_bf16(self, params: Union[Dict, FrozenDict], mask: Any = None):
+        return self._cast_floating_to(params, jnp.bfloat16, mask)
 
-    def to_fp16(self, params: Union[Dict, FrozenDict]):
-        return jax.tree_map(lambda x: x.astype(jnp.float16) if x.dtype == jnp.float32 else x, params)
+    def to_fp32(self, params: Union[Dict, FrozenDict], mask: Any = None):
+        return self._cast_floating_to(params, jnp.float32, mask)
+
+    def to_fp16(self, params: Union[Dict, FrozenDict], mask: Any = None):
+        return self._cast_floating_to(params, jnp.float16, mask)
 
     @classmethod
     def from_pretrained(
