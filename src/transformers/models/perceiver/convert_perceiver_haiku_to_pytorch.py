@@ -25,11 +25,8 @@ import torch.nn as nn
 
 import haiku as hk
 from transformers import (
-    PerceiverBasicDecoder,
     PerceiverConfig,
-    PerceiverModel,
-    PerceiverTextPostprocessor,
-    PerceiverTextPreprocessor,
+    PerceiverForMaskedLM,
     PerceiverTokenizer,
 )
 from transformers.utils import logging
@@ -129,7 +126,7 @@ def rename_keys(state_dict):
             param = np.transpose(param)
 
         # preprocessor embeddings need special treatment
-        state_dict[name] = torch.from_numpy(param)
+        state_dict["perceiver." + name] = torch.from_numpy(param)
 
 
 @torch.no_grad()
@@ -153,21 +150,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
 
     # load HuggingFace model
     config = PerceiverConfig()
-    preprocessor = PerceiverTextPreprocessor(config)
-    decoder = PerceiverBasicDecoder(
-        config,
-        output_num_channels=1280,
-        output_index_dims=2048,
-        qk_channels=8 * 32,
-        v_channels=config.d_model,
-        num_heads=8,
-        use_query_residual=False,
-        final_project=False,
-    )
-    postprocessor = PerceiverTextPostprocessor(config)
-    model = PerceiverModel(
-        config, input_preprocessor=preprocessor, decoder=decoder, output_postprocessor=postprocessor
-    )
+    model = PerceiverForMaskedLM(config)
     model.eval()
 
     # load weights
@@ -182,12 +165,13 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
 
     # forward pass
     outputs = model(inputs=encoding.input_ids, attention_mask=encoding.attention_mask)
+    logits = outputs.logits
 
-    # verify outputs
-    print("Shape of outputs:", outputs.shape)
-    print("First elements of outputs:", outputs[0, :3, :3])
+    # verify logits
+    print("Shape of logits:", logits.shape)
+    print("First elements of logits:", logits[0, :3, :3])
 
-    masked_tokens_predictions = outputs[0, 51:60].argmax(dim=-1)
+    masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1)
     print("Greedy predictions:")
     print(masked_tokens_predictions)
     print()

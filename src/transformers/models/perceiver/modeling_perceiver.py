@@ -702,20 +702,19 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.preprocessor = PerceiverTextPreprocessor(config)
-        self.decoder = PerceiverBasicDecoder(
-            config,
-            output_num_channels=config.d_latents,
-            output_index_dims=config.seq_len,
-            qk_channels=8 * 32,
-            v_channels=config.d_model,
-            num_heads=8,
-            use_query_residual=False,
-            final_project=False,
-        )
-        self.postprocessor = PerceiverTextPostprocessor(config)
-        self.model = PerceiverModel(
-            config, input_preprocessor=self.preprocessor, decoder=self.decoder, output_postprocessor=self.postprocessor
+        self.perceiver = PerceiverModel(
+            config, 
+            input_preprocessor=PerceiverTextPreprocessor(config), 
+            decoder=PerceiverBasicDecoder(
+                    config,
+                    output_num_channels=config.d_latents,
+                    output_index_dims=config.seq_len,   
+                    qk_channels=8 * 32,
+                    v_channels=config.d_model,
+                    num_heads=8,
+                    use_query_residual=False,
+                    final_project=False),
+            output_postprocessor=PerceiverTextPostprocessor(config),
         )
 
         self.init_weights()
@@ -746,7 +745,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        logits = self.model(
+        logits = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -767,8 +766,8 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         return MaskedLMOutput(
             loss=masked_lm_loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            hidden_states=None,  # TODO fill in once we have defined custom output class for PerceiverModel
+            attentions=None,  # TODO fill in once we have defined custom output class for PerceiverModel
         )
 
 
