@@ -58,14 +58,27 @@ class DecoderForONNX(torch.nn.Module):
 
         all_results = ()
         if past is not None:
-            for i in range(len(past)):
-                all_results = all_results + (past[i],)
+            temp_result = ()
+            count_n = len(past) // 4
+            for idx in range(count_n):
+                real_idx = idx * 4
+                temp_result = tuple(past[real_idx:real_idx + 4])
+                all_results += ((temp_result), )
+        else:
+            # past = [torch.ones(1, 12, 1, 64) for _ in range(24)]
+            # temp_result = ()
+            # count_n = len(past) // 4
+            # for idx in range(count_n):
+            #     real_idx = idx * 4
+            #     temp_result = tuple(past[real_idx:real_idx + 4])
+            #     all_results += ((temp_result), )
+            all_results = None
 
         last_hidden_state, past_key_values = self.decoder(
             input_ids=input_ids,
             encoder_hidden_states=encoder_state,
             encoder_attention_mask=attention_mask,
-            past_key_values=past,
+            past_key_values=all_results,
             return_dict=False,
         )
 
@@ -192,6 +205,8 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
                     past_values.append(q)
 
         lm_logits = F.linear(decoder_output, self.final_logits_weight, bias=self.final_logits_bias)
+
+        print("========= _decoder_with_past past_values length: ", len(past_values))
 
         return lm_logits, past_values
 
