@@ -17,13 +17,21 @@
 
 import abc
 import math
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...file_utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import (
     PreTrainedModel,
@@ -46,6 +54,37 @@ PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "deepmind/language-perceiver",
     # See all Perceiver models at https://huggingface.co/models?filter=perceiver
 ]
+
+
+@dataclass
+class PerceiverModelOutput(ModelOutput):
+    """
+    Base class for model's outputs, with potential hidden states and attentions.
+
+    Args:
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_labels)`):
+            Logits.
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+            each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` and ``config.add_cross_attention=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
+            attention softmax, used to compute the weighted average in the cross-attention heads.
+    """
+
+    logits: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class PerceiverEmbeddings(nn.Module):
@@ -117,7 +156,6 @@ class PerceiverSelfAttention(nn.Module):
         inputs_mask=None,
         output_attentions=False,
     ):
-        original_hidden_states = hidden_states
         hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
 
@@ -611,7 +649,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithCrossAttentions,
+        output_type=PerceiverModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -676,25 +714,27 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         print("Encoder outputs:", sequence_output[0, :3, :3])
 
-        outputs = None
+        logits = None
         if self.decoder:
             decoder_query = self.decoder.decoder_query(inputs)  # shape (batch_size, seq_len, d_model)
-            outputs = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
+            logits = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
 
             if self.output_postprocessor:
-                outputs = self.output_postprocessor(outputs, embedding_layer=self.input_preprocessor.embeddings)
+                logits = self.output_postprocessor(logits, embedding_layer=self.input_preprocessor.embeddings)
 
-        return outputs
+        if not return_dict:
+            return (
+                logits,
+                sequence_output,
+            ) + encoder_outputs[1:]
 
-        # if not return_dict:
-        #     return (sequence_output,) + encoder_outputs[1:]
-
-        # return BaseModelOutputWithCrossAttentions(
-        #     last_hidden_state=sequence_output,
-        #     hidden_states=encoder_outputs.hidden_states,
-        #     attentions=encoder_outputs.attentions,
-        #     cross_attentions=encoder_outputs.cross_attentions,
-        # )
+        return PerceiverModelOutput(
+            logits=logits,
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            cross_attentions=encoder_outputs.cross_attentions,
+        )
 
 
 @add_start_docstrings("""Example use of Perceiver for masked language modeling. """, PERCEIVER_START_DOCSTRING)
@@ -703,17 +743,18 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         super().__init__(config)
 
         self.perceiver = PerceiverModel(
-            config, 
-            input_preprocessor=PerceiverTextPreprocessor(config), 
+            config,
+            input_preprocessor=PerceiverTextPreprocessor(config),
             decoder=PerceiverBasicDecoder(
-                    config,
-                    output_num_channels=config.d_latents,
-                    output_index_dims=config.seq_len,   
-                    qk_channels=8 * 32,
-                    v_channels=config.d_model,
-                    num_heads=8,
-                    use_query_residual=False,
-                    final_project=False),
+                config,
+                output_num_channels=config.d_latents,
+                output_index_dims=config.seq_len,
+                qk_channels=8 * 32,
+                v_channels=config.d_model,
+                num_heads=8,
+                use_query_residual=False,
+                final_project=False,
+            ),
             output_postprocessor=PerceiverTextPostprocessor(config),
         )
 
@@ -745,7 +786,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        logits = self.perceiver(
+        outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -753,6 +794,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        logits = outputs.logits
 
         masked_lm_loss = None
         if labels is not None:
@@ -766,8 +808,8 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         return MaskedLMOutput(
             loss=masked_lm_loss,
             logits=logits,
-            hidden_states=None,  # TODO fill in once we have defined custom output class for PerceiverModel
-            attentions=None,  # TODO fill in once we have defined custom output class for PerceiverModel
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -777,11 +819,13 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.preprocessor = PerceiverImagePreprocessor(
-            config, prep_type="conv1x1", out_channels=256, spatial_downsample=1, concat_or_add_pos="concat"
+        self.perceiver = PerceiverModel(
+            config,
+            input_preprocessor=PerceiverImagePreprocessor(
+                config, prep_type="conv1x1", out_channels=256, spatial_downsample=1, concat_or_add_pos="concat"
+            ),
+            decoder=PerceiverClassificationDecoder(config),
         )
-        self.decoder = PerceiverClassificationDecoder(config)
-        self.model = PerceiverModel(config, input_preprocessor=self.preprocessor, decoder=self.decoder)
 
         self.init_weights()
 
@@ -804,7 +848,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        logits = self.model(
+        outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -812,6 +856,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        logits = outputs.logits
 
         loss = None
         if labels is not None:
@@ -830,8 +875,8 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=None,  # TODO fill in once we have defined custom output class for PerceiverModel
-            attentions=None,  # TODO fill in once we have defined custom output class for PerceiverModel
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -855,7 +900,7 @@ class PerceiverProjectionDecoder(PerceiverAbstractDecoder):
     """Baseline projection decoder (no cross-attention)."""
 
     def __init__(self, config):
-        super().__init__(name=name)
+        super().__init__()
         self.classifier = nn.Linear(config.d_latents, config.num_labels)
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):

@@ -21,14 +21,9 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn as nn
 
 import haiku as hk
-from transformers import (
-    PerceiverConfig,
-    PerceiverForMaskedLM,
-    PerceiverTokenizer,
-)
+from transformers import PerceiverConfig, PerceiverForMaskedLM, PerceiverTokenizer
 from transformers.utils import logging
 
 
@@ -161,7 +156,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
     text = "This is an incomplete sentence where some words are missing."
     encoding = tokenizer(text, padding="max_length", return_tensors="pt")
     # mask " missing.". Note that the model performs much better if the masked chunk starts with a space.
-    encoding.input_ids[0,51:60] = tokenizer.mask_token_id
+    encoding.input_ids[0, 51:60] = tokenizer.mask_token_id
 
     # forward pass
     outputs = model(inputs=encoding.input_ids, attention_mask=encoding.attention_mask)

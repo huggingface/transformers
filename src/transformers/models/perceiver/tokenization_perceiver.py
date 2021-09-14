@@ -15,7 +15,6 @@
 """ Tokenization class for Perceiver."""
 
 
-import warnings
 from typing import Dict, List, Optional, Tuple
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
