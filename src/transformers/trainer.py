@@ -2666,6 +2666,7 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
+<<<<<<< HEAD
         git_head_commit_url = self.repo.push_to_hub(commit_message=commit_message, blocking=blocking)
         # push separately the model card to be independant from the rest of the model
         if self.args.should_save:
@@ -2676,6 +2677,9 @@ class Trainer:
                 logger.error(f"Error pushing update to the model card. Please read logs and retry.\n${exc}")
 
         return git_head_commit_url
+=======
+        return self.repo.push_to_hub(commit_message=commit_message, blocking=blocking)
+>>>>>>> Push to hub when saving checkpoints (#13503)
 
     #
     # Deprecated code
