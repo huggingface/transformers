@@ -46,6 +46,8 @@ module abstraction using Python dataclasses that leads to concise and explicit c
 All of our JAX/Flax models are designed to run efficiently on Google
 Cloud TPUs. Here is [a guide for running JAX on Google Cloud TPU](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm).
 
+Consider applying for the [Google TPU Research Cloud project](https://sites.research.google/trc/) for free TPU compute.
+
 Each example README contains more details on the specific model and training
 procedure.
 
