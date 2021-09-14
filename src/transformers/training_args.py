@@ -32,7 +32,7 @@ from .file_utils import (
     is_torch_tpu_available,
     torch_required,
 )
-from .trainer_utils import EvaluationStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
+from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
 from .utils import logging
 
 
@@ -343,6 +343,22 @@ class TrainingArguments:
 
             Will default to :obj:`user_name/output_dir_name` with `output_dir_name` being the name of
             :obj:`output_dir`.
+        hub_strategy (:obj:`str` or :class:`~transformers.trainer_utils.HubStrategy`, `optional`, defaults to :obj:`"every_save"`):
+            Defines the scope of what is pushed to the Hub and when. Possible values are:
+
+            - :obj:`"end"`: push the model, its configuration, the tokenizer (if passed along to the
+              :class:`~transformers.Trainer`) and a draft of a model card at the end of training.
+            - :obj:`"every_save"`: push the model, its configuration, the tokenizer (if passed along to the
+              :class:`~transformers.Trainer`) and a draft of a model card each time there is a model save. The pushes
+              are asynchronous to not block training, and in case the save are very frequent, a new push is only
+              attempted if the previous one is finished. A last push is made with the final model at the end of
+              training.
+            - :obj:`"checkpoint"`: like :obj:`"every_save"` but the latest checkpoint is also pushed in a subfolder
+              named last-checkpoint, allowing you to resume training easily with
+              :obj:`trainer.train(resume_from_checkpoint="last-checkpoint")`.
+            - :obj:`"all_checkpoints"`: like :obj:`"checkpoint"` but all checkpoints are pushed like they appear in the
+              output folder (so you will get one checkpoint folder per folder in your final repository)
+
         hub_token (:obj:`str`, `optional`):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             :obj:`huggingface-cli login`.
@@ -618,6 +634,10 @@ class TrainingArguments:
     hub_model_id: str = field(
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
+    hub_strategy: HubStrategy = field(
+        default="every_save",
+        metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
+    )
     hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
     # Deprecated arguments
     push_to_hub_model_id: str = field(
@@ -668,6 +688,7 @@ class TrainingArguments:
         self.evaluation_strategy = IntervalStrategy(self.evaluation_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
         self.save_strategy = IntervalStrategy(self.save_strategy)
+        self.hub_strategy = HubStrategy(self.hub_strategy)
 
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.evaluation_strategy != IntervalStrategy.NO:

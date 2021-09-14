@@ -119,6 +119,29 @@ TFTrainingArguments
     :members:
 
 
+Checkpoints
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, :class:`~transformers.Trainer` will save all checkpoints in the :obj:`output_dir` you set in the
+:class:`~transformers.TrainingArguments` you are using. Those will go in subfolder named :obj:`checkpoint-xxx` with xxx
+being the step at which the training was at.
+
+Resuming training from a checkpoint can be done when calling :meth:`~transformers.Trainer.train` with either:
+
+- :obj:`resume_from_checkpoint=True` which will resume training from the latest checkpoint
+- :obj:`resume_from_checkpoint=checkpoint_dir` which will resume training from the specific checkpoint in the directory
+  passed.
+
+In addition, you can easily save your checkpoints on the Model Hub when using :obj:`push_to_hub=True`. By default, all
+the models saved in intermediate checkpoints are saved in different commits, but not the optimizer state. You can adapt
+the :obj:`hub-strategy` value of your :class:`~transformers.TrainingArguments` to either:
+
+- :obj:`"checkpoint"`: the latest checkpoint is also pushed in a subfolder named last-checkpoint, allowing you to
+  resume training easily with :obj:`trainer.train(resume_from_checkpoint="output_dir/last-checkpoint")`.
+- :obj:`"all_checkpoints"`: all checkpoints are pushed like they appear in the output folder (so you will get one
+  checkpoint folder per folder in your final repository)
+
+
 Logging
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
