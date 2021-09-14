@@ -16,7 +16,6 @@
 
 import unittest
 
-import jax
 from transformers import PegasusConfig, PegasusTokenizer, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
@@ -33,6 +32,7 @@ if is_flax_available():
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
     import numpy as np
 
+    import jax
     import jax.numpy as jnp
     from transformers import FlaxPegasusForConditionalGeneration, FlaxPegasusModel
 
