@@ -213,13 +213,15 @@ def custom_get_block_length_and_num_blocks(seq_length, window_size):
 class GPTNeoOnnxConfig(OnnxConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict({"input_ids": {0: "batch"}})
+        common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
             for i in range(self._config.num_layers):
-                common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "sequence"}
-                common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "sequence"}
+                common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "past_sequence"}
+                common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "past_sequence"}
 
-        common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
+            common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
+        else:
+            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
 
         return common_inputs
 
@@ -228,8 +230,8 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         common_outputs = super().outputs
         if self.use_past:
             for i in range(self._config.num_layers):
-                common_outputs[f"present.{i}.key"] = {0: "batch", 2: "sequence"}
-                common_outputs[f"present.{i}.value"] = {0: "batch", 2: "sequence"}
+                common_outputs[f"present.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
+                common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
 
             return common_outputs
 
@@ -264,8 +266,9 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
             ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.zeros(batch, 1)], dim=1
+                [ordered_inputs["attention_mask"], torch.ones(batch, 1)], dim=1
             )
+
         return ordered_inputs
 
     @staticmethod
@@ -273,11 +276,8 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         if name in ["present", "past_key_values"]:
             flatten_output = {}
             for idx, t in enumerate(field):
-                if len(t) == 1:
-                    flatten_output[f"{name}.{idx}.key_value"] = t[0]
-                else:
-                    flatten_output[f"{name}.{idx}.key"] = t[0]
-                    flatten_output[f"{name}.{idx}.value"] = t[1]
+                flatten_output[f"{name}.{idx}.key"] = t[0]
+                flatten_output[f"{name}.{idx}.value"] = t[1]
 
             return flatten_output
 
