@@ -15,9 +15,11 @@
 
 import json
 import os
+import re
 import shutil
 import tempfile
 import unittest
+from typing import Tuple
 
 from transformers import AddedToken, BatchEncoding, ByT5Tokenizer
 from transformers.file_utils import cached_property, is_tf_available, is_torch_available
@@ -50,11 +52,70 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs) -> ByT5Tokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
+        # XXX The default common tokenizer tests assume that every ID is decodable on its own.
+        # This assumption is invalid for ByT5 because single bytes might not be
+        # valid utf-8 (byte 128 for instance).
+        # Here we're overriding the smallest possible method to provide
+        # a clean sequence without making the same assumption.
+
+        toks = []
+        for i in range(len(tokenizer)):
+            try:
+                tok = tokenizer.decode([i], clean_up_tokenization_spaces=False)
+            except UnicodeDecodeError:
+                pass
+            toks.append((i, tok))
+
+        toks = list(filter(lambda t: re.match(r"^[ a-zA-Z]+$", t[1]), toks))
+        toks = list(filter(lambda t: [t[0]] == tokenizer.encode(t[1], add_special_tokens=False), toks))
+        if max_length is not None and len(toks) > max_length:
+            toks = toks[:max_length]
+        if min_length is not None and len(toks) < min_length and len(toks) > 0:
+            while len(toks) < min_length:
+                toks = toks + toks
+        # toks_str = [t[1] for t in toks]
+        toks_ids = [t[0] for t in toks]
+
+        # Ensure consistency
+        output_txt = tokenizer.decode(toks_ids, clean_up_tokenization_spaces=False)
+        if " " not in output_txt and len(toks_ids) > 1:
+            output_txt = (
+                tokenizer.decode([toks_ids[0]], clean_up_tokenization_spaces=False)
+                + " "
+                + tokenizer.decode(toks_ids[1:], clean_up_tokenization_spaces=False)
+            )
+        if with_prefix_space:
+            output_txt = " " + output_txt
+        output_ids = tokenizer.encode(output_txt, add_special_tokens=False)
+        return output_txt, output_ids
+
     def test_eos_treatment(self):
         tokenizer = self.t5_base_tokenizer
         batch_with_eos_added = tokenizer(["hi</s>", "I went to the gym</s>", "</s>"])
         batch_without_eos_added = tokenizer(["hi", "I went to the gym", ""])
         self.assertListEqual(batch_with_eos_added["input_ids"], batch_without_eos_added["input_ids"])
+
+    def test_multibytes_char(self):
+        tokenizer = self.t5_base_tokenizer
+        src_text = "Unicode €."
+        encoded = tokenizer(src_text)
+        encoded_ids = [88, 113, 108, 102, 114, 103, 104, 35, 229, 133, 175, 49, 1]
+        self.assertEqual(encoded["input_ids"], encoded_ids)
+
+        # decoding
+        decoded = tokenizer.decode(encoded_ids)
+        self.assertEqual(decoded, "Unicode €.</s>")
+
+        encoded = tokenizer("e è é ê ë")
+        encoded_ids = [104, 35, 198, 171, 35, 198, 172, 35, 198, 173, 35, 198, 174, 1]
+        self.assertEqual(encoded["input_ids"], encoded_ids)
+        # decoding
+        decoded = tokenizer.decode(encoded_ids)
+        self.assertEqual(decoded, "e è é ê ë</s>")
+
+        # encode/decode, but with `encode` instead of `__call__`
+        self.assertEqual(tokenizer.decode(tokenizer.encode("e è é ê ë")), "e è é ê ë</s>")
 
     def test_prepare_batch_integration(self):
         tokenizer = self.t5_base_tokenizer

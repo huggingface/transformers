@@ -1041,7 +1041,10 @@ class FlaxCLIPModule(nn.Module):
             kernel_init=jax.nn.initializers.normal(0.02, dtype=self.dtype),
             use_bias=False,
         )
-        self.logit_scale = self.param("logit_scale", jax.nn.initializers.ones, [])
+
+        self.logit_scale = self.param(
+            "logit_scale", lambda _, shape: jnp.ones(shape, dtype=self.dtype) * self.config.logit_scale_init_value, []
+        )
 
     def __call__(
         self,

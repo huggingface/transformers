@@ -25,13 +25,14 @@ from typing import Any, Dict, List, Optional
 from .debug_utils import DebugOption
 from .file_utils import (
     cached_property,
+    get_full_repo_name,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
     is_torch_tpu_available,
     torch_required,
 )
-from .trainer_utils import EvaluationStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
+from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
 from .utils import logging
 
 
@@ -335,12 +336,30 @@ class TrainingArguments:
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
-        push_to_hub_model_id (:obj:`str`, `optional`):
-            The name of the repository to which push the :class:`~transformers.Trainer` when :obj:`push_to_hub=True`.
-            Will default to the name of :obj:`output_dir`.
-        push_to_hub_organization (:obj:`str`, `optional`):
-            The name of the organization in with to which push the :class:`~transformers.Trainer`.
-        push_to_hub_token (:obj:`str`, `optional`):
+        hub_model_id (:obj:`str`, `optional`):
+            The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
+            name, for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member
+            of with :obj:`"organization_name/model"`.
+
+            Will default to :obj:`user_name/output_dir_name` with `output_dir_name` being the name of
+            :obj:`output_dir`.
+        hub_strategy (:obj:`str` or :class:`~transformers.trainer_utils.HubStrategy`, `optional`, defaults to :obj:`"every_save"`):
+            Defines the scope of what is pushed to the Hub and when. Possible values are:
+
+            - :obj:`"end"`: push the model, its configuration, the tokenizer (if passed along to the
+              :class:`~transformers.Trainer`) and a draft of a model card at the end of training.
+            - :obj:`"every_save"`: push the model, its configuration, the tokenizer (if passed along to the
+              :class:`~transformers.Trainer`) and a draft of a model card each time there is a model save. The pushes
+              are asynchronous to not block training, and in case the save are very frequent, a new push is only
+              attempted if the previous one is finished. A last push is made with the final model at the end of
+              training.
+            - :obj:`"checkpoint"`: like :obj:`"every_save"` but the latest checkpoint is also pushed in a subfolder
+              named last-checkpoint, allowing you to resume training easily with
+              :obj:`trainer.train(resume_from_checkpoint="last-checkpoint")`.
+            - :obj:`"all_checkpoints"`: like :obj:`"checkpoint"` but all checkpoints are pushed like they appear in the
+              output folder (so you will get one checkpoint folder per folder in your final repository)
+
+        hub_token (:obj:`str`, `optional`):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             :obj:`huggingface-cli login`.
     """
@@ -612,6 +631,15 @@ class TrainingArguments:
         default=None,
         metadata={"help": "The path to a folder with a valid checkpoint for your model."},
     )
+    hub_model_id: str = field(
+        default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
+    )
+    hub_strategy: HubStrategy = field(
+        default="every_save",
+        metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
+    )
+    hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    # Deprecated arguments
     push_to_hub_model_id: str = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
     )
@@ -660,6 +688,7 @@ class TrainingArguments:
         self.evaluation_strategy = IntervalStrategy(self.evaluation_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
         self.save_strategy = IntervalStrategy(self.save_strategy)
+        self.hub_strategy = HubStrategy(self.hub_strategy)
 
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.evaluation_strategy != IntervalStrategy.NO:
@@ -761,8 +790,40 @@ class TrainingArguments:
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
 
-        if self.push_to_hub_model_id is None:
-            self.push_to_hub_model_id = Path(self.output_dir).name
+        if self.push_to_hub_token is not None:
+            warnings.warn(
+                "`--push_to_hub_token` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "
+                "`--hub_token` instead.",
+                FutureWarning,
+            )
+            self.hub_token = self.push_to_hub_token
+
+        if self.push_to_hub_model_id is not None:
+            self.hub_model_id = get_full_repo_name(
+                self.push_to_hub_model_id, organization=self.push_to_hub_organization, token=self.hub_token
+            )
+            if self.push_to_hub_organization is not None:
+                warnings.warn(
+                    "`--push_to_hub_model_id` and `--push_to_hub_organization` are deprecated and will be removed in "
+                    "version 5 of 🤗 Transformers. Use `--hub_model_id` instead and pass the full repo name to this "
+                    f"argument (in this case {self.hub_model_id}).",
+                    FutureWarning,
+                )
+            else:
+                warnings.warn(
+                    "`--push_to_hub_model_id` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "
+                    "`--hub_model_id` instead and pass the full repo name to this argument (in this case "
+                    f"{self.hub_model_id}).",
+                    FutureWarning,
+                )
+        elif self.push_to_hub_organization is not None:
+            self.hub_model_id = f"{self.push_to_hub_organization}/{Path(self.output_dir).name}"
+            warnings.warn(
+                "`--push_to_hub_organization` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "
+                "`--hub_model_id` instead and pass the full repo name to this argument (in this case "
+                f"{self.hub_model_id}).",
+                FutureWarning,
+            )
 
     def __str__(self):
         self_as_dict = asdict(self)
