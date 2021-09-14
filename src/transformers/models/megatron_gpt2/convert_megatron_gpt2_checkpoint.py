@@ -65,7 +65,7 @@ def fix_query_key_value_ordering(param, checkpoint_version, num_splits, num_head
         param = param.transpose(0, 2)
         param = param.transpose(1, 2).contiguous()
     elif checkpoint_version >= 2.0:
-        print(f"hidden_size={hidden_size}")
+        #print(f"hidden_size={hidden_size}")
         # other versions store [num_heads * num_splits * hidden_size, :]
         saved_shape = (num_heads, num_splits, hidden_size) + input_shape[1:]
         param = param.view(*saved_shape)
@@ -82,9 +82,9 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     output_state_dict = {}
 
     nargs = input_state_dict["args"]
-    from pprint import pprint
-    pprint(vars(nargs))
+    # pprint(vars(nargs))
 
+    # XXX: why make the user write a config file when all the needed data is already in the checkpoint?
     config.vocab_size = nargs.padded_vocab_size
     config.n_positions = nargs.max_position_embeddings
     config.n_ctx = nargs.seq_length
@@ -93,7 +93,7 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     config.n_head = nargs.num_attention_heads
     config.n_inner = nargs.ffn_hidden_size
 
-    pprint(config)
+    # pprint(config)
 
     # The number of heads.
     heads = config.n_head
@@ -127,7 +127,7 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     # Read the hidden dimension.
     n_embed = pos_embeddings.size(1)
     # DEBUG.
-    assert n_embed == heads * hidden_size_per_head, f"n_embed={n_embed}, heads={heads}*hidden_size_per_head={hidden_size_per_head}"
+    assert n_embed == heads * hidden_size_per_head, f"detected mismatch n_embed={n_embed} != heads={heads}*hidden_size_per_head={hidden_size_per_head}"
     # Store the position embeddings.
     output_state_dict["transformer.wpe.weight"] = pos_embeddings
 
@@ -234,7 +234,7 @@ def main():
     parser.add_argument(
         "path_to_checkpoint",
         type=str,
-        help="Path to the ZIP file containing the checkpoint",
+        help="Path to the checkpoint file (.zip archive or direct .pt file)",
     )
     parser.add_argument(
         "--config_file",
@@ -248,12 +248,14 @@ def main():
     basename = os.path.dirname(args.path_to_checkpoint)
 
     # Load the model.
-    # print(f"Extracting PyTorch state dictionary from {args.path_to_checkpoint}")
-    # with zipfile.ZipFile(args.path_to_checkpoint, "r") as checkpoint:
-    #     with checkpoint.open("release/mp_rank_00/model_optim_rng.pt") as pytorch_dict:
-    #         input_state_dict = torch.load(pytorch_dict, map_location="cpu")
-
-    input_state_dict = torch.load(args.path_to_checkpoint, map_location="cpu")
+    # the .zip is very optional, let's keep it for backward compatibility
+    print(f"Extracting PyTorch state dictionary from {args.path_to_checkpoint}")
+    if args.path_to_checkpoint.endswith(".zip"):
+        with zipfile.ZipFile(args.path_to_checkpoint, "r") as checkpoint:
+            with checkpoint.open("release/mp_rank_00/model_optim_rng.pt") as pytorch_dict:
+                input_state_dict = torch.load(pytorch_dict, map_location="cpu")
+    else:
+        input_state_dict = torch.load(args.path_to_checkpoint, map_location="cpu")
 
     # Read the config, or default to the model released by NVIDIA.
     if args.config_file == "":
