@@ -1285,10 +1285,11 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls._api.delete_repo(token=cls._token, name="test-trainer")
-        except HTTPError:
-            pass
+        for model in ["test-trainer", "test-trainer-epoch", "test-trainer-step"]:
+            try:
+                cls._api.delete_repo(token=cls._token, name=model)
+            except HTTPError:
+                pass
 
         try:
             cls._api.delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
@@ -1352,7 +1353,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def test_push_to_hub_with_saves_each_epoch(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
-                output_dir=os.path.join(tmp_dir, "test-trainer"),
+                output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
                 push_to_hub=True,
                 hub_token=self._token,
                 save_strategy="epoch",
@@ -1360,7 +1361,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             trainer.train()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer", use_auth_token=self._token)
+            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-epoch", use_auth_token=self._token)
             commits = self.get_commit_history(tmp_dir)
             expected_commits = [f"Training in progress, epoch {i}" for i in range(3, 0, -1)]
             expected_commits.append("initial commit")
@@ -1370,7 +1371,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def test_push_to_hub_with_saves_each_n_steps(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
-                output_dir=os.path.join(tmp_dir, "test-trainer"),
+                output_dir=os.path.join(tmp_dir, "test-trainer-step"),
                 push_to_hub=True,
                 hub_token=self._token,
                 save_strategy="steps",
@@ -1379,7 +1380,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             trainer.train()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer", use_auth_token=self._token)
+            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-step", use_auth_token=self._token)
             commits = self.get_commit_history(tmp_dir)
             expected_commits = [f"Training in progress, step {i}" for i in range(10, 0, -5)]
             expected_commits.append("initial commit")
