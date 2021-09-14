@@ -160,6 +160,31 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 decoded = tokenizer.decode(encoded, skip_special_tokens=True)
                 self.assertTrue(special_token not in decoded)
 
+    def test_tokenize_special_tokens(self):
+        tokenizers = self.get_tokenizers(do_lower_case=True)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                SPECIAL_TOKEN_1 = chr(0xE005)
+                SPECIAL_TOKEN_2 = chr(0xE006)
+
+                text_1 = SPECIAL_TOKEN_1
+                text_2 = SPECIAL_TOKEN_2
+
+                # The list in which `_add_tokens` method stores special tokens. (in tokenization_utils.py)
+                tokenizer.unique_no_split_tokens = [SPECIAL_TOKEN_1]
+                # The property storing additional special tokens which occur in `all_special_tokens`. (in tokenization_utils_base.py)
+                tokenizer.additional_special_tokens = [SPECIAL_TOKEN_2]
+                # Add all special tokens into `unique_no_split_tokens`.
+                tokenizer.sanitize_special_tokens()
+
+                token_1 = tokenizer.tokenize(text_1)
+                token_2 = tokenizer.tokenize(text_2)
+
+                self.assertEqual(len(token_1), 1)
+                self.assertEqual(len(token_2), 1)
+                self.assertEqual(token_1[0], SPECIAL_TOKEN_1)
+                self.assertEqual(token_2[0], SPECIAL_TOKEN_2)
+
     @require_tokenizers
     def test_added_token_serializable(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

@@ -313,26 +313,27 @@ class TokenizerTesterMixin:
     # TODO: this test can be combined with `test_sentencepiece_tokenize_and_convert_tokens_to_string` after the latter is extended to all tokenizers.
     def test_tokenize_special_tokens(self):
         """Test `tokenize` with special tokens."""
-        tokenizer = self.get_tokenizer()
+        tokenizers = [self.get_tokenizer(do_lower_case=True)] if self.test_slow_tokenizer else []
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                SPECIAL_TOKEN_1 = "[SPECIAL_TOKEN_1]"
+                SPECIAL_TOKEN_2 = "[SPECIAL_TOKEN_2]"
 
-        text_1 = "[SPECIAL_TOKEN_1]"
-        text_2 = "[SPECIAL_TOKEN_2]"
+                # TODO: Can we replace `unique_no_split_tokens` and `all_special_tokens` with one variable(property) for a better maintainability?
+                # The list in which `_add_tokens` method stores special tokens. (in tokenization_utils.py)
+                tokenizer.unique_no_split_tokens = [SPECIAL_TOKEN_1]
+                # The property storing additional special tokens which occur in `all_special_tokens`. (in tokenization_utils_base.py)
+                tokenizer.additional_special_tokens = [SPECIAL_TOKEN_2]
+                # Add all special tokens into `unique_no_split_tokens`.
+                tokenizer.sanitize_special_tokens()
 
-        # TODO: Can we replace `unique_no_split_tokens` and `all_special_tokens` with one variable(property) for a better maintainability?
-        # The list in which `_add_tokens` method stores special tokens. (in tokenization_utils.py)
-        tokenizer.unique_no_split_tokens = ["[SPECIAL_TOKEN_1]"]
-        # The property storing additional special tokens which occur in `all_special_tokens`. (in tokenization_utils_base.py)
-        tokenizer.additional_special_tokens = ["[SPECIAL_TOKEN_2]"]
-        # Add all special tokens into `unique_no_split_tokens`.
-        tokenizer.sanitize_special_tokens()
+                token_1 = tokenizer.tokenize(SPECIAL_TOKEN_1)
+                token_2 = tokenizer.tokenize(SPECIAL_TOKEN_2)
 
-        token_1 = tokenizer.tokenize(text_1)
-        token_2 = tokenizer.tokenize(text_2)
-
-        self.assertEqual(len(token_1), 1)
-        self.assertEqual(len(token_2), 1)
-        self.assertEqual(token_1[0], "[SPECIAL_TOKEN_1]")
-        self.assertEqual(token_2[0], "[SPECIAL_TOKEN_2]")
+                self.assertEqual(len(token_1), 1)
+                self.assertEqual(len(token_2), 1)
+                self.assertEqual(token_1[0], SPECIAL_TOKEN_1)
+                self.assertEqual(token_2[0], SPECIAL_TOKEN_2)
 
     # TODO: this test could be extended to all tokenizers - not just the sentencepiece
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
