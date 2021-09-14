@@ -315,7 +315,8 @@ class TokenizerTesterMixin:
         """Test `tokenize` with special tokens."""
         tokenizer = self.get_tokenizer()
 
-        text = "The first [SPECIAL_TOKEN_1] and the second [SPECIAL_TOKEN_2] to test the tokenizer."
+        text_1 = "[SPECIAL_TOKEN_1]"
+        text_2 = "[SPECIAL_TOKEN_2]"
 
         # TODO: Can we replace `unique_no_split_tokens` and `all_special_tokens` with one variable(property) for a better maintainability?
         # The list in which `_add_tokens` method stores special tokens. (in tokenization_utils.py)
@@ -325,11 +326,13 @@ class TokenizerTesterMixin:
         # Add all special tokens into `unique_no_split_tokens`.
         tokenizer.sanitize_special_tokens()
 
-        tokens = tokenizer.tokenize(text)
+        token_1 = tokenizer.tokenize(text_1)
+        token_2 = tokenizer.tokenize(text_2)
 
-        self.assertEqual(len(tokens), 12)
-        self.assertEqual(tokens[2], "[SPECIAL_TOKEN_1]")
-        self.assertEqual(tokens[6], "[SPECIAL_TOKEN_2]")
+        self.assertEqual(len(token_1), 1)
+        self.assertEqual(len(token_2), 1)
+        self.assertEqual(token_1[0], "[SPECIAL_TOKEN_1]")
+        self.assertEqual(token_2[0], "[SPECIAL_TOKEN_2]")
 
     # TODO: this test could be extended to all tokenizers - not just the sentencepiece
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
