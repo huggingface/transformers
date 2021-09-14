@@ -138,11 +138,6 @@ class PerceiverSelfAttention(nn.Module):
         self.layernorm2 = nn.LayerNorm(kv_dim) if is_cross_attention else nn.Identity()
 
         # Projection matrices
-        print("is_cross_attention:", is_cross_attention)
-        print("Q_dim:", q_dim)
-        print("Kv_dim:", kv_dim)
-        print("Qk channels:", qk_channels)
-        print("V channels:", v_channels)
         self.query = nn.Linear(q_dim, qk_channels)
         self.key = nn.Linear(kv_dim, qk_channels)
         self.value = nn.Linear(kv_dim, v_channels)
@@ -851,7 +846,8 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         self.perceiver = PerceiverModel(
             config,
             input_preprocessor=PerceiverImagePreprocessor(
-                config, prep_type="conv1x1", out_channels=256, spatial_downsample=1, concat_or_add_pos="concat"
+                config, prep_type="conv1x1", out_channels=256, spatial_downsample=1, concat_or_add_pos="concat",
+                project_pos_dim=256,
             ),
             #decoder=PerceiverClassificationDecoder(config),
         )

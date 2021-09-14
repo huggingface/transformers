@@ -69,12 +69,13 @@ class PerceiverImagePreprocessor(nn.Module):
         temporal_downsample: int = 1,
         position_encoding_type: str = "fourier",
         n_extra_pos_mlp: int = 0,
-        n_positions: int = 50276,
+        n_positions: int = 50176,
         in_channels: int = 3,
         out_channels: int = 64,
         conv_after_patching: bool = False,
         conv2d_use_batchnorm: bool = True,
         concat_or_add_pos: str = "concat",
+        project_pos_dim=-1,
     ):
         super().__init__()
         self.config = config
@@ -110,6 +111,10 @@ class PerceiverImagePreprocessor(nn.Module):
         if n_extra_pos_mlp > 0:
             raise NotImplementedError("Stacking MLPs is not yet supported")
 
+        self.positions_projection = None
+        if project_pos_dim > 0:
+            self.positions_projection = nn.Linear(self.out_channels, project_pos_dim)
+
     def _build_network_inputs(self, inputs: torch.Tensor, pos: torch.Tensor, network_input_is_1d: bool = True):
         """Construct the final input, including position encoding."""
         # inputs have shape (batch_size, num_channels, height, width)
@@ -124,6 +129,10 @@ class PerceiverImagePreprocessor(nn.Module):
         # Construct the position encoding.
         pos_enc = self.position_embeddings(torch.LongTensor(indices))
         pos_enc = pos_enc.expand(batch_size, -1, -1)
+
+        # Optionally project them to a target dimension.
+        if self.positions_projection is not None:
+            pos_enc = self.positions_projection(pos_enc)
 
         if not network_input_is_1d:
             # Reshape pos to match the input feature shape

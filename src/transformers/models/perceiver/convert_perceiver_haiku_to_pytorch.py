@@ -43,13 +43,20 @@ def rename_keys(state_dict):
             "basic_decoder/~/trainable_position_encoding/pos_embs", "decoder.output_position_encodings.weight"
         )
 
+        # rename image preprocessor embeddings (for image classification model)
+        name = name.replace("image_preprocessor/~/conv2_d/w", "input_preprocessor.convnet_1x1.weight")
+        name = name.replace("image_preprocessor/~/conv2_d/b", "input_preprocessor.convnet_1x1.bias")
+        name = name.replace("image_preprocessor/~_build_network_inputs/trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight")
+        name = name.replace("image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/w", "input_preprocessor.positions_projection.weight")
+        name = name.replace("image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/b", "input_preprocessor.positions_projection.bias")
+        
         # rename embedding decoder bias
         name = name.replace("embedding_decoder/bias", "output_postprocessor.bias")
 
-        # rename preprocessor embeddings
+        # rename text preprocessor embeddings (for MLM model)
         name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
         name = name.replace("trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight")
-
+        
         # rename prefixes
         if name.startswith("perceiver_encoder/~/"):
             if "self_attention" in name:
@@ -120,7 +127,10 @@ def rename_keys(state_dict):
         if name[-6:] == "weight" and "input_preprocessor" not in name and "output_position_encodings" not in name:
             param = np.transpose(param)
 
-        # preprocessor embeddings need special treatment
+        # if conv2d, then we need to permute the axes
+        if name.endswith("convnet_1x1.weight"):
+            param = np.transpose(param)
+        
         state_dict["perceiver." + name] = torch.from_numpy(param)
 
 
