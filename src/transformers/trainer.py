@@ -2625,7 +2625,6 @@ class Trainer:
                 model_name = Path(self.args.output_dir).name
             else:
                 model_name = self.args.hub_model_id.split("/")[-1]
-            self.create_model_card(model_name=model_name, **kwargs)
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
         self.save_model()
@@ -2634,7 +2633,16 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
-        return self.repo.push_to_hub(commit_message=commit_message, blocking=blocking)
+        git_head_commit_url = self.repo.push_to_hub(commit_message=commit_message, blocking=blocking)
+        # push separately the model card to be independant from the rest of the model
+        if self.args.should_save:
+            self.create_model_card(model_name=model_name, **kwargs)
+            try:
+                self.repo.push_to_hub(commit_message="update model card README.md", blocking=blocking)
+            except EnvironmentError as exc:
+                logger.error(f"Error pushing update to the model card. Please read logs and retry.\n${exc}")
+
+        return git_head_commit_url
 
     #
     # Deprecated code
