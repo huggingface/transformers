@@ -52,6 +52,14 @@ class PerceiverConfig(PretrainedConfig):
             Number of attention heads for each self-attention layer in the Transformer encoder.
         num_cross_attention_heads (:obj:`int`, `optional`, defaults to 8):
             Number of attention heads for each cross-attention layer in the Transformer encoder.
+        qk_channels (:obj:`int`, `optional`):
+            Dimension to project the queries + keys before applying attention in the cross-attention and self-attention
+            layers of the encoder. Will default to preserving the dimension of the queries if not specified.
+        v_channels (:obj:`int`, `optional`):
+            Dimension to project the values before applying attention in the cross-attention and self-attention layers 
+            of the encoder. Will default to preserving the dimension of the queries if not specified.
+        cross_attention_shape_for_attention (:obj:`str`, `optional`, defaults to :obj:`'kv'`):
+            Dimension to use when downsampling the queries and keys in the cross-attention layer of the encoder.
         self_attention_widening_factor (:obj:`int`, `optional`, defaults to 1):
             Dimension of the feed-forward layer in the cross-attention layer of the Transformer encoder.
         cross_attention_widening_factor (:obj:`int`, `optional`, defaults to 1):
@@ -100,6 +108,9 @@ class PerceiverConfig(PretrainedConfig):
         num_self_attends_per_block=26,
         num_self_attention_heads=8,
         num_cross_attention_heads=8,
+        qk_channels=None,
+        v_channels=None,
+        cross_attention_shape_for_attention='kv',
         self_attention_widening_factor=1,
         cross_attention_widening_factor=1,
         hidden_act="gelu",
@@ -123,6 +134,9 @@ class PerceiverConfig(PretrainedConfig):
         self.num_self_attends_per_block = num_self_attends_per_block
         self.num_self_attention_heads = num_self_attention_heads
         self.num_cross_attention_heads = num_cross_attention_heads
+        self.qk_channels = qk_channels
+        self.v_channels = v_channels
+        self.cross_attention_shape_for_attention = cross_attention_shape_for_attention
         self.self_attention_widening_factor = self_attention_widening_factor
         self.cross_attention_widening_factor = cross_attention_widening_factor
         self.hidden_act = hidden_act

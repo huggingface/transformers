@@ -23,7 +23,7 @@ import numpy as np
 import torch
 
 import haiku as hk
-from transformers import PerceiverConfig, PerceiverForMaskedLM, PerceiverTokenizer
+from transformers import PerceiverConfig, PerceiverForImageClassification, PerceiverForMaskedLM, PerceiverTokenizer
 from transformers.utils import logging
 
 
@@ -125,15 +125,23 @@ def rename_keys(state_dict):
 
 
 @torch.no_grad()
-def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
+def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="MLM"):
     """
     Copy/paste/tweak model's weights to our Perceiver structure.
     """
 
     # load parameters as FlatMapping data structure
     with open(pickle_file, "rb") as f:
-        params = pickle.loads(f.read())
+        checkpoint = pickle.loads(f.read())
 
+    if isinstance(checkpoint, dict):
+        assert task == "image_classification", "Make sure to set task to image classification"
+        # the image classification checkpoint with conv_preprocessing also has batchnorm state
+        params = checkpoint['params']
+        state = checkpoint['state']
+    else:
+        params = checkpoint
+    
     # turn into initial state dict
     state_dict = dict()
     for scope_name, parameters in hk.data_structures.to_mutable_dict(params).items():
@@ -145,7 +153,21 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path):
 
     # load HuggingFace model
     config = PerceiverConfig()
-    model = PerceiverForMaskedLM(config)
+    if task == "MLM":
+        config.qk_channels = 8 * 32
+        config.v_channels = 1280
+        model = PerceiverForMaskedLM(config)
+    elif task == "image_classification":
+        config.num_latents = 512
+        config.d_latents = 1024
+        config.d_model = 512
+        config.num_blocks = 8
+        config.num_self_attends_per_block = 6
+        config.num_cross_attention_heads = 1
+        config.num_self_attention_heads = 8
+        config.qk_channels = None
+        config.v_channels = None
+        model = PerceiverForImageClassification(config)
     model.eval()
 
     # load weights
@@ -196,6 +218,12 @@ if __name__ == "__main__":
         required=True,
         help="Path to the output PyTorch model directory, provided as a string.",
     )
+    parser.add_argument(
+        "--task",
+        default="MLM",
+        type=str,
+        help="Task, provided as a string. One of 'MLM', 'image_classification'.",
+    )
 
     args = parser.parse_args()
-    convert_perceiver_checkpoint(args.pickle_file, args.pytorch_dump_folder_path)
+    convert_perceiver_checkpoint(args.pickle_file, args.pytorch_dump_folder_path, args.task)

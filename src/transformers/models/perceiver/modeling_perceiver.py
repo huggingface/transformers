@@ -128,14 +128,21 @@ class PerceiverSelfAttention(nn.Module):
         if v_channels % num_heads != 0:
             raise ValueError(f"v_channels ({v_channels}) must be divisible by" f" num_heads ({num_heads}).")
 
-        self.qk_channels_per_head = qk_channels // num_heads
-        self.v_channels_per_head = v_channels // num_heads
+        self.qk_channels = qk_channels
+        self.v_channels = v_channels
+        self.qk_channels_per_head = self.qk_channels // num_heads
+        self.v_channels_per_head = self.v_channels // num_heads
 
         # Layer normalization
         self.layernorm1 = nn.LayerNorm(q_dim)
         self.layernorm2 = nn.LayerNorm(kv_dim) if is_cross_attention else nn.Identity()
 
         # Projection matrices
+        print("is_cross_attention:", is_cross_attention)
+        print("Q_dim:", q_dim)
+        print("Kv_dim:", kv_dim)
+        print("Qk channels:", qk_channels)
+        print("V channels:", v_channels)
         self.query = nn.Linear(q_dim, qk_channels)
         self.key = nn.Linear(kv_dim, qk_channels)
         self.value = nn.Linear(kv_dim, v_channels)
@@ -242,9 +249,9 @@ class PerceiverSelfAttention(nn.Module):
 
 
 class PerceiverSelfOutput(nn.Module):
-    def __init__(self, config, input_size):
+    def __init__(self, config, input_channels, output_channels):
         super().__init__()
-        self.dense = nn.Linear(input_size, input_size)
+        self.dense = nn.Linear(input_channels, output_channels)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -252,6 +259,7 @@ class PerceiverSelfOutput(nn.Module):
 
 
 class PerceiverAttention(nn.Module):
+    """Attention module, including a dense block."""
     def __init__(
         self,
         config,
@@ -264,6 +272,20 @@ class PerceiverAttention(nn.Module):
         use_query_residual=True,
     ):
         super().__init__()
+        # MultiHead attention
+        if is_cross_attention and qk_channels is None:
+            if config.cross_attention_shape_for_attention == 'q':
+                qk_channels = q_dim
+            elif config.cross_attention_shape_for_attention == 'kv':
+                qk_channels = kv_dim
+            else:
+                raise ValueError(f'Unknown value {config.cross_attention_shape_for_attention} for '
+                       'cross_attention_shape_for_attention.')
+        else:
+            if qk_channels is None:
+                qk_channels = q_dim
+            if v_channels is None:
+                v_channels = qk_channels
         self.self = PerceiverSelfAttention(
             config,
             is_cross_attention=is_cross_attention,
@@ -273,7 +295,14 @@ class PerceiverAttention(nn.Module):
             q_dim=q_dim,
             kv_dim=kv_dim,
         )
-        self.output = PerceiverSelfOutput(config, input_size=q_dim)
+        # dense block
+        output_channels = None
+        if is_cross_attention:
+            output_channels = q_dim 
+        else:
+            if output_channels is None:
+                output_channels = v_channels
+        self.output = PerceiverSelfOutput(config, input_channels=self.self.v_channels, output_channels=output_channels)
         self.use_query_residual = use_query_residual
         self.pruned_heads = set()
 
@@ -444,8 +473,8 @@ class PerceiverEncoder(nn.Module):
         self.cross_attention = PerceiverLayer(
             config,
             is_cross_attention=True,
-            qk_channels=config.num_cross_attention_heads * 32,
-            v_channels=config.d_latents,
+            qk_channels=config.qk_channels,
+            v_channels=config.v_channels,
             num_heads=config.num_cross_attention_heads,
             q_dim=config.d_latents,
             kv_dim=config.d_model,
@@ -460,8 +489,8 @@ class PerceiverEncoder(nn.Module):
             layer = PerceiverLayer(
                 config,
                 is_cross_attention=False,
-                qk_channels=config.num_self_attention_heads * 32,
-                v_channels=config.d_latents,
+                qk_channels=config.qk_channels,
+                v_channels=config.v_channels,
                 num_heads=config.num_self_attention_heads,
                 q_dim=config.d_latents,
                 kv_dim=config.d_latents,
@@ -824,7 +853,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
             input_preprocessor=PerceiverImagePreprocessor(
                 config, prep_type="conv1x1", out_channels=256, spatial_downsample=1, concat_or_add_pos="concat"
             ),
-            decoder=PerceiverClassificationDecoder(config),
+            #decoder=PerceiverClassificationDecoder(config),
         )
 
         self.init_weights()
