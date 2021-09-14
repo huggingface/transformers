@@ -1470,7 +1470,6 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Pegasus
 class PegasusForCausalLM(PegasusPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1524,6 +1523,7 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
         self.model.decoder.resize_position_embeddings(new_num_position_embeddings)
 
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    # Copied from transformers.models.bart.modeling_bart.BartForCausalLM.forward with Bart->Pegasus
     def forward(
         self,
         input_ids=None,
