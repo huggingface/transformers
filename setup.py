@@ -134,7 +134,7 @@ _deps = [
     "sacremoses",
     "sagemaker>=2.31.0",
     "scikit-learn",
-    "sentencepiece==0.1.96",
+    "sentencepiece==0.1.91",
     "soundfile",
     "sphinx-copybutton",
     "sphinx-markdown-tables",
