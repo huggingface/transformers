@@ -106,6 +106,7 @@ class TokenClassificationPipeline(Pipeline):
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser
+        self._tag_policy = "I"
 
     def _sanitize_parameters(
         self,
@@ -401,13 +402,15 @@ class TokenClassificationPipeline(Pipeline):
         if entity_name.startswith("B-"):
             bi = "B"
             tag = entity_name[2:]
+            self._tag_policy = "B"
         elif entity_name.startswith("I-"):
             bi = "I"
             tag = entity_name[2:]
+            self._tag_policy = "B"
         else:
             # It's not in B-, I- format
             # Default to I- for continuation.
-            bi = "I"
+            bi = self._tag_policy
             tag = entity_name
         return bi, tag
 
