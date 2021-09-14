@@ -16,14 +16,21 @@
 
 import unittest
 
+import jax
 from transformers import PegasusConfig, PegasusTokenizer, is_flax_available
-from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import require_flax, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
 if is_flax_available():
+    import os
+
+    # The slow tests are often failing with OOM error on GPU
+    # This makes JAX allocate exactly what is needed on demand, and deallocate memory that is no longer needed
+    # but will be slower as stated here https://jax.readthedocs.io/en/latest/gpu_memory_allocation.html
+    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
     import numpy as np
 
     import jax.numpy as jnp
@@ -246,94 +253,87 @@ class FlaxPegasusModelTest(FlaxModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
 
+    def test_encode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if _assert_tensors_equal(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        if len(prefix) > 0:
-            prefix = f"{prefix}: "
-        raise AssertionError(f"{prefix}{a} != {b}")
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config)
 
+                @jax.jit
+                def encode_jitted(input_ids, attention_mask=None, **kwargs):
+                    return model.encode(input_ids=input_ids, attention_mask=attention_mask)
 
-def _long_tensor(tok_lst):
-    return np.array(tok_lst, dtype=np.int32)
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = encode_jitted(**prepared_inputs_dict).to_tuple()
 
+                with self.subTest("JIT Disabled"):
+                    with jax.disable_jit():
+                        outputs = encode_jitted(**prepared_inputs_dict).to_tuple()
 
-TOLERANCE = 1e-4
+                self.assertEqual(len(outputs), len(jitted_outputs))
+                for jitted_output, output in zip(jitted_outputs, outputs):
+                    self.assertEqual(jitted_output.shape, output.shape)
 
+    def test_decode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-@slow
-@require_sentencepiece
-@require_tokenizers
-@require_flax
-class FlaxPegasusModelIntegrationTest(unittest.TestCase):
-    def test_inference_no_head(self):
-        model = FlaxPegasusModel.from_pretrained("google/pegasus-large")
-        # change to intended input here
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_pegasus_inputs_dict(model.config, input_ids, decoder_input_ids)
-        output = model(**inputs_dict)[0]
-        expected_shape = (1, 11, 1024)
-        self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
-        expected_slice = np.array(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
-        )
-        _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(config)
+                encoder_outputs = model.encode(inputs_dict["input_ids"], inputs_dict["attention_mask"])
 
-    def test_inference_with_head(self):
-        model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
-        # change to intended input here
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_pegasus_inputs_dict(model.config, input_ids, decoder_input_ids)
-        output = model(**inputs_dict)[0]
-        expected_shape = (1, 11, 1024)
-        self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
-        expected_slice = np.array(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
-        )
-        _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
+                prepared_inputs_dict = {
+                    "decoder_input_ids": inputs_dict["decoder_input_ids"],
+                    "decoder_attention_mask": inputs_dict["decoder_attention_mask"],
+                    "encoder_outputs": encoder_outputs,
+                }
 
-    def test_seq_to_seq_generation(self):
-        hf = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
-        tok = PegasusTokenizer.from_pretrained("google/pegasus-large")
+                @jax.jit
+                def decode_jitted(decoder_input_ids, decoder_attention_mask, encoder_outputs):
+                    return model.decode(
+                        decoder_input_ids=decoder_input_ids,
+                        decoder_attention_mask=decoder_attention_mask,
+                        encoder_outputs=encoder_outputs,
+                    )
 
-        batch_input = [
-            'Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators."',
-            "height of 300 metres. Due to the addition of a broadcasting aerial at the top of the tower in 1957, it is now taller than the Chrysler Building by 5.2 metres (17 ft). Excluding transmitters, the Eiffel Tower is the second tallest free-standing structure in France after the Millau Viaduct.",
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
+
+                with self.subTest("JIT Disabled"):
+                    with jax.disable_jit():
+                        outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
+
+                self.assertEqual(len(outputs), len(jitted_outputs))
+                for jitted_output, output in zip(jitted_outputs, outputs):
+                    self.assertEqual(jitted_output.shape, output.shape)
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_class_name in self.all_model_classes:
+            model = model_class_name.from_pretrained("google/pegasus-large", from_pt=True)
+            # FlaxBartForSequenceClassification expects eos token in input_ids
+            input_ids = np.ones((1, 1)) * model.config.eos_token_id
+            outputs = model(input_ids)
+            self.assertIsNotNone(outputs)
+
+    @slow
+    def test_pegasus_xsum_summary(self):
+        model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-xsum")
+        tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-xsum")
+
+        src_text = [
+            """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow.""",
+            """ The London trio are up for best UK act and best album, as well as getting two nominations in the best song category."We got told like this morning 'Oh I think you're nominated'", said Dappy."And I was like 'Oh yeah, which one?' And now we've got nominated for four awards. I mean, wow!"Bandmate Fazer added: "We thought it's best of us to come down and mingle with everyone and say hello to the cameras. And now we find we've got four nominations."The band have two shots at the best song prize, getting the nod for their Tynchy Stryder collaboration Number One, and single Strong Again.Their album Uncle B will also go up against records by the likes of Beyonce and Kanye West.N-Dubz picked up the best newcomer Mobo in 2007, but female member Tulisa said they wouldn't be too disappointed if they didn't win this time around."At the end of the day we're grateful to be where we are in our careers."If it don't happen then it don't happen - live to fight another day and keep on making albums and hits for the fans."Dappy also revealed they could be performing live several times on the night.The group will be doing Number One and also a possible rendition of the War Child single, I Got Soul.The charity song is a  re-working of The Killers' All These Things That I've Done and is set to feature artists like Chipmunk, Ironik and Pixie Lott.This year's Mobos will be held outside of London for the first time, in Glasgow on 30 September.N-Dubz said they were looking forward to performing for their Scottish fans and boasted about their recent shows north of the border."We just done Edinburgh the other day," said Dappy."We smashed up an N-Dubz show over there. We done Aberdeen about three or four months ago - we smashed up that show over there! Everywhere we go we smash it up!" """,
         ]
 
-        # The below article tests that we don't add any hypotheses outside of the top n_beams
-        dct = tok.batch_encode_plus(
-            batch_input,
-            max_length=512,
-            padding="max_length",
-            truncation_strategy="only_first",
-            truncation=True,
-            return_tensors="np",
-        )
-
-        hypotheses_batch = hf.generate(
-            input_ids=dct["input_ids"],
-            attention_mask=dct["attention_mask"],
-            num_beams=2,
-        )
-
-        EXPECTED = [
-            'Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators."',
-            "The tower is 324 metres (1,063 ft) tall, about the same height as an 81-storey building, and the tallest structure in Paris.",
+        tgt_text = [
+            "California's largest electricity provider has turned off power to hundreds of thousands of customers.",
+            "Pop group N-Dubz have revealed they were surprised to get four nominations for this year's Mobo Awards.",
         ]
 
-        generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
-        assert generated == EXPECTED
+        inputs = tokenizer(src_text, return_tensors="np", truncation=True, max_length=512, padding=True)
+        translated_tokens = model.generate(**inputs, num_beams=2).sequences
+        decoded = tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        assert tgt_text == decoded
