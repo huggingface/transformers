@@ -1096,7 +1096,8 @@ class ModelTesterMixin:
                 model_embed = model.get_position_embeddings()
                 cloned_embeddings = model_embed.weight.clone()
 
-            # Check that resizing the position embeddings with a larger vocab size increases the model's vocab size
+            # Check that resizing the position embeddings with a larger max_position_embeddings increases
+            # the model's vocab size
             model.resize_position_embeddings(max_position_embeddings + 10)
             self.assertEqual(model.config.max_position_embeddings, max_position_embeddings + 10)
 
@@ -1114,17 +1115,17 @@ class ModelTesterMixin:
 
             # Check that resizing the position embeddings with a smaller max_position_embeddings decreases
             # the model's max_position_embeddings
-            model.resize_position_embeddings(max_position_embeddings - 15)
-            self.assertEqual(model.config.max_position_embeddings, max_position_embeddings - 15)
+            model.resize_position_embeddings(max_position_embeddings - 5)
+            self.assertEqual(model.config.max_position_embeddings, max_position_embeddings - 5)
 
             # Check that it actually resizes the embeddings matrix
             if model.config.is_encoder_decoder:
                 encoder_model_embed, decoder_model_embed = model.get_position_embeddings()
-                self.assertEqual(encoder_model_embed.weight.shape[0], encoder_cloned_embeddings.shape[0] - 15)
-                self.assertEqual(decoder_model_embed.weight.shape[0], decoder_cloned_embeddings.shape[0] - 15)
+                self.assertEqual(encoder_model_embed.weight.shape[0], encoder_cloned_embeddings.shape[0] - 5)
+                self.assertEqual(decoder_model_embed.weight.shape[0], decoder_cloned_embeddings.shape[0] - 5)
             else:
                 model_embed = model.get_position_embeddings()
-                self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+                self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 5)
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))

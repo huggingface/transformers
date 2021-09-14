@@ -461,13 +461,47 @@ class DistilBertModel(DistilBertPreTrainedModel):
                 will add correct vectors at the end following the position encoding algorithm, whereas reducing the
                 size will remove vectors from the end.
         """
-        if new_num_position_embeddings == self.config.max_position_embeddings:
+        num_position_embeds_diff = new_num_position_embeddings - self.config.max_position_embeddings
+
+        # no resizing needs to be done if the length stays the same
+        if num_position_embeds_diff == 0:
             return
 
         logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
         self.config.max_position_embeddings = new_num_position_embeddings
 
+        old_position_embeddings_weight = self.embeddings.position_embeddings.weight.clone()
+
         self.embeddings.position_embeddings = nn.Embedding(self.config.max_position_embeddings, self.config.dim)
+
+        if self.config.sinusoidal_pos_embds:
+
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters(self.embeddings.position_embeddings.weight, modifier_rank=0):
+                    if torch.distributed.get_rank() == 0:
+                        create_sinusoidal_embeddings(
+                            n_pos=self.config.max_position_embeddings,
+                            dim=self.config.dim,
+                            out=self.embeddings.position_embeddings.weight,
+                        )
+            else:
+                create_sinusoidal_embeddings(
+                    n_pos=self.config.max_position_embeddings,
+                    dim=self.config.dim,
+                    out=self.embeddings.position_embeddings.weight,
+                )
+        else:
+            with torch.no_grad():
+                if num_position_embeds_diff > 0:
+                    self.embeddings.position_embeddings.weight[:-num_position_embeds_diff] = nn.Parameter(
+                        old_position_embeddings_weight
+                    )
+                else:
+                    self.embeddings.position_embeddings.weight = nn.Parameter(
+                        old_position_embeddings_weight[:num_position_embeds_diff]
+                    )
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings

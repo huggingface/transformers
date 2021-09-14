@@ -660,9 +660,6 @@ class PegasusEncoder(PegasusPreTrainedModel):
                 will add correct vectors at the end following the position encoding algorithm, whereas reducing the
                 size will remove vectors from the end.
         """
-        if new_num_position_embeddings == self.config.max_position_embeddings:
-            return
-
         logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
         self.config.max_position_embeddings = new_num_position_embeddings
 
@@ -881,9 +878,6 @@ class PegasusDecoder(PegasusPreTrainedModel):
                 will add correct vectors at the end following the position encoding algorithm, whereas reducing the
                 size will remove vectors from the end.
         """
-        if new_num_position_embeddings == self.config.max_position_embeddings:
-            return
-
         logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
         self.config.max_position_embeddings = new_num_position_embeddings
 
@@ -1325,14 +1319,14 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
                 size will remove vectors from the end.
         """
         self.config.max_position_embeddings = new_num_position_embeddings
-        self.encoder.resize_position_embeddings(new_num_position_embeddings)
-        self.decoder.resize_position_embeddings(new_num_position_embeddings)
+        self.model.encoder.resize_position_embeddings(new_num_position_embeddings)
+        self.model.decoder.resize_position_embeddings(new_num_position_embeddings)
 
     def get_position_embeddings(self) -> Tuple[nn.Embedding]:
         """
         Returns the position embeddings matrix
         """
-        return (self.encoder.get_position_embeddings(), self.decoder.get_position_embeddings())
+        return (self.model.encoder.get_position_embeddings(), self.model.decoder.get_position_embeddings())
 
     @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
