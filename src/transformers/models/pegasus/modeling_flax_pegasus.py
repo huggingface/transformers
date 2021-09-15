@@ -407,6 +407,7 @@ class FlaxPegasusEncoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.encoder_attention_heads,
             dropout=self.config.attention_dropout,
+            dtype=self.dtype,
         )
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -519,6 +520,7 @@ class FlaxPegasusDecoderLayer(nn.Module):
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
             causal=True,
+            dtype=self.dtype,
         )
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
@@ -530,6 +532,7 @@ class FlaxPegasusDecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
+            dtype=self.dtype,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.fc1 = nn.Dense(

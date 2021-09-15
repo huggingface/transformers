@@ -18,6 +18,7 @@ import math
 import random
 from functools import partial
 from typing import Callable, Optional, Tuple
+from jax._src.dtypes import dtype
 
 import numpy as np
 
@@ -407,6 +408,7 @@ class FlaxMarianEncoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.encoder_attention_heads,
             dropout=self.config.attention_dropout,
+            dtype=self.dtype,
         )
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -520,6 +522,7 @@ class FlaxMarianDecoderLayer(nn.Module):
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
             causal=True,
+            dtype=self.dtype,
         )
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
@@ -531,6 +534,7 @@ class FlaxMarianDecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
+            dtype=self.dtype,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.fc1 = nn.Dense(
@@ -701,6 +705,7 @@ class FlaxMarianEncoder(nn.Module):
         input_ids = input_ids.reshape(-1, input_shape[-1])
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        print(inputs_embeds.dtype)
 
         positions = jnp.take(self.embed_positions, position_ids, axis=0)
         # explictly cast the positions here, since self.embed_positions are not registered as parameters 

@@ -1033,7 +1033,7 @@ class FlaxCLIPModule(nn.Module):
         )
 
         self.logit_scale = self.param(
-            "logit_scale", lambda _, shape: jnp.ones(shape, dtype=self.dtype) * self.config.logit_scale_init_value, []
+            "logit_scale", lambda _, shape: jnp.ones(shape) * self.config.logit_scale_init_value, []
         )
 
     def __call__(

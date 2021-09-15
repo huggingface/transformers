@@ -1428,7 +1428,7 @@ class FlaxBigBirdModule(nn.Module):
         self.encoder = FlaxBigBirdEncoder(self.config, dtype=self.dtype)
         self.pooler = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
 

@@ -17,6 +17,7 @@
 
 import copy
 from typing import Callable, Optional, Tuple
+from jax._src.dtypes import dtype
 
 import numpy as np
 
@@ -499,10 +500,11 @@ class FlaxT5LayerSelfAttention(nn.Module):
 
 class FlaxT5LayerCrossAttention(nn.Module):
     config: T5Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.EncDecAttention = FlaxT5Attention(self.config, has_relative_attention_bias=False, causal=False)
-        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon)
+        self.EncDecAttention = FlaxT5Attention(self.config, has_relative_attention_bias=False, causal=False, dtype=self.dtype)
+        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(
@@ -536,15 +538,15 @@ class FlaxT5Block(nn.Module):
         self.causal = self.config.causal
         self.layer = (
             FlaxT5LayerSelfAttention(
-                self.config, has_relative_attention_bias=self.has_relative_attention_bias, name=str(0)
+                self.config, has_relative_attention_bias=self.has_relative_attention_bias, name=str(0), dtype=dtype
             ),
         )
         feed_forward_index = 1
         if self.causal:
-            self.layer += (FlaxT5LayerCrossAttention(self.config, name=str(1)),)
+            self.layer += (FlaxT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype))
             feed_forward_index += 1
 
-        self.layer += (FlaxT5LayerFF(self.config, name=str(feed_forward_index)),)
+        self.layer += (FlaxT5LayerFF(self.config, name=str(feed_forward_index), dtype=self.dtype),)
 
     def __call__(
         self,
@@ -716,7 +718,7 @@ class FlaxT5Stack(nn.Module):
                 embedding_init=jax.nn.initializers.normal(self.config.init_std),
             )
 
-        self.block = FlaxT5BlockCollection(self.config)
+        self.block = FlaxT5BlockCollection(self.config, dtype=self.dtype)
         self.final_layer_norm = FlaxT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
         )
@@ -1362,13 +1364,13 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         encoder_config.causal = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = FlaxT5Stack(encoder_config, self.shared)
+        self.encoder = FlaxT5Stack(encoder_config, self.shared, dtype=self.dtype)
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxT5Stack(decoder_config, self.shared)
+        self.decoder = FlaxT5Stack(decoder_config, self.shared, dtype=self.dtype)
 
         self.lm_head = nn.Dense(
             self.config.vocab_size,

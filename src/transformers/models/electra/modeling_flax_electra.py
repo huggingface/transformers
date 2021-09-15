@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from typing import Callable, Optional, Tuple
+from jax._src.dtypes import dtype
 
 import numpy as np
 
@@ -567,7 +568,7 @@ class FlaxElectraModule(nn.Module):
     def setup(self):
         self.embeddings = FlaxElectraEmbeddings(self.config, dtype=self.dtype)
         if self.config.embedding_size != self.config.hidden_size:
-            self.embeddings_project = nn.Dense(self.config.hidden_size)
+            self.embeddings_project = nn.Dense(self.config.hidden_size, dtype=self.dtype)
         self.encoder = FlaxElectraEncoder(self.config, dtype=self.dtype)
 
     def __call__(
@@ -618,7 +619,6 @@ class FlaxElectraTiedDense(nn.Module):
 
     def setup(self):
         bias = self.param("bias", self.bias_init, (self.embedding_size,))
-        self.bias = jnp.asarray(bias, dtype=self.dtype)
 
     def __call__(self, x, kernel):
         y = lax.dot_general(
@@ -636,7 +636,7 @@ class FlaxElectraForMaskedLMModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
-        self.generator_predictions = FlaxElectraGeneratorPredictions(config=self.config)
+        self.generator_predictions = FlaxElectraGeneratorPredictions(config=self.config, dtype=self.dtype)
         if self.config.tie_word_embeddings:
             self.generator_lm_head = FlaxElectraTiedDense(self.config.vocab_size, dtype=self.dtype)
         else:
@@ -785,7 +785,7 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
             else self.config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Dense(self.config.num_labels)
+        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(
         self,
