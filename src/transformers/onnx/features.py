@@ -79,7 +79,13 @@ class FeaturesManager:
             "sequence-classification-with-past",
             onnx_config_cls=GPTNeoOnnxConfig,
         ),
-        "layoutlm": supported_features_mapping("default", onnx_config_cls=LayoutLMOnnxConfig),
+        "layoutlm": supported_features_mapping(
+            "default", 
+            "masked-lm",
+            "sequence-classification",          
+            "token-classification",                               
+            onnx_config_cls=LayoutLMOnnxConfig,                  
+        )   
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_KIND.values())))
