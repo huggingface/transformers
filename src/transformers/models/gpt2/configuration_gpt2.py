@@ -113,7 +113,7 @@ class GPT2Config(PretrainedConfig):
             Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        scale_attn_by_layer_id (:obj:`bool`, `optional`, defaults to :obj:`False):
+        scale_attn_by_layer_idx (:obj:`bool`, `optional`, defaults to :obj:`False):
             Whether to additionally scale attention weights by 1 / layer_idx.
         reorder_and_upcast_attn (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
@@ -168,7 +168,7 @@ class GPT2Config(PretrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
-        scale_attn_by_layer_id=False,
+        scale_attn_by_layer_idx=False,
         reorder_and_upcast_attn=False,
         **kwargs
     ):
@@ -193,7 +193,7 @@ class GPT2Config(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
-        self.scale_attn_by_layer_id = scale_attn_by_layer_id
+        self.scale_attn_by_layer_idx = scale_attn_by_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
 
         self.bos_token_id = bos_token_id

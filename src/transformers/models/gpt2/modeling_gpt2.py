@@ -157,8 +157,8 @@ class GPT2Attention(nn.Module):
         self.scale_attn_weights = config.scale_attn_weights
         self.is_cross_attention = is_cross_attention
 
-        # [Required for Mistral-GPT2] Layer-wise attention scaling, reordering, and upcasting
-        self.scale_attn_by_layer_id = config.scale_attn_by_layer_id
+        # Layer-wise attention scaling, reordering, and upcasting
+        self.scale_attn_by_layer_idx = config.scale_attn_by_layer_idx
         self.layer_idx = layer_idx
         self.reorder_and_upcast_attn = config.reorder_and_upcast_attn
 
@@ -196,8 +196,8 @@ class GPT2Attention(nn.Module):
         if self.scale_attn_weights:
             attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
 
-        # [Required for Mistral-GPT2] Layer-wise attention scaling
-        if self.scale_attn_by_layer_id:
+        # Layer-wise attention scaling
+        if self.scale_attn_by_layer_idx:
             attn_weights = attn_weights / float(self.layer_idx + 1)
 
         if not self.is_cross_attention:
@@ -236,7 +236,7 @@ class GPT2Attention(nn.Module):
         if self.scale_attn_weights:
             scale_factor /= float(value.size(-1)) ** 0.5
 
-        if self.scale_attn_by_layer_id:
+        if self.scale_attn_by_layer_idx:
             scale_factor /= float(self.layer_idx + 1)
 
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
