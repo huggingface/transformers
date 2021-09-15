@@ -534,9 +534,9 @@ class DataCollatorForSeq2Seq:
                         feature["labels"] + remainder if padding_side == "right" else remainder + feature["labels"]
                     )
                 elif padding_side == "right":
-                    feature["labels"] = np.concatenate([feature["labels"], remainder])
+                    feature["labels"] = np.concatenate([feature["labels"], remainder]).astype(np.int64)
                 else:
-                    feature["labels"] = np.concatenate([remainder, feature["labels"]])
+                    feature["labels"] = np.concatenate([remainder, feature["labels"]]).astype(np.int64)
 
         features = self.tokenizer.pad(
             features,
