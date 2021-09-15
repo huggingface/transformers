@@ -6,33 +6,29 @@ from transformers import (
     BartConfig,
 )
 
-# from transformers.modeling_bart import AttentionForONNX     # Transformers 3.5.1
 from transformers.generation_utils import GenerationMixin
-from transformers.generation_logits_process import LogitsProcessorList
 
 from typing import Optional, List, Tuple
 
-def unpack_past(past):
-    keys = []
+def flatten_past(past):
     values = []
     if past is not None:
         for i, p in enumerate(past):
             for j, q in enumerate(p):
                 values.append(q)
 
-            # # Transformers 3.5.1
-            # if 'self' in p:
-            #     values.append(p['self']['prev_key'])
-            #     values.append(p['self']['prev_value'])
-            #     keys.append('self_prev_key_' + str(i))
-            #     keys.append('self_prev_value_' + str(i))
-            # if 'encoder_decoder' in p:
-            #     values.append(p['encoder_decoder']['prev_key'])
-            #     values.append(p['encoder_decoder']['prev_value'])
-            #     keys.append('enc_dec_prev_key_' + str(i))
-            #     keys.append('enc_dec_prev_value_' + str(i))
+    return values
 
-    return keys, values
+def list_to_tuple(past):
+    results = ()
+    temp_result = ()
+    count_n = len(past) // 4
+    for idx in range(count_n):
+        real_idx = idx * 4
+        temp_result = tuple(past[real_idx:real_idx + 4])
+        results += ((temp_result), )
+
+    return results
 
 class DecoderForONNX(torch.nn.Module):
     def __init__(self, decoder):
@@ -40,39 +36,12 @@ class DecoderForONNX(torch.nn.Module):
         self.decoder = decoder
 
     def forward(self, input_ids, encoder_state, attention_mask, past = None):
-
-        # # Transformers 3.5.1
-        # last_hidden_state, past_key_values = self.decoder(
-        #     input_ids,
-        #     encoder_state,
-        #     attention_mask,
-        #     None,
-        #     None,
-        #     past_key_values=grouped_past_values,
-        #     use_cache=True,
-        #     use_past=use_past,
-        # )
-
+        all_results = None
         if past is not None:
-            print("======== Past is not None.")
-
-        all_results = ()
-        if past is not None:
-            temp_result = ()
-            count_n = len(past) // 4
-            for idx in range(count_n):
-                real_idx = idx * 4
-                temp_result = tuple(past[real_idx:real_idx + 4])
-                all_results += ((temp_result), )
-        else:
-            # past = [torch.ones(1, 12, 1, 64) for _ in range(24)]
-            # temp_result = ()
-            # count_n = len(past) // 4
-            # for idx in range(count_n):
-            #     real_idx = idx * 4
-            #     temp_result = tuple(past[real_idx:real_idx + 4])
-            #     all_results += ((temp_result), )
-            all_results = None
+            all_results = list_to_tuple(past)
+            input_ids = input_ids[:, -1:]
+        # else:
+        #     all_results = None
 
         last_hidden_state, past_key_values = self.decoder(
             input_ids=input_ids,
@@ -84,9 +53,8 @@ class DecoderForONNX(torch.nn.Module):
 
         past_values = []
         for past in past_key_values:
-        # #     # past_values = past_values + past # Transformers 3.5.1
             past_values = past_values + list(past)
-        return last_hidden_state, past_key_values
+        return last_hidden_state, past_values
 
 def create_traced_encoder(encoder, input_ids, attention_mask):
     return torch.jit.trace(encoder, (input_ids, attention_mask))
@@ -94,14 +62,13 @@ def create_traced_encoder(encoder, input_ids, attention_mask):
 def create_traced_decoder(decoder, input_ids, encoder_state, attention_mask, past = None):
     decoder_c = copy.deepcopy(decoder)
     decoder_for_onnx = DecoderForONNX(decoder_c)
-    past_keys, past_values = unpack_past(past)
+    past_values = flatten_past(past)
 
     # Do this twice so we got 2 different decoders for further work.
     if past_values is None or len(past_values) == 0:
         return torch.jit.trace(decoder_for_onnx, (input_ids, encoder_state, attention_mask))
     else:
-        test_module = torch.jit.trace(decoder_for_onnx, (input_ids, encoder_state, attention_mask, past_values))
-        return test_module
+        return torch.jit.trace(decoder_for_onnx, (input_ids, encoder_state, attention_mask, past_values))
 
 class BartConfigTS(BartConfig, torch.nn.Module):
     def init_module(self):
@@ -182,33 +149,33 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
     def _encoder_forward(self, input_ids, attention_mask):
         return self.encoder(input_ids, attention_mask)[0]
 
+    @staticmethod
+    def _init_sequence_length_for_generation(
+        input_ids: torch.LongTensor, max_length: int
+    ) -> Tuple[torch.Tensor, torch.Tensor, int]:
+        unfinished_sequences = torch.zeros(input_ids.shape[0], dtype=torch.long, device=input_ids.device) + 1
+        sequence_lengths = torch.zeros(input_ids.shape[0], dtype=torch.long, device=input_ids.device) + max_length
+
+        cur_len = input_ids.shape[-1]
+        return sequence_lengths, unfinished_sequences, cur_len
+
     def _decoder_forward(self, input_ids, encoder_output, attention_mask, past: List[torch.Tensor]):
         # Update here to use different decoder for different values of past.
         if past is None or len(past) == 0:
-            print("========= call decoder_no_past =========")
-            decoder_output, past_new = self.decoder_no_past(
+            decoder_output, past = self.decoder_no_past(
                             input_ids=input_ids,
                             encoder_state=encoder_output,
                             attention_mask=attention_mask)
         else:
-            print("========= call decoder_with_past =========")
-            decoder_output, past_new = self.decoder_with_past(
+            decoder_output, past = self.decoder_with_past(
                             input_ids=input_ids,
                             encoder_state=encoder_output,
                             attention_mask=attention_mask,
                             past=past)
 
-        past_values = []
-        if past_new is not None:
-            for i, p in enumerate(past_new):
-                for j, q in enumerate(p):
-                    past_values.append(q)
-
         lm_logits = F.linear(decoder_output, self.final_logits_weight, bias=self.final_logits_bias)
 
-        print("========= _decoder_with_past past_values length: ", len(past_values))
-
-        return lm_logits, past_values
+        return lm_logits, past
 
     def greedy_search(self, input_ids, encoder_output, attention_mask, max_length, pad_token_id: int, eos_token_id: int):
         # init sequence length tensors
@@ -268,7 +235,7 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
 
         # special case if pad_token_id is not defined
         if pad_token_id is None and eos_token_id is not None:
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            # Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.
             pad_token_id = eos_token_id
 
         encoder_output = self._encoder_forward(input_ids, attention_mask)
@@ -574,10 +541,6 @@ class BARTBeamSearchGenerator(BARTGenerator):
         max_length,
         pad_token_id: int,
         eos_token_id: int):
-        # init sequence length tensors
-        sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
-            input_ids, max_length
-        )
 
         batch_size = self.beam_scorer.batch_size
 
