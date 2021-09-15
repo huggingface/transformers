@@ -84,7 +84,7 @@ class PerceiverFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-    def center_crop(image):
+    def center_crop(self, image):
         image = self.to_numpy_array(image, rescale=False, channel_first=False)
         shape = image.shape
 
