@@ -18,9 +18,11 @@
 import argparse
 import pickle
 from pathlib import Path
+import json
 
 import numpy as np
 import torch
+from huggingface_hub import cached_download, hf_hub_url
 
 import haiku as hk
 from transformers import PerceiverConfig, PerceiverForImageClassification, PerceiverForMaskedLM, PerceiverTokenizer
@@ -55,6 +57,9 @@ def rename_keys(state_dict):
         
         # rename prefix of decoders
         name = name.replace("classification_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention.")
+        name = name.replace("classification_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
+        name = name.replace("classification_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
+        name = name = name.replace("classification_decoder/~/basic_decoder/~/", "decoder.decoder.") 
         name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
         name = name.replace("basic_decoder/~/", "decoder.")
         if "decoder" in name:
@@ -186,6 +191,13 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.num_self_attention_heads = 8
         config.qk_channels = None
         config.v_channels = None
+        config.num_labels = 1000
+        repo_id = "datasets/huggingface/label-files"
+        filename = "imagenet-1k-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
         model = PerceiverForImageClassification(config)
     model.eval()
 
