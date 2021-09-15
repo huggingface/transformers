@@ -168,9 +168,9 @@ class PerceiverSelfAttention(nn.Module):
         is_cross_attention = inputs is not None
         queries = self.query(hidden_states)
 
-        print("First few elements of queries after layernorm:", hidden_states[0, :3, :3])
-        if is_cross_attention:
-            print("First few elements of keys + values after layernorm:", inputs[0, :3, :3])
+        # print("First few elements of queries after layernorm:", hidden_states[0, :3, :3])
+        # if is_cross_attention:
+        #     print("First few elements of keys + values after layernorm:", inputs[0, :3, :3])
 
         if is_cross_attention:
             keys = self.key(inputs)
@@ -180,9 +180,9 @@ class PerceiverSelfAttention(nn.Module):
             keys = self.key(hidden_states)
             values = self.value(hidden_states)
 
-        print("First few elements of queries:", queries[0, :3, :3])
-        print("First few elements of keys:", keys[0, :3, :3])
-        print("First few elements of values:", values[0, :3, :3])
+        # print("First few elements of queries:", queries[0, :3, :3])
+        # print("First few elements of keys:", keys[0, :3, :3])
+        # print("First few elements of values:", values[0, :3, :3])
 
         # Reshape channels for multi-head attention.
         # We reshape from (batch_size, time, channels) to (batch_size, num_heads, time, channels per head)
@@ -220,7 +220,7 @@ class PerceiverSelfAttention(nn.Module):
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
-        print("Attention probs after softmax:", attention_probs[0, :3, :3, :3])
+        #print("Attention probs after softmax:", attention_probs[0, :3, :3, :3])
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -236,7 +236,7 @@ class PerceiverSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (hiddens,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        print("Result:", context_layer[0, :3, :3])
+        #print("Result:", context_layer[0, :3, :3])
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -340,7 +340,7 @@ class PerceiverAttention(nn.Module):
         # Output projection
         attention_output = self.output(self_outputs[0])
 
-        print("Result after conv1d:", attention_output[0, :3, :3])
+        #print("Result after conv1d:", attention_output[0, :3, :3])
 
         # Optionally include a residual to the original queries.
         # Consider omitting the residual if the semantics of query and output
@@ -348,7 +348,7 @@ class PerceiverAttention(nn.Module):
         if self.use_query_residual:
             attention_output = attention_output + hidden_states
 
-        print("Result after query residual:", attention_output[0, :3, :3])
+        #print("Result after query residual:", attention_output[0, :3, :3])
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -510,10 +510,10 @@ class PerceiverEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions else None
 
-        print("Shape of latents before cross-attention:", hidden_states.shape)
-        print("First few elements of latents:", hidden_states[0, :3, :3])
-        print("Shape of inputs before cross-attention:", inputs.shape)
-        print("First few elements of inputs:", inputs[0, :3, :3])
+        # print("Shape of latents before cross-attention:", hidden_states.shape)
+        # print("First few elements of latents:", hidden_states[0, :3, :3])
+        # print("Shape of inputs before cross-attention:", inputs.shape)
+        # print("First few elements of inputs:", inputs[0, :3, :3])
 
         # Apply the cross-attention between the latents (hidden_states) and inputs:
         layer_outputs = self.cross_attention(
@@ -691,7 +691,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        print("Shape of inputs:", inputs.shape)
+        #print("Shape of inputs:", inputs.shape)
 
         if inputs is None:
             raise ValueError("You must specify inputs")
@@ -736,7 +736,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-        print("Encoder outputs:", sequence_output[0, :3, :3])
+        #print("Encoder outputs:", sequence_output[0, :3, :3])
 
         logits = None
         if self.decoder:

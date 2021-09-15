@@ -38,6 +38,7 @@ logger = logging.get_logger(__name__)
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    url = "https://storage.googleapis.com/perceiver_io/dalmation.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -45,8 +46,6 @@ def prepare_img():
 def rename_keys(state_dict):
     for name in list(state_dict):
         param = state_dict.pop(name)
-
-        print("Processing name:", name)
         
         ## PREPROCESSORS ##
         
@@ -235,10 +234,15 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
 
     # verify logits
     print("Shape of logits:", logits.shape)
-    print("First elements of logits:", logits[0, :3, :3])
-
+    
     if task == "MLM":
-        masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1)
+        expected_slice = torch.tensor([[-11.8336, -11.6850, -11.8483],
+        [-12.8149, -12.5863, -12.7904],
+        [-12.8440, -12.6410, -12.8646]])
+        assert torch.allclose(logits[0, :3, :3], expected_slice)
+        masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1).tolist()
+        expected_list = [ 38, 115, 111, 121, 121, 111, 116, 109,  52]
+        assert masked_tokens_predictions == expected_list
         print("Greedy predictions:")
         print(masked_tokens_predictions)
         print()
@@ -246,8 +250,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         print(tokenizer.decode(masked_tokens_predictions))
 
     elif task == "image_classification":
-        # TODO
-        pass
+        print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
 
     # Finally, save files
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
