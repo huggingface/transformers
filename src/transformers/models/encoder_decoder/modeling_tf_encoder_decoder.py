@@ -464,6 +464,9 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             # handle the init case where `dummy_inputs` returns a dict containing `decoder_input_ids`.
             if "decoder_input_ids" in encoder_inputs:
                 decoder_input_ids = encoder_inputs.pop("decoder_input_ids")
+            # handle the init case where `dummy_inputs` returns a dict containing `decoder_input_ids`.
+            if "decoder_attention_mask" in encoder_inputs:
+                decoder_attention_mask = encoder_inputs.pop("decoder_attention_mask")
 
             encoder_outputs = self.encoder(**encoder_inputs)
 
