@@ -88,7 +88,7 @@ def rename_keys(state_dict):
         name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
         name = name.replace("basic_decoder/~/", "decoder.")
         if "decoder" in name:
-            name = name.replace("trainable_position_encoding/pos_embs", "output_position_encodings.weight")
+            name = name.replace("trainable_position_encoding/pos_embs", "output_position_encodings")
 
         # rename embedding decoder bias (for MLM model)
         name = name.replace("embedding_decoder/bias", "output_postprocessor.bias")
@@ -163,11 +163,7 @@ def rename_keys(state_dict):
                 name = name.replace("linear_1.w", "dense2.weight")
 
         # finally, TRANSPOSE if kernel and not embedding layer, and set value
-        if name[-6:] == "weight" and "input_preprocessor" not in name and "output_position_encodings" not in name:
-            param = np.transpose(param)
-
-        # if conv2d OR position projector, then we need to permute the axes
-        if name.endswith("convnet_1x1.weight") or name.endswith("positions_projection.weight"):
+        if name[-6:] == "weight" and "embeddings" not in name:
             param = np.transpose(param)
 
         state_dict["perceiver." + name] = torch.from_numpy(param)

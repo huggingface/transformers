@@ -985,7 +985,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         if position_encoding_type != "none":
             if output_index_dims is None:
                 raise ValueError("You must specify output_index_dims")
-            self.output_position_encodings = nn.Embedding(output_index_dims, num_channels)
+            self.output_position_encodings = nn.Parameter(torch.randn(output_index_dims, num_channels))
         self.decoding_cross_attention = PerceiverLayer(
             config,
             is_cross_attention=True,
@@ -1007,7 +1007,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         if subsampled_points is not None:
             raise NotImplementedError("Subsampled points is not yet supported")
         else:
-            pos_emb = self.output_position_encodings.weight.expand(inputs.shape[0], -1, -1)
+            pos_emb = self.output_position_encodings.expand(inputs.shape[0], -1, -1)
         return pos_emb
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
