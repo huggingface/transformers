@@ -184,36 +184,59 @@ class GPT2Attention(nn.Module):
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
 
-        if self.reorder_and_upcast_attn:
-            # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
-            bsz, num_heads, seq_len, dk = query.size()
+        attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
-            # Preallocate attn_weights for `baddbmm`
-            attn_weights = torch.empty(bsz * num_heads, seq_len, seq_len, dtype=torch.float32, device=query.device)
+        if self.scale_attn_weights:
+            attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
 
-            # Compute Scale Factor
-            scale_factor = 1.0
-            if self.scale_attn_weights:
-                scale_factor /= float(value.size(-1)) ** 0.5
+        # [Required for Mistral-GPT2] Layer-wise attention scaling
+        if self.scale_attn_by_layer:
+            attn_weights = attn_weights / float(self.layer_idx + 1)
 
-            if self.scale_attn_by_layer:
-                scale_factor /= float(self.layer_idx + 1)
+        if not self.is_cross_attention:
+            # if only "normal" attention layer implements causal mask
+            query_length, key_length = query.size(-2), key.size(-2)
+            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+            attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
-            # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
-            with autocast(enabled=False):
-                q, k = query.reshape(-1, seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, seq_len)
-                attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
-                attn_weights = attn_weights.reshape(bsz, num_heads, seq_len, seq_len)
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights = attn_weights + attention_mask
 
-        else:
-            attn_weights = torch.matmul(query, key.transpose(-1, -2))
+        attn_weights = nn.Softmax(dim=-1)(attn_weights)
 
-            if self.scale_attn_weights:
-                attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
+        # Downcast (if necessary) back to V dtype (half/fp16 if mixed-precision) -- No-Op if in float()
+        attn_weights = attn_weights.type(value.dtype)
+        attn_weights = self.attn_dropout(attn_weights)
 
-            # [Required for Mistral-GPT2] Layer-wise attention scaling
-            if self.scale_attn_by_layer:
-                attn_weights = attn_weights / float(self.layer_idx + 1)
+        # Mask heads if we want to
+        if head_mask is not None:
+            attn_weights = attn_weights * head_mask
+
+        attn_output = torch.matmul(attn_weights, value)
+
+        return attn_output, attn_weights
+
+    def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, head_mask=None):
+        # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
+        bsz, num_heads, seq_len, dk = query.size()
+
+        # Preallocate attn_weights for `baddbmm`
+        attn_weights = torch.empty(bsz * num_heads, seq_len, seq_len, dtype=torch.float32, device=query.device)
+
+        # Compute Scale Factor
+        scale_factor = 1.0
+        if self.scale_attn_weights:
+            scale_factor /= float(value.size(-1)) ** 0.5
+
+        if self.scale_attn_by_layer:
+            scale_factor /= float(self.layer_idx + 1)
+
+        # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
+        with autocast(enabled=False):
+            q, k = query.reshape(-1, seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, seq_len)
+            attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
+            attn_weights = attn_weights.reshape(bsz, num_heads, seq_len, seq_len)
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
@@ -293,8 +316,11 @@ class GPT2Attention(nn.Module):
         else:
             present = None
 
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
-
+        if self.reorder_and_upcast_attn:
+            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
+        else:
+            attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
