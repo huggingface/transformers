@@ -19,12 +19,18 @@ import math
 import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
+from packaging import version
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.cuda.amp import autocast
 from torch.nn import CrossEntropyLoss, MSELoss
+
+if version.parse(torch.__version__) >= version.parse("1.6"):
+    is_amp_available = True
+    from torch.cuda.amp import autocast
+else:
+    is_amp_available = False
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -233,7 +239,12 @@ class GPT2Attention(nn.Module):
             scale_factor /= float(self.layer_idx + 1)
 
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
-        with autocast(enabled=False):
+        if is_amp_available:
+            with autocast(enabled=False):
+                q, k = query.reshape(-1, seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, seq_len)
+                attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
+                attn_weights = attn_weights.reshape(bsz, num_heads, seq_len, seq_len)
+        else:
             q, k = query.reshape(-1, seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, seq_len)
             attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
             attn_weights = attn_weights.reshape(bsz, num_heads, seq_len, seq_len)
