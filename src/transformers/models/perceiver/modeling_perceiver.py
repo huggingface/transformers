@@ -773,6 +773,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
                 config,
                 output_num_channels=config.d_latents,
                 output_index_dims=config.seq_len,
+                num_channels=config.d_model,
                 qk_channels=8 * 32,
                 v_channels=config.d_model,
                 num_heads=8,
@@ -849,7 +850,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
                 config, prep_type="conv1x1", out_channels=256, spatial_downsample=1, concat_or_add_pos="concat",
                 project_pos_dim=256,
             ),
-            #decoder=PerceiverClassificationDecoder(config),
+            decoder=PerceiverClassificationDecoder(config, num_channels=config.d_latents, use_query_residual=True),
         )
 
         self.init_weights()
@@ -950,8 +951,9 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         config,
         output_num_channels,
         position_encoding_type="trainable",
-        # Ignored if position_encoding_type == 'none':
+        # The following 2 arguments are ignored if position_encoding_type == 'none':
         output_index_dims=None,
+        num_channels=128,
         qk_channels=None,
         v_channels=None,
         num_heads=1,
@@ -968,19 +970,19 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         if position_encoding_type != "none":
             if output_index_dims is None:
                 raise ValueError("You must specify output_index_dims")
-            self.output_position_encodings = nn.Embedding(output_index_dims, config.d_model)
+            self.output_position_encodings = nn.Embedding(output_index_dims, num_channels)
         self.decoding_cross_attention = PerceiverLayer(
             config,
             is_cross_attention=True,
             qk_channels=qk_channels,
             v_channels=v_channels,
             num_heads=num_heads,
-            q_dim=config.d_model,
+            q_dim=num_channels,
             kv_dim=config.d_latents,
             widening_factor=widening_factor,
             use_query_residual=use_query_residual,
         )
-        self.final_layer = nn.Linear(config.d_model, output_num_channels) if final_project else nn.Identity()
+        self.final_layer = nn.Linear(num_channels, output_num_channels) if final_project else nn.Identity()
 
     def output_shape(self, inputs):
         return ((inputs[0], self._subsampled_index_dims, self._output_num_channels), None)
@@ -1018,7 +1020,7 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
     (batch_size, num_labels). The queries are of shape (batch_size, 1, num_labels).
     """
 
-    def __init__(self, config):
+    def __init__(self, config, **decoder_kwargs):
         super().__init__()
 
         self.num_labels = config.num_labels
@@ -1026,6 +1028,7 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
             config,
             output_num_channels=self.num_labels,
             output_index_dims=1,  # Predict a single logit array.
+            **decoder_kwargs,
         )
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
