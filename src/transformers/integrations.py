@@ -301,6 +301,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
 
     from sigopt import Connection
+
     conn = Connection()
     proxies = kwargs.pop("proxies", None)
     if proxies is not None:
@@ -310,7 +311,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
         name="huggingface-tune",
         parameters=trainer.hp_space(None),
         metrics=[
-            dict(name="objective", objective=direction, strategy='optimize'),
+            dict(name="objective", objective=direction, strategy="optimize"),
         ],
         parallel_bandwidth=1,
         observation_budget=n_trials,
@@ -330,8 +331,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
         values = [
             dict(name="objective", value=trainer.objective),
         ]
-        obs = conn.experiments(experiment.id).observations().create(
-            suggestion=suggestion.id, values=values)
+        obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
         logger.info("[suggestion_id, observation_id]: [%s, %s]" % (suggestion.id, obs.id))
         experiment = conn.experiments(experiment.id).fetch()
 
@@ -339,6 +339,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
     best_run = BestRun(best.id, best.value, best.assignments)
 
     return best_run
+
 
 def get_available_reporting_integrations():
     integrations = []

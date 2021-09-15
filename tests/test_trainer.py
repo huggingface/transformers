@@ -48,8 +48,8 @@ from transformers.testing_utils import (
     require_datasets,
     require_optuna,
     require_ray,
-    require_sigopt,
     require_sentencepiece,
+    require_sigopt,
     require_tokenizers,
     require_torch,
     require_torch_gpu,
@@ -1513,8 +1513,8 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
 
         def hp_space(trial):
             return [
-                {'bounds': {'min': -4, 'max': 4}, 'name': 'a', 'type': 'int'},
-                {'bounds': {'min': -4, 'max': 4}, 'name': 'b', 'type': 'int'},
+                {"bounds": {"min": -4, "max": 4}, "name": "a", "type": "int"},
+                {"bounds": {"min": -4, "max": 4}, "name": "b", "type": "int"},
             ]
 
         def model_init(trial):
@@ -1546,4 +1546,5 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
                 model_init=model_init,
             )
             trainer.hyperparameter_search(
-                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="sigopt", n_trials=4)
+                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="sigopt", n_trials=4
+            )

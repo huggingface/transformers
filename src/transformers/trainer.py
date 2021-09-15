@@ -234,8 +234,8 @@ class Trainer:
             :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
 
             The function may have zero argument, or a single one containing the optuna/Ray Tune/SigOpt trial object, to
-            be able to choose different architectures according to hyper parameters (such as layer count, sizes of inner
-            layers, dropout probabilities etc).
+            be able to choose different architectures according to hyper parameters (such as layer count, sizes of
+            inner layers, dropout probabilities etc).
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
@@ -872,7 +872,7 @@ class Trainer:
             params = trial
             params.pop("wandb", None)
         elif self.hp_search_backend == HPSearchBackend.SIGOPT:
-            params = {k:int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
+            params = {k: int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
 
         for key, value in params.items():
             if not hasattr(self.args, key):
@@ -1521,6 +1521,7 @@ class Trainer:
                 run_id = trial.number
             elif self.hp_search_backend == HPSearchBackend.RAY:
                 from ray import tune
+
                 run_id = tune.get_trial_id()
             elif self.hp_search_backend == HPSearchBackend.SIGOPT:
                 run_id = trial.id
@@ -1704,8 +1705,7 @@ class Trainer:
                   <https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html>`__
                 - the documentation of `tune.run
                   <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
-                - the documentation of `sigopt
-                  <https://app.sigopt.com/docs/endpoints/experiments/create>`__
+                - the documentation of `sigopt <https://app.sigopt.com/docs/endpoints/experiments/create>`__
 
         Returns:
             :class:`transformers.trainer_utils.BestRun`: All the information about the best run.
@@ -1738,9 +1738,11 @@ class Trainer:
         self.hp_name = hp_name
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        backend_dict = {HPSearchBackend.OPTUNA: run_hp_search_optuna,
-                        HPSearchBackend.RAY: run_hp_search_ray,
-                        HPSearchBackend.SIGOPT: run_hp_search_sigopt}
+        backend_dict = {
+            HPSearchBackend.OPTUNA: run_hp_search_optuna,
+            HPSearchBackend.RAY: run_hp_search_ray,
+            HPSearchBackend.SIGOPT: run_hp_search_sigopt,
+        }
         best_run = backend_dict[backend](self, n_trials, direction, **kwargs)
 
         self.hp_search_backend = None
