@@ -888,7 +888,7 @@ class Trainer:
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             logger.info("Trial:", trial.params)
         if self.hp_search_backend == HPSearchBackend.SIGOPT:
-            logger.info("SigOpt Assignments: %s" % trial.assignments)
+            logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from transformers.deepspeed import HfDeepSpeedConfig

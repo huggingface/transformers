@@ -310,14 +310,12 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
     experiment = conn.experiments().create(
         name="huggingface-tune",
         parameters=trainer.hp_space(None),
-        metrics=[
-            dict(name="objective", objective=direction, strategy="optimize"),
-        ],
+        metrics=[dict(name="objective", objective=direction, strategy="optimize")],
         parallel_bandwidth=1,
         observation_budget=n_trials,
         project="huggingface",
     )
-    logger.info("created experiment: https://app.sigopt.com/experiment/" + experiment.id)
+    logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
 
     while experiment.progress.observation_count < experiment.observation_budget:
         suggestion = conn.experiments(experiment.id).suggestions().create()
@@ -328,11 +326,9 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             metrics = trainer.evaluate()
             trainer.objective = trainer.compute_objective(metrics)
 
-        values = [
-            dict(name="objective", value=trainer.objective),
-        ]
+        values = [dict(name="objective", value=trainer.objective)]
         obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
-        logger.info("[suggestion_id, observation_id]: [%s, %s]" % (suggestion.id, obs.id))
+        logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
         experiment = conn.experiments(experiment.id).fetch()
 
     best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
