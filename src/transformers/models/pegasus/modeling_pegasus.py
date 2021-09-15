@@ -466,7 +466,6 @@ class PegasusDecoderLayer(nn.Module):
 class PegasusPreTrainedModel(PreTrainedModel):
     config_class = PegasusConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -480,10 +479,6 @@ class PegasusPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (PegasusDecoder, PegasusEncoder)):
-            module.gradient_checkpointing = value
 
 
 PEGASUS_START_DOCSTRING = r"""
@@ -651,7 +646,6 @@ class PegasusEncoder(PegasusPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
-        self.gradient_checkpointing = False
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
@@ -674,7 +668,6 @@ class PegasusEncoder(PegasusPreTrainedModel):
             self.config.d_model,
             self.padding_idx,
         )
-        self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
@@ -776,7 +769,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
+                if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -846,7 +839,6 @@ class PegasusDecoder(PegasusPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
-        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -894,7 +886,6 @@ class PegasusDecoder(PegasusPreTrainedModel):
             self.config.d_model,
             self.padding_idx,
         )
-        self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
@@ -1047,11 +1038,12 @@ class PegasusDecoder(PegasusPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
+                        "`use_cache=False`..."
                     )
                     use_cache = False
 
