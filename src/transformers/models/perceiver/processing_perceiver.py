@@ -127,9 +127,6 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
 
         # Construct the position encoding.
-        print("Index dims:", index_dims)
-        print("Indices:", indices)
-        print("Shape of inputs:", inputs.shape)
         position_ids = torch.arange(0, indices)
         pos_enc = self.position_embeddings(position_ids)
         pos_enc = pos_enc.expand(batch_size, -1, -1)
@@ -157,8 +154,10 @@ class PerceiverImagePreprocessor(nn.Module):
         elif self.prep_type == "conv1x1":
             # map inputs to self.out_channels
             print("Shape of inputs before conv:", inputs.shape)
+            print("Inputs before conv:", inputs[0,0,:3,:3])
             inputs = self.convnet_1x1(inputs)
             print("Shape of inputs after conv:", inputs.shape)
+            print("Inputs after conv:", inputs[0,0,:3,:3])
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
         return inputs
