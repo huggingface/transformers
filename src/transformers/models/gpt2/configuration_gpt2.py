@@ -113,6 +113,8 @@ class GPT2Config(PretrainedConfig):
             Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        scale_attn_by_layer (:obj:`bool`, `optional`, defaults to :obj:`False):
+            [Required for Mistral-GPT2] Whether to additionally scale attention weights by 1 / layer_idx.
 
     Example::
 
@@ -162,6 +164,7 @@ class GPT2Config(PretrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        scale_attn_by_layer=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -185,6 +188,7 @@ class GPT2Config(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
+        self.scale_attn_by_layer = scale_attn_by_layer
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
