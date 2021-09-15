@@ -15,6 +15,7 @@
 # limitations under the License.
 """PyTorch OpenAI GPT-2 model."""
 
+import math
 import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -188,13 +189,7 @@ class GPT2Attention(nn.Module):
             bsz, num_heads, seq_len, dk = query.size()
 
             # Preallocate attn_weights for `baddbmm`
-            attn_weights = torch.empty(
-                bsz * num_heads,
-                seq_len,
-                seq_len,
-                dtype=torch.float32,
-                device=query.device
-            )
+            attn_weights = torch.empty(bsz * num_heads, seq_len, seq_len, dtype=torch.float32, device=query.device)
 
             # Compute Scale Factor
             scale_factor = 1.0
@@ -207,13 +202,7 @@ class GPT2Attention(nn.Module):
             # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
             with autocast(enabled=False):
                 q, k = query.reshape(-1, seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, seq_len)
-                attn_weights = torch.baddbmm(
-                    attn_weights,
-                    q.float(),
-                    k.float(),
-                    beta=0,
-                    alpha=scale_factor
-                )
+                attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
                 attn_weights = attn_weights.reshape(bsz, num_heads, seq_len, seq_len)
 
         else:
@@ -442,6 +431,17 @@ class GPT2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+        # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
+        #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
+        #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
+        #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
+        #
+        # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
+        for name, p in module.named_parameters():
+            if "c_proj" in name and "weight" in name:
+                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+
 
 @dataclass
 class GPT2DoubleHeadsModelOutput(ModelOutput):
@@ -629,7 +629,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([GPT2Block(config, layer_idx=i+1) for i in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([GPT2Block(config, layer_idx=i + 1) for i in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
