@@ -114,11 +114,11 @@ class GPT2Config(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         scale_attn_by_layer_id (:obj:`bool`, `optional`, defaults to :obj:`False):
-            [Mistral-GPT2] Whether to additionally scale attention weights by 1 / layer_idx.
-        reorder_attn (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            [Mistral-GPT2] Whether to scale keys (K) prior to computing attention (dot-product)
-        upscale_attn (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            [Mistral-GPT2] Whether to upcast attention dot-product/softmax to float() when training with mixed precision
+            Whether to additionally scale attention weights by 1 / layer_idx.
+        reorder_and_upcast_attn (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention 
+            dot-product/softmax to float() when training with mixed precision
+
 
     Example::
 
