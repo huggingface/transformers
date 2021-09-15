@@ -226,7 +226,7 @@ def create_sinusoidal_positions(n_pos, dim, dtype):
     out[:, 0:sentinel] = np.sin(position_enc[:, 0::2])
     out[:, sentinel:] = np.cos(position_enc[:, 1::2])
 
-    return jnp.array(out, dtype=dtype)
+    return jnp.array(out)
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->Pegasus
@@ -250,7 +250,7 @@ class FlaxPegasusAttention(nn.Module):
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
@@ -415,10 +415,10 @@ class FlaxPegasusEncoderLayer(nn.Module):
         self.fc1 = nn.Dense(
             self.config.encoder_ffn_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
@@ -535,10 +535,10 @@ class FlaxPegasusDecoderLayer(nn.Module):
         self.fc1 = nn.Dense(
             self.config.encoder_ffn_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
@@ -681,7 +681,7 @@ class FlaxPegasusEncoder(nn.Module):
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+                embedding_init=jax.nn.initializers.normal(self.config.init_std),
                 dtype=self.dtype,
             )
 
@@ -708,6 +708,8 @@ class FlaxPegasusEncoder(nn.Module):
 
         # embed positions
         embed_pos = jnp.take(self.embed_positions, position_ids, axis=0)
+        # explictly cast the positions here, since self.embed_positions are not registered as parameters 
+        embed_pos = embed_pos.astype(inputs_embeds.dtype)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
@@ -749,7 +751,7 @@ class FlaxPegasusDecoder(nn.Module):
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+                embedding_init=jax.nn.initializers.normal(self.config.init_std),
                 dtype=self.dtype,
             )
 
@@ -780,6 +782,8 @@ class FlaxPegasusDecoder(nn.Module):
 
         # embed positions
         positions = jnp.take(self.embed_positions, position_ids, axis=0)
+        # explictly cast the positions here, since self.embed_positions are not registered as parameters 
+        positions = positions.astype(inputs_embeds.dtype)
 
         hidden_states = inputs_embeds + positions
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
@@ -817,8 +821,7 @@ class FlaxPegasusModule(nn.Module):
         self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
         self.encoder = FlaxPegasusEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
@@ -1222,7 +1225,7 @@ class FlaxPegasusForConditionalGenerationModule(nn.Module):
             self.model.shared.num_embeddings,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
