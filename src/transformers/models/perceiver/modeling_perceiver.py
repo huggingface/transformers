@@ -180,9 +180,10 @@ class PerceiverSelfAttention(nn.Module):
             keys = self.key(hidden_states)
             values = self.value(hidden_states)
 
-        # print("First few elements of queries:", queries[0, :3, :3])
-        # print("First few elements of keys:", keys[0, :3, :3])
-        # print("First few elements of values:", values[0, :3, :3])
+        # if is_cross_attention:
+        #     print("First few elements of queries:", queries[0, :3, :3])
+        #     print("First few elements of keys:", keys[0, :3, :3])
+        #     print("First few elements of values:", values[0, :3, :3])
 
         # Reshape channels for multi-head attention.
         # We reshape from (batch_size, time, channels) to (batch_size, num_heads, time, channels per head)
@@ -518,6 +519,9 @@ class PerceiverEncoder(nn.Module):
         # print("Shape of inputs before cross-attention:", inputs.shape)
         # print("First few elements of inputs:", inputs[0, :3, :3])
 
+        print("Shape of inputs before cross-attention:", inputs.shape)
+        print("First few elements of inputs:", inputs[0,:3,:3])
+        
         # Apply the cross-attention between the latents (hidden_states) and inputs:
         layer_outputs = self.cross_attention(
             hidden_states,
@@ -535,8 +539,8 @@ class PerceiverEncoder(nn.Module):
         # Apply the block of self-attention layers more than once:
         for _ in range(self.config.num_blocks):
             for i, layer_module in enumerate(self.self_attends):
-                print(f"Block {i} -----------------------------------------------")
-                print(f"Hidden states before block {i}:", hidden_states[0, :3, :3])
+                #print(f"Block {i} -----------------------------------------------")
+                #print(f"Hidden states before block {i}:", hidden_states[0, :3, :3])
                 if output_hidden_states:
                     all_hidden_states = all_hidden_states + (hidden_states,)
 

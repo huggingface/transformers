@@ -40,9 +40,8 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-# We will verify our results on an image of cute cats
+# We will verify our results on an image of a dog
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     url = "https://storage.googleapis.com/perceiver_io/dalmation.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im

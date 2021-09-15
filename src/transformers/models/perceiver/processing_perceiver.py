@@ -121,11 +121,17 @@ class PerceiverImagePreprocessor(nn.Module):
         batch_size = inputs.shape[0]
         index_dims = inputs.shape[2:]
         indices = np.prod(index_dims)
-
+        
         # Reshape input features to a 1D index dimension if necessary.
         if len(inputs.shape) > 3 and network_input_is_1d:
+            # Move axes from (batch_size, num_channels, height, width) to (batch_size, height, width, num_channels)
+            # as the original implementation expects the channels to be as last dimension before flattening
+            inputs = torch.moveaxis(inputs, 1, -1)
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
 
+        print("Shape of inputs:", inputs.shape)
+        print("First elements of inputs:", inputs[0,:3,:3])
+        
         # Construct the position encoding.
         position_ids = torch.arange(0, indices)
         pos_enc = self.position_embeddings(position_ids)
@@ -134,6 +140,9 @@ class PerceiverImagePreprocessor(nn.Module):
         # Optionally project them to a target dimension.
         if self.positions_projection is not None:
             pos_enc = self.positions_projection(pos_enc)
+
+        print("Shape of position encodings:", pos_enc.shape)
+        print("First elements of position encodings:", pos_enc[0,:3,:3])
 
         if not network_input_is_1d:
             # Reshape pos to match the input feature shape
@@ -146,6 +155,9 @@ class PerceiverImagePreprocessor(nn.Module):
         elif self.concat_or_add_pos == "add":
             inputs_with_pos = inputs + pos_enc
 
+        print("Inputs with position encodings:", inputs_with_pos[0,:3,:3])
+        print("Inputs without position encodings:", inputs[0,:3,:3])
+    
         return inputs_with_pos, inputs
 
     def __call__(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
@@ -153,11 +165,9 @@ class PerceiverImagePreprocessor(nn.Module):
             raise NotImplementedError("TODO")
         elif self.prep_type == "conv1x1":
             # map inputs to self.out_channels
-            print("Shape of inputs before conv:", inputs.shape)
-            print("Inputs before conv:", inputs[0,0,:3,:3])
             inputs = self.convnet_1x1(inputs)
-            print("Shape of inputs after conv:", inputs.shape)
-            print("Inputs after conv:", inputs[0,0,:3,:3])
+            print("Inputs after conv:", inputs[0,:3,:3,:3])
+            print("Sum of inputs after conv:", inputs.sum())
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
         return inputs
