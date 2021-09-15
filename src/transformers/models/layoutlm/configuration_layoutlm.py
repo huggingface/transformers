@@ -18,6 +18,7 @@ from typing import Any, List, Mapping, Optional
 
 from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
 
+from ... import is_torch_available
 from ...onnx import OnnxConfig, PatchingSpec
 from ...utils import logging
 from ..bert.configuration_bert import BertConfig
@@ -182,6 +183,8 @@ class LayoutLMOnnxConfig(OnnxConfig):
         if not framework == TensorType.PYTORCH:
             raise NotImplementedError("Exporting LayoutLM to ONNX is currently only supported for PyTorch.")
 
+        if not is_torch_available():
+            raise ValueError("Cannot generate dummy inputs without PyTorch installed.")
         import torch
 
         input_dict["bbox"] = torch.tensor(
