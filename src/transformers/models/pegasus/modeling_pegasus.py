@@ -653,12 +653,12 @@ class PegasusEncoder(PegasusPreTrainedModel):
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
-                The number of new position embedding matrix. If position embeddings are learned, increasing the size
-                will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
         """
         logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
         self.config.max_position_embeddings = new_num_position_embeddings
@@ -871,12 +871,12 @@ class PegasusDecoder(PegasusPreTrainedModel):
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
-                The number of new position embedding matrix. If position embeddings are learned, increasing the size
-                will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
         """
         logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
         self.config.max_position_embeddings = new_num_position_embeddings
@@ -1148,12 +1148,12 @@ class PegasusModel(PegasusPreTrainedModel):
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
-                The number of new position embedding matrix. If position embeddings are learned, increasing the size
-                will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
         """
         self.config.max_position_embeddings = new_num_position_embeddings
         self.encoder.resize_position_embeddings(new_num_position_embeddings)
@@ -1311,12 +1311,12 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
-                The number of new position embedding matrix. If position embeddings are learned, increasing the size
-                will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
         """
         self.config.max_position_embeddings = new_num_position_embeddings
         self.model.encoder.resize_position_embeddings(new_num_position_embeddings)
@@ -1506,12 +1506,12 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
-                The number of new position embedding matrix. If position embeddings are learned, increasing the size
-                will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
         """
         self.config.max_position_embeddings = new_num_position_embeddings
         self.model.decoder.resize_position_embeddings(new_num_position_embeddings)

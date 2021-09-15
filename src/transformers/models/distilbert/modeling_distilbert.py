@@ -444,22 +444,22 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
-        Returns the position embeddings matrix
+        Returns the position embeddings
         """
         return self.embeddings.position_embeddings
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
+            new_num_position_embeddings (:obj:`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
                 will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+                end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
+                size will add correct vectors at the end following the position encoding algorithm, whereas reducing
+                the size will remove vectors from the end.
         """
         num_position_embeds_diff = new_num_position_embeddings - self.config.max_position_embeddings
 
@@ -588,22 +588,22 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
-        Returns the position embeddings matrix
+        Returns the position embeddings
         """
         return self.distilbert.get_position_embeddings()
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
+            new_num_position_embeddings (:obj:`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
                 will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+                end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
+                size will add correct vectors at the end following the position encoding algorithm, whereas reducing
+                the size will remove vectors from the end.
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
@@ -692,22 +692,22 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
-        Returns the position embeddings matrix
+        Returns the position embeddings
         """
         return self.distilbert.get_position_embeddings()
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
+            new_num_position_embeddings (:obj:`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
                 will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+                end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
+                size will add correct vectors at the end following the position encoding algorithm, whereas reducing
+                the size will remove vectors from the end.
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
@@ -808,22 +808,22 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
-        Returns the position embeddings matrix
+        Returns the position embeddings
         """
         return self.distilbert.get_position_embeddings()
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
+            new_num_position_embeddings (:obj:`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
                 will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+                end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
+                size will add correct vectors at the end following the position encoding algorithm, whereas reducing
+                the size will remove vectors from the end.
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
@@ -925,22 +925,22 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
-        Returns the position embeddings matrix
+        Returns the position embeddings
         """
         return self.distilbert.get_position_embeddings()
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
+            new_num_position_embeddings (:obj:`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
                 will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+                end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
+                size will add correct vectors at the end following the position encoding algorithm, whereas reducing
+                the size will remove vectors from the end.
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
@@ -1030,22 +1030,22 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
-        Returns the position embeddings matrix
+        Returns the position embeddings
         """
         return self.distilbert.get_position_embeddings()
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
         config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`, `optional`):
-                The number of new position embedding matrix. If position embeddings are learned, increasing the size
-                will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
-                end. If position embeddings not learned (*e.g.* sinusoidal position embeddings), increasing the sise
-                will add correct vectors at the end following the position encoding algorithm, whereas reducing the
-                size will remove vectors from the end.
+            new_num_position_embeddings (:obj:`int`)
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 

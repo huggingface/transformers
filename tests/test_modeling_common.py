@@ -1097,7 +1097,7 @@ class ModelTesterMixin:
                 cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the position embeddings with a larger max_position_embeddings increases
-            # the model's vocab size
+            # the model's postion embeddings size
             model.resize_position_embeddings(max_position_embeddings + 10)
             self.assertEqual(model.config.max_position_embeddings, max_position_embeddings + 10)
 
