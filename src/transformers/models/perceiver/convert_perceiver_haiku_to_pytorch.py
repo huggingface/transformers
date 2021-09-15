@@ -166,8 +166,8 @@ def rename_keys(state_dict):
         if name[-6:] == "weight" and "input_preprocessor" not in name and "output_position_encodings" not in name:
             param = np.transpose(param)
 
-        # if conv2d, then we need to permute the axes
-        if name.endswith("convnet_1x1.weight"):
+        # if conv2d OR position projector, then we need to permute the axes
+        if name.endswith("convnet_1x1.weight") or name.endswith("positions_projection.weight"):
             param = np.transpose(param)
 
         state_dict["perceiver." + name] = torch.from_numpy(param)

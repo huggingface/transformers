@@ -158,6 +158,12 @@ class PerceiverSelfAttention(nn.Module):
         inputs_mask=None,
         output_attentions=False,
     ):
+        if inputs is not None:
+            print("First few elements of queries before layernorm:", hidden_states[0,:3,:3])
+            print("Sum of queries before layernorm:", hidden_states.sum())
+            print("First few elements of keys + values before layernorm:", inputs[0,:3,:3])
+            print("Sum of keys + values before layernorm:", inputs.sum())
+        
         hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
 
@@ -168,9 +174,9 @@ class PerceiverSelfAttention(nn.Module):
         is_cross_attention = inputs is not None
         queries = self.query(hidden_states)
 
-        # print("First few elements of queries after layernorm:", hidden_states[0, :3, :3])
-        # if is_cross_attention:
-        #     print("First few elements of keys + values after layernorm:", inputs[0, :3, :3])
+        if is_cross_attention:
+            print("First few elements of queries after layernorm:", hidden_states[0, :3, :3])
+            print("First few elements of keys + values after layernorm:", inputs[0, :3, :3])
 
         if is_cross_attention:
             keys = self.key(inputs)
@@ -516,8 +522,6 @@ class PerceiverEncoder(nn.Module):
 
         print("Shape of latents before cross-attention:", hidden_states.shape)
         print("First few elements of latents:", hidden_states[0, :3, :3])
-        # print("Shape of inputs before cross-attention:", inputs.shape)
-        # print("First few elements of inputs:", inputs[0, :3, :3])
 
         print("Shape of inputs before cross-attention:", inputs.shape)
         print("First few elements of inputs:", inputs[0,:3,:3])
