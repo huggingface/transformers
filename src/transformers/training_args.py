@@ -883,7 +883,8 @@ class TrainingArguments:
                 if self.xpu_backend not in ("mpi", "ccl"):
                     raise ValueError(
                         "CPU distributed training backend is not properly set. "
-                        "Please set '--xpu_backend' to either 'mpi' or 'ccl'.")
+                        "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
+                    )
                 torch.distributed.init_process_group(backend=self.xpu_backend)
         elif is_torch_tpu_available():
             device = xm.xla_device()
