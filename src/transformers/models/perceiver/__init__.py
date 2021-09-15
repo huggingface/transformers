@@ -53,7 +53,7 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .feature_extraction_perceiver import PerceiverFeatureExtractor
-    
+
     if is_torch_available():
         from .modeling_perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -16,19 +16,24 @@
 
 
 import argparse
+import json
 import pickle
 from pathlib import Path
-import json
-import requests
-from PIL import Image
 
 import numpy as np
 import torch
-from huggingface_hub import cached_download, hf_hub_url
-from torchvision import transforms
+from PIL import Image
 
 import haiku as hk
-from transformers import PerceiverConfig, PerceiverForImageClassification, PerceiverForMaskedLM, PerceiverTokenizer, PerceiverFeatureExtractor
+import requests
+from huggingface_hub import cached_download, hf_hub_url
+from transformers import (
+    PerceiverConfig,
+    PerceiverFeatureExtractor,
+    PerceiverForImageClassification,
+    PerceiverForMaskedLM,
+    PerceiverTokenizer,
+)
 from transformers.utils import logging
 
 
@@ -46,41 +51,54 @@ def prepare_img():
 def rename_keys(state_dict):
     for name in list(state_dict):
         param = state_dict.pop(name)
-        
+
         ## PREPROCESSORS ##
-        
+
         # rename text preprocessor embeddings (for MLM model)
         name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
         if name.startswith("trainable_position_encoding/pos_embs"):
-            name = name.replace("trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight")
-        
+            name = name.replace(
+                "trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight"
+            )
+
         # rename image preprocessor embeddings (for image classification model)
         name = name.replace("image_preprocessor/~/conv2_d/w", "input_preprocessor.convnet_1x1.weight")
         name = name.replace("image_preprocessor/~/conv2_d/b", "input_preprocessor.convnet_1x1.bias")
-        name = name.replace("image_preprocessor/~_build_network_inputs/trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight")
-        name = name.replace("image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/w", "input_preprocessor.positions_projection.weight")
-        name = name.replace("image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/b", "input_preprocessor.positions_projection.bias")
-        
-        ## DECODERS ## 
-        
+        name = name.replace(
+            "image_preprocessor/~_build_network_inputs/trainable_position_encoding/pos_embs",
+            "input_preprocessor.position_embeddings.weight",
+        )
+        name = name.replace(
+            "image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/w",
+            "input_preprocessor.positions_projection.weight",
+        )
+        name = name.replace(
+            "image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/b",
+            "input_preprocessor.positions_projection.bias",
+        )
+
+        ## DECODERS ##
+
         # rename prefix of decoders
-        name = name.replace("classification_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention.")
+        name = name.replace(
+            "classification_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
+        )
         name = name.replace("classification_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
         name = name.replace("classification_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
-        name = name = name.replace("classification_decoder/~/basic_decoder/~/", "decoder.decoder.") 
+        name = name = name.replace("classification_decoder/~/basic_decoder/~/", "decoder.decoder.")
         name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
         name = name.replace("basic_decoder/~/", "decoder.")
         if "decoder" in name:
             name = name.replace("trainable_position_encoding/pos_embs", "output_position_encodings.weight")
-        
+
         # rename embedding decoder bias (for MLM model)
         name = name.replace("embedding_decoder/bias", "output_postprocessor.bias")
-        
+
         ## PERCEIVER MODEL ##
-        
+
         # rename latent embeddings
         name = name.replace("perceiver_encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
-        
+
         # rename prefixes
         if name.startswith("perceiver_encoder/~/"):
             if "self_attention" in name:
@@ -152,7 +170,7 @@ def rename_keys(state_dict):
         # if conv2d, then we need to permute the axes
         if name.endswith("convnet_1x1.weight"):
             param = np.transpose(param)
-        
+
         state_dict["perceiver." + name] = torch.from_numpy(param)
 
 
@@ -169,11 +187,11 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
     if isinstance(checkpoint, dict):
         assert task == "image_classification", "Make sure to set task to image classification"
         # the image classification checkpoint with conv_preprocessing also has batchnorm state
-        params = checkpoint['params']
-        state = checkpoint['state']
+        params = checkpoint["params"]
+        state = checkpoint["state"]
     else:
         params = checkpoint
-    
+
     # turn into initial state dict
     state_dict = dict()
     for scope_name, parameters in hk.data_structures.to_mutable_dict(params).items():
@@ -234,14 +252,14 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
 
     # verify logits
     print("Shape of logits:", logits.shape)
-    
+
     if task == "MLM":
-        expected_slice = torch.tensor([[-11.8336, -11.6850, -11.8483],
-        [-12.8149, -12.5863, -12.7904],
-        [-12.8440, -12.6410, -12.8646]])
+        expected_slice = torch.tensor(
+            [[-11.8336, -11.6850, -11.8483], [-12.8149, -12.5863, -12.7904], [-12.8440, -12.6410, -12.8646]]
+        )
         assert torch.allclose(logits[0, :3, :3], expected_slice)
         masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1).tolist()
-        expected_list = [ 38, 115, 111, 121, 121, 111, 116, 109,  52]
+        expected_list = [38, 115, 111, 121, 121, 111, 116, 109, 52]
         assert masked_tokens_predictions == expected_list
         print("Greedy predictions:")
         print(masked_tokens_predictions)

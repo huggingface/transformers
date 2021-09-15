@@ -220,7 +220,7 @@ class PerceiverSelfAttention(nn.Module):
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
-        #print("Attention probs after softmax:", attention_probs[0, :3, :3, :3])
+        # print("Attention probs after softmax:", attention_probs[0, :3, :3, :3])
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -236,7 +236,7 @@ class PerceiverSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (hiddens,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        #print("Result:", context_layer[0, :3, :3])
+        # print("Result:", context_layer[0, :3, :3])
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -255,6 +255,7 @@ class PerceiverSelfOutput(nn.Module):
 
 class PerceiverAttention(nn.Module):
     """Attention module, including a dense block."""
+
     def __init__(
         self,
         config,
@@ -269,13 +270,15 @@ class PerceiverAttention(nn.Module):
         super().__init__()
         # MultiHead attention
         if is_cross_attention and qk_channels is None:
-            if config.cross_attention_shape_for_attention == 'q':
+            if config.cross_attention_shape_for_attention == "q":
                 qk_channels = q_dim
-            elif config.cross_attention_shape_for_attention == 'kv':
+            elif config.cross_attention_shape_for_attention == "kv":
                 qk_channels = kv_dim
             else:
-                raise ValueError(f'Unknown value {config.cross_attention_shape_for_attention} for '
-                       'cross_attention_shape_for_attention.')
+                raise ValueError(
+                    f"Unknown value {config.cross_attention_shape_for_attention} for "
+                    "cross_attention_shape_for_attention."
+                )
         else:
             if qk_channels is None:
                 qk_channels = q_dim
@@ -293,7 +296,7 @@ class PerceiverAttention(nn.Module):
         # dense block
         output_channels = None
         if is_cross_attention:
-            output_channels = q_dim 
+            output_channels = q_dim
         else:
             if output_channels is None:
                 output_channels = v_channels
@@ -340,7 +343,7 @@ class PerceiverAttention(nn.Module):
         # Output projection
         attention_output = self.output(self_outputs[0])
 
-        #print("Result after conv1d:", attention_output[0, :3, :3])
+        # print("Result after conv1d:", attention_output[0, :3, :3])
 
         # Optionally include a residual to the original queries.
         # Consider omitting the residual if the semantics of query and output
@@ -348,7 +351,7 @@ class PerceiverAttention(nn.Module):
         if self.use_query_residual:
             attention_output = attention_output + hidden_states
 
-        #print("Result after query residual:", attention_output[0, :3, :3])
+        # print("Result after query residual:", attention_output[0, :3, :3])
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -691,7 +694,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        #print("Shape of inputs:", inputs.shape)
+        # print("Shape of inputs:", inputs.shape)
 
         if inputs is None:
             raise ValueError("You must specify inputs")
@@ -736,7 +739,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-        #print("Encoder outputs:", sequence_output[0, :3, :3])
+        # print("Encoder outputs:", sequence_output[0, :3, :3])
 
         logits = None
         if self.decoder:
@@ -847,7 +850,11 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         self.perceiver = PerceiverModel(
             config,
             input_preprocessor=PerceiverImagePreprocessor(
-                config, prep_type="conv1x1", out_channels=256, spatial_downsample=1, concat_or_add_pos="concat",
+                config,
+                prep_type="conv1x1",
+                out_channels=256,
+                spatial_downsample=1,
+                concat_or_add_pos="concat",
                 project_pos_dim=256,
             ),
             decoder=PerceiverClassificationDecoder(config, num_channels=config.d_latents, use_query_residual=True),

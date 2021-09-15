@@ -17,7 +17,6 @@
 
 import unittest
 
-from tests.test_modeling_common import floats_tensor
 from transformers import PerceiverConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -157,7 +156,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (PerceiverForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = PerceiverModelTester(self)

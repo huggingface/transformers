@@ -56,7 +56,7 @@ class PerceiverConfig(PretrainedConfig):
             Dimension to project the queries + keys before applying attention in the cross-attention and self-attention
             layers of the encoder. Will default to preserving the dimension of the queries if not specified.
         v_channels (:obj:`int`, `optional`):
-            Dimension to project the values before applying attention in the cross-attention and self-attention layers 
+            Dimension to project the values before applying attention in the cross-attention and self-attention layers
             of the encoder. Will default to preserving the dimension of the queries if not specified.
         cross_attention_shape_for_attention (:obj:`str`, `optional`, defaults to :obj:`'kv'`):
             Dimension to use when downsampling the queries and keys in the cross-attention layer of the encoder.
@@ -110,7 +110,7 @@ class PerceiverConfig(PretrainedConfig):
         num_cross_attention_heads=8,
         qk_channels=None,
         v_channels=None,
-        cross_attention_shape_for_attention='kv',
+        cross_attention_shape_for_attention="kv",
         self_attention_widening_factor=1,
         cross_attention_widening_factor=1,
         hidden_act="gelu",
