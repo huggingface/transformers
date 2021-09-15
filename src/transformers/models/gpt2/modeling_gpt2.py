@@ -197,7 +197,7 @@ class GPT2Attention(nn.Module):
                 scale_factor /= float(value.size(-1)) ** 0.5
 
             if self.scale_attn_by_layer:
-                scale_factor /= float(self.layer_idx)
+                scale_factor /= float(self.layer_idx + 1)
 
             # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
             with autocast(enabled=False):
@@ -213,7 +213,7 @@ class GPT2Attention(nn.Module):
 
             # [Required for Mistral-GPT2] Layer-wise attention scaling
             if self.scale_attn_by_layer:
-                attn_weights = attn_weights / float(self.layer_idx)
+                attn_weights = attn_weights / float(self.layer_idx + 1)
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
@@ -629,7 +629,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([GPT2Block(config, layer_idx=i + 1) for i in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
