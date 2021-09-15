@@ -3,7 +3,7 @@ import functools
 import inspect
 import operator
 import random
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
 import torch
 from packaging import version
@@ -24,36 +24,90 @@ from .. import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+    MODEL_MAPPING,
     GPT2DoubleHeadsModel,
+    PretrainedConfig,
     PreTrainedModel,
     logging,
 )
-from ..models.albert import AlbertModel
+from ..models.albert import AlbertConfig
 from ..models.auto import get_values
-from ..models.bert import BertModel
-from ..models.distilbert import DistilBertModel
-from ..models.electra import ElectraModel
-from ..models.gpt2 import GPT2Model
-from ..models.gpt_neo import GPTNeoModel
-from ..models.gptj import GPTJModel
-from ..models.megatron_bert import MegatronBertModel
-from ..models.mobilebert import MobileBertModel
-from ..models.t5 import T5Model
+from ..models.bert import BertConfig
+from ..models.distilbert import DistilBertConfig
+from ..models.electra import ElectraConfig
+from ..models.gpt2 import GPT2Config
+from ..models.gpt_neo import GPTNeoConfig
+from ..models.gptj import GPTJConfig
+from ..models.megatron_bert import MegatronBertConfig
+from ..models.mobilebert import MobileBertConfig
+from ..models.t5 import T5Config
 
 
 logger = logging.get_logger(__name__)
 
-SUPPORTED_ARCHITECTURES = (
-    AlbertModel,
-    BertModel,
-    DistilBertModel,
-    ElectraModel,
-    GPT2Model,
-    GPTJModel,
-    GPTNeoModel,
-    MegatronBertModel,
-    MobileBertModel,
-    T5Model,
+
+T = TypeVar("T")
+TypeOrListOfType = Union[T, List[T]]
+
+
+def _generate_supported_model_classes(
+    model_config_class: Type[PretrainedConfig],
+    supported_tasks: Optional[TypeOrListOfType[str]] = None,
+    other_model_classes: Optional[TypeOrListOfType[Type[PretrainedConfig]]] = None,
+):
+    task_mapping = {
+        "default": MODEL_MAPPING,
+        "pretraining": MODEL_FOR_PRETRAINING_MAPPING,
+        "next-sentence-prediction": MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+        "masked-lm": MODEL_FOR_MASKED_LM_MAPPING,
+        "causal-lm": MODEL_FOR_CAUSAL_LM_MAPPING,
+        "seq2seq-lm": MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        "multiple-choice": MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        "sequence-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    }
+
+    if supported_tasks is None:
+        supported_tasks = task_mapping.keys()
+    if isinstance(supported_tasks, str):
+        supported_tasks = [supported_tasks]
+
+    model_classes = []
+    for task in supported_tasks:
+        model_class = task_mapping[task].get(model_config_class, None)
+        if model_class:
+            model_classes.append(model_class)
+
+    if other_model_classes:
+        if not isinstance(other_model_classes, (tuple, list)):
+            other_model_classes = [other_model_classes]
+        model_classes.extend(other_model_classes)
+
+    return tuple(model_classes)
+
+
+_SUPPORTED_MODELS = (
+    *_generate_supported_model_classes(AlbertConfig),
+    *_generate_supported_model_classes(BertConfig),
+    *_generate_supported_model_classes(DistilBertConfig),
+    *_generate_supported_model_classes(MobileBertConfig),
+    *_generate_supported_model_classes(ElectraConfig),
+    *_generate_supported_model_classes(MegatronBertConfig),
+    *_generate_supported_model_classes(GPT2Config, other_model_classes=GPT2DoubleHeadsModel),
+    *_generate_supported_model_classes(GPTJConfig),
+    *_generate_supported_model_classes(GPTNeoConfig),
+    *_generate_supported_model_classes(T5Config),
+)
+
+_SUPPORTED_MODELS_FOR_DYNAMIC_AXES = (
+    *_generate_supported_model_classes(AlbertConfig),
+    *_generate_supported_model_classes(BertConfig),
+    *_generate_supported_model_classes(DistilBertConfig),
+    *_generate_supported_model_classes(MobileBertConfig),
+    *_generate_supported_model_classes(ElectraConfig),
+    *_generate_supported_model_classes(MegatronBertConfig),
 )
 
 
@@ -277,8 +331,6 @@ class HFTracer(Tracer):
             setattr(model, cache_name, getattr(clone, cache_name))
 
     def trace(self, root: PreTrainedModel, concrete_args: Optional[Dict[str, Any]] = None, method_names=None) -> Graph:
-        # if not isinstance(root, SUPPORTED_ARCHITECTURES):
-        #     raise ValueError(f"{type(root)} not supported, supported architectures: {','.join(SUPPORTED_ARCHITECTURES)}")
         sig = inspect.signature(root.forward)
         input_names = sig.parameters.keys() - concrete_args.keys()
 
@@ -322,7 +374,7 @@ class HFTracer(Tracer):
             if path is None:
                 path = self._insert_module_as_submodule(mod)
             if path is None:
-                raise NameError("module is not installed as a submodule")
+                raise NameError("Module is not installed as a submodule")
             self.prev_module = path
             return path
 
@@ -335,7 +387,7 @@ class HFTracer(Tracer):
                     return n
             path = self._insert_module_as_submodule(mod)
             if path is None:
-                raise NameError("module is not installed as a submodule")
+                raise NameError("Module is not installed as a submodule")
             self.prev_module = path
             return path
 
@@ -402,8 +454,8 @@ def _change_view_methods(gm: GraphModule, mapping: Union[Dict[Node, int], Dict[i
     return gm
 
 
-def _do_something(gm: GraphModule, mapping) -> GraphModule:
-    # TODO: is this really useful compared to patch_arguments?
+def _patch_getitem(gm: GraphModule, mapping: Union[Dict[Node, int], Dict[int, Node]]) -> GraphModule:
+    # TODO: combine this with the patch_argument function which seems to do almost the same thing.
     graph = gm.graph
     for node in graph.nodes:
         if node.op == "call_function" and node.target == operator.getitem:
@@ -434,7 +486,7 @@ def _do_something(gm: GraphModule, mapping) -> GraphModule:
         return gm
 
 
-def _register_position_ids_and_replace(gm: GraphModule, sequence_length_node) -> GraphModule:
+def _register_position_ids_and_replace(gm: GraphModule, sequence_length_node: Node) -> GraphModule:
     """
     Redefines position_ids (as tracing with static shapes can introduce optimizations that fix position_ids to a value
     not suitable for dynamic input shapes), and replaces old position_ids usage by the redefined version.
@@ -481,7 +533,7 @@ def _register_position_ids_and_replace(gm: GraphModule, sequence_length_node) ->
     return gm
 
 
-def transform_to_dynamic_input(gm: GraphModule, is_retracing=False) -> GraphModule:
+def transform_to_dynamic_input(gm: GraphModule, is_retracing: bool = False) -> GraphModule:
     """Transformation that enables traced models to perform inference on dynamic input shapes."""
     graph = gm.graph
     input_names = gm.dummy_inputs.keys()
@@ -507,7 +559,7 @@ def transform_to_dynamic_input(gm: GraphModule, is_retracing=False) -> GraphModu
         pass
 
     gm = _change_view_methods(gm, static2dynamic)
-    gm = _do_something(gm, static2dynamic)
+    gm = _patch_getitem(gm, static2dynamic)
 
     if (
         gm.use_dynamic_sequence_length
@@ -515,31 +567,6 @@ def transform_to_dynamic_input(gm: GraphModule, is_retracing=False) -> GraphModu
         and hasattr(gm.config, "max_position_embeddings")
     ):
         gm = _register_position_ids_and_replace(gm, encoder_sequence_length_node)
-
-    # for node in graph.nodes:
-
-    # if dynamic_batch_size or dynamic_encoder_sequence_length:
-    #     bs = mapping.get(gm.static_batch_size, gm.static_batch_size)
-    #     encoder_seqlen = mapping.get(gm.static_sequence_length[0], gm.static_sequence_length[0])
-    #     with graph.inserting_after(bs if isinstance(bs, Node) else encoder_seqlen):
-    #         mapping[gm.static_batch_size * gm.static_sequence_length[0]] = graph.call_function(
-    #             operator.mul,
-    #             args=(bs, encoder_seqlen)
-    #         )
-
-    # import pdb; pdb.set_trace()
-
-    # if (
-    #     need_to_insert_decoder_shape_node
-    #     and node.op == "placeholder"
-    #     and "decoder" in node.name
-    #     and node.name in input_names
-    # ):
-    #     with graph.inserting_after(node):
-    #         if static_decoder_sequence_length > 0:
-    #             decoder_sequence_length_node = graph.call_method("size", args=(node, 1))
-    #             mapping[static_decoder_sequence_length] = decoder_sequence_length_node
-    #     need_to_insert_decoder_shape_node = False
 
     graph.lint()
     gm.recompile()
@@ -550,7 +577,7 @@ def transform_to_dynamic_input(gm: GraphModule, is_retracing=False) -> GraphModu
     return gm
 
 
-def patch_arguments(gm: GraphModule, mapping) -> GraphModule:
+def patch_arguments(gm: GraphModule, mapping: Union[Dict[Node, int], Dict[int, Node]]) -> GraphModule:
     """Helper function that patches node arguments (supports regular types, tuples and slices) using the mapping."""
 
     def _patch_slice(s, mapping):
@@ -629,9 +656,9 @@ def retrace_graph_with(
     restoring anything necessary after the retrace.
     """
     if tracer is None and func is None:
-        raise ValueError("either a tracer or a function using a tracer must be provided.")
+        raise ValueError("Either a tracer or a function using a tracer must be provided.")
     elif tracer is not None and func is not None:
-        raise ValueError("either provide a tracer or a function using a tracer, but not both.")
+        raise ValueError("Either provide a tracer or a function using a tracer, but not both.")
     else:
         gm, attributes = prepare_for_retracing(gm)
         tracing_func = tracer.trace if tracer else func
@@ -640,7 +667,7 @@ def retrace_graph_with(
         return traced
 
 
-def _generate_random_int(low=3, high=100, forbidden_values=None):
+def _generate_random_int(low: int = 3, high: int = 100, forbidden_values: Optional[List[int]] = None):
     if forbidden_values is None:
         forbidden_values = []
     value = random.randint(low, high)
@@ -653,7 +680,7 @@ def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
     batch_size: int = 1,
-    sequence_length: Union[int, List[int]] = [128, 128],
+    sequence_length: Union[int, List[int], Tuple[int]] = (128, 128),
     num_choices: int = -1,
 ) -> GraphModule:
 
@@ -715,6 +742,19 @@ def symbolic_trace(
             forbidden_values.append(encoder_sequence_length)
             decoder_sequence_length = _generate_random_int(forbidden_values=forbidden_values)
             sequence_length = [encoder_sequence_length, decoder_sequence_length]
+
+    if not isinstance(model, _SUPPORTED_MODELS):
+        supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
+        raise NotImplementedError(
+            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
+        )
+    if (use_dynamic_batch_size or use_dynamic_sequence_length) and not isinstance(
+        model, _SUPPORTED_MODELS_FOR_DYNAMIC_AXES
+    ):
+        supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS_FOR_DYNAMIC_AXES))
+        raise NotImplementedError(
+            f"Dynamic axes are not supported for {model.__class__.__name__} yet, supported models: {supported_model_names}"
+        )
 
     # Tracing.
     tracer = HFTracer(batch_size=batch_size, sequence_length=sequence_length, num_choices=num_choices)

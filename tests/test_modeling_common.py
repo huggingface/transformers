@@ -91,6 +91,7 @@ class ModelTesterMixin:
     all_model_classes = ()
     all_generative_model_classes = ()
     fx_ready_model_classes = ()
+    fx_dynamic_ready_model_classes = ()
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -608,9 +609,6 @@ class ModelTesterMixin:
 
     def test_torch_fx_dynamic_axes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        import pdb
-
-        pdb.set_trace()
         self._create_and_check_torch_fx_tracing(config, inputs_dict, dynamic_axes=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False, dynamic_axes=False):
@@ -620,7 +618,8 @@ class ModelTesterMixin:
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
 
-        for model_class in self.fx_ready_model_classes:
+        model_classes = self.fx_ready_model_classes if not dynamic_axes else self.fx_dynamic_ready_model_classes
+        for model_class in model_classes:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
