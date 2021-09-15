@@ -35,14 +35,15 @@ def rename_keys(state_dict):
     for name in list(state_dict):
         param = state_dict.pop(name)
 
-        # rename latent embeddings
-        name = name.replace("perceiver_encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
-
-        # rename decoder queries
-        name = name.replace(
-            "basic_decoder/~/trainable_position_encoding/pos_embs", "decoder.output_position_encodings.weight"
-        )
-
+        print("Processing name:", name)
+        
+        ## PREPROCESSORS ##
+        
+        # rename text preprocessor embeddings (for MLM model)
+        name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
+        if name.startswith("trainable_position_encoding/pos_embs"):
+            name = name.replace("trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight")
+        
         # rename image preprocessor embeddings (for image classification model)
         name = name.replace("image_preprocessor/~/conv2_d/w", "input_preprocessor.convnet_1x1.weight")
         name = name.replace("image_preprocessor/~/conv2_d/b", "input_preprocessor.convnet_1x1.bias")
@@ -50,12 +51,22 @@ def rename_keys(state_dict):
         name = name.replace("image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/w", "input_preprocessor.positions_projection.weight")
         name = name.replace("image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/b", "input_preprocessor.positions_projection.bias")
         
-        # rename embedding decoder bias
+        ## DECODERS ## 
+        
+        # rename prefix of decoders
+        name = name.replace("classification_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention.")
+        name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
+        name = name.replace("basic_decoder/~/", "decoder.")
+        if "decoder" in name:
+            name = name.replace("trainable_position_encoding/pos_embs", "output_position_encodings.weight")
+        
+        # rename embedding decoder bias (for MLM model)
         name = name.replace("embedding_decoder/bias", "output_postprocessor.bias")
-
-        # rename text preprocessor embeddings (for MLM model)
-        name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
-        name = name.replace("trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight")
+        
+        ## PERCEIVER MODEL ##
+        
+        # rename latent embeddings
+        name = name.replace("perceiver_encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
         
         # rename prefixes
         if name.startswith("perceiver_encoder/~/"):
@@ -64,8 +75,6 @@ def rename_keys(state_dict):
             else:
                 suffix = ""
             name = name.replace("perceiver_encoder/~/", "encoder." + suffix)
-        if name.startswith("basic_decoder/cross_attention/"):
-            name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
         # rename layernorm parameters
         if "offset" in name:
             name = name.replace("offset", "bias")
