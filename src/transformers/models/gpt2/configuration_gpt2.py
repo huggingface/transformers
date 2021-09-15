@@ -119,7 +119,6 @@ class GPT2Config(PretrainedConfig):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision
 
-
     Example::
 
         >>> from transformers import GPT2Model, GPT2Config
