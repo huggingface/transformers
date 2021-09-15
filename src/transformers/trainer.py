@@ -1977,8 +1977,9 @@ class Trainer:
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
         if self.args.local_rank != -1:
-            self.state.total_flos += distributed_broadcast_scalars([self.current_flos],
-                                                                   device=self.args.device).sum().item()
+            self.state.total_flos += (
+                distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
+            )
             self.current_flos = 0
         else:
             self.state.total_flos += self.current_flos

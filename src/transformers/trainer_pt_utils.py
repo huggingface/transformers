@@ -175,8 +175,9 @@ def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int]
 
 
 def distributed_broadcast_scalars(
-    scalars: List[Union[int, float]], num_total_examples: Optional[int] = None,
-    device: Optional[torch.device] = torch.device('cuda')
+    scalars: List[Union[int, float]],
+    num_total_examples: Optional[int] = None,
+    device: Optional[torch.device] = torch.device("cuda"),
 ) -> torch.Tensor:
     try:
         tensorized_scalar = torch.tensor(scalars).to(device)
