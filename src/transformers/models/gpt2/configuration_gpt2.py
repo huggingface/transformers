@@ -116,7 +116,7 @@ class GPT2Config(PretrainedConfig):
         scale_attn_by_layer_id (:obj:`bool`, `optional`, defaults to :obj:`False):
             Whether to additionally scale attention weights by 1 / layer_idx.
         reorder_and_upcast_attn (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention 
+            Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision
 
 

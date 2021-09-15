@@ -19,12 +19,13 @@ import math
 import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
-from packaging import version
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
+
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     is_amp_available = True
@@ -331,7 +332,7 @@ class GPT2Attention(nn.Module):
             attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
         else:
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
-        
+
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
