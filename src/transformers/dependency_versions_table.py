@@ -52,7 +52,7 @@ deps = {
     "sacremoses": "sacremoses",
     "sagemaker": "sagemaker>=2.31.0",
     "scikit-learn": "scikit-learn",
-    "sentencepiece": "sentencepiece==0.1.91",
+    "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
     "soundfile": "soundfile",
     "sphinx-copybutton": "sphinx-copybutton",
     "sphinx-markdown-tables": "sphinx-markdown-tables",
