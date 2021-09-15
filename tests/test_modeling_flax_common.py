@@ -611,10 +611,10 @@ class FlaxModelTesterMixin:
             # check if all params are still in float32 when dtype of computation is bfloat16
             model = model_class(config, dtype=jnp.dtype("bfloat16"))
             types = jax.tree_map(lambda x: x.dtype, model.params)
-            types = flatten_dict(types).values()
+            types = flatten_dict(types)
 
-            for type_ in types:
-                self.assertEquals(type_, jnp.float32)
+            for name, type_ in types.items():
+                self.assertEquals(type_, jnp.float32, msg=f"param {name} is not initialized in fp32.")
 
 
 @require_flax
