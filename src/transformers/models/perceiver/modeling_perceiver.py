@@ -513,8 +513,8 @@ class PerceiverEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions else None
 
-        # print("Shape of latents before cross-attention:", hidden_states.shape)
-        # print("First few elements of latents:", hidden_states[0, :3, :3])
+        print("Shape of latents before cross-attention:", hidden_states.shape)
+        print("First few elements of latents:", hidden_states[0, :3, :3])
         # print("Shape of inputs before cross-attention:", inputs.shape)
         # print("First few elements of inputs:", inputs[0, :3, :3])
 

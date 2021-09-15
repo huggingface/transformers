@@ -84,6 +84,26 @@ class PerceiverFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
+    def center_crop(image):
+        image = self.to_numpy_array(image, rescale=False, channel_first=False)
+        shape = image.shape
+
+        image_height = shape[0]
+        image_width = shape[1]
+
+        padded_center_crop_size = ((224 / (224 + 32)) *
+            np.minimum(image_height, image_width).astype(np.float32)).astype(np.int32)
+
+        offset_height = ((image_height - padded_center_crop_size) + 1) // 2
+        offset_width = ((image_width - padded_center_crop_size) + 1) // 2
+        crop_window = [offset_height, offset_width,
+                        padded_center_crop_size, padded_center_crop_size]
+
+        # image = tf.image.crop_to_bounding_box(image_bytes, *crop_window)
+        image = image[crop_window[0]:crop_window[0] + crop_window[2], crop_window[1]:crop_window[1]+crop_window[3]]
+
+        return image
+    
     def __call__(
         self,
         images: Union[
@@ -146,7 +166,7 @@ class PerceiverFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         # transformations (center cropping + resizing + normalization)
         if self.do_center_crop and self.crop_size is not None:
-            images = [self.center_crop(image, self.crop_size) for image in images]
+            images = [self.center_crop(image) for image in images]
         if self.do_resize and self.size is not None and self.resample is not None:
             images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
         if self.do_normalize:
