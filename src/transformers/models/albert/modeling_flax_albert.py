@@ -152,19 +152,16 @@ class FlaxAlbertEmbeddings(nn.Module):
             self.config.vocab_size,
             self.config.embedding_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.position_embeddings = nn.Embed(
             self.config.max_position_embeddings,
             self.config.embedding_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.token_type_embeddings = nn.Embed(
             self.config.type_vocab_size,
             self.config.embedding_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -199,21 +196,21 @@ class FlaxAlbertSelfAttention(nn.Module):
         self.query = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.key = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.value = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
@@ -278,13 +275,13 @@ class FlaxAlbertLayer(nn.Module):
         self.attention = FlaxAlbertSelfAttention(self.config, dtype=self.dtype)
         self.ffn = nn.Dense(
             self.config.intermediate_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.activation = ACT2FN[self.config.hidden_act]
         self.ffn_output = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.full_layer_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
@@ -413,7 +410,7 @@ class FlaxAlbertEncoder(nn.Module):
         self.layers_per_group = int(self.config.num_hidden_layers / self.config.num_hidden_groups)
         self.embedding_hidden_mapping_in = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.layers = [
@@ -594,7 +591,7 @@ class FlaxAlbertModule(nn.Module):
         if self.add_pooling_layer:
             self.pooler = nn.Dense(
                 self.config.hidden_size,
-                kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+                kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
                 dtype=self.dtype,
                 name="pooler",
             )
