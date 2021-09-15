@@ -22,6 +22,7 @@ from typing import Optional, Tuple
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.cuda.amp import autocast
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -124,7 +125,7 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
 
 
 class GPT2Attention(nn.Module):
-    def __init__(self, config, is_cross_attention=False):
+    def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
 
         max_positions = config.max_position_embeddings
@@ -147,6 +148,11 @@ class GPT2Attention(nn.Module):
 
         self.scale_attn_weights = config.scale_attn_weights
         self.is_cross_attention = is_cross_attention
+
+        # [Required for Mistral-GPT2] Layer-wise attention scaling, reordering, and upcasting
+        self.scale_attn_by_layer = config.scale_attn_by_layer
+        self.layer_idx = layer_idx
+        self.reorder_and_upcast_attn = config.reorder_and_upcast_attn
 
         if self.is_cross_attention:
             self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
@@ -176,10 +182,49 @@ class GPT2Attention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
-        if self.scale_attn_weights:
-            attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
+        if self.reorder_and_upcast_attn:
+            # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
+            bsz, num_heads, seq_len, dk = query.size()
+
+            # Preallocate attn_weights for `baddbmm`
+            attn_weights = torch.empty(
+                bsz * num_heads,
+                seq_len,
+                seq_len,
+                dtype=torch.float32,
+                device=query.device
+            )
+
+            # Compute Scale Factor
+            scale_factor = 1.0
+            if self.scale_attn_weights:
+                scale_factor /= float(value.size(-1)) ** 0.5
+
+            if self.scale_attn_by_layer:
+                scale_factor /= float(self.layer_idx)
+
+            # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
+            with autocast(enabled=False):
+                q, k = query.reshape(-1, seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, seq_len)
+                attn_weights = torch.baddbmm(
+                    attn_weights,
+                    q.float(),
+                    k.float(),
+                    beta=0,
+                    alpha=scale_factor
+                )
+                attn_weights = attn_weights.reshape(bsz, num_heads, seq_len, seq_len)
+
+        else:
+            attn_weights = torch.matmul(query, key.transpose(-1, -2))
+
+            if self.scale_attn_weights:
+                attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
+
+            # [Required for Mistral-GPT2] Layer-wise attention scaling
+            if self.scale_attn_by_layer:
+                attn_weights = attn_weights / float(self.layer_idx)
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
@@ -192,6 +237,9 @@ class GPT2Attention(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
+
+        # Downcast (if necessary) back to V dtype (half/fp16 if mixed-precision) -- No-Op if in float()
+        attn_weights = attn_weights.type(value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
         # Mask heads if we want to
@@ -287,13 +335,13 @@ class GPT2MLP(nn.Module):
 
 
 class GPT2Block(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = GPT2Attention(config)
+        self.attn = GPT2Attention(config, layer_idx=layer_idx)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
@@ -581,7 +629,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([GPT2Block(config) for _ in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([GPT2Block(config, layer_idx=i+1) for i in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
