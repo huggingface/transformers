@@ -38,6 +38,7 @@ from .file_utils import (
     ModelOutput,
     PushToHubMixin,
     cached_path,
+    copy_func,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
@@ -593,6 +594,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 self = getattr(self, self.base_model_prefix)
             self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
 
+        for module in self.modules():
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
+
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
         uninitialized_encoder_weights: List[str] = []
@@ -882,6 +887,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return new_lm_head
 
+    def resize_position_embeddings(self, new_num_position_embeddings: int):
+        raise NotImplementedError(
+            f"`resize_position_embeddings` is not implemented for {self.__class__}`. To implement it, you should "
+            f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`"
+        )
+
+    def get_position_embeddings(self) -> Union[nn.Embedding, Tuple[nn.Embedding]]:
+        raise NotImplementedError(
+            f"`get_position_embeddings` is not implemented for {self.__class__}`. To implement it, you should "
+            f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`"
+        )
+
     def init_weights(self):
         """
         If needed prunes and maybe initializes weights.
@@ -1033,14 +1050,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
                 Can be either:
 
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
                     - a string or path valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `model id` string of a pretrained
@@ -1260,8 +1277,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
                     f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
-                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}\n\n"
                 )
+
+                if revision is not None:
+                    msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
+
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
@@ -1276,12 +1297,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if state_dict is None:
                 try:
                     state_dict = torch.load(resolved_archive_file, map_location="cpu")
-                except Exception:
-                    raise OSError(
-                        f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
-                        f"at '{resolved_archive_file}'"
-                        "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
-                    )
+                except Exception as e:
+                    try:
+                        with open(resolved_archive_file) as f:
+                            if f.read().startswith("version"):
+                                raise OSError(
+                                    "You seem to have cloned a repository without having git-lfs installed. Please install "
+                                    "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
+                                    "you cloned."
+                                )
+                            else:
+                                raise ValueError from e
+                    except (UnicodeDecodeError, ValueError):
+                        raise OSError(
+                            f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
+                            f"at '{resolved_archive_file}'"
+                            "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
+                        )
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -1408,6 +1440,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         add_prefix = has_prefix_module and not expects_prefix_module
 
         if remove_prefix:
+            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
             expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
         elif add_prefix:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
@@ -1489,6 +1522,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             start_prefix = cls.base_model_prefix + "."
         if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
             model_to_load = getattr(model, cls.base_model_prefix)
+            if any(key in expected_keys_not_prefixed for key in loaded_keys):
+                raise ValueError(
+                    "The state dictionary of the model you are training to load is corrupted. Are you sure it was "
+                    "properly saved?"
+                )
 
         load(model_to_load, prefix=start_prefix)
 
@@ -1553,6 +1591,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 retrieved_modules.append(module)
 
         return retrieved_modules
+
+
+# To update the docstring, we need to copy the method, otherwise we change the original docstring.
+PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
+PreTrainedModel.push_to_hub.__doc__ = PreTrainedModel.push_to_hub.__doc__.format(
+    object="model", object_class="AutoModel", object_files="model checkpoint"
+)
 
 
 class Conv1D(nn.Module):

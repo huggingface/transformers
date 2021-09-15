@@ -37,6 +37,7 @@ from .configuration_dpr import DPRConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DPRConfig"
+_CHECKPOINT_FOR_DOC = "facebook/dpr-ctx_encoder-single-nq-base"
 
 DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-ctx_encoder-single-nq-base",
@@ -626,7 +627,7 @@ class DPRReader(DPRPretrainedReader):
             ...         return_tensors='pt'
             ...     )
             >>> outputs = model(**encoded_inputs)
-            >>> start_logits = outputs.stat_logits
+            >>> start_logits = outputs.start_logits
             >>> end_logits = outputs.end_logits
             >>> relevance_logits = outputs.relevance_logits
 

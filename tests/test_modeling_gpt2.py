@@ -17,7 +17,7 @@
 import datetime
 import unittest
 
-from transformers import is_torch_available
+from transformers import GPT2Config, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -30,9 +30,9 @@ if is_torch_available():
 
     from transformers import (
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
-        GPT2Config,
         GPT2DoubleHeadsModel,
         GPT2ForSequenceClassification,
+        GPT2ForTokenClassification,
         GPT2LMHeadModel,
         GPT2Model,
         GPT2Tokenizer,
@@ -119,25 +119,7 @@ class GPT2ModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = GPT2Config(
-            vocab_size=self.vocab_size,
-            n_embd=self.hidden_size,
-            n_layer=self.num_hidden_layers,
-            n_head=self.num_attention_heads,
-            # intermediate_size=self.intermediate_size,
-            # hidden_act=self.hidden_act,
-            # hidden_dropout_prob=self.hidden_dropout_prob,
-            # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            n_positions=self.max_position_embeddings,
-            n_ctx=self.max_position_embeddings,
-            # type_vocab_size=self.type_vocab_size,
-            # initializer_range=self.initializer_range,
-            use_cache=not gradient_checkpointing,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
-            gradient_checkpointing=gradient_checkpointing,
-        )
+        config = self.get_config(gradient_checkpointing=gradient_checkpointing)
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
 
@@ -151,6 +133,27 @@ class GPT2ModelTester:
             sequence_labels,
             token_labels,
             choice_labels,
+        )
+
+    def get_config(self, gradient_checkpointing=False):
+        return GPT2Config(
+            vocab_size=self.vocab_size,
+            n_embd=self.hidden_size,
+            n_layer=self.num_hidden_layers,
+            n_head=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            hidden_act=self.hidden_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            n_positions=self.max_position_embeddings,
+            n_ctx=self.max_position_embeddings,
+            type_vocab_size=self.type_vocab_size,
+            initializer_range=self.initializer_range,
+            use_cache=not gradient_checkpointing,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            gradient_checkpointing=gradient_checkpointing,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -364,6 +367,16 @@ class GPT2ModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    def create_and_check_gpt2_for_token_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = GPT2ForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -392,7 +405,7 @@ class GPT2ModelTester:
 class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification)
+        (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification, GPT2ForTokenClassification)
         if is_torch_available()
         else ()
     )
@@ -459,6 +472,10 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_gpt2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
+
+    def test_gpt2_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_for_token_classification(*config_and_inputs)
 
     def test_gpt2_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)

@@ -187,7 +187,6 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["input_values", "attention_mask"]
             self.assertListEqual(arg_names[:2], expected_arg_names)
 
-    @slow
     # overwrite because of `input_values`
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -245,6 +244,24 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
         for batch_sum in mask.sum(axis=-1):
             self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
 
+    def test_compute_mask_indices_attn_mask_overlap(self):
+        batch_size = 4
+        sequence_length = 80
+        mask_prob = 0.5
+        mask_length = 4
+
+        attention_mask = np.ones((batch_size, sequence_length), dtype=np.int32)
+        attention_mask[:2, sequence_length // 2 :] = 0
+
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
+        )
+
+        for batch_sum in mask.sum(axis=-1):
+            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
+
+        self.assertTrue(mask[:2, sequence_length // 2 :].sum() == 0)
+
     def test_compute_perplexity(self):
         probs = np.arange(100).reshape(2, 5, 10) / 100
 
@@ -285,6 +302,48 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
             self.assertTrue(((negative - features.reshape(negative.shape)) == 0).sum() == 0.0)
 
         # make sure that full vectors are sampled and not values of vectors
+        # => this means that `unique()` yields a single value for `hidden_size` dim
+        self.assertTrue(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+
+    def test_sample_negatives_with_attn_mask(self):
+        batch_size = 2
+        sequence_length = 10
+        hidden_size = 4
+        num_negatives = 3
+
+        features = (np.arange(sequence_length * hidden_size) // hidden_size).reshape(
+            sequence_length, hidden_size
+        )  # each value in vector consits of same value
+
+        # second half of last input tensor is padded
+        attention_mask = np.ones((batch_size, sequence_length), dtype=np.int8)
+        attention_mask[-1, sequence_length // 2 :] = 0
+
+        forbidden_indices = (
+            np.arange(sequence_length // 2, sequence_length, dtype=np.int32) + (batch_size - 1) * sequence_length
+        ).tolist()
+
+        features = np.broadcast_to(features[None, :], (batch_size, sequence_length, hidden_size))
+
+        negative_indices = _sample_negative_indices(features.shape, num_negatives, attention_mask=attention_mask)
+
+        # make sure that no padding tokens are sampled
+        self.assertTrue(all([idx not in negative_indices for idx in forbidden_indices]))
+
+        features = features.reshape(-1, hidden_size)  # BTC => (BxT)C
+        # take negative vectors from sampled indices
+        sampled_negatives = features[negative_indices.reshape(-1)]
+        negatives = sampled_negatives.reshape(batch_size, sequence_length, num_negatives, hidden_size).transpose(
+            2, 0, 1, 3
+        )
+
+        self.assertTrue(negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size))
+
+        # make sure no negatively sampled vector is actually a positive one
+        for negative in negatives:
+            self.assertTrue(((negative - features.reshape(negative.shape)) == 0).sum() == 0.0)
+
+        # make sure that full vectors are sampled and not just slices of vectors
         # => this means that `unique()` yields a single value for `hidden_size` dim
         self.assertTrue(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 

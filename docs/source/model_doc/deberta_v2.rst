@@ -53,12 +53,13 @@ New in v2:
   transformer layer to better learn the local dependency of input tokens.
 - **Sharing position projection matrix with content projection matrix in attention layer** Based on previous
   experiments, this can save parameters without affecting the performance.
-- **Apply bucket to encode relative postions** The DeBERTa-v2 model uses log bucket to encode relative positions
+- **Apply bucket to encode relative positions** The DeBERTa-v2 model uses log bucket to encode relative positions
   similar to T5.
 - **900M model & 1.5B model** Two additional model sizes are available: 900M and 1.5B, which significantly improves the
   performance of downstream tasks.
 
-This model was contributed by `DeBERTa <https://huggingface.co/DeBERTa>`__. The original code can be found `here
+This model was contributed by `DeBERTa <https://huggingface.co/DeBERTa>`__. This model TF 2.0 implementation was
+contributed by `kamalkraj <https://huggingface.co/kamalkraj>`__. The original code can be found `here
 <https://github.com/microsoft/DeBERTa>`__.
 
 
@@ -117,3 +118,45 @@ DebertaV2ForQuestionAnswering
 
 .. autoclass:: transformers.DebertaV2ForQuestionAnswering
     :members: forward
+
+
+TFDebertaV2Model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFDebertaV2Model
+    :members: call
+
+
+TFDebertaV2PreTrainedModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFDebertaV2PreTrainedModel
+    :members: call
+
+
+TFDebertaV2ForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFDebertaV2ForMaskedLM
+    :members: call
+
+
+TFDebertaV2ForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFDebertaV2ForSequenceClassification
+    :members: call
+
+
+TFDebertaV2ForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFDebertaV2ForTokenClassification
+    :members: call
+
+
+TFDebertaV2ForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFDebertaV2ForQuestionAnswering
+    :members: call

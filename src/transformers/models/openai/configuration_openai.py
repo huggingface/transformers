@@ -115,6 +115,12 @@ class OpenAIGPTConfig(PretrainedConfig):
     """
 
     model_type = "openai-gpt"
+    attribute_map = {
+        "max_position_embeddings": "n_positions",
+        "hidden_size": "n_embd",
+        "num_attention_heads": "n_head",
+        "num_hidden_layers": "n_layer",
+    }
 
     def __init__(
         self,
@@ -138,8 +144,6 @@ class OpenAIGPTConfig(PretrainedConfig):
         summary_first_dropout=0.1,
         **kwargs
     ):
-        super().__init__(**kwargs)
-
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx
         self.n_positions = n_positions
@@ -158,19 +162,4 @@ class OpenAIGPTConfig(PretrainedConfig):
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
-
-    @property
-    def max_position_embeddings(self):
-        return self.n_positions
-
-    @property
-    def hidden_size(self):
-        return self.n_embd
-
-    @property
-    def num_attention_heads(self):
-        return self.n_head
-
-    @property
-    def num_hidden_layers(self):
-        return self.n_layer
+        super().__init__(**kwargs)

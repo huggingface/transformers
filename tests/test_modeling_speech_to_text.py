@@ -14,13 +14,13 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Speech2Text model. """
 
-
 import copy
 import inspect
 import os
 import tempfile
 import unittest
 
+from transformers import Speech2TextConfig
 from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     is_torch_available,
@@ -40,12 +40,7 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_te
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Speech2TextConfig,
-        Speech2TextForConditionalGeneration,
-        Speech2TextModel,
-        Speech2TextProcessor,
-    )
+    from transformers import Speech2TextForConditionalGeneration, Speech2TextModel, Speech2TextProcessor
     from transformers.models.speech_to_text.modeling_speech_to_text import Speech2TextDecoder, Speech2TextEncoder
 
 
@@ -142,7 +137,17 @@ class Speech2TextModelTester:
         attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(2)
 
-        config = Speech2TextConfig(
+        config = self.get_config()
+        inputs_dict = prepare_speech_to_text_inputs_dict(
+            config,
+            input_features=input_features,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+        )
+        return config, inputs_dict
+
+    def get_config(self):
+        return Speech2TextConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -165,13 +170,6 @@ class Speech2TextModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_speech_to_text_inputs_dict(
-            config,
-            input_features=input_features,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-        )
-        return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
@@ -243,11 +241,15 @@ class Speech2TextModelTester:
             decoder.save_pretrained(tmpdirname)
             decoder = Speech2TextDecoder.from_pretrained(tmpdirname).to(torch_device)
 
+        encoder_attention_mask = encoder._get_feature_vector_attention_mask(
+            encoder_last_hidden_state.shape[1], inputs_dict["attention_mask"]
+        )
+
         last_hidden_state_2 = decoder(
             input_ids=inputs_dict["decoder_input_ids"],
             attention_mask=inputs_dict["decoder_attention_mask"],
             encoder_hidden_states=encoder_last_hidden_state,
-            encoder_attention_mask=inputs_dict["attention_mask"],
+            encoder_attention_mask=encoder_attention_mask,
         )[0]
 
         self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
@@ -290,6 +292,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
+    # not implemented currently
     def test_inputs_embeds(self):
         pass
 
@@ -354,7 +357,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             else:
                 seq_length = self.model_tester.seq_length
 
-            subsampled_seq_length = model._get_subsampled_output_lengths(seq_length)
+            subsampled_seq_length = model._get_feat_extract_output_lengths(seq_length)
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -404,8 +407,8 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             model.to(torch_device)
             model.eval()
 
-            subsampled_encoder_seq_length = model._get_subsampled_output_lengths(encoder_seq_length)
-            subsampled_encoder_key_length = model._get_subsampled_output_lengths(encoder_key_length)
+            subsampled_encoder_seq_length = model._get_feat_extract_output_lengths(encoder_seq_length)
+            subsampled_encoder_key_length = model._get_feat_extract_output_lengths(encoder_key_length)
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))

@@ -87,12 +87,13 @@ def get_model_table_from_auto_modules():
     transformers = spec.loader.load_module()
 
     # Dictionary model names to config.
+    config_maping_names = transformers.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
     model_name_to_config = {
-        name: transformers.CONFIG_MAPPING[code] for code, name in transformers.MODEL_NAMES_MAPPING.items()
+        name: config_maping_names[code]
+        for code, name in transformers.MODEL_NAMES_MAPPING.items()
+        if code in config_maping_names
     }
-    model_name_to_prefix = {
-        name: config.__name__.replace("Config", "") for name, config in model_name_to_config.items()
-    }
+    model_name_to_prefix = {name: config.replace("Config", "") for name, config in model_name_to_config.items()}
 
     # Dictionaries flagging if each model prefix has a slow/fast tokenizer, backend in PT/TF/Flax.
     slow_tokenizers = collections.defaultdict(bool)
@@ -130,7 +131,7 @@ def get_model_table_from_auto_modules():
 
     # Let's build that table!
     model_names = list(model_name_to_config.keys())
-    model_names.sort()
+    model_names.sort(key=str.lower)
     columns = ["Model", "Tokenizer slow", "Tokenizer fast", "PyTorch support", "TensorFlow support", "Flax Support"]
     # We'll need widths to properly display everything in the center (+2 is to leave one extra space on each side).
     widths = [len(c) + 2 for c in columns]

@@ -1213,18 +1213,14 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
         if inputs["attention_mask"] is not None:
             # compute real output lengths according to convolution formula
             output_lengths = self._get_feat_extract_output_lengths(tf.reduce_sum(inputs["attention_mask"], -1))
-            attention_mask = tf.sequence_mask(output_lengths, dtype=hidden_states.dtype)
+
+            attention_mask = tf.sequence_mask(
+                output_lengths, maxlen=shape_list(hidden_states)[1], dtype=hidden_states.dtype
+            )
 
         hidden_states = self.feature_projection(hidden_states, training=inputs["training"])
 
         mask_time_indices = kwargs.get("mask_time_indices", None)
-        if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
-            hidden_states = tf.where(
-                tf.cast(mask_time_indices[:, :, tf.newaxis], tf.bool),
-                self.masked_spec_embed[tf.newaxis, tf.newaxis, :],
-                hidden_states,
-            )
-
         if inputs["training"]:
             hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 

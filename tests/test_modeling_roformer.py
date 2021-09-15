@@ -18,7 +18,7 @@
 import unittest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import RoFormerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -29,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        RoFormerConfig,
         RoFormerForCausalLM,
         RoFormerForMaskedLM,
         RoFormerForMultipleChoice,
@@ -113,7 +112,12 @@ class RoFormerModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = RoFormerConfig(
+        config = self.get_config()
+
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        return RoFormerConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -127,8 +131,6 @@ class RoFormerModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def prepare_config_and_inputs_for_decoder(self):
         (

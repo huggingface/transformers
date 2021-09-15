@@ -24,7 +24,11 @@ Underflow and Overflow Detection
 
 .. note::
 
-   This feature can be used with any ``nn.Module``-based model
+   For multi-GPU training it requires DDP (``torch.distributed.launch``).
+
+.. note::
+
+   This feature can be used with any ``nn.Module``-based model.
 
 If you start getting ``loss=NaN`` or the model inhibits some other abnormal behavior due to ``inf`` or ``nan`` in
 activations or weights one needs to discover where the first underflow or overflow happens and what led to it. Luckily

@@ -39,6 +39,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LukeConfig"
 _TOKENIZER_FOR_DOC = "LukeTokenizer"
+_CHECKPOINT_FOR_DOC = "studio-ousia/luke-base"
 
 LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "studio-ousia/luke-base",
@@ -886,13 +887,12 @@ class LukeModel(LukePreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
-            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if attention_mask is None:

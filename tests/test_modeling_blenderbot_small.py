@@ -17,7 +17,7 @@
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import BlenderbotSmallConfig, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -29,12 +29,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
-        BlenderbotSmallConfig,
-        BlenderbotSmallForConditionalGeneration,
-        BlenderbotSmallModel,
-        BlenderbotSmallTokenizer,
-    )
+    from transformers import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel, BlenderbotSmallTokenizer
     from transformers.models.blenderbot_small.modeling_blenderbot_small import (
         BlenderbotSmallDecoder,
         BlenderbotSmallEncoder,
@@ -73,7 +68,6 @@ def prepare_blenderbot_small_inputs_dict(
     }
 
 
-@require_torch
 class BlenderbotSmallModelTester:
     def __init__(
         self,
@@ -114,7 +108,6 @@ class BlenderbotSmallModelTester:
         self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
             3,
         )
@@ -122,7 +115,12 @@ class BlenderbotSmallModelTester:
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = BlenderbotSmallConfig(
+        config = self.get_config()
+        inputs_dict = prepare_blenderbot_small_inputs_dict(config, input_ids, decoder_input_ids)
+        return config, inputs_dict
+
+    def get_config(self):
+        return BlenderbotSmallConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -138,8 +136,6 @@ class BlenderbotSmallModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_blenderbot_small_inputs_dict(config, input_ids, decoder_input_ids)
-        return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()

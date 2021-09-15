@@ -874,16 +874,21 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         ), "self.model.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the pad_token_id. See T5 docs for more information"
 
         start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
+        start_tokens = tf.cast(start_tokens, input_ids.dtype)  # Ensure compatible dtypes for concatenation
         shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
 
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids = tf.where(
-            shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+            shifted_input_ids == -100,
+            tf.cast(tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids.dtype),
+            shifted_input_ids,
         )
 
         # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0))
+        assert_gte0 = tf.debugging.assert_greater_equal(
+            shifted_input_ids, tf.constant(0, dtype=shifted_input_ids.dtype)
+        )
 
         # Make sure the assertion op is called by wrapping the result in an identity no-op
         with tf.control_dependencies([assert_gte0]):
@@ -1133,8 +1138,10 @@ class TFT5Model(TFT5PreTrainedModel):
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
-            >>> outputs = model(input_ids, decoder_input_ids=decoder_input_ids)
 
+            >>> # forward pass
+            >>> outputs = model(input_ids, decoder_input_ids=decoder_input_ids)
+            >>> last_hidden_states = outputs.last_hidden_state
 
         """
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
@@ -1321,15 +1328,18 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
 
+            >>> # training
             >>> inputs = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='tf').input_ids
-            >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='tf').input_ids
+            >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='tf').input_ids
             >>> outputs = model(inputs, labels=labels)
             >>> loss = outputs.loss
             >>> logits = outputs.logits
 
-            >>> inputs = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="tf").input_ids  # Batch size 1
-
-            >>> result = model.generate(inputs)
+            >>> # inference
+            >>> inputs = tokenizer("summarize: studies have shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
+            >>> outputs = model.generate(inputs)
+            >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+            >>> # studies have shown that owning a dog is good for you
 
         """
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
@@ -1406,6 +1416,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             logits = self.shared(sequence_output, mode="linear")
         else:
             logits = self.lm_head(sequence_output)
+
+        logits = tf.cast(logits, tf.float32)
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
@@ -1569,14 +1581,13 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import T5Tokenizer, TFT5Model
+            >>> from transformers import T5Tokenizer, TFT5EncoderModel
 
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = TFT5EncoderModel.from_pretrained('t5-small')
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
             >>> outputs = model(input_ids)
-
 
         """
         inputs = input_processing(

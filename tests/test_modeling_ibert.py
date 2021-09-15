@@ -17,7 +17,7 @@
 import copy
 import unittest
 
-from transformers import is_torch_available
+from transformers import IBertConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -30,7 +30,6 @@ if is_torch_available():
 
     from transformers import (
         IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        IBertConfig,
         IBertForMaskedLM,
         IBertForMultipleChoice,
         IBertForQuestionAnswering,
@@ -97,7 +96,12 @@ class IBertModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = IBertConfig(
+        config = self.get_config()
+
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        return IBertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -111,8 +115,6 @@ class IBertModelTester:
             initializer_range=self.initializer_range,
             quant_mode=True,
         )
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels

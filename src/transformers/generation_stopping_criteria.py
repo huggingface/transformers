@@ -35,7 +35,7 @@ class StoppingCriteria(ABC):
     """Abstract base class for all stopping criteria that can be applied during generation."""
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, score: torch.FloatTensor, **kwargs) -> bool:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
         raise NotImplementedError("StoppingCriteria needs to be subclassed")
 
 

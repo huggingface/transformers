@@ -88,6 +88,7 @@ if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VA
             "tf-nightly-cpu",
             "tf-nightly-gpu",
             "intel-tensorflow",
+            "intel-tensorflow-avx512",
             "tensorflow-rocm",
             "tensorflow-macos",
         )
@@ -134,6 +135,14 @@ try:
         _datasets_available = False
 except importlib_metadata.PackageNotFoundError:
     _datasets_available = False
+
+
+_detectron2_available = importlib.util.find_spec("detectron2") is not None
+try:
+    _detectron2_version = importlib_metadata.version("detectron2")
+    logger.debug(f"Successfully imported detectron2 version {_detectron2_version}")
+except importlib_metadata.PackageNotFoundError:
+    _detectron2_available = False
 
 
 _faiss_available = importlib.util.find_spec("faiss") is not None
@@ -268,13 +277,9 @@ _default_endpoint = "https://moon-staging.huggingface.co" if _staging_mode else 
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", _default_endpoint)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
-PRESET_MIRROR_DICT = {
-    "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
-    "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
-}
-
-# This is the version of torch required to run torch.fx features.
+# This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
+TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
 
@@ -296,7 +301,7 @@ def is_torch_cuda_available():
         return False
 
 
-_torch_fx_available = False
+_torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
     _torch_fx_available = (torch_version.major, torch_version.minor) == (
@@ -304,9 +309,15 @@ if _torch_available:
         TORCH_FX_REQUIRED_VERSION.minor,
     )
 
+    _torch_onnx_dict_inputs_support_available = torch_version >= TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION
+
 
 def is_torch_fx_available():
     return _torch_fx_available
+
+
+def is_torch_onnx_dict_inputs_support_available():
+    return _torch_onnx_dict_inputs_support_available
 
 
 def is_tf_available():
@@ -342,6 +353,10 @@ def is_torch_tpu_available():
 
 def is_datasets_available():
     return _datasets_available
+
+
+def is_detectron2_available():
+    return _detectron2_available
 
 
 def is_rjieba_available():
@@ -390,6 +405,10 @@ def is_tokenizers_available():
 
 def is_vision_available():
     return importlib.util.find_spec("PIL") is not None
+
+
+def is_pytesseract_available():
+    return importlib.util.find_spec("pytesseract") is not None
 
 
 def is_in_notebook():
@@ -569,6 +588,14 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 
 
 # docstyle-ignore
+DETECTRON2_IMPORT_ERROR = """
+{0} requires the detectron2 library but it was not found in your environment. Checkout the instructions on the
+installation page: https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
+that match your environment.
+"""
+
+
+# docstyle-ignore
 FLAX_IMPORT_ERROR = """
 {0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your environment.
@@ -615,13 +642,22 @@ VISION_IMPORT_ERROR = """
 """
 
 
+# docstyle-ignore
+PYTESSERACT_IMPORT_ERROR = """
+{0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
+`pip install pytesseract`
+"""
+
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
+        ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
@@ -982,7 +1018,7 @@ TF_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> choice0 = "It is eaten with a fork and a knife."
         >>> choice1 = "It is eaten while held in the hand."
 
-        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='tf', padding=True)
+        >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors='tf', padding=True)
         >>> inputs = {{k: tf.expand_dims(v, 0) for k, v in encoding.items()}}
         >>> outputs = model(inputs)  # batch size is 1
 
@@ -1055,7 +1091,7 @@ FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
 
-        >>> outputs = model(**inputs, labels=labels)
+        >>> outputs = model(**inputs)
         >>> logits = outputs.logits
 """
 
@@ -1099,7 +1135,7 @@ FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> choice0 = "It is eaten with a fork and a knife."
         >>> choice1 = "It is eaten while held in the hand."
 
-        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='jax', padding=True)
+        >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors='jax', padding=True)
         >>> outputs = model(**{{k: v[None, :] for k,v in encoding.items()}})
 
         >>> logits = outputs.logits
@@ -1113,10 +1149,11 @@ FLAX_CAUSAL_LM_SAMPLE = r"""
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
-        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
+        >>> outputs = model(**inputs)
 
-        >>> logits = outputs.logits
+        >>> # retrieve logts for next token
+        >>> next_token_logits = outputs.logits[:, -1]
 """
 
 FLAX_SAMPLE_DOCSTRINGS = {
@@ -1220,12 +1257,13 @@ def hf_bucket_url(
         filename = f"{subfolder}/{filename}"
 
     if mirror:
-        endpoint = PRESET_MIRROR_DICT.get(mirror, mirror)
+        if mirror in ["tuna", "bfsu"]:
+            raise ValueError("The Tuna and BFSU mirrors are no longer available. Try removing the mirror argument.")
         legacy_format = "/" not in model_id
         if legacy_format:
-            return f"{endpoint}/{model_id}-{filename}"
+            return f"{mirror}/{model_id}-{filename}"
         else:
-            return f"{endpoint}/{model_id}/{filename}"
+            return f"{mirror}/{model_id}/{filename}"
 
     if revision is None:
         revision = "main"
@@ -1476,6 +1514,7 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     progress = tqdm(
         unit="B",
         unit_scale=True,
+        unit_divisor=1024,
         total=total,
         initial=resume_size,
         desc="Downloading",
@@ -1641,6 +1680,56 @@ def get_from_cache(
     return cache_path
 
 
+def get_list_of_files(
+    path_or_repo: Union[str, os.PathLike],
+    revision: Optional[str] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+    local_files_only: bool = False,
+) -> List[str]:
+    """
+    Gets the list of files inside :obj:`path_or_repo`.
+
+    Args:
+        path_or_repo (:obj:`str` or :obj:`os.PathLike`):
+            Can be either the id of a repo on huggingface.co or a path to a `directory`.
+        revision (:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+            identifier allowed by git.
+        use_auth_token (:obj:`str` or `bool`, `optional`):
+            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to only rely on local files and not to attempt to download any files.
+
+    Returns:
+        :obj:`List[str]`: The list of files available in :obj:`path_or_repo`.
+    """
+    path_or_repo = str(path_or_repo)
+    # If path_or_repo is a folder, we just return what is inside (subdirectories included).
+    if os.path.isdir(path_or_repo):
+        list_of_files = []
+        for path, dir_names, file_names in os.walk(path_or_repo):
+            list_of_files.extend([os.path.join(path, f) for f in file_names])
+        return list_of_files
+
+    # Can't grab the files if we are on offline mode.
+    if is_offline_mode() or local_files_only:
+        return []
+
+    # Otherwise we grab the token and use the model_info method.
+    if isinstance(use_auth_token, str):
+        token = use_auth_token
+    elif use_auth_token is True:
+        token = HfFolder.get_token()
+    else:
+        token = None
+    model_info = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).model_info(
+        path_or_repo, revision=revision, token=token
+    )
+    return [f.rfilename for f in model_info.siblings]
+
+
 class cached_property(property):
     """
     Descriptor that mimics @property but caches output in member variable.
@@ -1794,11 +1883,15 @@ class ModelOutput(OrderedDict):
         other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
 
         if other_fields_are_none and not is_tensor(first_field):
-            try:
-                iterator = iter(first_field)
+            if isinstance(first_field, dict):
+                iterator = first_field.items()
                 first_field_iterator = True
-            except TypeError:
-                first_field_iterator = False
+            else:
+                try:
+                    iterator = iter(first_field)
+                    first_field_iterator = True
+                except TypeError:
+                    first_field_iterator = False
 
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
@@ -1901,7 +1994,7 @@ class _LazyModule(ModuleType):
 
     # Very heavily inspired by optuna.integration._IntegrationModule
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
-    def __init__(self, name, module_file, import_structure, extra_objects=None):
+    def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
         super().__init__(name)
         self._modules = set(import_structure.keys())
         self._class_to_module = {}
@@ -1911,6 +2004,7 @@ class _LazyModule(ModuleType):
         # Needed for autocompletion in an IDE
         self.__all__ = list(import_structure.keys()) + sum(import_structure.values(), [])
         self.__file__ = module_file
+        self.__spec__ = module_spec
         self.__path__ = [os.path.dirname(module_file)]
         self._objects = {} if extra_objects is None else extra_objects
         self._name = name
@@ -1990,14 +2084,14 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
         """
-        Upload model checkpoint or tokenizer files to the 🤗 Model Hub while synchronizing a local clone of the repo in
+        Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
         :obj:`repo_path_or_name`.
 
         Parameters:
             repo_path_or_name (:obj:`str`, `optional`):
-                Can either be a repository name for your model or tokenizer in the Hub or a path to a local folder (in
-                which case the repository will have the name of that local folder). If not specified, will default to
-                the name given by :obj:`repo_url` and a local directory with that name will be created.
+                Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
+                the repository will have the name of that local folder). If not specified, will default to the name
+                given by :obj:`repo_url` and a local directory with that name will be created.
             repo_url (:obj:`str`, `optional`):
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
                 repository will be created in your namespace (unless you specify an :obj:`organization`) with
@@ -2007,11 +2101,9 @@ class PushToHubMixin:
                 the current working directory. This will slow things down if you are making changes in an existing repo
                 since you will need to clone the repo before every push.
             commit_message (:obj:`str`, `optional`):
-                Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
-                :obj:`"add model"` depending on the type of the class.
+                Message to commit while pushing. Will default to :obj:`"add {object}"`.
             organization (:obj:`str`, `optional`):
-                Organization in which you want to push your model or tokenizer (you must be a member of this
-                organization).
+                Organization in which you want to push your {object} (you must be a member of this organization).
             private (:obj:`bool`, `optional`):
                 Whether or not the repository created should be private (requires a paying subscription).
             use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
@@ -2021,29 +2113,27 @@ class PushToHubMixin:
 
 
         Returns:
-            The url of the commit of your model in the given repository.
+            :obj:`str`: The url of the commit of your {object} in the given repository.
 
         Examples::
 
-            # Upload a model to the Hub:
-            from transformers import AutoModel
+            from transformers import {object_class}
 
-            model = BertModel.from_pretrained("bert-base-cased")
-            # Fine-tuning code
+            {object} = {object_class}.from_pretrained("bert-base-cased")
 
-            # Push the model to your namespace with the name "my-finetuned-bert" and have a local clone in the
+            # Push the {object} to your namespace with the name "my-finetuned-bert" and have a local clone in the
             # `my-finetuned-bert` folder.
-            model.push_to_hub("my-finetuned-bert")
+            {object}.push_to_hub("my-finetuned-bert")
 
-            # Push the model to your namespace with the name "my-finetuned-bert" with no local clone.
-            model.push_to_hub("my-finetuned-bert", use_temp_dir=True)
+            # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
+            {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
 
-            # Push the model to an organization with the name "my-finetuned-bert" and have a local clone in the
+            # Push the {object} to an organization with the name "my-finetuned-bert" and have a local clone in the
             # `my-finetuned-bert` folder.
-            model.push_to_hub("my-finetuned-bert", organization="huggingface")
+            {object}.push_to_hub("my-finetuned-bert", organization="huggingface")
 
             # Make a change to an existing repo that has been cloned locally in `my-finetuned-bert`.
-            model.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
+            {object}.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
         """
         if use_temp_dir:
             # Make sure we use the right `repo_name` for the `repo_url` before replacing it.
@@ -2148,3 +2238,13 @@ class PushToHubMixin:
                 commit_message = "add model"
 
         return repo.push_to_hub(commit_message=commit_message)
+
+
+def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
+    if token is None:
+        token = HfFolder.get_token()
+    if organization is None:
+        username = HfApi().whoami(token)["name"]
+        return f"{username}/{model_id}"
+    else:
+        return f"{organization}/{model_id}"

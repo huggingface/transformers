@@ -16,6 +16,7 @@
 import datetime
 import math
 import os
+import warnings
 from typing import Callable, Dict, Optional, Tuple
 
 from .file_utils import ENV_VARS_TRUE_VALUES
@@ -104,6 +105,14 @@ class TFTrainer:
         self.global_step = 0
         self.epoch_logging = 0
         self.eval_loss = tf.keras.metrics.Sum()
+
+        warnings.warn(
+            "The class `TFTrainer` is deprecated and will be removed in version 5 of Transformers. "
+            "We recommend using native Keras instead, by calling methods like `fit()` and `predict()` "
+            "directly on the model object. Detailed examples of the Keras style can be found in our "
+            "examples at https://github.com/huggingface/transformers/tree/master/examples/tensorflow",
+            FutureWarning,
+        )
 
         if tb_writer is not None:
             self.tb_writer = tb_writer

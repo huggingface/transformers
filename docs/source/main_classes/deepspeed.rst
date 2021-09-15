@@ -1074,7 +1074,8 @@ optimizers, with the exception of using the combination of HuggingFace scheduler
 | DS Optimizer | No           | Yes          |
 +--------------+--------------+--------------+
 
-If ``offload_optimizer`` is enabled you must use both DeepSpeed scheduler and DeepSpeed optimizer.
+It is possible to use a non-DeepSpeed optimizer when ``offload_optimizer`` is enabled, as long as it has both CPU and
+GPU implementation (except LAMB).
 
 
 
@@ -1168,8 +1169,8 @@ Here is where the schedulers overlap between 🤗 Transformers and DeepSpeed:
   therefore, if you don't configure the scheduler this is scheduler that will get configured by default.
 
 If you don't configure the ``scheduler`` entry in the configuration file, the :class:`~transformers.Trainer` will use
-the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` to configure a 🤗 Transformers version
-of it.
+the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` or ``--warmup_ratio`` to configure a
+🤗 Transformers version of it.
 
 Here is an example of the auto-configured ``scheduler`` entry for ``WarmupLR``:
 
@@ -1190,9 +1191,10 @@ Since `"auto"` is used the :class:`~transformers.Trainer` arguments will set the
 file. This is so that there is one definitive source of the values and to avoid hard to find errors when, for example,
 the learning rate is set to different values in different places. Command line rules. The values that get set are:
 
-- ``warmup_min_lr`` with the value of ``0``
-- ``warmup_max_lr`` with the value of ``--learning_rate``
-- ``warmup_num_steps`` with the value of ``--warmup_steps``
+- ``warmup_min_lr`` with the value of ``0``.
+- ``warmup_max_lr`` with the value of ``--learning_rate``.
+- ``warmup_num_steps`` with the value of ``--warmup_steps`` if provided. Otherwise will use ``--warmup_ratio``
+  multiplied by the number of training steps and rounded up.
 - ``total_num_steps`` with either the value of ``--max_steps`` or if it is not provided, derived automatically at run
   time based on the environment and the size of the dataset and other command line arguments (needed for
   ``WarmupDecayLR``).
@@ -1739,7 +1741,7 @@ For example for a pretrained model:
 .. code-block:: python
 
     from transformers.deepspeed import HfDeepSpeedConfig
-    from transformers import AugoModel
+    from transformers import AutoModel, deepspeed
 
     ds_config = { ... } # deepspeed config object or path to the file
     # must run before instantiating the model
@@ -1752,7 +1754,7 @@ or for non-pretrained model:
 .. code-block:: python
 
     from transformers.deepspeed import HfDeepSpeedConfig
-    from transformers import AugoModel, AutoConfig
+    from transformers import AutoModel, AutoConfig, deepspeed
 
     ds_config = { ... } # deepspeed config object or path to the file
     # must run before instantiating the model

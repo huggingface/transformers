@@ -14,36 +14,147 @@
 
 import unittest
 
-from transformers.pipelines import Pipeline, pipeline
-from transformers.testing_utils import require_pandas, require_torch, require_torch_scatter, slow
+from transformers import (
+    MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
+    AutoModelForTableQuestionAnswering,
+    AutoTokenizer,
+    TableQuestionAnsweringPipeline,
+    pipeline,
+)
+from transformers.testing_utils import (
+    is_pipeline_test,
+    require_pandas,
+    require_tf,
+    require_torch,
+    require_torch_scatter,
+    slow,
+)
 
-from .test_pipelines_common import CustomInputPipelineCommonMixin
+from .test_pipelines_common import PipelineTestCaseMeta
 
 
 @require_torch_scatter
 @require_torch
 @require_pandas
-class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
-    pipeline_task = "table-question-answering"
-    pipeline_running_kwargs = {
-        "padding": "max_length",
-    }
-    small_models = [
-        "lysandre/tiny-tapas-random-wtq",
-        "lysandre/tiny-tapas-random-sqa",
-    ]
-    large_models = ["google/tapas-base-finetuned-wtq"]  # Models tested with the @slow decorator
-    valid_inputs = [
-        {
-            "table": {
+@is_pipeline_test
+class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    # Putting it there for consistency, but TQA do not have fast tokenizer
+    # which are needed to generate automatic tests
+    model_mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
+
+    @require_tf
+    @unittest.skip("Table question answering not implemented in TF")
+    def test_small_model_tf(self):
+        pass
+
+    @require_torch
+    def test_small_model_pt(self):
+        model_id = "lysandre/tiny-tapas-random-wtq"
+        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        self.assertIsInstance(model.config.aggregation_labels, dict)
+        self.assertIsInstance(model.config.no_aggregation_label_index, int)
+
+        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
+        outputs = table_querier(
+            table={
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
                 "number of movies": ["87", "53", "69"],
                 "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
             },
-            "query": "how many movies has george clooney played in?",
-        },
-        {
+            query="how many movies has george clooney played in?",
+        )
+        self.assertEqual(
+            outputs,
+            {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+        )
+        outputs = table_querier(
+            table={
+                "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
+                "age": ["56", "45", "59"],
+                "number of movies": ["87", "53", "69"],
+                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+            },
+            query=["how many movies has george clooney played in?", "how old is he?", "what's his date of birth?"],
+        )
+        self.assertEqual(
+            outputs,
+            [
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+            ],
+        )
+        outputs = table_querier(
+            table={
+                "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                "Stars": ["36542", "4512", "3934"],
+                "Contributors": ["651", "77", "34"],
+                "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+            },
+            query=[
+                "What repository has the largest number of stars?",
+                "Given that the numbers of stars defines if a repository is active, what repository is the most active?",
+                "What is the number of repositories?",
+                "What is the average number of stars?",
+                "What is the total amount of stars?",
+            ],
+        )
+        self.assertEqual(
+            outputs,
+            [
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+                {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+            ],
+        )
+
+        with self.assertRaises(ValueError):
+            table_querier(query="What does it do with empty context ?", table=None)
+        with self.assertRaises(ValueError):
+            table_querier(query="What does it do with empty context ?", table="")
+        with self.assertRaises(ValueError):
+            table_querier(query="What does it do with empty context ?", table={})
+        with self.assertRaises(ValueError):
+            table_querier(
+                table={
+                    "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                    "Stars": ["36542", "4512", "3934"],
+                    "Contributors": ["651", "77", "34"],
+                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                }
+            )
+        with self.assertRaises(ValueError):
+            table_querier(
+                query="",
+                table={
+                    "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                    "Stars": ["36542", "4512", "3934"],
+                    "Contributors": ["651", "77", "34"],
+                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                },
+            )
+        with self.assertRaises(ValueError):
+            table_querier(
+                query=None,
+                table={
+                    "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                    "Stars": ["36542", "4512", "3934"],
+                    "Contributors": ["651", "77", "34"],
+                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                },
+            )
+
+    def test_slow_tokenizer_sqa(self):
+        model_id = "lysandre/tiny-tapas-random-sqa"
+        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
+
+        inputs = {
             "table": {
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
                 "age": ["56", "45", "59"],
@@ -51,166 +162,108 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
                 "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
             },
             "query": ["how many movies has george clooney played in?", "how old is he?", "what's his date of birth?"],
-        },
-        {
-            "table": {
+        }
+        sequential_outputs = table_querier(**inputs, sequential=True)
+        batch_outputs = table_querier(**inputs, sequential=False)
+
+        self.assertEqual(len(sequential_outputs), 3)
+        self.assertEqual(len(batch_outputs), 3)
+        self.assertEqual(sequential_outputs[0], batch_outputs[0])
+        self.assertNotEqual(sequential_outputs[1], batch_outputs[1])
+        # self.assertNotEqual(sequential_outputs[2], batch_outputs[2])
+
+        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
+        outputs = table_querier(
+            table={
+                "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
+                "age": ["56", "45", "59"],
+                "number of movies": ["87", "53", "69"],
+                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+            },
+            query="how many movies has george clooney played in?",
+        )
+        self.assertEqual(
+            outputs,
+            {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
+        )
+        outputs = table_querier(
+            table={
+                "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
+                "age": ["56", "45", "59"],
+                "number of movies": ["87", "53", "69"],
+                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+            },
+            query=["how many movies has george clooney played in?", "how old is he?", "what's his date of birth?"],
+        )
+        self.assertEqual(
+            outputs,
+            [
+                {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
+                {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
+                {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
+            ],
+        )
+        outputs = table_querier(
+            table={
                 "Repository": ["Transformers", "Datasets", "Tokenizers"],
                 "Stars": ["36542", "4512", "3934"],
                 "Contributors": ["651", "77", "34"],
                 "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
             },
-            "query": [
+            query=[
                 "What repository has the largest number of stars?",
                 "Given that the numbers of stars defines if a repository is active, what repository is the most active?",
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
             ],
-        },
-    ]
-
-    def _test_pipeline(self, table_querier: Pipeline):
-        output_keys = {"answer", "coordinates", "cells"}
-        valid_inputs = self.valid_inputs
-        invalid_inputs = [
-            {"query": "What does it do with empty context ?", "table": ""},
-            {"query": "What does it do with empty context ?", "table": None},
-        ]
-        self.assertIsNotNone(table_querier)
-
-        mono_result = table_querier(valid_inputs[0])
-        self.assertIsInstance(mono_result, dict)
-
-        for key in output_keys:
-            self.assertIn(key, mono_result)
-
-        multi_result = table_querier(valid_inputs)
-        self.assertIsInstance(multi_result, list)
-        for result in multi_result:
-            self.assertIsInstance(result, (list, dict))
-
-        for result in multi_result:
-            if isinstance(result, list):
-                for _result in result:
-                    for key in output_keys:
-                        self.assertIn(key, _result)
-            else:
-                for key in output_keys:
-                    self.assertIn(key, result)
-        for bad_input in invalid_inputs:
-            self.assertRaises(ValueError, table_querier, bad_input)
-        self.assertRaises(ValueError, table_querier, invalid_inputs)
-
-    def test_aggregation(self):
-        table_querier = pipeline(
-            "table-question-answering",
-            model="lysandre/tiny-tapas-random-wtq",
-            tokenizer="lysandre/tiny-tapas-random-wtq",
         )
-        self.assertIsInstance(table_querier.model.config.aggregation_labels, dict)
-        self.assertIsInstance(table_querier.model.config.no_aggregation_label_index, int)
-
-        mono_result = table_querier(self.valid_inputs[0])
-        multi_result = table_querier(self.valid_inputs)
-
-        self.assertIn("aggregator", mono_result)
-
-        for result in multi_result:
-            if isinstance(result, list):
-                for _result in result:
-                    self.assertIn("aggregator", _result)
-            else:
-                self.assertIn("aggregator", result)
-
-    def test_aggregation_with_sequential(self):
-        table_querier = pipeline(
-            "table-question-answering",
-            model="lysandre/tiny-tapas-random-wtq",
-            tokenizer="lysandre/tiny-tapas-random-wtq",
+        self.assertEqual(
+            outputs,
+            [
+                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
+                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
+                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
+                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
+                {"answer": "Python, Python", "coordinates": [(0, 3), (1, 3)], "cells": ["Python", "Python"]},
+            ],
         )
-        self.assertIsInstance(table_querier.model.config.aggregation_labels, dict)
-        self.assertIsInstance(table_querier.model.config.no_aggregation_label_index, int)
 
         with self.assertRaises(ValueError):
+            table_querier(query="What does it do with empty context ?", table=None)
+        with self.assertRaises(ValueError):
+            table_querier(query="What does it do with empty context ?", table="")
+        with self.assertRaises(ValueError):
+            table_querier(query="What does it do with empty context ?", table={})
+        with self.assertRaises(ValueError):
             table_querier(
-                {
-                    "table": {},
-                    "query": "how many movies has george clooney played in?",
+                table={
+                    "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                    "Stars": ["36542", "4512", "3934"],
+                    "Contributors": ["651", "77", "34"],
+                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
                 }
             )
         with self.assertRaises(ValueError):
             table_querier(
-                {
-                    "query": "how many movies has george clooney played in?",
-                }
+                query="",
+                table={
+                    "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                    "Stars": ["36542", "4512", "3934"],
+                    "Contributors": ["651", "77", "34"],
+                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                },
             )
         with self.assertRaises(ValueError):
             table_querier(
-                {
-                    "table": {
-                        "Repository": ["Transformers", "Datasets", "Tokenizers"],
-                        "Stars": ["36542", "4512", "3934"],
-                        "Contributors": ["651", "77", "34"],
-                        "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
-                    },
-                    "query": "",
-                }
+                query=None,
+                table={
+                    "Repository": ["Transformers", "Datasets", "Tokenizers"],
+                    "Stars": ["36542", "4512", "3934"],
+                    "Contributors": ["651", "77", "34"],
+                    "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+                },
             )
-        with self.assertRaises(ValueError):
-            table_querier(
-                {
-                    "table": {
-                        "Repository": ["Transformers", "Datasets", "Tokenizers"],
-                        "Stars": ["36542", "4512", "3934"],
-                        "Contributors": ["651", "77", "34"],
-                        "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
-                    },
-                }
-            )
-
-    def test_empty_errors(self):
-        table_querier = pipeline(
-            "table-question-answering",
-            model="lysandre/tiny-tapas-random-wtq",
-            tokenizer="lysandre/tiny-tapas-random-wtq",
-        )
-        mono_result = table_querier(self.valid_inputs[0], sequential=True)
-        multi_result = table_querier(self.valid_inputs, sequential=True)
-
-        self.assertIn("aggregator", mono_result)
-
-        for result in multi_result:
-            if isinstance(result, list):
-                for _result in result:
-                    self.assertIn("aggregator", _result)
-            else:
-                self.assertIn("aggregator", result)
-
-    def test_sequential(self):
-        table_querier = pipeline(
-            "table-question-answering",
-            model="lysandre/tiny-tapas-random-sqa",
-            tokenizer="lysandre/tiny-tapas-random-sqa",
-        )
-        sequential_mono_result_0 = table_querier(self.valid_inputs[0], sequential=True)
-        sequential_mono_result_1 = table_querier(self.valid_inputs[1], sequential=True)
-        sequential_multi_result = table_querier(self.valid_inputs, sequential=True)
-        mono_result_0 = table_querier(self.valid_inputs[0])
-        mono_result_1 = table_querier(self.valid_inputs[1])
-        multi_result = table_querier(self.valid_inputs)
-
-        # First valid input has a single question, the dict should be equal
-        self.assertDictEqual(sequential_mono_result_0, mono_result_0)
-
-        # Second valid input has several questions, the questions following the first one should not be equal
-        self.assertNotEqual(sequential_mono_result_1, mono_result_1)
-
-        # Assert that we get the same results when passing in several sequences.
-        for index, (sequential_multi, multi) in enumerate(zip(sequential_multi_result, multi_result)):
-            if index == 0:
-                self.assertDictEqual(sequential_multi, multi)
-            else:
-                self.assertNotEqual(sequential_multi, multi)
 
     @slow
     def test_integration_wtq(self):

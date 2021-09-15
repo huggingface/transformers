@@ -125,6 +125,13 @@ class EvaluationStrategy(ExplicitEnum):
     EPOCH = "epoch"
 
 
+class HubStrategy(ExplicitEnum):
+    END = "end"
+    EVERY_SAVE = "every_save"
+    CHECKPOINT = "checkpoint"
+    ALL_CHECKPOINTS = "all_checkpoints"
+
+
 class BestRun(NamedTuple):
     """
     The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).
@@ -420,7 +427,7 @@ class TrainerMemoryTracker:
         self.cur_stage = None
 
     def update_metrics(self, stage, metrics):
-        """stop tracking for the passed stage"""
+        """updates the metrics"""
         if self.skip_memory_metrics:
             return
 
@@ -442,7 +449,7 @@ class TrainerMemoryTracker:
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
 
     def stop_and_update_metrics(self, metrics=None):
-        """combine stop + update in one call for simpler code"""
+        """combine stop and metrics update in one call for simpler code"""
         if self.skip_memory_metrics:
             return
 

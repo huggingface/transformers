@@ -67,14 +67,14 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         vocab_file (:obj:`str`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
             .. note::
 
                When building a sequence using special tokens, this is not the token that is used for the beginning of
                sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
             that is used for the end of sequence. The token used is the :obj:`sep_token`.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
@@ -138,6 +138,7 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
+        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -227,6 +228,12 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

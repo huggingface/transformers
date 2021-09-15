@@ -512,7 +512,7 @@ FLAX_VISION_MODEL_DOCSTRING = """
         >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
         >>> model = FlaxViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
 
-        >>> inputs = feature_extractor(images=image, return_tensors="jax")
+        >>> inputs = feature_extractor(images=image, return_tensors="np")
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
 """
@@ -581,7 +581,7 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
 
     Example::
 
-        >>> from transformers import FlaxViTFeatureExtractor, ViTForImageClassification
+        >>> from transformers import ViTFeatureExtractor, FlaxViTForImageClassification
         >>> from PIL import Image
         >>> import jax
         >>> import requests
@@ -592,12 +592,13 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
         >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
         >>> model = FlaxViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
 
-        >>> inputs = feature_extractor(images=image, return_tensors="jax")
+        >>> inputs = feature_extractor(images=image, return_tensors="np")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
+
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = jax.numpy.argmax(logits, axis=-1)
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx.item()])
 """
 
 overwrite_call_docstring(FlaxViTForImageClassification, FLAX_VISION_CLASSIF_DOCSTRING)

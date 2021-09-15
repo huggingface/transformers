@@ -14,12 +14,11 @@
 # limitations under the License.
 """ Testing suite for the PyTorch VisualBERT model. """
 
-
 import copy
 import unittest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import VisualBertConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -30,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        VisualBertConfig,
         VisualBertForMultipleChoice,
         VisualBertForPreTraining,
         VisualBertForQuestionAnswering,
@@ -98,7 +96,7 @@ class VisualBertModelTester:
         self.num_choices = num_choices
         self.scope = scope
 
-    def prepare_config(self):
+    def get_config(self):
         return VisualBertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
@@ -138,7 +136,7 @@ class VisualBertModelTester:
         if self.use_visual_token_type_ids:
             visual_token_type_ids = ids_tensor([self.batch_size, self.visual_seq_length], self.type_vocab_size)
 
-        config = self.prepare_config()
+        config = self.get_config()
         return config, {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
@@ -198,7 +196,7 @@ class VisualBertModelTester:
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = self.prepare_config()
+        config = self.get_config()
         return config, {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,

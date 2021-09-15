@@ -60,7 +60,6 @@ encode the text and prepare the images. The following example shows how to get t
 
 .. code-block::
 
-        >>> import torch
         >>> from PIL import Image
         >>> import requests
 

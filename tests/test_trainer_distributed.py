@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     from torch import nn
-    from torch.utils.data.dataset import Dataset
+    from torch.utils.data import Dataset
 
     from transformers import Trainer
 

@@ -988,6 +988,9 @@ class RagModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
+        if torch_device == "cuda":
+            rag_token.half()
+
         input_dict = tokenizer(
             self.test_data_questions,
             return_tensors="pt",

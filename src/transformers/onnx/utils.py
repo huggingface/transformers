@@ -14,7 +14,6 @@
 
 from ctypes import c_float, sizeof
 from enum import Enum
-from typing import Any, Dict, Iterable
 
 
 class ParameterFormat(Enum):
@@ -62,21 +61,3 @@ def compute_serialized_parameters_size(num_parameters: int, dtype: ParameterForm
         Size (in byte) taken to save all the parameters
     """
     return num_parameters * dtype.size
-
-
-def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
-    """
-    Flatten any potential nested structure expanding the name of the field with the index of the element within the
-    structure.
-
-    Args:
-        name: The name of the nested structure
-        field: The structure to, potentially, be flattened
-
-    Returns:
-        (Dict[str, Any]): Outputs with flattened structure and key mapping this new structure.
-
-    """
-    from itertools import chain
-
-    return {f"{name}.{idx}": item for idx, item in enumerate(chain.from_iterable(field))}

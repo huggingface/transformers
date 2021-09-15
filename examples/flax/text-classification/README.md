@@ -100,7 +100,7 @@ In the Tensorboard results linked below, the random seed of each model is equal 
 
 | Task  | Metric                       | Acc (best run) | Acc (avg/5runs) | Stdev     | Metrics                                                                  |
 |-------|------------------------------|----------------|-----------------|-----------|--------------------------------------------------------------------------|
-| CoLA  | Matthew's corr               | 60.57          | 59.04           | 1.06      | [tfhub.dev](https://tensorboard.dev/experiment/lfr2adVpRtmLDALKrElkzg/)  |
+| CoLA  | Matthews corr                | 60.57          | 59.04           | 1.06      | [tfhub.dev](https://tensorboard.dev/experiment/lfr2adVpRtmLDALKrElkzg/)  |
 | SST-2 | Accuracy                     | 92.66          | 92.23           | 0.57      | [tfhub.dev](https://tensorboard.dev/experiment/jYvfv2trRHKMjoWnXVwrZA/)  |
 | MRPC  | F1/Accuracy                  | 89.90/85.78    | 88.97/84.36     | 0.72/1.09 | [tfhub.dev](https://tensorboard.dev/experiment/bo3W3DEoRw2Q7YXjWrJkfg/)  |
 | STS-B | Pearson/Spearman corr.       | 89.04/88.70    | 88.94/88.63     | 0.07/0.07 | [tfhub.dev](https://tensorboard.dev/experiment/fxVwbLD7QpKhbot0r9rn2w/)  |

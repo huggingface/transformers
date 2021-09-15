@@ -36,6 +36,7 @@ from .file_utils import (
     ModelOutput,
     PushToHubMixin,
     cached_path,
+    copy_func,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
@@ -219,8 +220,14 @@ class TFSequenceClassificationLoss:
         return loss_fn(labels, logits)
 
 
-class TFMultipleChoiceLoss(TFSequenceClassificationLoss):
+class TFMultipleChoiceLoss:
     """Loss function suitable for multiple choice tasks."""
+
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        return loss_fn(labels, logits)
 
 
 class TFMaskedLanguageModelingLoss(TFCausalLanguageModelingLoss):
@@ -734,7 +741,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if self.get_lm_head() is not None:
             lm_head = self.get_lm_head()
 
-            return lm_head.get_output_embeddings()
+            try:
+                return lm_head.get_output_embeddings()
+            except AttributeError:
+                logger.info("Building the model")
+                self(self.dummy_inputs)
+
+                return lm_head().get_output_embeddings()
 
         return None  # Overwrite for models with output embeddings
 
@@ -1113,14 +1126,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             config (:obj:`Union[PretrainedConfig, str]`, `optional`):
                 Can be either:
 
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
                     - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `model id` string of a pretrained
@@ -1327,11 +1340,22 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 ignore_mismatched_sizes=ignore_mismatched_sizes,
                 _prefix=load_weight_prefix,
             )
-        except OSError:
-            raise OSError(
-                "Unable to load weights from h5 file. "
-                "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
-            )
+        except OSError as e:
+            try:
+                with open(resolved_archive_file) as f:
+                    if f.read().startswith("version"):
+                        raise OSError(
+                            "You seem to have cloned a repository without having git-lfs installed. Please install "
+                            "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
+                            "you cloned."
+                        )
+                    else:
+                        raise ValueError from e
+            except (UnicodeDecodeError, ValueError):
+                raise OSError(
+                    "Unable to load weights from h5 file. "
+                    "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
+                )
 
         model(model.dummy_inputs)  # Make sure restore ops are run
 
@@ -1390,6 +1414,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return model, loading_info
 
         return model
+
+
+# To update the docstring, we need to copy the method, otherwise we change the original docstring.
+TFPreTrainedModel.push_to_hub = copy_func(TFPreTrainedModel.push_to_hub)
+TFPreTrainedModel.push_to_hub.__doc__ = TFPreTrainedModel.push_to_hub.__doc__.format(
+    object="model", object_class="TFAutoModel", object_files="model checkpoint"
+)
 
 
 class TFConv1D(tf.keras.layers.Layer):

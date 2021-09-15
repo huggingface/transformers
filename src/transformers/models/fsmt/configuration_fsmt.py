@@ -124,6 +124,7 @@ class FSMTConfig(PretrainedConfig):
 
     """
     model_type = "fsmt"
+    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     # update the defaults from config file
     def __init__(
@@ -161,18 +162,6 @@ class FSMTConfig(PretrainedConfig):
         forced_eos_token_id=2,
         **common_kwargs
     ):
-        if "hidden_size" in common_kwargs:
-            raise ValueError("hidden size is called d_model")
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            tie_word_embeddings=tie_word_embeddings,
-            forced_eos_token_id=forced_eos_token_id,
-            **common_kwargs,
-        )
         self.langs = langs
         self.src_vocab_size = src_vocab_size
         self.tgt_vocab_size = tgt_vocab_size
@@ -196,6 +185,8 @@ class FSMTConfig(PretrainedConfig):
         self.early_stopping = early_stopping
 
         self.decoder = DecoderConfig(vocab_size=tgt_vocab_size, bos_token_id=eos_token_id)
+        if "decoder" in common_kwargs:
+            del common_kwargs["decoder"]
 
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
@@ -205,14 +196,16 @@ class FSMTConfig(PretrainedConfig):
         self.dropout = dropout
 
         self.use_cache = use_cache
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            decoder_start_token_id=decoder_start_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            tie_word_embeddings=tie_word_embeddings,
+            forced_eos_token_id=forced_eos_token_id,
+            **common_kwargs,
+        )
 
     def to_dict(self):
         """

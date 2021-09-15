@@ -341,8 +341,8 @@ Add a model card
 
 To make sure everyone knows what your model can do, what its limitations, potential bias or ethical considerations are,
 please add a README.md model card to your model repo. You can just create it, or there's also a convenient button
-titled "Add a README.md" on your model page. A model card template can be found `here
-<https://github.com/huggingface/model_card>`__ (meta-suggestions are welcome). model card template (meta-suggestions
+titled "Add a README.md" on your model page. A model card documentation can be found `here
+<https://huggingface.co/docs/hub/model-repos>`__ (meta-suggestions are welcome). model card template (meta-suggestions
 are welcome).
 
 .. note::

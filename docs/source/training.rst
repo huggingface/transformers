@@ -281,7 +281,7 @@ Fine-tuning in native PyTorch
    frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
    picture-in-picture" allowfullscreen></iframe>
 
-You might need to restart your notebook at this stage to free some memory, or excute the following code:
+You might need to restart your notebook at this stage to free some memory, or execute the following code:
 
 .. code-block:: python
 

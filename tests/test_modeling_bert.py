@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
+import os
+import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import BertConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
@@ -30,7 +30,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
-        BertConfig,
         BertForMaskedLM,
         BertForMultipleChoice,
         BertForNextSentencePrediction,
@@ -112,7 +111,15 @@ class BertModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = BertConfig(
+        config = self.get_config()
+
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        """
+        Returns a tiny configuration by default.
+        """
+        return BertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -126,8 +133,6 @@ class BertModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def prepare_config_and_inputs_for_decoder(self):
         (
@@ -550,6 +555,29 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @slow
+    @require_torch_gpu
+    def test_torchscript_device_change(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+
+            # BertForMultipleChoice behaves incorrectly in JIT environments.
+            if model_class == BertForMultipleChoice:
+                return
+
+            config.torchscript = True
+            model = model_class(config=config)
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            traced_model = torch.jit.trace(
+                model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
+            )
+
+            with tempfile.TemporaryDirectory() as tmp:
+                torch.jit.save(traced_model, os.path.join(tmp, "bert.pt"))
+                loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
+                loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
 
 @require_torch

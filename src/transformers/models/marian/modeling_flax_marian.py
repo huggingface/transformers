@@ -30,7 +30,7 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, replace_return_docstrings
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -45,7 +45,7 @@ from .configuration_marian import MarianConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de'"
+_CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 _CONFIG_FOR_DOC = "MarianConfig"
 _TOKENIZER_FOR_DOC = "MarianTokenizer"
 
@@ -221,11 +221,11 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     """
     Shift input ids one token to the right.
     """
-    shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
-    shifted_input_ids = jax.ops.index_update(shifted_input_ids, (..., 0), decoder_start_token_id)
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    shifted_input_ids = np.zeros_like(input_ids)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1]
+    shifted_input_ids[:, 0] = decoder_start_token_id
 
+    shifted_input_ids = np.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
     return shifted_input_ids
 
 
@@ -411,7 +411,7 @@ class FlaxMarianEncoderLayer(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
-        self.acticvation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
+        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
         self.fc1 = nn.Dense(
             self.config.encoder_ffn_dim,
             dtype=self.dtype,
@@ -438,7 +438,7 @@ class FlaxMarianEncoderLayer(nn.Module):
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = self.acticvation_dropout_layer(hidden_states, deterministic=deterministic)
+        hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
@@ -523,7 +523,7 @@ class FlaxMarianDecoderLayer(nn.Module):
         )
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
-        self.acticvation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
+        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
 
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.encoder_attn = FlaxMarianAttention(
@@ -580,7 +580,7 @@ class FlaxMarianDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = self.acticvation_dropout_layer(hidden_states, deterministic=deterministic)
+        hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
@@ -1125,6 +1125,7 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
+    @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -1292,7 +1293,7 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        deterministic: bool = True,
+        train: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -1384,7 +1385,7 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=deterministic,
+            deterministic=not train,
             rngs=rngs,
             mutable=mutable,
             method=_decoder_forward,
