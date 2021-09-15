@@ -696,7 +696,7 @@ class BartEncoder(BartPretrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=False,
+        return_dict=None,
     ):
         r"""
         Args:
@@ -879,10 +879,10 @@ class BartDecoder(BartPretrainedModel):
         input_ids=None,
         attention_mask=None,
         encoder_hidden_states=None,
-        past_key_values=None,
         encoder_attention_mask=None,
         head_mask=None,
         cross_attn_head_mask=None,
+        past_key_values=None,
         inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
@@ -957,11 +957,6 @@ class BartDecoder(BartPretrainedModel):
             return_dict (:obj:`bool`, `optional`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
         """
-        if past_key_values is not None:
-            print("======== past_key_values: ", len(past_key_values))
-        else:
-            print("======== past_key_values is None ")
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -981,14 +976,7 @@ class BartDecoder(BartPretrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        # past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-        # Jay Updated
-        past_key_values_length = 0
-        if past_key_values is not None and len(past_key_values) > 0:
-            if isinstance(past_key_values, list):
-                past_key_values_length = past_key_values[0].shape[2]
-            else:
-                past_key_values_length = past_key_values[0][0].shape[2]
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -1030,16 +1018,7 @@ class BartDecoder(BartPretrainedModel):
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            # past_key_value = past_key_values[idx] if past_key_values is not None else None
-            # Jay Updated
-            if past_key_values is not None and len(past_key_values) > 0:
-                if isinstance(past_key_values, list):
-                    real_idx = idx * 4
-                    past_key_value = tuple(past_key_values[real_idx:real_idx + 4])
-                else:
-                    past_key_value = past_key_values[idx]
-            else:
-                past_key_value = None
+            past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 

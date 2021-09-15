@@ -10,7 +10,7 @@ from transformers.generation_utils import GenerationMixin
 
 from typing import Optional, List, Tuple
 
-def flatten_past(past):
+def flatten_list(past):
     values = []
     if past is not None:
         for i, p in enumerate(past):
@@ -30,6 +30,19 @@ def list_to_tuple(past):
 
     return results
 
+class EncoderForONNX(torch.nn.Module):
+    def __init__(self, encoder):
+        super().__init__()
+        self.encoder = encoder
+
+    def forward(self, input_ids, attention_mask):
+        return self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            return_dict=False,
+        )
+
+
 class DecoderForONNX(torch.nn.Module):
     def __init__(self, decoder):
         super().__init__()
@@ -40,8 +53,6 @@ class DecoderForONNX(torch.nn.Module):
         if past is not None:
             all_results = list_to_tuple(past)
             input_ids = input_ids[:, -1:]
-        # else:
-        #     all_results = None
 
         last_hidden_state, past_key_values = self.decoder(
             input_ids=input_ids,
@@ -57,12 +68,16 @@ class DecoderForONNX(torch.nn.Module):
         return last_hidden_state, past_values
 
 def create_traced_encoder(encoder, input_ids, attention_mask):
-    return torch.jit.trace(encoder, (input_ids, attention_mask))
+    encoder_c = copy.deepcopy(encoder)
+    encoder_for_onnx = EncoderForONNX(encoder_c)
+
+    # return torch.jit.trace(encoder, (input_ids, attention_mask))
+    return torch.jit.trace(encoder_for_onnx, (input_ids, attention_mask))
 
 def create_traced_decoder(decoder, input_ids, encoder_state, attention_mask, past = None):
     decoder_c = copy.deepcopy(decoder)
     decoder_for_onnx = DecoderForONNX(decoder_c)
-    past_values = flatten_past(past)
+    past_values = flatten_list(past)
 
     # Do this twice so we got 2 different decoders for further work.
     if past_values is None or len(past_values) == 0:
