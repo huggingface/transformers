@@ -492,6 +492,7 @@ if is_vision_available():
     _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
+    _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
@@ -2468,6 +2469,7 @@ if TYPE_CHECKING:
         from .models.layoutxlm import LayoutXLMProcessor
         from .models.segformer import SegformerFeatureExtractor
         from .models.vit import ViTFeatureExtractor
+        from .models.perceiver import PerceiverFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
 

@@ -17,13 +17,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available
 
 
 _import_structure = {
     "configuration_perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig"],
     "tokenization_perceiver": ["PerceiverTokenizer"],
 }
+
+if is_vision_available():
+    _import_structure["feature_extraction_perceiver"] = ["PerceiverFeatureExtractor"]
 
 if is_torch_available():
     _import_structure["modeling_perceiver"] = [
@@ -48,6 +51,9 @@ if TYPE_CHECKING:
     from .configuration_perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig
     from .tokenization_perceiver import PerceiverTokenizer
 
+    if is_vision_available():
+        from .feature_extraction_perceiver import PerceiverFeatureExtractor
+    
     if is_torch_available():
         from .modeling_perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,

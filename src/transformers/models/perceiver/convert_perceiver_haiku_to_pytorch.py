@@ -19,18 +19,27 @@ import argparse
 import pickle
 from pathlib import Path
 import json
+import requests
+from PIL import Image
 
 import numpy as np
 import torch
 from huggingface_hub import cached_download, hf_hub_url
+from torchvision import transforms
 
 import haiku as hk
-from transformers import PerceiverConfig, PerceiverForImageClassification, PerceiverForMaskedLM, PerceiverTokenizer
+from transformers import PerceiverConfig, PerceiverForImageClassification, PerceiverForMaskedLM, PerceiverTokenizer, PerceiverFeatureExtractor
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
+# We will verify our results on an image of cute cats
+def prepare_img():
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    im = Image.open(requests.get(url, stream=True).raw)
+    return im
 
 
 def rename_keys(state_dict):
@@ -205,26 +214,40 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
     model.load_state_dict(state_dict)
 
     # prepare dummy input
-    tokenizer = PerceiverTokenizer.from_pretrained("/Users/NielsRogge/Documents/Perceiver/Tokenizer files")
-    text = "This is an incomplete sentence where some words are missing."
-    encoding = tokenizer(text, padding="max_length", return_tensors="pt")
-    # mask " missing.". Note that the model performs much better if the masked chunk starts with a space.
-    encoding.input_ids[0, 51:60] = tokenizer.mask_token_id
+    if task == "MLM":
+        tokenizer = PerceiverTokenizer.from_pretrained("/Users/NielsRogge/Documents/Perceiver/Tokenizer files")
+        text = "This is an incomplete sentence where some words are missing."
+        encoding = tokenizer(text, padding="max_length", return_tensors="pt")
+        # mask " missing.". Note that the model performs much better if the masked chunk starts with a space.
+        encoding.input_ids[0, 51:60] = tokenizer.mask_token_id
+        inputs = encoding.input_ids
+        input_mask = encoding.attention_mask
+    elif task == "image_classification":
+        feature_extractor = PerceiverFeatureExtractor()
+        image = prepare_img()
+        encoding = feature_extractor(image, return_tensors="pt")
+        inputs = encoding.pixel_values
+        input_mask = None
 
     # forward pass
-    outputs = model(inputs=encoding.input_ids, attention_mask=encoding.attention_mask)
+    outputs = model(inputs=inputs, attention_mask=input_mask)
     logits = outputs.logits
 
     # verify logits
     print("Shape of logits:", logits.shape)
     print("First elements of logits:", logits[0, :3, :3])
 
-    masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1)
-    print("Greedy predictions:")
-    print(masked_tokens_predictions)
-    print()
-    print("Predicted string:")
-    print(tokenizer.decode(masked_tokens_predictions))
+    if task == "MLM":
+        masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1)
+        print("Greedy predictions:")
+        print(masked_tokens_predictions)
+        print()
+        print("Predicted string:")
+        print(tokenizer.decode(masked_tokens_predictions))
+
+    elif task == "image_classification":
+        # TODO
+        pass
 
     # Finally, save files
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
