@@ -779,12 +779,11 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
 
-                # new_toks = ["[ABC]", "[DEF]"]  # TODO(thom) add this one back when Rust toks are ready: , "GHI IHG"]
-                new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False)]
+                new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False), AddedToken("GHI IHG", normalized=False)]
                 tokenizer.add_tokens(new_toks)
-                input = "[ABC][DEF][ABC][DEF]"  # TODO(thom) add back cf above: "[ABC] [DEF] [ABC] GHI IHG [DEF]"
+                input = "[ABC][DEF][ABC]GHI IHG[DEF]"
                 if self.space_between_special_tokens:
-                    output = "[ABC] [DEF] [ABC] [DEF]"
+                    output = "[ABC] [DEF] [ABC] GHI IHG [DEF]"
                 else:
                     output = input
                 encoded = tokenizer.encode(input, add_special_tokens=False)
