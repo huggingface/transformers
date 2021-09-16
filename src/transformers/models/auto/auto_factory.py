@@ -126,7 +126,7 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
             trust_remote_code (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to :obj:`True` for repository you trust and in which you have read the code, as it
-                will execute code present on the Hub in your local machine.
+                will execute code present on the Hub on your local machine.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -218,7 +218,7 @@ FROM_PRETRAINED_TF_DOCSTRING = """
                 identifier allowed by git.
             trust_remote_code (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
-                should only be set to :obj:`True` for repository you trust and in which you have read the code, as it
+                should only be set to :obj:`True` for repositories you trust and in which you have read the code, as it
                 will execute code present on the Hub in your local machine.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -311,8 +311,8 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
                 identifier allowed by git.
             trust_remote_code (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
-                should only be set to :obj:`True` for repository you trust and in which you have read the code, as it
-                will execute code present on the Hub in your local machine.
+                should only be set to :obj:`True` for repositories you trust and in which you have read the code, as it
+                will execute code present on the Hub on your local machine.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or

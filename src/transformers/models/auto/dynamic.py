@@ -39,7 +39,7 @@ def init_hf_modules():
     """
     Creates the cache directory for modules with an init, and adds it to the Python path.
     """
-    # This function has already been executed if HF_MODULES_CACH already is in the Python path.
+    # This function has already been executed if HF_MODULES_CACHE already is in the Python path.
     if HF_MODULES_CACHE in sys.path:
         return
 
@@ -56,7 +56,7 @@ def create_dynamic_module(name: Union[str, os.PathLike]):
     """
     init_hf_modules()
     dynamic_module_path = Path(HF_MODULES_CACHE) / name
-    # If th parent module does not exist yet, recusrively create it.
+    # If the parent module does not exist yet, recursively create it.
     if not dynamic_module_path.parent.exists():
         create_dynamic_module(dynamic_module_path.parent)
     os.makedirs(dynamic_module_path, exist_ok=True)
