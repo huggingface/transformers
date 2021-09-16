@@ -38,7 +38,7 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import require_tensorflow_probability, require_tf, slow
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
@@ -176,9 +176,9 @@ class TFTapasModelTester:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             labels = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-            numeric_values = floats_tensor([self.batch_size, self.seq_length])
-            numeric_values_scale = floats_tensor([self.batch_size, self.seq_length])
-            float_answer = floats_tensor([self.batch_size])
+            numeric_values = ids_tensor([self.batch_size, self.seq_length], vocab_size=2, dtype=tf.float32)
+            numeric_values_scale = ids_tensor([self.batch_size, self.seq_length], vocab_size=2, dtype=tf.float32)
+            float_answer = ids_tensor([self.batch_size], vocab_size=2, dtype=tf.float32)
             aggregation_labels = ids_tensor([self.batch_size], self.num_aggregation_labels)
 
         config = self.get_config()
