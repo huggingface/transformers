@@ -862,6 +862,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
                 prep_type="conv1x1",
                 out_channels=256,
                 spatial_downsample=1,
+                position_encoding_type="trainable",
                 concat_or_add_pos="concat",
                 project_pos_dim=256,
             ),
