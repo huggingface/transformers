@@ -79,6 +79,12 @@ or from the root of the repository the following command:
 python src/transformers/commands/transformers_cli.py env
 ```
 
+If `transformers_cli.py env` throws the error *OSError: sndfile library not
+found*, you can install librosa package with `conda install -c conda-forge
+librosa`.
+If `transformers_cli.py env` throws the error *ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found*,
+you can install it with `conda install libgcc` and set the following variable
+`export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/miniconda3/lib/`.
 
 ### Do you want to implement a new model?
 
