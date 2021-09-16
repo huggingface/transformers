@@ -91,7 +91,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
             for vector, length in zip(input_values, attention_mask.sum(-1)):
                 normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
-                if length > normed_slice.shape[0]:
+                if length < normed_slice.shape[0]:
                     normed_slice[length:] = padding_value
 
                 normed_input_values.append(normed_slice)
