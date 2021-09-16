@@ -426,6 +426,9 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
             # Modified test files are always added
             if f.startswith("tests/"):
                 test_files_to_run.append(f)
+            # Example files are tested separately
+            elif f.startswith("examples/pytorch"):
+                test_files_to_run.append("examples/pytorch/test_examples.py")
             else:
                 new_tests = module_to_test_file(f)
                 if new_tests is not None:
@@ -462,7 +465,11 @@ if __name__ == "__main__":
         help="To fetch the tests between the current commit and the last commit",
     )
     parser.add_argument(
-        "--filters", type=str, nargs="*", help="Only keep the test files matching one of those filters."
+        "--filters",
+        type=str,
+        nargs="*",
+        default=["tests"],
+        help="Only keep the test files matching one of those filters.",
     )
     args = parser.parse_args()
     if args.sanity_check:
