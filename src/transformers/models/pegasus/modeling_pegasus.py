@@ -668,6 +668,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
             self.config.d_model,
             self.padding_idx,
         )
+        self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
@@ -886,6 +887,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
             self.config.d_model,
             self.padding_idx,
         )
+        self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
