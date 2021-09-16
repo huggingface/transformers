@@ -49,8 +49,8 @@ entailment (a binary classification task). For more details, see their follow-up
 intermediate pre-training <https://www.aclweb.org/anthology/2020.findings-emnlp.27/>`__ by Julian Martin Eisenschlos,
 Syrine Krichene and Thomas Müller.
 
-This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. This model TF version was contributed by
-`kamalkraj <https://huggingface.co/kamalkraj>`__. The original code can be found `here
+This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The Tensorflow version of this model was
+contributed by `kamalkraj <https://huggingface.co/kamalkraj>`__. The original code can be found `here
 <https://github.com/google-research/tapas>`__.
 
 Tips:
@@ -131,7 +131,7 @@ for your environment):
         >>> config = TapasConfig('google-base-finetuned-wikisql-supervised')
         >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base', config=config)
 
-And here is the equivalent code for TensorFlow (To run the TF model install the `tensorflow_probability dependency
+In TensorFlow, this can be done as follows (make sure to have installed the `tensorflow_probability dependency
 <https://github.com/tensorflow/probability`>_ for your environment):
 
 .. code-block::
@@ -251,7 +251,7 @@ are already in the TSV file of step 2. Here's an example:
         {'input_ids': tensor([[ ... ]]), 'attention_mask': tensor([[...]]), 'token_type_ids': tensor([[[...]]]),
         'numeric_values': tensor([[ ... ]]), 'numeric_values_scale: tensor([[ ... ]]), labels: tensor([[ ... ]])}
 
-change `return_tensors='tf'` in tokenizer to use with TF models.
+Set `return_tensors='tf'` when calling the tokenizer to prepare data for the TF models.
 
 Note that :class:`~transformers.TapasTokenizer` expects the data of the table to be **text-only**. You can use
 ``.astype(str)`` on a dataframe to turn it into text-only data. Of course, this only shows how to encode a single
@@ -342,7 +342,7 @@ And here is the equivalent code for TensorFlow:
         ... tf.TensorSpec(shape=(512,7), dtype=tf.int32),
         ... tf.TensorSpec(shape=(512,), dtype=tf.int32),
         ... tf.TensorSpec(shape=(512,), dtype=tf.float32))
-        >>> train_dataloader = tf.data.Dataset.from_generator(train_dataset,output_signature=output_signature).batch(32)
+        >>> train_dataloader = tf.data.Dataset.from_generator(train_dataset, output_signature=output_signature).batch(32)
 
 Note that here, we encode each table-question pair independently. This is fine as long as your dataset is **not
 conversational**. In case your dataset involves conversational questions (such as in SQA), then you should first group
@@ -350,9 +350,9 @@ together the ``queries``, ``answer_coordinates`` and ``answer_text`` per table (
 index) and batch encode each table with its questions. This will make sure that the ``prev_labels`` token types (see
 docs of :class:`~transformers.TapasTokenizer`) are set correctly. See `this notebook
 <https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
-for more info. see `this TF notebook
+for more info. See `this notebook
 <https://github.com/kamalkraj/Tapas-Tutorial/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
-for more info using TF model.
+for more info regarding using the TensorFlow model.
 
 **STEP 4: Train (fine-tune) TapasForQuestionAnswering/TFTapasForQuestionAnswering**
 
@@ -402,8 +402,8 @@ the weak supervision for aggregation case):
         ...         optimizer.step()
 
 
-You can then fine-tune :class:`~transformers.TFTapasForQuestionAnswering` using native TensorFlow as follows (shown
-here for the weak supervision for aggregation case):
+Equivalently, fine-tuning :class:`~transformers.TFTapasForQuestionAnswering` in native TensorFlow can be done as
+follows (shown here for the weak supervision for aggregation case):
 
 .. code-block::
 
@@ -569,9 +569,10 @@ And here is the equivalent code for TensorFlow:
 In case of a conversational set-up, then each table-question pair must be provided **sequentially** to the model, such
 that the ``prev_labels`` token types can be overwritten by the predicted ``labels`` of the previous table-question
 pair. Again, more info can be found in `this notebook
-<https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__.
-more info about TF model can be found in `this TF notebook
-<https://github.com/kamalkraj/Tapas-Tutorial/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__.
+<https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
+(for PyTorch) and `this notebook
+<https://github.com/kamalkraj/Tapas-Tutorial/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
+(for TensorFlow).
 
 
 Tapas specific outputs
