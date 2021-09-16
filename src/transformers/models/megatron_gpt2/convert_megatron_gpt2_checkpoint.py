@@ -65,7 +65,7 @@ def fix_query_key_value_ordering(param, checkpoint_version, num_splits, num_head
         param = param.transpose(0, 2)
         param = param.transpose(1, 2).contiguous()
     elif checkpoint_version >= 2.0:
-        #print(f"hidden_size={hidden_size}")
+        # print(f"hidden_size={hidden_size}")
         # other versions store [num_heads * num_splits * hidden_size, :]
         saved_shape = (num_heads, num_splits, hidden_size) + input_shape[1:]
         param = param.view(*saved_shape)
@@ -82,9 +82,11 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     output_state_dict = {}
 
     nargs = input_state_dict["args"]
-    # pprint(vars(nargs))
+    from pprint import pprint
 
-    # XXX: why make the user write a config file when all the needed data is already in the checkpoint?
+    pprint(vars(nargs))
+
+    # XXX: why make the user write a config file when the exact dimensions/sizes are already in the checkpoint?
     config.vocab_size = nargs.padded_vocab_size
     config.n_positions = nargs.max_position_embeddings
     config.n_ctx = nargs.seq_length
@@ -112,22 +114,22 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     # The embeddings.
     embeddings = lm["embedding"]
 
-    #print(embeddings.keys())
-
     # The word embeddings.
     word_embeddings = embeddings["word_embeddings"]["weight"]
-    #word_embeddings = embeddings["word_embeddings.weight"]
+    # word_embeddings = embeddings["word_embeddings.weight"]
     # Truncate the embedding table to vocab_size rows.
     word_embeddings = word_embeddings[: config.vocab_size, :]
     output_state_dict["transformer.wte.weight"] = word_embeddings
 
     # The position embeddings.
     pos_embeddings = embeddings["position_embeddings"]["weight"]
-    #pos_embeddings = embeddings["position_embeddings.weight"]
+    # pos_embeddings = embeddings["position_embeddings.weight"]
     # Read the hidden dimension.
     n_embed = pos_embeddings.size(1)
     # DEBUG.
-    assert n_embed == heads * hidden_size_per_head, f"detected mismatch n_embed={n_embed} != heads={heads}*hidden_size_per_head={hidden_size_per_head}"
+    assert (
+        n_embed == heads * hidden_size_per_head
+    ), f"detected mismatch n_embed={n_embed} != heads={heads}*hidden_size_per_head={hidden_size_per_head}"
     # Store the position embeddings.
     output_state_dict["transformer.wpe.weight"] = pos_embeddings
 
@@ -268,7 +270,7 @@ def main():
             n_layer=24,
             n_head=16,
             n_inner=4096,
-            activation_function="gelu_new",
+            activation_function="gelu",  # used to be "gelu_new" in earlier versions
             resid_pdrop=0.1,
             embd_pdrop=0.1,
             attn_pdrop=0.1,
