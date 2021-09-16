@@ -150,10 +150,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     def _cast_floating_to(self, params: Union[Dict, FrozenDict], dtype: jnp.dtype, mask: Any = None) -> Any:
 
         # taken from https://github.com/deepmind/jmp/blob/3a8318abc3292be38582794dbf7b094e6583b192/jmp/_src/policy.py#L27
-        def conditional_cast(params):
-            if isinstance(params, jnp.ndarray) and jnp.issubdtype(params.dtype, jnp.floating):
-                params = params.astype(dtype)
-            return params
+        def conditional_cast(param):
+            if isinstance(param, jnp.ndarray) and jnp.issubdtype(param.dtype, jnp.floating):
+                param = param.astype(dtype)
+            return param
 
         if mask is None:
             return jax.tree_map(conditional_cast, params)
