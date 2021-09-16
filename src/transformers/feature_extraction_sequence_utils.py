@@ -220,7 +220,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             truncated_inputs.append(inputs_slice)
 
         if padding_strategy == PaddingStrategy.LONGEST:
-            # make sure that `max_length` cannot be longer than longest truncated length
+            # make sure that `max_length` cannot be longer than the longest truncated length
             max_length = max(len(input_slice[self.model_input_names[0]]) for input_slice in truncated_inputs)
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
