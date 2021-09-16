@@ -127,9 +127,6 @@ class TapasConfig(PretrainedConfig):
             If the aggregation labels are defined and one of these labels represents "No aggregation", this should be
             set to its index. For example, the WTQ models have the "NONE" aggregation label at index 0, so that value
             should be set to 0 for these models.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if ``config.is_decoder=True``.
 
 
     Example::
@@ -184,7 +181,6 @@ class TapasConfig(PretrainedConfig):
         disable_per_token_loss=False,
         aggregation_labels=None,
         no_aggregation_label_index=None,
-        use_cache=True,
         **kwargs
     ):
 
@@ -234,5 +230,3 @@ class TapasConfig(PretrainedConfig):
 
         if isinstance(self.aggregation_labels, dict):
             self.aggregation_labels = {int(k): v for k, v in aggregation_labels.items()}
-
-        self.use_cache = use_cache
