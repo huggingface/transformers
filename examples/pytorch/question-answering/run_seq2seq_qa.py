@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team All rights reserved.
+# Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for question answering.
+Fine-tuning the library's seq2seq models for question answering.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
@@ -22,7 +22,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Tuple
 
 import datasets
 import nltk
@@ -43,7 +43,6 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
-from utils_seq2seq_qa import prepreocess_sqaud_batch
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -52,6 +51,24 @@ check_min_version("4.11.0.dev0")
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
 logger = logging.getLogger(__name__)
+
+
+def preprocess_sqaud_batch(
+    examples,
+    question_column: str,
+    context_column: str,
+    answer_column: str,
+) -> Tuple[List[str], List[str]]:
+    questions = examples[question_column]
+    contexts = examples[context_column]
+    answers = examples[answer_column]
+
+    def generate_input(_question, _context):
+        return " ".join(["question:", _question, "context:", _context])
+
+    inputs = [generate_input(question, context) for question, context in zip(questions, contexts)]
+    targets = [answer["text"][0] if len(answer["text"]) > 0 else "" for answer in answers]
+    return inputs, targets
 
 
 @dataclass
@@ -235,7 +252,7 @@ question_answering_column_name_mapping = {
 }
 
 question_answering_preprocess_mapping = {
-    "squad_v2": prepreocess_sqaud_batch,
+    "squad_v2": preprocess_sqaud_batch,
 }
 
 
@@ -244,13 +261,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser(
-        (
-            ModelArguments,
-            DataTrainingArguments,
-            Seq2SeqTrainingArguments,
-        )
-    )
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -411,13 +422,6 @@ def main():
             "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
-
-    # question_column_name = "question" if "question" in column_names else column_names[0]
-    # context_column_name = "context" if "context" in column_names else column_names[1]
-    # answer_column_name = "answers" if "answers" in column_names else column_names[2]
-
-    # # Padding side determines if we do (question|context) or (context|question).
-    # pad_on_right = tokenizer.padding_side == "right"
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
