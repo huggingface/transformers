@@ -14,7 +14,6 @@
 # limitations under the License.
 
 from typing import Callable, Optional, Tuple
-from jax._src.dtypes import dtype
 
 import numpy as np
 
@@ -618,16 +617,19 @@ class FlaxElectraTiedDense(nn.Module):
     bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
 
     def setup(self):
-        bias = self.param("bias", self.bias_init, (self.embedding_size,))
+        self.bias = self.param("bias", self.bias_init, (self.embedding_size,))
 
     def __call__(self, x, kernel):
+        x = jnp.asarray(x, self.dtype)
+        kernel = jnp.asarray(kernel, self.dtype)
         y = lax.dot_general(
             x,
             kernel,
             (((x.ndim - 1,), (0,)), ((), ())),
             precision=self.precision,
         )
-        return y + self.bias
+        bias = jnp.asarray(self.bias, self.dtype)
+        return y + bias
 
 
 class FlaxElectraForMaskedLMModule(nn.Module):
