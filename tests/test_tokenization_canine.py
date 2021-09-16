@@ -167,18 +167,14 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 SPECIAL_TOKEN_1 = chr(0xE005)
                 SPECIAL_TOKEN_2 = chr(0xE006)
 
-                text_1 = SPECIAL_TOKEN_1
-                text_2 = SPECIAL_TOKEN_2
+                # `add_tokens` method stores special tokens only in `tokenizer.unique_no_split_tokens`. (in tokenization_utils.py)
+                tokenizer.add_tokens([SPECIAL_TOKEN_1], special_tokens=True)
+                # `add_special_tokens` method stores special tokens in `tokenizer.additional_special_tokens`,
+                # which also occur in `tokenizer.all_special_tokens`. (in tokenization_utils_base.py)
+                tokenizer.add_special_tokens({"additional_special_tokens": [SPECIAL_TOKEN_2]})
 
-                # The list in which `_add_tokens` method stores special tokens. (in tokenization_utils.py)
-                tokenizer.unique_no_split_tokens = [SPECIAL_TOKEN_1]
-                # The property storing additional special tokens which occur in `all_special_tokens`. (in tokenization_utils_base.py)
-                tokenizer.additional_special_tokens = [SPECIAL_TOKEN_2]
-                # Add all special tokens into `unique_no_split_tokens`.
-                tokenizer.sanitize_special_tokens()
-
-                token_1 = tokenizer.tokenize(text_1)
-                token_2 = tokenizer.tokenize(text_2)
+                token_1 = tokenizer.tokenize(SPECIAL_TOKEN_1)
+                token_2 = tokenizer.tokenize(SPECIAL_TOKEN_2)
 
                 self.assertEqual(len(token_1), 1)
                 self.assertEqual(len(token_2), 1)
