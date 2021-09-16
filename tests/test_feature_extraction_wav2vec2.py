@@ -135,7 +135,9 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
                 self.assertTrue(np.abs(np.var(input_vector) - 1) < 1e-3)
 
             _check_zero_mean_unit_variance(input_values[0][:800])
+            self.assertTrue(input_values[0][800:].sum() < 1e-6)
             _check_zero_mean_unit_variance(input_values[1][:1000])
+            self.assertTrue(input_values[0][1000:].sum() < 1e-6)
             _check_zero_mean_unit_variance(input_values[2][:1200])
 
     def test_zero_mean_unit_variance_normalization(self):
@@ -158,7 +160,7 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
             _check_zero_mean_unit_variance(input_values[1][:1000])
             _check_zero_mean_unit_variance(input_values[2][:1200])
 
-    def test_zero_mean_unit_variance_normalization_trunc_np(self):
+    def test_zero_mean_unit_variance_normalization_trunc_np_max_length(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         processed = feat_extract(
@@ -173,6 +175,38 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         _check_zero_mean_unit_variance(input_values[0, :800])
         _check_zero_mean_unit_variance(input_values[1])
         _check_zero_mean_unit_variance(input_values[2])
+
+    def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        processed = feat_extract(
+            speech_inputs, truncation=True, max_length=1000, padding="longest", return_tensors="np"
+        )
+        input_values = processed.input_values
+
+        def _check_zero_mean_unit_variance(input_vector):
+            self.assertTrue(np.abs(np.mean(input_vector)) < 1e-3)
+            self.assertTrue(np.abs(np.var(input_vector) - 1) < 1e-3)
+
+        _check_zero_mean_unit_variance(input_values[0, :800])
+        _check_zero_mean_unit_variance(input_values[1, :1000])
+        _check_zero_mean_unit_variance(input_values[2])
+
+        # make sure that if max_length < longest -> then pad to max_length
+        self.assertTrue(input_values.shape == (3, 1000))
+
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        processed = feat_extract(
+            speech_inputs, truncation=True, max_length=2000, padding="longest", return_tensors="np"
+        )
+        input_values = processed.input_values
+
+        _check_zero_mean_unit_variance(input_values[0, :800])
+        _check_zero_mean_unit_variance(input_values[1, :1000])
+        _check_zero_mean_unit_variance(input_values[2])
+
+        # make sure that if max_length > longest -> then pad to longest
+        self.assertTrue(input_values.shape == (3, 1200))
 
     @slow
     @require_torch

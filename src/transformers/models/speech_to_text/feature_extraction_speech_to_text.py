@@ -110,7 +110,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             std = np.sqrt(np.maximum(var, 1e-10))
             x = np.divide(x, std)
 
-        if x.shape[0] > input_length:
+        if input_length < x.shape[0]:
             x[input_length:] = padding_value
 
         # make sure array is in float32
