@@ -18,7 +18,6 @@ import math
 import random
 from functools import partial
 from typing import Callable, Optional, Tuple
-from jax._src.dtypes import dtype
 
 import numpy as np
 
@@ -29,6 +28,7 @@ from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
+from jax._src.dtypes import dtype
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -708,7 +708,7 @@ class FlaxMarianEncoder(nn.Module):
         print(inputs_embeds.dtype)
 
         positions = jnp.take(self.embed_positions, position_ids, axis=0)
-        # explictly cast the positions here, since self.embed_positions are not registered as parameters 
+        # explictly cast the positions here, since self.embed_positions are not registered as parameters
         positions = positions.astype(inputs_embeds.dtype)
 
         hidden_states = inputs_embeds + positions
@@ -775,7 +775,7 @@ class FlaxMarianDecoder(nn.Module):
 
         # embed positions
         positions = jnp.take(self.embed_positions, position_ids, axis=0)
-        # explictly cast the positions here, since self.embed_positions are not registered as parameters 
+        # explictly cast the positions here, since self.embed_positions are not registered as parameters
         positions = positions.astype(inputs_embeds.dtype)
 
         hidden_states = inputs_embeds + positions

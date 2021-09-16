@@ -17,7 +17,6 @@
 
 import copy
 from typing import Callable, Optional, Tuple
-from jax._src.dtypes import dtype
 
 import numpy as np
 
@@ -27,6 +26,7 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
+from jax._src.dtypes import dtype
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -503,7 +503,9 @@ class FlaxT5LayerCrossAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.EncDecAttention = FlaxT5Attention(self.config, has_relative_attention_bias=False, causal=False, dtype=self.dtype)
+        self.EncDecAttention = FlaxT5Attention(
+            self.config, has_relative_attention_bias=False, causal=False, dtype=self.dtype
+        )
         self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
@@ -543,7 +545,7 @@ class FlaxT5Block(nn.Module):
         )
         feed_forward_index = 1
         if self.causal:
-            self.layer += (FlaxT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype))
+            self.layer += FlaxT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype)
             feed_forward_index += 1
 
         self.layer += (FlaxT5LayerFF(self.config, name=str(feed_forward_index), dtype=self.dtype),)
