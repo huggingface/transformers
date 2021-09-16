@@ -17,6 +17,7 @@ import copy
 import gc
 import inspect
 import json
+import os
 import os.path
 import random
 import tempfile
@@ -24,7 +25,7 @@ import unittest
 import warnings
 from typing import Dict, List, Tuple
 
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, Repository
 from requests.exceptions import HTTPError
 from transformers import AutoModel, AutoModelForSequenceClassification, is_torch_available, logging
 from transformers.file_utils import WEIGHTS_NAME, is_torch_fx_available
@@ -1792,6 +1793,44 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.dtype, torch.float16)
 
 
+if is_torch_available():
+
+    class FakeModel(PreTrainedModel):
+        config_class = BertConfig
+        base_model_prefix = "fake"
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
+
+        def forward(self, x):
+            return self.linear(x)
+
+        def _init_weights(self, module):
+            pass
+
+
+# Make sure this is synchronized with the model above.
+FAKE_MODEL_CODE = """
+import torch
+from transformers import BertConfig, PreTrainedModel
+
+class FakeModel(PreTrainedModel):
+    config_class = BertConfig
+    base_model_prefix = "fake"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
+
+    def forward(self, x):
+        return self.linear(x)
+
+    def _init_weights(self, module):
+        pass
+"""
+
+
 @require_torch
 @is_staging_test
 class ModelPushToHubTester(unittest.TestCase):
@@ -1809,6 +1848,11 @@ class ModelPushToHubTester(unittest.TestCase):
 
         try:
             cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-dynamic-model")
         except HTTPError:
             pass
 
@@ -1840,3 +1884,23 @@ class ModelPushToHubTester(unittest.TestCase):
             new_model = BertModel.from_pretrained("valid_org/test-model-org")
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
                 self.assertTrue(torch.equal(p1, p2))
+
+    def test_push_to_hub_dynamic_model(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        config.auto_map = {"AutoModel": "modeling.FakeModel"}
+        model = FakeModel(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model", use_auth_token=self._token)
+            model.save_pretrained(tmp_dir)
+            with open(os.path.join(tmp_dir, "modeling.py"), "w") as f:
+                f.write(FAKE_MODEL_CODE)
+
+            repo.push_to_hub()
+            print(os.listdir(tmp_dir))
+
+        new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
