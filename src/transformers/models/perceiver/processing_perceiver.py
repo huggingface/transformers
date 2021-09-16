@@ -129,29 +129,29 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = torch.moveaxis(inputs, 1, -1)
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
 
-        print("Shape of inputs:", inputs.shape)
-        print("First elements of inputs:", inputs[0,:3,:3])
-        print("Sum of inputs before adding position encodings:", inputs.sum())
+        #print("Shape of inputs:", inputs.shape)
+        #print("First elements of inputs:", inputs[0,:3,:3])
+        #print("Sum of inputs before adding position encodings:", inputs.sum())
         
         # Construct the position encoding.
         position_ids = torch.arange(0, indices)
         pos_enc = self.position_embeddings(position_ids)
         pos_enc = pos_enc.expand(batch_size, -1, -1)
 
-        print("Shape of position encodings before projection:", pos_enc.shape)
-        print("First elements of position encodings before projection:", pos_enc[0,:3,:3])
-        print("Sum of position encodings before projection:", pos_enc.sum())
+        #print("Shape of position encodings before projection:", pos_enc.shape)
+        #print("First elements of position encodings before projection:", pos_enc[0,:3,:3])
+        #print("Sum of position encodings before projection:", pos_enc.sum())
 
-        print("Shape of weights of position projector:", self.positions_projection.weight.shape)
-        print("First elements of weights of position projector:", self.positions_projection.weight[:3,:3])
+        #print("Shape of weights of position projector:", self.positions_projection.weight.shape)
+        #print("First elements of weights of position projector:", self.positions_projection.weight[:3,:3])
         
         # Optionally project them to a target dimension.
         if self.positions_projection is not None:
             pos_enc = self.positions_projection(pos_enc)
 
-        print("Shape of position encodings after projection:", pos_enc.shape)
-        print("First elements of position encodings after projection:", pos_enc[0,:3,:3])
-        print("Sum of position encodings after projection:", pos_enc.sum())
+        #print("Shape of position encodings after projection:", pos_enc.shape)
+        #print("First elements of position encodings after projection:", pos_enc[0,:3,:3])
+        #print("Sum of position encodings after projection:", pos_enc.sum())
 
         if not network_input_is_1d:
             # Reshape pos to match the input feature shape
@@ -164,10 +164,10 @@ class PerceiverImagePreprocessor(nn.Module):
         elif self.concat_or_add_pos == "add":
             inputs_with_pos = inputs + pos_enc
 
-        print("Inputs with position encodings:", inputs_with_pos[0,:3,:3])
-        print("Sum of inputs with position encodings:", inputs_with_pos.sum())
-        print("Inputs without position encodings:", inputs[0,:3,:3])
-        print("Sum of inputs without position encodings:", inputs.sum())
+        #print("Inputs with position encodings:", inputs_with_pos[0,:3,:3])
+        #print("Sum of inputs with position encodings:", inputs_with_pos.sum())
+        #print("Inputs without position encodings:", inputs[0,:3,:3])
+        #print("Sum of inputs without position encodings:", inputs.sum())
     
         return inputs_with_pos, inputs
 
@@ -177,8 +177,8 @@ class PerceiverImagePreprocessor(nn.Module):
         elif self.prep_type == "conv1x1":
             # map inputs to self.out_channels
             inputs = self.convnet_1x1(inputs)
-            print("Inputs after conv:", inputs[0,:3,:3,:3])
-            print("Sum of inputs after conv:", inputs.sum())
+            #print("Inputs after conv:", inputs[0,:3,:3,:3])
+            #print("Sum of inputs after conv:", inputs.sum())
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
         return inputs
