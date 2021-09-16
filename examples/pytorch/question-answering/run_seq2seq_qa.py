@@ -22,7 +22,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import datasets
 import nltk
@@ -51,24 +51,6 @@ check_min_version("4.11.0.dev0")
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
 logger = logging.getLogger(__name__)
-
-
-def preprocess_sqaud_batch(
-    examples,
-    question_column: str,
-    context_column: str,
-    answer_column: str,
-) -> Tuple[List[str], List[str]]:
-    questions = examples[question_column]
-    contexts = examples[context_column]
-    answers = examples[answer_column]
-
-    def generate_input(_question, _context):
-        return " ".join(["question:", _question, "context:", _context])
-
-    inputs = [generate_input(question, context) for question, context in zip(questions, contexts)]
-    targets = [answer["text"][0] if len(answer["text"]) > 0 else "" for answer in answers]
-    return inputs, targets
 
 
 @dataclass
@@ -130,12 +112,6 @@ class DataTrainingArguments:
     answer_column: Optional[str] = field(
         default="answer",
         metadata={"help": "The name of the column in the datasets containing the answers (for question answering)."},
-    )
-    batch_preprocessor: Optional[Callable] = field(
-        default=None,
-        metadata={
-            "help": "The function to convert the question-context-answer triplets into input-output pair for Seq2Seq task."
-        },
     )
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
     validation_file: Optional[str] = field(
@@ -249,10 +225,6 @@ class DataTrainingArguments:
 
 question_answering_column_name_mapping = {
     "squad_v2": ("question", "context", "answer"),
-}
-
-question_answering_preprocess_mapping = {
-    "squad_v2": preprocess_sqaud_batch,
 }
 
 
@@ -409,10 +381,6 @@ def main():
                 f"--answer_column' value '{data_args.answer_column}' needs to be one of: {', '.join(column_names)}"
             )
 
-    batch_preprocessor_fn: Callable = question_answering_preprocess_mapping.get(data_args.batch_preprocessor, None)
-    if data_args.batch_preprocessor is not None:
-        batch_preprocessor_fn: Callable = data_args.batch_preprocessor
-
     # Temporarily set max_answer_length for training.
     max_answer_length = data_args.max_answer_length
     padding = "max_length" if data_args.pad_to_max_length else False
@@ -430,8 +398,25 @@ def main():
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
+    def preprocess_sqaud_batch(
+        examples,
+        question_column: str,
+        context_column: str,
+        answer_column: str,
+    ) -> Tuple[List[str], List[str]]:
+        questions = examples[question_column]
+        contexts = examples[context_column]
+        answers = examples[answer_column]
+
+        def generate_input(_question, _context):
+            return " ".join(["question:", _question, "context:", _context])
+
+        inputs = [generate_input(question, context) for question, context in zip(questions, contexts)]
+        targets = [answer["text"][0] if len(answer["text"]) > 0 else "" for answer in answers]
+        return inputs, targets
+
     def preprocess_function(examples):
-        inputs, targets = batch_preprocessor_fn(examples)
+        inputs, targets = preprocess_sqaud_batch(examples, question_column, context_column, answer_column)
 
         model_inputs = tokenizer(inputs, max_length=max_seq_length, padding=padding, truncation=True)
         # Setup the tokenizer for targets
