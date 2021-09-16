@@ -52,7 +52,7 @@ LOCALIZED_READMES = {
 
 
 def _should_continue(line, indent):
-    return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\):\s*$", line) is not None
+    return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\)(\s*->.*:|:)\s*$", line) is not None
 
 
 def find_code_in_transformers(object_name):
