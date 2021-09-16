@@ -540,12 +540,15 @@ class FlaxT5Block(nn.Module):
         self.causal = self.config.causal
         self.layer = (
             FlaxT5LayerSelfAttention(
-                self.config, has_relative_attention_bias=self.has_relative_attention_bias, name=str(0), dtype=dtype
+                self.config,
+                has_relative_attention_bias=self.has_relative_attention_bias,
+                name=str(0),
+                dtype=self.dtype,
             ),
         )
         feed_forward_index = 1
         if self.causal:
-            self.layer += FlaxT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype)
+            self.layer += (FlaxT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype),)
             feed_forward_index += 1
 
         self.layer += (FlaxT5LayerFF(self.config, name=str(feed_forward_index), dtype=self.dtype),)
