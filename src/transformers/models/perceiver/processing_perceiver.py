@@ -105,7 +105,7 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
   """Trainable position encoding."""
 
   def __init__(self, index_dim, num_channels=128):
-    super().__init__(config)
+    super().__init__()
     self.position_embeddings = nn.Embedding(index_dim, num_channels)
 
   def forward(self, batch_size, position_ids=None):
@@ -146,7 +146,7 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
 
   def __init__(self, index_dims, num_bands, concat_pos=True,
                max_resolution=None, sine_only=False):
-    super().__init__(config)
+    super().__init__()
     self.num_bands = num_bands
     self.concat_pos = concat_pos
     self.sine_only = sine_only
@@ -249,8 +249,13 @@ class PerceiverImagePreprocessor(nn.Module):
                 stride=(spatial_downsample, spatial_downsample),
             )
 
-        self.position_embeddings = nn.Embedding(n_positions, self.out_channels)
-
+        if self.position_encoding_type == "trainable": 
+            self.position_embeddings = PerceiverTrainablePositionEncoding(n_positions, self.out_channels)
+        elif self.position_encoding_type == "fourier":
+            self.position_embeddings = PerceiverFourierPositionEncoding(n_positions, self.out_channels)
+        else:
+            raise ValueError(f'Unknown position encoding type: {position_encoding_type}.')
+        
         # Stack MLPs to get a deeper positional embedding.
         if n_extra_pos_mlp > 0:
             raise NotImplementedError("Stacking MLPs is not yet supported")
@@ -280,8 +285,7 @@ class PerceiverImagePreprocessor(nn.Module):
         # Construct the position encoding.
         if self.position_encoding_type == "trainable": 
             position_ids = torch.arange(0, indices)
-            pos_enc = self.position_embeddings(position_ids)
-            pos_enc = pos_enc.expand(batch_size, -1, -1)
+            pos_enc = self.position_embeddings(batch_size, position_ids)
         elif self.position_encoding_type == "fourier":
             pos_enc = None
 

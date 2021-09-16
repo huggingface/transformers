@@ -65,7 +65,7 @@ def rename_keys(state_dict):
         name = name.replace("image_preprocessor/~/conv2_d/b", "input_preprocessor.convnet_1x1.bias")
         name = name.replace(
             "image_preprocessor/~_build_network_inputs/trainable_position_encoding/pos_embs",
-            "input_preprocessor.position_embeddings.weight",
+            "input_preprocessor.position_embeddings.position_embeddings.weight",
         )
         name = name.replace(
             "image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/w",
