@@ -620,6 +620,9 @@ class TokenizerTesterMixin:
 
     def test_added_tokens_do_lower_case(self):
         # TODO(thom) activate fast tokenizer tests once Rust tokenizers accepts white spaces in added tokens.
+        if not self.test_slow_tokenizer:
+            self.skipTest("This test is only for slow tokenizers")
+            return
         tokenizers = self.get_tokenizers(fast=False, do_lower_case=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
