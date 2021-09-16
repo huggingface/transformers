@@ -185,16 +185,31 @@ def _random_spans_noise_mask(length, noise_density, mean_noise_span_length):
     return is_noise[:orig_length]
 
 
-def _compute_mask_indices(shape, mask_prob, mask_length) -> np.ndarray:
-    return np.array([_random_spans_noise_mask(shape[-1], noise_density=mask_prob, mean_noise_span_length=mask_length) for _ in range(shape[0])], dtype=np.bool)
+def _old_compute_mask_indices(shape, mask_prob, mask_length, attention_mask) -> np.ndarray:
+    mask_indices = np.zeros(shape, dtype=np.bool)
+
+    # compute random mask spans
+    for i, mask in enumerate(attention_mask):
+        indices_slice_length = mask.sum()
+        mask_indices_slice = _random_spans_noise_mask(indices_slice_length, noise_density=mask_prob, mean_noise_span_length=mask_length)
+        mask_indices[i, :indices_slice_length] = mask_indices_slice
+
+    max_length = mask_indices.sum(-1).max()
+
+    # make sure that all mask slices have the same # mask indices
+    for i, indices in enumerate(mask_indices):
+        num_indices = indices.sum()
+        if num_indices < max_length:
+            mask_indices[i, -(max_length - num_indices):] = 1
+
+    return mask_indices
 
 
-def _old_2_compute_mask_indices(
+def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
     mask_length: int,
     attention_mask: Optional[torch.tensor] = None,
-    min_masks: int = 0,
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape
@@ -225,7 +240,7 @@ def _old_2_compute_mask_indices(
         + np.random.rand()
     )
 
-    all_num_mask = max(min_masks, all_num_mask)
+#    all_num_mask = max(min_masks, all_num_mask)
 
     mask_indicess = []
     for i in range(batch_size):
@@ -236,7 +251,7 @@ def _old_2_compute_mask_indices(
                 mask_prob * sequence_length / float(mask_length)
                 + np.random.rand()
             )
-            num_mask = max(min_masks, num_mask)
+#            num_mask = max(min_masks, num_mask)
         else:
             num_mask = all_num_mask
 
@@ -1155,6 +1170,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 (batch_size, sequence_length),
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
+                attention_mask=attention_mask,
             )
             mask_time_indices = torch.tensor(mask_time_indices, device=self.device)
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -1165,6 +1181,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 (batch_size, hidden_size),
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
+                attention_mask=attention_mask,
             )
             mask_time_indices = torch.tensor(mask_time_indices, device=self.device)
             hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
