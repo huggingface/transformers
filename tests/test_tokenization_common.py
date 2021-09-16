@@ -779,7 +779,11 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
 
-                new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False), AddedToken("GHI IHG", normalized=False)]
+                new_toks = [
+                    AddedToken("[ABC]", normalized=False),
+                    AddedToken("[DEF]", normalized=False),
+                    AddedToken("GHI IHG", normalized=False),
+                ]
                 tokenizer.add_tokens(new_toks)
                 input = "[ABC][DEF][ABC]GHI IHG[DEF]"
                 if self.space_between_special_tokens:
