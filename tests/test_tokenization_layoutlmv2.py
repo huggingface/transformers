@@ -14,14 +14,21 @@
 # limitations under the License.
 
 import inspect
-import re
 import os
+import re
 import shutil
 import tempfile
 import unittest
 from typing import List
 
-from transformers import AddedToken, LayoutLMv2TokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available, PreTrainedTokenizerFast
+from transformers import (
+    AddedToken,
+    LayoutLMv2TokenizerFast,
+    PreTrainedTokenizerFast,
+    SpecialTokensMixin,
+    is_tf_available,
+    is_torch_available,
+)
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
@@ -1785,7 +1792,13 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):
         toks = [(i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in range(len(tokenizer))]
         toks = list(filter(lambda t: re.match(r"^[ a-zA-Z]+$", t[1]), toks))
-        toks = list(filter(lambda t: [t[0]] == tokenizer.encode(t[1].split(" "), boxes=len(t[1]) * [[1, 1, 1, 1]], add_special_tokens=False), toks))
+        toks = list(
+            filter(
+                lambda t: [t[0]]
+                == tokenizer.encode(t[1].split(" "), boxes=len(t[1]) * [[1, 1, 1, 1]], add_special_tokens=False),
+                toks,
+            )
+        )
         if max_length is not None and len(toks) > max_length:
             toks = toks[:max_length]
         if min_length is not None and len(toks) < min_length and len(toks) > 0:
@@ -1805,10 +1818,13 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         if with_prefix_space:
             output_txt = " " + output_txt
         output_txt_list = output_txt.split(" ")
-        output_ids = tokenizer.encode(output_txt_list, boxes=len(output_txt) * [[1, 1, 1, 1]], add_special_tokens=False)
+        output_ids = tokenizer.encode(
+            output_txt_list, boxes=len(output_txt) * [[1, 1, 1, 1]], add_special_tokens=False
+        )
         boxes = len(output_txt) * [[1, 1, 1, 1]]
 
         return output_txt_list, output_ids, boxes
+
     # @unittest.skip("LayoutLMv2 tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_single_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
@@ -1816,7 +1832,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 seq_0, ids, boxes = self.get_clean_sequence(tokenizer, max_length=20)
 
-                sequence = tokenizer.encode(seq_0,boxes=boxes, add_special_tokens=False)
+                sequence = tokenizer.encode(seq_0, boxes=boxes, add_special_tokens=False)
                 total_length = len(sequence)
 
                 assert total_length > 4, "Issue with the testing sequence, please update it it's too short"
@@ -1826,7 +1842,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(model_max_length, 100)
                 seq_1 = seq_0 * model_max_length
 
-                sequence1 = tokenizer(seq_1, boxes=len(seq_1)*[[1,1,1,1]], add_special_tokens=False)
+                sequence1 = tokenizer(seq_1, boxes=len(seq_1) * [[1, 1, 1, 1]], add_special_tokens=False)
                 total_length1 = len(sequence1["input_ids"])
                 assert (
                     total_length1 > model_max_length
@@ -1840,17 +1856,29 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     with self.subTest(f"Padding: {padding_state}"):
                         for truncation_state in [True, "longest_first", "only_first"]:
                             with self.subTest(f"Truncation: {truncation_state}"):
-                                output = tokenizer(seq_1,boxes=len(seq_1)*[[1,1,1,1]], padding=padding_state, truncation=truncation_state)
+                                output = tokenizer(
+                                    seq_1,
+                                    boxes=len(seq_1) * [[1, 1, 1, 1]],
+                                    padding=padding_state,
+                                    truncation=truncation_state,
+                                )
                                 self.assertEqual(len(output["input_ids"]), model_max_length)
 
-                                output = tokenizer([seq_1],boxes=[len(seq_1)*[[1,1,1,1]]], padding=padding_state, truncation=truncation_state)
+                                output = tokenizer(
+                                    [seq_1],
+                                    boxes=[len(seq_1) * [[1, 1, 1, 1]]],
+                                    padding=padding_state,
+                                    truncation=truncation_state,
+                                )
                                 self.assertEqual(len(output["input_ids"][0]), model_max_length)
 
                         # Simple with no truncation
                         # Reset warnings
                         tokenizer.deprecation_warnings = {}
                         with self.assertLogs("transformers", level="WARNING") as cm:
-                            output = tokenizer(seq_1, boxes=len(seq_1)*[[1,1,1,1]], padding=padding_state, truncation=False)
+                            output = tokenizer(
+                                seq_1, boxes=len(seq_1) * [[1, 1, 1, 1]], padding=padding_state, truncation=False
+                            )
                             self.assertNotEqual(len(output["input_ids"]), model_max_length)
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
@@ -1861,7 +1889,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                         tokenizer.deprecation_warnings = {}
                         with self.assertLogs("transformers", level="WARNING") as cm:
-                            output = tokenizer([seq_1],boxes=[len(seq_1)*[[1,1,1,1]]], padding=padding_state, truncation=False)
+                            output = tokenizer(
+                                [seq_1], boxes=[len(seq_1) * [[1, 1, 1, 1]]], padding=padding_state, truncation=False
+                            )
                             self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
@@ -1874,7 +1904,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 stride = 2
                 information = tokenizer(
                     seq_0,
-                    boxes = len(seq_0) * [[1, 1, 1, 1]],
+                    boxes=len(seq_0) * [[1, 1, 1, 1]],
                     max_length=total_length - 2,
                     add_special_tokens=False,
                     stride=stride,
@@ -1893,7 +1923,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(truncated_sequence, sequence[:-2])
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, sequence[-(2 + stride):])
+                    self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
                 else:
                     truncated_sequence = information["input_ids"]
                     overflowing_tokens = information["overflowing_tokens"]
@@ -1902,7 +1932,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(truncated_sequence, sequence[:-2])
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, sequence[-(2 + stride):])
+                    self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
 
     @unittest.skip("LayoutLMv2 tokenizer requires boxes besides sequences.")
     def test_pretokenized_inputs(self):
