@@ -468,7 +468,15 @@ class TrainingArguments:
     )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
-    logging_nan_inf_filter: str = field(default=False, metadata={"help": "Filter nan and inf losses for logging"})
+    logging_nan_inf_filter: str = field(
+        default=False,
+        metadata={
+            "help": (
+                "Filter nan and inf losses for logging. "
+                "Note this flag only affects the logging output and not the optimization step."
+            )
+        },
+    )
     save_strategy: IntervalStrategy = field(
         default="steps",
         metadata={"help": "The checkpoint save strategy to use."},
