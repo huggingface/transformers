@@ -97,7 +97,7 @@ class GPT2ModelTester:
         return GPT2Config.from_pretrained("gpt2")
 
     def prepare_config_and_inputs(
-        self, gradient_checkpointing=False, scale_attn_by_layer_idx=False, reorder_and_upcast_attn=False
+        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -123,7 +123,7 @@ class GPT2ModelTester:
 
         config = self.get_config(
             gradient_checkpointing=gradient_checkpointing,
-            scale_attn_by_layer_idx=scale_attn_by_layer_idx,
+            scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
             reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
 
@@ -141,7 +141,9 @@ class GPT2ModelTester:
             choice_labels,
         )
 
-    def get_config(self, gradient_checkpointing=False, scale_attn_by_layer_idx=False, reorder_and_upcast_attn=False):
+    def get_config(
+        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+    ):
         return GPT2Config(
             vocab_size=self.vocab_size,
             n_embd=self.hidden_size,
@@ -160,7 +162,7 @@ class GPT2ModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
-            scale_attn_by_layer_idx=scale_attn_by_layer_idx,
+            scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
             reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
 
@@ -489,8 +491,8 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
 
-    def test_gpt2_scale_attn_by_layer_idx(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_layer_idx=True)
+    def test_gpt2_scale_attn_by_inverse_layer_idx(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
 
     def test_gpt2_reorder_and_upcast_attn(self):
