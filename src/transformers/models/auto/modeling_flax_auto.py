@@ -45,6 +45,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5Model"),
         ("wav2vec2", "FlaxWav2Vec2Model"),
         ("marian", "FlaxMarianModel"),
+        ("blenderbot", "FlaxBlenderbotModel")
     ]
 )
 
@@ -88,6 +89,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5ForConditionalGeneration"),
         ("marian", "FlaxMarianMTModel"),
         ("encoder-decoder", "FlaxEncoderDecoderModel"),
+        ("blenderbot", "FlaxBlenderbotForConditionalGeneration"),
     ]
 )
 

@@ -394,6 +394,33 @@ class FlaxBertPreTrainedModel:
         requires_backends(cls, ["flax"])
 
 
+class FlaxBlenderbotForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxBlenderbotModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxBlenderbotPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
 class FlaxBigBirdForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])

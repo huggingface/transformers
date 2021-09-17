@@ -118,3 +118,17 @@ TFBlenderbotForConditionalGeneration
 
 .. autoclass:: transformers.TFBlenderbotForConditionalGeneration
     :members: call
+
+
+FlaxBlenderbot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBlenderbot
+    :members: __call__, encode, decode
+
+
+FlaxBlenderbotForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBlenderbotForConditionalGeneration
+    :members: __call__, encode, decode
