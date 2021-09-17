@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -148,7 +148,7 @@ class FlaxBeitPatchEmbeddings(nn.Module):
             strides=(patch_size, patch_size),
             padding="VALID",
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
     def __call__(self, pixel_values):
@@ -181,9 +181,11 @@ class FlaxBeitEmbeddings(nn.Module):
         batch_size, seq_len, _ = embeddings.shape
 
         cls_tokens = jnp.broadcast_to(self.cls_token, (batch_size, 1, self.config.hidden_size))
+        cls_tokens = cls_tokens.astype(embeddings.dtype)
 
         if bool_masked_pos is not None:
             mask_tokens = jnp.broadcast_to(self.mask_token, (batch_size, seq_len, self.config.hidden_size))
+            mask_tokens = mask_tokens.astype(embeddings.dtype)
             # replace the masked visual tokens by mask_tokens
             w = jnp.expand_dims(bool_masked_pos, axis=-1)
             embeddings = embeddings * (1 - w) + mask_tokens * w
@@ -191,7 +193,7 @@ class FlaxBeitEmbeddings(nn.Module):
         embeddings = jnp.concatenate((cls_tokens, embeddings), axis=1)
 
         if self.config.use_absolute_position_embeddings:
-            embeddings = embeddings + self.position_embeddings
+            embeddings = embeddings + self.position_embeddings.astype(embeddings.dtype)
 
         embeddings = self.dropout(embeddings, deterministic=deterministic)
         return embeddings
@@ -214,10 +216,9 @@ class FlaxBeitRelativePositionBias(nn.Module):
         self.relative_position_index = relative_position_index_init(self.window_size)
 
     def __call__(self):
-        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.reshape(-1)].reshape(
-            self.window_size[0] * self.window_size[1] + 1, self.window_size[0] * self.window_size[1] + 1, -1
-        )  # Wh*Ww,Wh*Ww,nH
-
+        index = self.relative_position_index.reshape(-1)
+        shape = (self.window_size[0] * self.window_size[1] + 1, self.window_size[0] * self.window_size[1] + 1, -1)
+        relative_position_bias = self.relative_position_bias_table[index].reshape(shape)  # Wh*Ww,Wh*Ww,nH
         return jnp.transpose(relative_position_bias, (2, 0, 1))
 
 
@@ -238,22 +239,24 @@ class FlaxBeitSelfAttention(nn.Module):
         self.query = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.key = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             use_bias=False,
         )
         self.value = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
         self.relative_position_bias = (
-            FlaxBeitRelativePositionBias(self.config, window_size=self.window_size) if self.window_size else None
+            FlaxBeitRelativePositionBias(self.config, window_size=self.window_size, dtype=self.dtype)
+            if self.window_size
+            else None
         )
 
     def __call__(
@@ -275,14 +278,15 @@ class FlaxBeitSelfAttention(nn.Module):
         if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
             dropout_rng = self.make_rng("dropout")
 
-        attention_bias = 0.0
+        attention_bias = jnp.array(0.0, dtype=self.dtype)
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
             attention_bias = jnp.expand_dims(self.relative_position_bias(), 0)
+            attention_bias = attention_bias.astype(query_states.dtype)
 
         # Add shared relative position bias if provided.
         if relative_position_bias is not None:
-            attention_bias = attention_bias + relative_position_bias
+            attention_bias = attention_bias + relative_position_bias.astype(attention_bias.dtype)
 
         attn_weights = dot_product_attention_weights(
             query_states,
@@ -310,7 +314,7 @@ class FlaxBeitSelfOutput(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -354,7 +358,7 @@ class FlaxBeitIntermediate(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.intermediate_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.activation = ACT2FN[self.config.hidden_act]
@@ -373,7 +377,7 @@ class FlaxBeitOutput(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -403,6 +407,9 @@ class FlaxBeitLayer(nn.Module):
         if self.init_values > 0:
             self.lambda_1 = self.param("lambda_1", ones_with_scale, (self.config.hidden_size), self.init_values)
             self.lambda_2 = self.param("lambda_2", ones_with_scale, (self.config.hidden_size), self.init_values)
+        else:
+            self.lambda_1 = None
+            self.lambda_2 = None
 
     def __call__(
         self, hidden_states, relative_position_bias=None, deterministic: bool = True, output_attentions: bool = False
@@ -417,7 +424,7 @@ class FlaxBeitLayer(nn.Module):
 
         # apply lambda_1 if present
         if self.lambda_1 is not None:
-            attention_output = self.lambda_1 * attention_output
+            attention_output = self.lambda_1.astype(attention_output.dtype) * attention_output
 
         # first residual connection
         hidden_states = self.drop_path(attention_output, deterministic=deterministic) + hidden_states
@@ -430,7 +437,7 @@ class FlaxBeitLayer(nn.Module):
 
         # apply lambda_2 if present
         if self.lambda_2 is not None:
-            layer_output = self.lambda_2 * layer_output
+            layer_output = self.lambda_2.astype(layer_output.dtype) * layer_output
 
         # second residual connection
         layer_output = self.drop_path(layer_output, deterministic=deterministic) + hidden_states
@@ -447,7 +454,6 @@ class FlaxBeitLayerCollection(nn.Module):
     config: BeitConfig
     window_size: Tuple[int, int]
     drop_path_rates: List[float]
-    relative_position_bias: Callable[[], jnp.ndarray]
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
@@ -465,6 +471,7 @@ class FlaxBeitLayerCollection(nn.Module):
     def __call__(
         self,
         hidden_states,
+        relative_position_bias: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -477,7 +484,6 @@ class FlaxBeitLayerCollection(nn.Module):
         for i, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            relative_position_bias = self.relative_position_bias() if self.relative_position_bias is not None else None
             layer_outputs = layer(
                 hidden_states, relative_position_bias, deterministic=deterministic, output_attentions=output_attentions
             )
@@ -516,9 +522,6 @@ class FlaxBeitEncoder(nn.Module):
             self.config,
             window_size=self.window_size,
             drop_path_rates=drop_path_rates,
-            relative_position_bias=self.relative_position_bias
-            if self.config.use_shared_relative_position_bias
-            else None,
             dtype=self.dtype,
         )
 
@@ -530,8 +533,13 @@ class FlaxBeitEncoder(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+        if self.config.use_shared_relative_position_bias:
+            relative_position_bias = self.relative_position_bias()
+        else:
+            relative_position_bias = None
         return self.layer(
             hidden_states,
+            relative_position_bias=relative_position_bias,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -716,7 +724,11 @@ class FlaxBeitForMaskedImageModelingModule(nn.Module):
 
         # Classifier head
         self.layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
-        self.lm_head = nn.Dense(self.config.vocab_size, dtype=self.dtype)
+        self.lm_head = nn.Dense(
+            self.config.vocab_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            dtype=self.dtype,
+        )
 
     def __call__(
         self,
@@ -798,8 +810,8 @@ class FlaxBeitForImageClassificationModule(nn.Module):
         self.beit = FlaxBeitModule(config=self.config, dtype=self.dtype, add_pooling_layer=True)
         self.classifier = nn.Dense(
             self.config.num_labels,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
 
     def __call__(
