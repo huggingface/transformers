@@ -860,11 +860,13 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
             input_preprocessor=PerceiverImagePreprocessor(
                 config,
                 prep_type="conv1x1",
-                out_channels=256,
                 spatial_downsample=1,
+                out_channels=256,
                 position_encoding_type="trainable",
                 concat_or_add_pos="concat",
                 project_pos_dim=256,
+                index_dim=50176,
+                num_channels=256,
             ),
             decoder=PerceiverClassificationDecoder(config, num_channels=config.d_latents, use_query_residual=True),
         )

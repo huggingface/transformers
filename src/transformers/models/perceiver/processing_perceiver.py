@@ -212,13 +212,13 @@ class PerceiverImagePreprocessor(nn.Module):
         temporal_downsample: int = 1,
         position_encoding_type: str = "fourier",
         n_extra_pos_mlp: int = 0,
-        n_positions: int = 50176,
         in_channels: int = 3,
         out_channels: int = 64,
         conv_after_patching: bool = False,
         conv2d_use_batchnorm: bool = True,
         concat_or_add_pos: str = "concat",
         project_pos_dim=-1,
+        **position_encoding_kwargs,
     ):
         super().__init__()
         self.config = config
@@ -250,9 +250,9 @@ class PerceiverImagePreprocessor(nn.Module):
             )
 
         if self.position_encoding_type == "trainable": 
-            self.position_embeddings = PerceiverTrainablePositionEncoding(n_positions, self.out_channels)
+            self.position_embeddings = PerceiverTrainablePositionEncoding(**position_encoding_kwargs)
         elif self.position_encoding_type == "fourier":
-            self.position_embeddings = PerceiverFourierPositionEncoding(n_positions, self.out_channels)
+            self.position_embeddings = PerceiverFourierPositionEncoding(**position_encoding_kwargs)
         else:
             raise ValueError(f'Unknown position encoding type: {position_encoding_type}.')
         
