@@ -126,26 +126,6 @@ class RepeatDataset:
         return {"input_ids": self.x, "labels": self.x}
 
 
-class RepeatDatasetWithInfAndNan:
-    def __init__(self, x, length=64, inf_sample_idx=10, nan_sample_idx=20):
-        self.x = x
-        self.length = length
-        self.inf_sample_idx = inf_sample_idx
-        self.nan_sample_idx = nan_sample_idx
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, i):
-        if i == self.inf_sample_idx:
-            x = (torch.ones_like(self.x) - 1e20).long()
-        #        elif i == self.nan_sample_idx:
-        #            x = torch.ones_like(self.x) - float(1/0)
-        else:
-            x = self.x
-        return {"input_ids": x, "labels": x}
-
-
 class DynamicShapesDataset:
     def __init__(self, length=64, seed=42, batch_size=8):
         self.length = length
