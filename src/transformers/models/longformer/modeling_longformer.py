@@ -976,7 +976,7 @@ class LongformerSelfAttention(nn.Module):
         # attn = torch.einsum('blhs,bshd->blhd', (selected_attn_probs, selected_v))
         # compute attn output only global
         attn_output_only_global = torch.matmul(
-            attn_probs_only_global.transpose(1, 2), value_vectors_only_global.transpose(1, 2)
+            attn_probs_only_global.transpose(1, 2).clone(), value_vectors_only_global.transpose(1, 2).clone()
         ).transpose(1, 2)
 
         # reshape attn probs
