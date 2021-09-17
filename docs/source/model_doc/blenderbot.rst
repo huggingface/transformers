@@ -120,10 +120,10 @@ TFBlenderbotForConditionalGeneration
     :members: call
 
 
-FlaxBlenderbot
+FlaxBlenderbotModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.FlaxBlenderbot
+.. autoclass:: transformers.FlaxBlenderbotModel
     :members: __call__, encode, decode
 
 

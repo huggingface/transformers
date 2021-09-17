@@ -882,7 +882,6 @@ class FlaxBlenderbotModule(nn.Module):
         )
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartPreTrainedModel with Bart->Blenderbot
 class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
     config_class = BlenderbotConfig
     base_model_prefix: str = "model"
