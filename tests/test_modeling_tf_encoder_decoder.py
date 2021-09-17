@@ -726,9 +726,9 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         return EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
 
     def get_encoder_decoder_config_small(self):
-        encoder_config = AutoConfig.from_pretrained("julien-c/bert-xsmall-dummy")
+        encoder_config = AutoConfig.from_pretrained("hf-internal-testing/tiny-bert")
         decoder_config = AutoConfig.from_pretrained(
-            "julien-c/bert-xsmall-dummy", is_decoder=True, add_cross_attention=True
+            "hf-internal-testing/tiny-bert", is_decoder=True, add_cross_attention=True
         )
         return EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
 
@@ -761,13 +761,17 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         self.assertTrue(logits_orig.numpy().sum() - logits_1.numpy().sum() < 1e-3)
 
+        max_diff = np.max(np.abs(logits_1.numpy() - logits_orig.numpy()))
+        self.assertAlmostEqual(max_diff, 0.0, places=4)
+
         with tempfile.TemporaryDirectory() as tmp_dirname:
             encoder_decoder.save_pretrained(tmp_dirname)
             encoder_decoder = TFEncoderDecoderModel.from_pretrained(tmp_dirname)
 
         logits_2 = encoder_decoder(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
 
-        self.assertTrue(logits_orig.numpy().sum() - logits_2.numpy().sum() < 1e-3)
+        max_diff = np.max(np.abs(logits_2.numpy() - logits_orig.numpy()))
+        self.assertAlmostEqual(max_diff, 0.0, places=4)
 
     @require_torch
     @is_pt_tf_cross_test
@@ -798,15 +802,16 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         logits_tf = encoder_decoder_tf(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
 
-        self.assertTrue(logits_pt.detach().cpu().numpy().sum() - logits_tf.numpy().sum() < 4e-2)
+        max_diff = np.max(np.abs(logits_pt.detach().cpu().numpy() - logits_tf.numpy()))
+        self.assertAlmostEqual(max_diff, 0.0, places=3)
 
         # TensorFlow => PyTorch
         with tempfile.TemporaryDirectory() as tmp_dirname:
             encoder_decoder_tf.save_pretrained(tmp_dirname)
             encoder_decoder_pt = EncoderDecoderModel.from_pretrained(tmp_dirname, from_tf=True)
 
-        logits_pt = encoder_decoder_pt(input_ids=pt_input_ids, decoder_input_ids=pt_decoder_input_ids).logits
-        self.assertTrue(logits_pt.detach().cpu().numpy().sum() - logits_tf.numpy().sum() < 4e-2)  # <= this test passes
+        max_diff = np.max(np.abs(logits_pt.detach().cpu().numpy() - logits_tf.numpy()))
+        self.assertAlmostEqual(max_diff, 0.0, places=3)
 
     @slow
     def test_encoder_decoder_from_pretrained(self):
