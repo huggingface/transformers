@@ -1297,9 +1297,16 @@ class Trainer:
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():
-                        tr_loss += self.training_step(model, inputs)
+                        tr_loss_step = self.training_step(model, inputs)
                 else:
-                    tr_loss += self.training_step(model, inputs)
+                    tr_loss_step = self.training_step(model, inputs)
+
+                if args.logging_nan_inf_filter and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step)):
+                    # if loss is nan or inf simply add the average of previous logged losses
+                    tr_loss += tr_loss / 1 + (self.state.global_step - self._globalstep_last_logged)
+                else:
+                    tr_loss += tr_loss_step
+
                 self.current_flos += float(self.floating_point_ops(inputs))
 
                 # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
