@@ -78,6 +78,35 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer, (BertTokenizer, BertTokenizerFast))
         self.assertEqual(tokenizer.vocab_size, 12)
 
+    def test_tokenizer_from_name(self):
+        name = "bert"
+        vocab_file = "./tests/fixtures/vocab.txt"
+        tokenizer = AutoTokenizer.from_model_name(name, vocab_file=vocab_file, use_fast=False)
+        self.assertIsInstance(tokenizer, BertTokenizer)
+        self.assertEqual(tokenizer.vocab_size, 10)
+
+        name = "gpt2"
+        vocab_file = "./tests/fixtures/vocab.json"
+        merges_file = "./tests/fixtures/merges.txt"
+        tokenizer = AutoTokenizer.from_model_name(name, vocab_file=vocab_file, merges_file=merges_file, use_fast=False)
+        self.assertIsInstance(tokenizer, GPT2Tokenizer)
+        self.assertEqual(tokenizer.vocab_size, 21)
+
+    @require_tokenizers
+    def test_tokenizer_from_name_fast(self):
+        name = "bert"
+        vocab_file = "./tests/fixtures/vocab.txt"
+        tokenizer = AutoTokenizer.from_model_name(name, vocab_file=vocab_file)
+        self.assertIsInstance(tokenizer, BertTokenizerFast)
+        self.assertEqual(tokenizer.vocab_size, 10)
+
+        name = "gpt2"
+        vocab_file = "./tests/fixtures/vocab.json"
+        merges_file = "./tests/fixtures/merges.txt"
+        tokenizer = AutoTokenizer.from_model_name(name, vocab_file=vocab_file, merges_file=merges_file)
+        self.assertIsInstance(tokenizer, GPT2TokenizerFast)
+        self.assertEqual(tokenizer.vocab_size, 21)
+
     @require_tokenizers
     def test_tokenizer_identifier_with_correct_config(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast, AutoTokenizer]:

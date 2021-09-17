@@ -348,8 +348,56 @@ class AutoTokenizer:
     def __init__(self):
         raise EnvironmentError(
             "AutoTokenizer is designed to be instantiated "
-            "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method."
+            "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` or `AutoTokenizer.from_config(config)` method."
         )
+
+    @classmethod
+    @replace_list_option_in_docstrings(TOKENIZER_MAPPING_NAMES)
+    def from_model_name(cls, model_name, *args, **kwargs):
+        r"""
+        Instantiate one of the tokenizer classes of the library by passing the required vocabulary file.
+
+        The tokenizer class to instantiate is selected based on the :obj:`model_name` which is passed as an argument.
+
+        List options
+
+        Params:
+            model_name (:obj:`str`):
+                The :obj:`model_name` associated to the tokenizer class that should be instantiated. Should be one of
+                the keys shown in bold above.
+            use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to try to load the fast version of the tokenizer.
+            args (additional positional arguments, `optional`):
+                Will be passed to the Tokenizer ``__init__()`` method. Can be used to pass the required vocabulary
+                files such as ``vocab_file`` or ``merges_file``.
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the Tokenizer ``__init__()`` method. Can be used to pass the required vocabulary
+                files such as ``vocab_file=/path/tol/vocab_file.json`` and/or ``merges_file=/path/to/merges_file.txt``
+                as well as to set special tokens like ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``,
+                ``pad_token``, ``cls_token``, ``mask_token``, ``additional_special_tokens``. See parameters in the
+                ``__init__()`` for more details.
+
+        Examples::
+
+            >>> from transformers import AutoTokenizer
+
+            >>> # Instantiate BERT-like tokenizer
+            >>> tokenizer = AutoTokenizer.from_model_name("bert", vocab_file="./vocab.txt")
+
+            >>> # Instantiate GPT2-like tokenizer
+            >>> tokenizer = AutoTokenizer.from_model_name("gpt2", vocab_file="./vocab.json", merges_file="./merges.txt")
+        """
+
+        use_fast = kwargs.pop("use_fast", True)
+
+        tokenizer_class_name, tokenizer_class_name_fast = TOKENIZER_MAPPING_NAMES[model_name]
+
+        if use_fast and tokenizer_class_name_fast is not None:
+            tokenizer_cls_fast = tokenizer_class_from_name(tokenizer_class_name_fast)
+            return tokenizer_cls_fast(*args, **kwargs)
+
+        tokenizer_cls = tokenizer_class_from_name(tokenizer_class_name)
+        return tokenizer_cls(*args, **kwargs)
 
     @classmethod
     @replace_list_option_in_docstrings(TOKENIZER_MAPPING_NAMES)
