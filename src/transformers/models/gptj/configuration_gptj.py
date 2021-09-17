@@ -36,7 +36,7 @@ class GPTJConfig(PretrainedConfig):
     :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 50400):
+        vocab_size (:obj:`int`, `optional`, defaults to 50257):
             Vocabulary size of the GPT-J model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.GPTJModel`.
         n_positions (:obj:`int`, `optional`, defaults to 2048):
@@ -96,7 +96,7 @@ class GPTJConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50400,
+        vocab_size=50257,
         n_positions=2048,
         n_ctx=2048,
         n_embd=4096,
