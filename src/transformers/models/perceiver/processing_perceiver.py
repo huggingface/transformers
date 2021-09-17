@@ -17,10 +17,67 @@ IO pre- and post-processor classes for Perceiver.
 """
 import abc
 from typing import Optional
+import math
+from functools import reduce
+from operator import __add__
 
 import numpy as np
 import torch
 import torch.nn as nn
+
+
+#  ------------------------------------------------------------
+#  -------------------  Up/down-sampling  ---------------------
+#  ------------------------------------------------------------
+
+
+class Conv2dSamePadding(nn.Conv2d):
+    """Conv2d layer with padding="same" support.
+    Source: https://gist.github.com/sumanmichael/4de9dee93f972d47c80c4ade8e149ea6
+    """
+
+    def __init__(self,*args,**kwargs):
+        super(Conv2dSamePadding, self).__init__(*args, **kwargs)
+        self.zero_pad_2d = nn.ZeroPad2d(reduce(__add__,
+            [(k // 2 + (k - 2 * (k // 2)) - 1, k // 2) for k in self.kernel_size[::-1]]))
+
+    def forward(self, input):
+        return  self._conv_forward(self.zero_pad_2d(input), self.weight, self.bias)
+
+
+class Conv2DDownsample(nn.Module):
+  """Downsamples 4x by applying a 2D convolution and doing max pooling."""
+
+  def __init__(
+      self,
+      num_layers: int = 1,
+      in_channels: int = 3,
+      out_channels: int = 64,
+      use_batchnorm: bool = True,
+  ):
+    """Constructs a Conv2DDownsample model.
+    Args:
+      in_channels: The number of input channels.
+      out_channels: The number of conv output channels.
+      use_batchnorm: Whether to use batchnorm.
+    """
+    super().__init__()
+
+    self.conv = Conv2dSamePadding(in_channels=in_channels, out_channels=out_channels,
+          kernel_size=7,
+          stride=2,
+          bias=False)
+    self.batchnorm = nn.BatchNorm2d(num_features=out_channels) if use_batchnorm else nn.Identity()
+    self.relu = nn.ReLU()
+    self.max_pool = nn.MaxPool2d(kernel_size=3, stride=2)
+
+  def forward(self, inputs):
+    out = inputs
+    out = self.conv(inputs)
+    out = self.batchnorm(out)
+    out = self.relu(out)
+    out = self.max_pool(out)
+    return out
 
 
 def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_pos=True, sine_only=False):
@@ -240,10 +297,22 @@ class PerceiverImagePreprocessor(nn.Module):
         self.conv_after_patching = conv_after_patching
         self.out_channels = out_channels
 
-        if self.prep_type in ["conv", "patches"]:
-            raise NotImplementedError(f"Preparation type {prep_type} is not yet supported")
+        if self.prep_type == 'conv':
+            # Downsampling with conv is currently restricted
+            convnet_num_layers = math.log(spatial_downsample, 4)
+            convnet_num_layers_is_int = (convnet_num_layers == np.round(convnet_num_layers))
+            if not convnet_num_layers_is_int or temporal_downsample != 1:
+                raise ValueError('Only powers of 4 expected for spatial '
+                                'and 1 expected for temporal '
+                                'downsampling with conv.')
+            self.convnet = Conv2DDownsample(
+                num_layers=int(convnet_num_layers),
+                out_channels=out_channels,
+                use_batchnorm=conv2d_use_batchnorm)
+        
         elif self.prep_type == "conv1x1":
-            assert temporal_downsample == 1, "conv1x1 does not downsample in time."
+            if temporal_downsample != 1:
+                raise ValueError("Conv1x1 does not downsample in time.")
             self.convnet_1x1 = nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -251,7 +320,9 @@ class PerceiverImagePreprocessor(nn.Module):
                 # spatial_downsample is unconstrained for 1x1 convolutions.
                 stride=(spatial_downsample, spatial_downsample),
             )
-
+        elif self.prep_type == "patches":
+            raise NotImplementedError(f"Preparation type {prep_type} is not yet supported")
+        
         if self.position_encoding_type == "trainable":
             self.position_embeddings = PerceiverTrainablePositionEncoding(**position_encoding_kwargs)
         elif self.position_encoding_type == "fourier":
@@ -329,8 +400,13 @@ class PerceiverImagePreprocessor(nn.Module):
         return inputs_with_pos, inputs
 
     def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
-        if self.prep_type in ["conv", "patches"]:
+        if self.prep_type == "patches":
             raise NotImplementedError("TODO")
+        elif self.prep_type == "conv":
+            # Convnet image featurization.
+            # Downsamples spatially by a factor of 4
+            inputs = self.convnet(inputs)
+        
         elif self.prep_type == "conv1x1":
             # map inputs to self.out_channels
             inputs = self.convnet_1x1(inputs)

@@ -32,6 +32,7 @@ from transformers import (
     PerceiverFeatureExtractor,
     PerceiverForImageClassification,
     PerceiverForImageClassificationFourier,
+    PerceiverForImageClassificationConvProcessing,
     PerceiverForMaskedLM,
     PerceiverTokenizer,
 )
@@ -61,7 +62,7 @@ def rename_keys(state_dict):
                 "trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight"
             )
 
-        # rename image preprocessor embeddings (for image classification model)
+        # rename image preprocessor embeddings (for image classification model with learned position embeddings)
         name = name.replace("image_preprocessor/~/conv2_d/w", "input_preprocessor.convnet_1x1.weight")
         name = name.replace("image_preprocessor/~/conv2_d/b", "input_preprocessor.convnet_1x1.bias")
         name = name.replace(
@@ -76,6 +77,15 @@ def rename_keys(state_dict):
             "image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/b",
             "input_preprocessor.positions_projection.bias",
         )
+
+        # rename image preprocessor embeddings (for image classification model with conv processing)
+        if "counter" in name or "hidden" in name:
+            continue
+        name = name.replace("image_preprocessor/~/conv2_d_downsample/~/conv/w", "input_preprocessor.convnet.conv.weight")
+        name = name.replace("image_preprocessor/~/conv2_d_downsample/~/batchnorm/offset", "input_preprocessor.convnet.batchnorm.bias")
+        name = name.replace("image_preprocessor/~/conv2_d_downsample/~/batchnorm/scale", "input_preprocessor.convnet.batchnorm.weight")
+        name = name.replace("image_preprocessor/~/conv2_d_downsample/~/batchnorm/~/mean_ema/average", "input_preprocessor.convnet.batchnorm.running_mean")
+        name = name.replace("image_preprocessor/~/conv2_d_downsample/~/batchnorm/~/var_ema/average", "input_preprocessor.convnet.batchnorm.running_var")
 
         ## DECODERS ##
 
@@ -167,6 +177,10 @@ def rename_keys(state_dict):
         if name[-6:] == "weight" and "embeddings" not in name:
             param = np.transpose(param)
 
+        # if batchnorm, we need to squeeze it
+        if "batchnorm" in name:
+            param = np.squeeze(param)
+        
         state_dict["perceiver." + name] = torch.from_numpy(param)
 
 
@@ -180,10 +194,11 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
     with open(pickle_file, "rb") as f:
         checkpoint = pickle.loads(f.read())
 
+    state = None
     if isinstance(checkpoint, dict):
-        if task not in ["image_classification", "image_classification_fourier"]:
+        if task not in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
             raise ValueError("Make sure to set task to image classification")
-        # the image classification checkpoint with conv_preprocessing also has batchnorm state
+        # the image classification_conv checkpoint also has batchnorm states (running_mean and running_var)
         params = checkpoint["params"]
         state = checkpoint["state"]
     else:
@@ -194,6 +209,12 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
     for scope_name, parameters in hk.data_structures.to_mutable_dict(params).items():
         for param_name, param in parameters.items():
             state_dict[scope_name + "/" + param_name] = param
+
+    if state is not None:
+        # add state variables
+        for scope_name, parameters in hk.data_structures.to_mutable_dict(state).items():
+            for param_name, param in parameters.items():
+                state_dict[scope_name + "/" + param_name] = param
 
     # rename keys
     rename_keys(state_dict)
@@ -226,6 +247,9 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         elif task == "image_classification_fourier":
             config.d_model = 261
             model = PerceiverForImageClassificationFourier(config)
+        elif task == "image_classification_conv":
+            config.d_model = 322
+            model = PerceiverForImageClassificationConvProcessing(config)
         else:
             raise ValueError(f"Task {task} not supported")
     else:
@@ -244,7 +268,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         encoding.input_ids[0, 51:60] = tokenizer.mask_token_id
         inputs = encoding.input_ids
         input_mask = encoding.attention_mask
-    elif task in ["image_classification", "image_classification_fourier"]:
+    elif task in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
         feature_extractor = PerceiverFeatureExtractor()
         image = prepare_img()
         encoding = feature_extractor(image, return_tensors="pt")
@@ -272,7 +296,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         print("Predicted string:")
         print(tokenizer.decode(masked_tokens_predictions))
 
-    elif task in ["image_classification", "image_classification_fourier"]:
+    elif task in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
         print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
 
     # Finally, save files
