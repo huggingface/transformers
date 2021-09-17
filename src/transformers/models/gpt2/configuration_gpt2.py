@@ -87,7 +87,6 @@ class GPT2Config(PretrainedConfig):
                 - :obj:`"mean"`: Take the mean of all tokens hidden states.
                 - :obj:`"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
                 - :obj:`"attn"`: Not implemented now, use multi-head attention.
-
         summary_use_proj (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Argument used when doing sequence summary, used in the models :class:`~transformers.GPT2DoubleHeadsModel`
             and :class:`~transformers.TFGPT2DoubleHeadsModel`.
