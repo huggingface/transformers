@@ -31,8 +31,8 @@ from transformers import (
     PerceiverConfig,
     PerceiverFeatureExtractor,
     PerceiverForImageClassification,
-    PerceiverForImageClassificationFourier,
     PerceiverForImageClassificationConvProcessing,
+    PerceiverForImageClassificationFourier,
     PerceiverForMaskedLM,
     PerceiverTokenizer,
 )
@@ -81,11 +81,23 @@ def rename_keys(state_dict):
         # rename image preprocessor embeddings (for image classification model with conv processing)
         if "counter" in name or "hidden" in name:
             continue
-        name = name.replace("image_preprocessor/~/conv2_d_downsample/~/conv/w", "input_preprocessor.convnet.conv.weight")
-        name = name.replace("image_preprocessor/~/conv2_d_downsample/~/batchnorm/offset", "input_preprocessor.convnet.batchnorm.bias")
-        name = name.replace("image_preprocessor/~/conv2_d_downsample/~/batchnorm/scale", "input_preprocessor.convnet.batchnorm.weight")
-        name = name.replace("image_preprocessor/~/conv2_d_downsample/~/batchnorm/~/mean_ema/average", "input_preprocessor.convnet.batchnorm.running_mean")
-        name = name.replace("image_preprocessor/~/conv2_d_downsample/~/batchnorm/~/var_ema/average", "input_preprocessor.convnet.batchnorm.running_var")
+        name = name.replace(
+            "image_preprocessor/~/conv2_d_downsample/~/conv/w", "input_preprocessor.convnet.conv.weight"
+        )
+        name = name.replace(
+            "image_preprocessor/~/conv2_d_downsample/~/batchnorm/offset", "input_preprocessor.convnet.batchnorm.bias"
+        )
+        name = name.replace(
+            "image_preprocessor/~/conv2_d_downsample/~/batchnorm/scale", "input_preprocessor.convnet.batchnorm.weight"
+        )
+        name = name.replace(
+            "image_preprocessor/~/conv2_d_downsample/~/batchnorm/~/mean_ema/average",
+            "input_preprocessor.convnet.batchnorm.running_mean",
+        )
+        name = name.replace(
+            "image_preprocessor/~/conv2_d_downsample/~/batchnorm/~/var_ema/average",
+            "input_preprocessor.convnet.batchnorm.running_var",
+        )
 
         ## DECODERS ##
 
@@ -180,7 +192,7 @@ def rename_keys(state_dict):
         # if batchnorm, we need to squeeze it
         if "batchnorm" in name:
             param = np.squeeze(param)
-        
+
         state_dict["perceiver." + name] = torch.from_numpy(param)
 
 

@@ -16,10 +16,10 @@
 IO pre- and post-processor classes for Perceiver.
 """
 import abc
-from typing import Optional
 import math
 from functools import reduce
 from operator import __add__
+from typing import Optional
 
 import numpy as np
 import torch
@@ -32,52 +32,55 @@ import torch.nn as nn
 
 
 class Conv2dSamePadding(nn.Conv2d):
-    """Conv2d layer with padding="same" support.
-    Source: https://gist.github.com/sumanmichael/4de9dee93f972d47c80c4ade8e149ea6
+    """
+    Conv2d layer with padding="same" support. Source:
+    https://gist.github.com/sumanmichael/4de9dee93f972d47c80c4ade8e149ea6
     """
 
-    def __init__(self,*args,**kwargs):
+    def __init__(self, *args, **kwargs):
         super(Conv2dSamePadding, self).__init__(*args, **kwargs)
-        self.zero_pad_2d = nn.ZeroPad2d(reduce(__add__,
-            [(k // 2 + (k - 2 * (k // 2)) - 1, k // 2) for k in self.kernel_size[::-1]]))
+        self.zero_pad_2d = nn.ZeroPad2d(
+            reduce(__add__, [(k // 2 + (k - 2 * (k // 2)) - 1, k // 2) for k in self.kernel_size[::-1]])
+        )
 
     def forward(self, input):
-        return  self._conv_forward(self.zero_pad_2d(input), self.weight, self.bias)
+        return self._conv_forward(self.zero_pad_2d(input), self.weight, self.bias)
 
 
 class Conv2DDownsample(nn.Module):
-  """Downsamples 4x by applying a 2D convolution and doing max pooling."""
+    """Downsamples 4x by applying a 2D convolution and doing max pooling."""
 
-  def __init__(
-      self,
-      num_layers: int = 1,
-      in_channels: int = 3,
-      out_channels: int = 64,
-      use_batchnorm: bool = True,
-  ):
-    """Constructs a Conv2DDownsample model.
-    Args:
-      in_channels: The number of input channels.
-      out_channels: The number of conv output channels.
-      use_batchnorm: Whether to use batchnorm.
-    """
-    super().__init__()
+    def __init__(
+        self,
+        num_layers: int = 1,
+        in_channels: int = 3,
+        out_channels: int = 64,
+        use_batchnorm: bool = True,
+    ):
+        """
+        Constructs a Conv2DDownsample model.
 
-    self.conv = Conv2dSamePadding(in_channels=in_channels, out_channels=out_channels,
-          kernel_size=7,
-          stride=2,
-          bias=False)
-    self.batchnorm = nn.BatchNorm2d(num_features=out_channels) if use_batchnorm else nn.Identity()
-    self.relu = nn.ReLU()
-    self.max_pool = nn.MaxPool2d(kernel_size=3, stride=2)
+        Args:
+          in_channels: The number of input channels.
+          out_channels: The number of conv output channels.
+          use_batchnorm: Whether to use batchnorm.
+        """
+        super().__init__()
 
-  def forward(self, inputs):
-    out = inputs
-    out = self.conv(inputs)
-    out = self.batchnorm(out)
-    out = self.relu(out)
-    out = self.max_pool(out)
-    return out
+        self.conv = Conv2dSamePadding(
+            in_channels=in_channels, out_channels=out_channels, kernel_size=7, stride=2, bias=False
+        )
+        self.batchnorm = nn.BatchNorm2d(num_features=out_channels) if use_batchnorm else nn.Identity()
+        self.relu = nn.ReLU()
+        self.max_pool = nn.MaxPool2d(kernel_size=3, stride=2)
+
+    def forward(self, inputs):
+        out = inputs
+        out = self.conv(inputs)
+        out = self.batchnorm(out)
+        out = self.relu(out)
+        out = self.max_pool(out)
+        return out
 
 
 def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_pos=True, sine_only=False):
@@ -297,19 +300,18 @@ class PerceiverImagePreprocessor(nn.Module):
         self.conv_after_patching = conv_after_patching
         self.out_channels = out_channels
 
-        if self.prep_type == 'conv':
+        if self.prep_type == "conv":
             # Downsampling with conv is currently restricted
             convnet_num_layers = math.log(spatial_downsample, 4)
-            convnet_num_layers_is_int = (convnet_num_layers == np.round(convnet_num_layers))
+            convnet_num_layers_is_int = convnet_num_layers == np.round(convnet_num_layers)
             if not convnet_num_layers_is_int or temporal_downsample != 1:
-                raise ValueError('Only powers of 4 expected for spatial '
-                                'and 1 expected for temporal '
-                                'downsampling with conv.')
+                raise ValueError(
+                    "Only powers of 4 expected for spatial " "and 1 expected for temporal " "downsampling with conv."
+                )
             self.convnet = Conv2DDownsample(
-                num_layers=int(convnet_num_layers),
-                out_channels=out_channels,
-                use_batchnorm=conv2d_use_batchnorm)
-        
+                num_layers=int(convnet_num_layers), out_channels=out_channels, use_batchnorm=conv2d_use_batchnorm
+            )
+
         elif self.prep_type == "conv1x1":
             if temporal_downsample != 1:
                 raise ValueError("Conv1x1 does not downsample in time.")
@@ -322,7 +324,7 @@ class PerceiverImagePreprocessor(nn.Module):
             )
         elif self.prep_type == "patches":
             raise NotImplementedError(f"Preparation type {prep_type} is not yet supported")
-        
+
         if self.position_encoding_type == "trainable":
             self.position_embeddings = PerceiverTrainablePositionEncoding(**position_encoding_kwargs)
         elif self.position_encoding_type == "fourier":
@@ -406,7 +408,7 @@ class PerceiverImagePreprocessor(nn.Module):
             # Convnet image featurization.
             # Downsamples spatially by a factor of 4
             inputs = self.convnet(inputs)
-        
+
         elif self.prep_type == "conv1x1":
             # map inputs to self.out_channels
             inputs = self.convnet_1x1(inputs)
