@@ -18,7 +18,7 @@ import numpy as np
 import timeout_decorator  # noqa
 
 from transformers import BlenderbotConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import jax_device, require_flax, slow
 
 from .test_generation_flax_utils import FlaxGenerationTesterMixin
 from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -398,7 +398,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
 
-    @unittest.skipUnless(jax.default_backend() != "cpu", "3B test too slow on CPU.")
+    @unittest.skipUnless(jax_device != "cpu", "3B test too slow on CPU.")
     @slow
     def test_generation_from_short_input_same_as_parlai_3B(self):
         FASTER_GEN_KWARGS = dict(num_beams=1, early_stopping=True, min_length=15, max_length=25)
