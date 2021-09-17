@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import gelu_new, silu

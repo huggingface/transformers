@@ -21,7 +21,6 @@ import os
 import warnings
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
@@ -51,6 +50,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
+_CHECKPOINT_FOR_DOC = "t5-small"
 
 ####################################################
 # This dict contains ids and associated url
@@ -179,7 +179,7 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
 ####################################################
 # PyTorch Models are constructed by sub-classing
 # - torch.nn.Module for the layers and
-# - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
+# - PreTrainedModel for the models (it-self a sub-class of nn.Module)
 ####################################################
 PARALLELIZE_DOCSTRING = r"""
     This is an experimental feature and is a subject to change at a moment's notice.
@@ -257,7 +257,7 @@ class T5DenseReluDense(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.wi(hidden_states)
-        hidden_states = F.relu(hidden_states)
+        hidden_states = nn.functional.relu(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.wo(hidden_states)
         return hidden_states
@@ -393,15 +393,18 @@ class T5Attention(nn.Module):
 
     def compute_bias(self, query_length, key_length):
         """Compute binned relative position bias"""
-        context_position = torch.arange(query_length, dtype=torch.long)[:, None]
-        memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
+        context_position = torch.arange(
+            query_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
+        )[:, None]
+        memory_position = torch.arange(
+            key_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
+        )[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
             relative_position,  # shape (query_length, key_length)
             bidirectional=(not self.is_decoder),
             num_buckets=self.relative_attention_num_buckets,
         )
-        relative_position_bucket = relative_position_bucket.to(self.relative_attention_bias.weight.device)
         values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
@@ -425,8 +428,6 @@ class T5Attention(nn.Module):
         # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = hidden_states.shape[:2]
-
-        int_seq_length = int(seq_length)
 
         real_seq_length = seq_length
 
@@ -496,16 +497,16 @@ class T5Attention(nn.Module):
             # if key and values are already calculated
             # we want only the last query position bias
             if past_key_value is not None:
-                position_bias = position_bias[:, :, -int_seq_length:, :]
+                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
         scores += position_bias
-        attn_weights = F.softmax(scores.float(), dim=-1).type_as(
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = F.dropout(
+        attn_weights = nn.functional.dropout(
             attn_weights, p=self.dropout, training=self.training
         )  # (batch_size, n_heads, seq_length, key_length)
 
@@ -626,7 +627,7 @@ class T5Block(nn.Module):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention' if expected_num_past_key_values == 4 else ''}."
+                    f"{'2 (past / key) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
                     f"Got {len(past_key_value)} past key / value states"
                 )
 
@@ -701,7 +702,7 @@ class T5Block(nn.Module):
         else:
             outputs = outputs + attention_outputs
 
-        return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+        return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
 class T5PreTrainedModel(PreTrainedModel):
@@ -881,7 +882,7 @@ class T5Stack(T5PreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(
-                f"You cannot specify both {err_msg_prefix}inputs and {err_msg_prefix}inputs_embeds at the same time"
+                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
             )
         elif input_ids is not None:
             input_shape = input_ids.size()
@@ -890,7 +891,7 @@ class T5Stack(T5PreTrainedModel):
             input_shape = inputs_embeds.size()[:-1]
         else:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
+            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
@@ -1009,14 +1010,15 @@ class T5Stack(T5PreTrainedModel):
                 )
 
             # layer_outputs is a tuple with:
-            # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+            # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
             if use_cache is False:
                 layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
+
             hidden_states, present_key_value_state = layer_outputs[:2]
 
             # We share the position biases between the layers - the first layer store them
-            # layer_outputs = hidden-states, key-value-states (self-attention weights),
-            # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+            # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
+            # (cross-attention position bias), (cross-attention weights)
             position_bias = layer_outputs[2]
             if self.is_decoder and encoder_hidden_states is not None:
                 encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
@@ -1232,7 +1234,7 @@ num_heads)`.
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class T5Model(T5PreTrainedModel):
@@ -1342,8 +1344,9 @@ class T5Model(T5PreTrainedModel):
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
+            >>> # forward pass
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
             >>> last_hidden_states = outputs.last_hidden_state
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1535,14 +1538,18 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
 
+            >>> # training
             >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
-            >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids
+            >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='pt').input_ids
             >>> outputs = model(input_ids=input_ids, labels=labels)
             >>> loss = outputs.loss
             >>> logits = outputs.logits
 
-            >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="pt").input_ids  # Batch size 1
+            >>> # inference
+            >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> outputs = model.generate(input_ids)
+            >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+            >>> # studies have shown that owning a dog is good for you.
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1711,7 +1718,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting encoder's raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class T5EncoderModel(T5PreTrainedModel):

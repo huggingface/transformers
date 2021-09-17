@@ -14,21 +14,88 @@
 
 import unittest
 
+import pytest
+
 from transformers import AutoFeatureExtractor, AutoTokenizer, Speech2TextForConditionalGeneration, Wav2Vec2ForCTC
-from transformers.pipelines import AutomaticSpeechRecognitionPipeline
-from transformers.testing_utils import require_datasets, require_torch, require_torchaudio, slow
+from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
+from transformers.testing_utils import is_pipeline_test, require_datasets, require_torch, require_torchaudio, slow
 
 
+# We can't use this mixin because it assumes TF support.
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
+@is_pipeline_test
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
-    # pipeline_task = "automatic-speech-recognition"
-    # small_models = ["facebook/s2t-small-mustc-en-fr-st"]  # Models tested without the @slow decorator
-    # large_models = [
-    #     "facebook/wav2vec2-base-960h",
-    #     "facebook/s2t-small-mustc-en-fr-st",
-    # ]  # Models tested with the @slow decorator
+    @require_torch
+    @slow
+    def test_pt_defaults(self):
+        pipeline("automatic-speech-recognition", framework="pt")
+
+    @require_torch
+    def test_torch_small(self):
+        import numpy as np
+
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/s2t-small-mustc-en-fr-st",
+            tokenizer="facebook/s2t-small-mustc-en-fr-st",
+            framework="pt",
+        )
+        waveform = np.zeros((34000,))
+        output = speech_recognizer(waveform)
+        self.assertEqual(output, {"text": "C'est ce que j'ai fait à ce moment-là."})
+
+    @require_torch
+    def test_torch_small_no_tokenizer_files(self):
+        # test that model without tokenizer file cannot be loaded
+        with pytest.raises(ValueError):
+            pipeline(
+                task="automatic-speech-recognition",
+                model="hf-internal-testing/tiny-random-wav2vec2",
+                framework="pt",
+            )
+
+    @require_datasets
+    @require_torch
+    @slow
+    def test_torch_large(self):
+        import numpy as np
+
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/wav2vec2-base-960h",
+            tokenizer="facebook/wav2vec2-base-960h",
+            framework="pt",
+        )
+        waveform = np.zeros((34000,))
+        output = speech_recognizer(waveform)
+        self.assertEqual(output, {"text": ""})
+
+        from datasets import load_dataset
+
+        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        filename = ds[0]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
+
+    @require_datasets
+    @require_torch
+    @slow
+    def test_torch_speech_encoder_decoder(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/s2t-wav2vec2-large-en-de",
+            feature_extractor="facebook/s2t-wav2vec2-large-en-de",
+            framework="pt",
+        )
+
+        from datasets import load_dataset
+
+        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        filename = ds[0]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": 'Ein Mann sagte zum Universum : " Sir, ich existiert! "'})
 
     @slow
     @require_torch

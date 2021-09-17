@@ -19,7 +19,7 @@ limitations under the License.
 ## PyTorch version
 
 Fine-tuning the library models for token classification task such as Named Entity Recognition (NER), Parts-of-speech
-tagging (POS) pr phrase extraction (CHUNKS). The main scrip `run_ner.py` leverages the 🤗 Datasets library and the Trainer API. You can easily
+tagging (POS) or phrase extraction (CHUNKS). The main scrip `run_ner.py` leverages the 🤗 Datasets library and the Trainer API. You can easily
 customize it to your needs if you need extra processing on your datasets.
 
 It will either run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own text files for

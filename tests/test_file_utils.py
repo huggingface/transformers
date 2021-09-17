@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import unittest
 
 import requests
+import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
 from transformers import *  # noqa F406
@@ -36,6 +38,11 @@ PINNED_SHA1 = "d9e9f15bc825e4b2c9249e9578f884bbcb5e3684"
 # Sha-1 of config.json on the top of `main`, for checking purposes
 PINNED_SHA256 = "4b243c475af8d0a7754e87d7d096c92e5199ec2fe168a2ee7998e3b8e9bcb1d3"
 # Sha-256 of pytorch_model.bin on the top of `main`, for checking purposes
+
+
+def test_module_spec():
+    assert transformers.__spec__ is not None
+    assert importlib.util.find_spec("transformers") is not None
 
 
 class GetFromCacheTests(unittest.TestCase):

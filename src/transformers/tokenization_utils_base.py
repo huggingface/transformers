@@ -21,6 +21,7 @@ of output with special method for the Fast tokenizers)
 import copy
 import json
 import os
+import re
 import warnings
 from collections import OrderedDict, UserDict
 from contextlib import contextmanager
@@ -28,9 +29,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from packaging import version
 
 import requests
 
+from . import __version__
 from .file_utils import (
     ExplicitEnum,
     PaddingStrategy,
@@ -43,6 +46,8 @@ from .file_utils import (
     _is_torch_device,
     add_end_docstrings,
     cached_path,
+    copy_func,
+    get_list_of_files,
     hf_bucket_url,
     is_flax_available,
     is_offline_mode,
@@ -114,6 +119,7 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
+_re_tokenizer_file = re.compile(r"tokenizer\.(.*)\.json")
 
 
 class TruncationStrategy(ExplicitEnum):
@@ -1192,7 +1198,11 @@ class SpecialTokensMixin:
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
             attr_value = getattr(self, "_" + attr)
             if attr_value:
-                set_attr[attr] = str(attr_value)
+                set_attr[attr] = (
+                    type(attr_value)(str(attr_value_sub) for attr_value_sub in attr_value)
+                    if isinstance(attr_value, (list, tuple))
+                    else str(attr_value)
+                )
         return set_attr
 
     @property
@@ -1314,7 +1324,9 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
             return_overflowing_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to return overflowing token sequences.
+                Whether or not to return overflowing token sequences. If a pair of sequences of input ids (or a batch
+                of pairs) is provided with :obj:`truncation_strategy = longest_first` or :obj:`True`, an error is
+                raised instead of returning overflowing tokens.
             return_special_tokens_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return special tokens mask information.
             return_offsets_mapping (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -1365,7 +1377,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
           high-level keys being the ``__init__`` keyword name of each vocabulary file required by the model, the
           low-level being the :obj:`short-cut-names` of the pretrained models with, as associated values, the
           :obj:`url` to the associated pretrained vocabulary file.
-        - **max_model_input_sizes** (:obj:`Dict[str, Optinal[int]]`) -- A dictionary with, as keys, the
+        - **max_model_input_sizes** (:obj:`Dict[str, Optional[int]]`) -- A dictionary with, as keys, the
           :obj:`short-cut-names` of the pretrained models, and as associated values, the maximum length of the sequence
           inputs of this model, or :obj:`None` if the model has no maximum input size.
         - **pretrained_init_configuration** (:obj:`Dict[str, Dict[str, Any]]`) -- A dictionary with, as keys, the
@@ -1556,6 +1568,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             use_auth_token (:obj:`str` or `bool`, `optional`):
                 The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
                 generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+            local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to only rely on local files and not to attempt to download any files.
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -1634,11 +1648,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             vocab_files[file_id] = pretrained_model_name_or_path
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
+            fast_tokenizer_file = get_fast_tokenizer_file(
+                pretrained_model_name_or_path,
+                revision=revision,
+                use_auth_token=use_auth_token,
+                local_files_only=local_files_only,
+            )
             additional_files_names = {
                 "added_tokens_file": ADDED_TOKENS_FILE,
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                "tokenizer_file": FULL_TOKENIZER_FILE,
+                "tokenizer_file": fast_tokenizer_file,
             }
             # Look for the tokenizer files
             for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
@@ -1705,6 +1725,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
             )
+
+            if revision is not None:
+                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
+
             raise EnvironmentError(msg)
 
         for file_id, file_path in vocab_files.items():
@@ -1717,12 +1741,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 logger.info(f"loading file {file_path} from cache at {resolved_vocab_files[file_id]}")
 
         return cls._from_pretrained(
-            resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
+            resolved_vocab_files,
+            pretrained_model_name_or_path,
+            init_configuration,
+            *init_inputs,
+            use_auth_token=use_auth_token,
+            **kwargs,
         )
 
     @classmethod
     def _from_pretrained(
-        cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
+        cls,
+        resolved_vocab_files,
+        pretrained_model_name_or_path,
+        init_configuration,
+        *init_inputs,
+        use_auth_token=None,
+        **kwargs
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
         # file or if `from_slow` is set to True.
@@ -1745,11 +1780,56 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
+            # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
+            config_tokenizer_class = init_kwargs.get("tokenizer_class")
+            init_kwargs.pop("tokenizer_class", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
         else:
+            config_tokenizer_class = None
             init_kwargs = init_configuration
+
+        if config_tokenizer_class is None:
+            from .models.auto.configuration_auto import AutoConfig  # tests_ignore
+
+            # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
+            try:
+                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, use_auth_token=use_auth_token)
+                config_tokenizer_class = config.tokenizer_class
+            except (OSError, ValueError, KeyError):
+                # skip if an error occurred.
+                config = None
+            if config_tokenizer_class is None:
+                # Third attempt. If we have not yet found the original type of the tokenizer,
+                # we are loading we see if we can infer it from the type of the configuration file
+                from .models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES  # tests_ignore
+
+                if hasattr(config, "model_type"):
+                    model_type = config.model_type
+                else:
+                    # Fallback: use pattern matching on the string.
+                    model_type = None
+                    for pattern in TOKENIZER_MAPPING_NAMES.keys():
+                        if pattern in str(pretrained_model_name_or_path):
+                            model_type = pattern
+                            break
+
+                if model_type is not None:
+                    config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING_NAMES.get(
+                        model_type, (None, None)
+                    )
+                    if config_tokenizer_class is None:
+                        config_tokenizer_class = config_tokenizer_class_fast
+
+        if config_tokenizer_class is not None:
+            if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
+                logger.warning(
+                    "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. "
+                    "It may result in unexpected tokenization. \n"
+                    f"The tokenizer class you load from this checkpoint is '{config_tokenizer_class}'. \n"
+                    f"The class this function is called from is '{cls.__name__}'."
+                )
 
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
@@ -1806,6 +1886,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                 special_tokens_map = json.load(special_tokens_map_handle)
             for key, value in special_tokens_map.items():
+                if key in kwargs and kwargs[key]:
+                    # This value has already been redefined by the kwargs
+                    # We keep this new value and ignore the one stored in the special_tokens_map_file
+
+                    continue
+
                 if isinstance(value, dict):
                     value = AddedToken(**value)
                 elif isinstance(value, list):
@@ -1872,16 +1958,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             save_directory (:obj:`str` or :obj:`os.PathLike`): The path to a directory where the tokenizer will be saved.
             legacy_format (:obj:`bool`, `optional`):
                 Only applicable for a fast tokenizer. If unset (default), will save the tokenizer in the unified JSON
-                format as well as in legacy format, i.e. with tokenizer specific vocabulary and a separate added_tokens
-                files.
+                format as well as in legacy format if it exists, i.e. with tokenizer specific vocabulary and a separate
+                added_tokens files.
 
                 If :obj:`False`, will only save the tokenizer in the unified JSON format. This format is incompatible
                 with "slow" tokenizers (not powered by the `tokenizers` library), so the tokenizer will not be able to
                 be loaded in the corresponding "slow" tokenizer.
 
-                If :obj:`True`, will save the tokenizer in legacy format.
+                If :obj:`True`, will save the tokenizer in legacy format. If the "slow" tokenizer doesn't exits, a
+                value error is raised.
             filename_prefix: (:obj:`str`, `optional`):
                 A prefix to add to the names of the files saved by the tokenizer.
+            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it.
+
+                .. warning::
+
+                    Using :obj:`push_to_hub=True` will synchronize the repository you are pushing to with
+                    :obj:`save_directory`, which requires :obj:`save_directory` to be a local clone of the repo you are
+                    pushing to if it's an existing folder. Pass along :obj:`temp_dir=True` to use a temporary directory
+                    instead.
 
         Returns:
             A tuple of :obj:`str`: The files saved.
@@ -1889,6 +1985,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
+
+        if push_to_hub:
+            commit_message = kwargs.pop("commit_message", None)
+            repo = self._create_or_get_repo(save_directory, **kwargs)
+
         os.makedirs(save_directory, exist_ok=True)
 
         special_tokens_map_file = os.path.join(
@@ -1919,6 +2020,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # add_type_field=True to allow dicts in the kwargs / differentiate from AddedToken serialization
         tokenizer_config = convert_added_tokens(tokenizer_config, add_type_field=True)
+
+        # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
+        tokenizer_class = self.__class__.__name__
+        # Remove the Fast at the end unless we have a special `PreTrainedTokenizerFast`
+        if tokenizer_class.endswith("Fast") and tokenizer_class != "PreTrainedTokenizerFast":
+            tokenizer_class = tokenizer_class[:-4]
+        tokenizer_config["tokenizer_class"] = tokenizer_class
+
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
         logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
@@ -1939,9 +2048,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
 
         if push_to_hub:
-            # Annoyingly, the return contains files that don't exist.
-            existing_files = [f for f in save_files if os.path.isfile(f)]
-            url = self._push_to_hub(save_files=existing_files, **kwargs)
+            url = self._push_to_hub(repo, commit_message=commit_message)
             logger.info(f"Tokenizer pushed to the hub in this commit: {url}")
 
         return save_files
@@ -2744,7 +2851,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
         adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
-        manages a moving window (with user defined stride) for overflowing tokens
+        manages a moving window (with user defined stride) for overflowing tokens. Please Note, for `pair_ids`
+        different than `None` and `truncation_strategy = longest_first` or `True`, it is not possible to return
+        overflowing tokens. Such a combination of arguments will raise an error.
 
         Args:
             ids (:obj:`List[int]`):
@@ -2774,6 +2883,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Asking to return token_type_ids while setting add_special_tokens to False "
                 "results in an undefined behavior. Please set add_special_tokens to True or "
                 "set return_token_type_ids to None."
+            )
+
+        if (
+            return_overflowing_tokens
+            and truncation_strategy == TruncationStrategy.LONGEST_FIRST
+            and pair_ids is not None
+        ):
+            raise ValueError(
+                "Not possible to return overflowing tokens for pair of sequences with the "
+                "`longest_first`. Please select another truncation strategy than `longest_first`, "
+                "for instance `only_second` or `only_first`."
             )
 
         # Load from model defaults
@@ -2883,7 +3003,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         Returns:
             :obj:`Tuple[List[int], List[int], List[int]]`: The truncated ``ids``, the truncated ``pair_ids`` and the
-            list of overflowing tokens.
+            list of overflowing tokens. Note: The `longest_first` strategy returns empty list of overflowing_tokens if
+            a pair of sequences (or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:
             return ids, pair_ids, []
@@ -2892,34 +3013,36 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation_strategy = TruncationStrategy(truncation_strategy)
 
         overflowing_tokens = []
-        if truncation_strategy == TruncationStrategy.LONGEST_FIRST:
-            for _ in range(num_tokens_to_remove):
-                if pair_ids is None or len(ids) > len(pair_ids):
-                    if not overflowing_tokens:
-                        window_len = min(len(ids), stride + 1)
-                    else:
-                        window_len = 1
-                    overflowing_tokens.extend(ids[-window_len:])
-                    ids = ids[:-1]
-                else:
-                    if not overflowing_tokens:
-                        window_len = min(len(pair_ids), stride + 1)
-                    else:
-                        window_len = 1
-                    overflowing_tokens.extend(pair_ids[-window_len:])
-                    pair_ids = pair_ids[:-1]
-        elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
+        if truncation_strategy == TruncationStrategy.ONLY_FIRST or (
+            truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is None
+        ):
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
                 overflowing_tokens = ids[-window_len:]
                 ids = ids[:-num_tokens_to_remove]
             else:
-                logger.error(
-                    f"We need to remove {num_tokens_to_remove} to truncate the input"
+                error_msg = (
+                    f"We need to remove {num_tokens_to_remove} to truncate the input "
                     f"but the first sequence has a length {len(ids)}. "
-                    f"Please select another truncation strategy than {truncation_strategy}, "
-                    f"for instance 'longest_first' or 'only_second'."
                 )
+                if truncation_strategy == TruncationStrategy.ONLY_FIRST:
+                    error_msg = (
+                        error_msg + "Please select another truncation strategy than "
+                        f"{truncation_strategy}, for instance 'longest_first' or 'only_second'."
+                    )
+                logger.error(error_msg)
+        elif truncation_strategy == TruncationStrategy.LONGEST_FIRST:
+            logger.warning(
+                f"Be aware, overflowing tokens are not returned for the setting you have chosen,"
+                f" i.e. sequence pairs with the '{TruncationStrategy.LONGEST_FIRST.value}' "
+                f"truncation strategy. So the returned list will always be empty even if some "
+                f"tokens have been removed."
+            )
+            for _ in range(num_tokens_to_remove):
+                if pair_ids is None or len(ids) > len(pair_ids):
+                    ids = ids[:-1]
+                else:
+                    pair_ids = pair_ids[:-1]
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
@@ -3252,13 +3375,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             The full set of keys ``[input_ids, attention_mask, labels]``, will only be returned if tgt_texts is passed.
             Otherwise, input_ids, attention_mask will be the only keys.
         """
-        warnings.warn(
-            "`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of 🤗 Transformers. Use the "
-            "regular `__call__` method to prepare your inputs and the tokenizer under the `with_target_tokenizer` "
-            "context manager to prepare your targets. See the documentation of your specific tokenizer for more "
-            "details",
-            FutureWarning,
-        )
+        # docstyle-ignore
+        formatted_warning = """
+`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of HuggingFace Transformers. Use the regular
+`__call__` method to prepare your inputs and the tokenizer under the `as_target_tokenizer` context manager to prepare
+your targets.
+
+Here is a short example:
+
+model_inputs = tokenizer(src_texts, ...)
+with tokenizer.as_target_tokenizer():
+    labels = tokenizer(tgt_texts, ...)
+model_inputs["labels"] = labels["input_ids"]
+
+See the documentation of your specific tokenizer for more details on the specific arguments to the tokenizer of choice.
+For a more complete example, see the implementation of `prepare_seq2seq_batch`.
+"""
+        warnings.warn(formatted_warning, FutureWarning)
         # mBART-specific kwargs that should be ignored by other models.
         kwargs.pop("src_lang", None)
         kwargs.pop("tgt_lang", None)
@@ -3290,3 +3423,60 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
+
+
+def get_fast_tokenizer_file(
+    path_or_repo: Union[str, os.PathLike],
+    revision: Optional[str] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+    local_files_only: bool = False,
+) -> str:
+    """
+    Get the tokenizer file to use for this version of transformers.
+
+    Args:
+        path_or_repo (:obj:`str` or :obj:`os.PathLike`):
+            Can be either the id of a repo on huggingface.co or a path to a `directory`.
+        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+            identifier allowed by git.
+        use_auth_token (:obj:`str` or `bool`, `optional`):
+            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to only rely on local files and not to attempt to download any files.
+
+    Returns:
+        :obj:`str`: The tokenizer file to use.
+    """
+    # Inspect all files from the repo/folder.
+    all_files = get_list_of_files(
+        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
+    )
+    tokenizer_files_map = {}
+    for file_name in all_files:
+        search = _re_tokenizer_file.search(file_name)
+        if search is not None:
+            v = search.groups()[0]
+            tokenizer_files_map[v] = file_name
+    available_versions = sorted(tokenizer_files_map.keys())
+
+    # Defaults to FULL_TOKENIZER_FILE and then try to look at some newer versions.
+    tokenizer_file = FULL_TOKENIZER_FILE
+    transformers_version = version.parse(__version__)
+    for v in available_versions:
+        if version.parse(v) <= transformers_version:
+            tokenizer_file = tokenizer_files_map[v]
+        else:
+            # No point going further since the versions are sorted.
+            break
+
+    return tokenizer_file
+
+
+# To update the docstring, we need to copy the method, otherwise we change the original docstring.
+PreTrainedTokenizerBase.push_to_hub = copy_func(PreTrainedTokenizerBase.push_to_hub)
+PreTrainedTokenizerBase.push_to_hub.__doc__ = PreTrainedTokenizerBase.push_to_hub.__doc__.format(
+    object="tokenizer", object_class="AutoTokenizer", object_files="tokenizer files"
+)

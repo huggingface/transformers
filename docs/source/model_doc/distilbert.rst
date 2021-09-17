@@ -44,8 +44,9 @@ Tips:
 - DistilBERT doesn't have options to select the input positions (:obj:`position_ids` input). This could be added if
   necessary though, just let us know if you need this option.
 
-This model was contributed by `victorsanh <https://huggingface.co/victorsanh>`__. The original code can be found
-:prefix_link:`here <examples/research-projects/distillation>`.
+This model was contributed by `victorsanh <https://huggingface.co/victorsanh>`__. This model jax version was
+contributed by `kamalkraj <https://huggingface.co/kamalkraj>`__. The original code can be found :prefix_link:`here
+<examples/research-projects/distillation>`.
 
 
 DistilBertConfig
@@ -152,3 +153,45 @@ TFDistilBertForQuestionAnswering
 
 .. autoclass:: transformers.TFDistilBertForQuestionAnswering
     :members: call
+
+
+FlaxDistilBertModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxDistilBertModel
+    :members: __call__
+
+
+FlaxDistilBertForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxDistilBertForMaskedLM
+    :members: __call__
+
+
+FlaxDistilBertForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxDistilBertForSequenceClassification
+    :members: __call__
+
+
+FlaxDistilBertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxDistilBertForMultipleChoice
+    :members: __call__
+
+
+FlaxDistilBertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxDistilBertForTokenClassification
+    :members: __call__
+
+
+FlaxDistilBertForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxDistilBertForQuestionAnswering
+    :members: __call__

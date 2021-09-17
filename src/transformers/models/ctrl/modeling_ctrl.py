@@ -19,7 +19,7 @@ from typing import Tuple
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
@@ -87,7 +87,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
     return output, attention_weights
 
 
-class MultiHeadAttention(torch.nn.Module):
+class MultiHeadAttention(nn.Module):
     def __init__(self, d_model_size, num_heads):
         super().__init__()
         self.num_heads = num_heads
@@ -95,11 +95,11 @@ class MultiHeadAttention(torch.nn.Module):
 
         self.depth = int(d_model_size / self.num_heads)
 
-        self.Wq = torch.nn.Linear(d_model_size, d_model_size)
-        self.Wk = torch.nn.Linear(d_model_size, d_model_size)
-        self.Wv = torch.nn.Linear(d_model_size, d_model_size)
+        self.Wq = nn.Linear(d_model_size, d_model_size)
+        self.Wk = nn.Linear(d_model_size, d_model_size)
+        self.Wv = nn.Linear(d_model_size, d_model_size)
 
-        self.dense = torch.nn.Linear(d_model_size, d_model_size)
+        self.dense = nn.Linear(d_model_size, d_model_size)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -167,21 +167,21 @@ class MultiHeadAttention(torch.nn.Module):
 
 
 def point_wise_feed_forward_network(d_model_size, dff):
-    return torch.nn.Sequential(torch.nn.Linear(d_model_size, dff), torch.nn.ReLU(), torch.nn.Linear(dff, d_model_size))
+    return nn.Sequential(nn.Linear(d_model_size, dff), nn.ReLU(), nn.Linear(dff, d_model_size))
 
 
-class EncoderLayer(torch.nn.Module):
+class EncoderLayer(nn.Module):
     def __init__(self, d_model_size, num_heads, dff, rate=0.1):
         super().__init__()
 
         self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model_size, dff)
 
-        self.layernorm1 = torch.nn.LayerNorm(d_model_size, eps=1e-6)
-        self.layernorm2 = torch.nn.LayerNorm(d_model_size, eps=1e-6)
+        self.layernorm1 = nn.LayerNorm(d_model_size, eps=1e-6)
+        self.layernorm2 = nn.LayerNorm(d_model_size, eps=1e-6)
 
-        self.dropout1 = torch.nn.Dropout(rate)
-        self.dropout2 = torch.nn.Dropout(rate)
+        self.dropout1 = nn.Dropout(rate)
+        self.dropout2 = nn.Dropout(rate)
 
     def forward(
         self, x, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False

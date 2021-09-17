@@ -102,6 +102,10 @@ def _reset_library_root_logger() -> None:
         _default_handler = None
 
 
+def get_log_levels_dict():
+    return log_levels
+
+
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
     Return a logger with the specified name.

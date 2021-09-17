@@ -56,7 +56,7 @@ RoFormerTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
-RobertaTokenizerFast
+RoFormerTokenizerFast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RoFormerTokenizerFast

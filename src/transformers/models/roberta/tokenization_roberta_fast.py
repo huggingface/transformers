@@ -143,8 +143,8 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
 
     def __init__(
         self,
-        vocab_file,
-        merges_file,
+        vocab_file=None,
+        merges_file=None,
         tokenizer_file=None,
         errors="replace",
         bos_token="<s>",

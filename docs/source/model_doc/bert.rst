@@ -76,6 +76,9 @@ Bert specific outputs
 .. autoclass:: transformers.models.bert.modeling_tf_bert.TFBertForPreTrainingOutput
     :members:
 
+.. autoclass:: transformers.models.bert.modeling_flax_bert.FlaxBertForPreTrainingOutput
+    :members:
+
 
 BertModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -508,9 +508,9 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
-            input_shape = shape_list(tensor=inputs["input_ids"])
+            input_shape = shape_list(inputs["input_ids"])
         elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(tensor=inputs["inputs_embeds"])[:-1]
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -933,7 +933,10 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
             activation="tanh",
             name="dense",
         )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
         self.out_proj = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
@@ -1206,7 +1209,10 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
         self.num_labels = config.num_labels
 
         self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )

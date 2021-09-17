@@ -31,6 +31,7 @@ FSMT_TINY2 = "stas/tiny-wmt19-en-ru"
 
 class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = FSMTTokenizer
+    test_rust_tokenizer = False
 
     def setUp(self):
         super().setUp()

@@ -20,19 +20,26 @@ import datetime
 import json
 import math
 import os
+import sys
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
+from logging import StreamHandler
 from typing import Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
 from packaging import version
-from torch.utils.data.dataset import Dataset, IterableDataset
+from torch import nn
+from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data.sampler import RandomSampler, Sampler
 
-from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
+from .file_utils import (
+    is_sagemaker_dp_enabled,
+    is_sagemaker_mp_enabled,
+    is_torch_tpu_available,
+    is_training_run_on_sagemaker,
+)
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -42,6 +49,8 @@ if is_sagemaker_dp_enabled():
 else:
     import torch.distributed as dist
 
+if is_training_run_on_sagemaker():
+    logging.add_handler(StreamHandler(sys.stdout))
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
@@ -112,7 +121,7 @@ def find_batch_size(tensors):
             result = find_batch_size(t)
             if result is not None:
                 return result
-    elif isinstance(tensors, dict):
+    elif isinstance(tensors, (dict, BatchEncoding)):
         for key, value in tensors.items():
             result = find_batch_size(value)
             if result is not None:
@@ -154,6 +163,7 @@ def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int]
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
         output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensor)
+        output_tensors = [t if len(t.shape) > 0 else t[None] for t in output_tensors]
         concat = torch.cat(output_tensors, dim=0)
 
         # truncate the dummy elements added by SequentialDistributedSampler
@@ -288,7 +298,7 @@ class SequentialDistributedSampler(Sampler):
         return self.num_samples
 
 
-def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset, bach_size: int):
+def get_tpu_sampler(dataset: torch.utils.data.Dataset, batch_size: int):
     if xm.xrt_world_size() <= 1:
         return RandomSampler(dataset)
     return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
@@ -441,14 +451,14 @@ class LabelSmoother:
 
     def __call__(self, model_output, labels):
         logits = model_output["logits"] if isinstance(model_output, dict) else model_output[0]
-        log_probs = -torch.nn.functional.log_softmax(logits, dim=-1)
+        log_probs = -nn.functional.log_softmax(logits, dim=-1)
         if labels.dim() == log_probs.dim() - 1:
             labels = labels.unsqueeze(-1)
 
         padding_mask = labels.eq(self.ignore_index)
         # In case the ignore_index is -100, the gather will fail, so we replace labels by 0. The padding_mask
         # will ignore them in any case.
-        labels.clamp_min_(0)
+        labels = torch.clamp(labels, min=0)
         nll_loss = log_probs.gather(dim=-1, index=labels)
         # works for fp16 input tensor too, by internally upcasting it to fp32
         smoothed_loss = log_probs.sum(dim=-1, keepdim=True, dtype=torch.float32)
@@ -688,7 +698,7 @@ class IterableDatasetShard(IterableDataset):
 
 
     Args:
-        dataset (:obj:`torch.utils.data.dataset.IterableDataset`):
+        dataset (:obj:`torch.utils.data.IterableDataset`):
             The batch sampler to split in several shards.
         batch_size (:obj:`int`, `optional`, defaults to 1):
             The size of the batches per shard.
@@ -904,12 +914,12 @@ def log_metrics(self, split, metrics):
     if not self.is_world_process_zero():
         return
 
-    logger.info(f"***** {split} metrics *****")
+    print(f"***** {split} metrics *****")
     metrics_formatted = self.metrics_format(metrics)
     k_width = max(len(str(x)) for x in metrics_formatted.keys())
     v_width = max(len(str(x)) for x in metrics_formatted.values())
     for key in sorted(metrics_formatted.keys()):
-        logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
+        print(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
 
 
 def save_metrics(self, split, metrics, combined=True):

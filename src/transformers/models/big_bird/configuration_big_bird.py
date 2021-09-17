@@ -51,9 +51,9 @@ class BigBirdConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_fast"`):
+        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"gelu_fast"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
@@ -84,6 +84,8 @@ class BigBirdConfig(PretrainedConfig):
             "block_sparse"`.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        classifier_dropout (:obj:`float`, `optional`):
+            The dropout ratio for the classification head.
 
         Example::
 
@@ -107,7 +109,7 @@ class BigBirdConfig(PretrainedConfig):
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
-        hidden_act="gelu_fast",
+        hidden_act="gelu_new",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=4096,
@@ -126,6 +128,7 @@ class BigBirdConfig(PretrainedConfig):
         block_size=64,
         num_random_blocks=3,
         gradient_checkpointing=False,
+        classifier_dropout=None,
         **kwargs
     ):
         super().__init__(
@@ -157,3 +160,4 @@ class BigBirdConfig(PretrainedConfig):
         self.use_bias = use_bias
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
+        self.classifier_dropout = classifier_dropout

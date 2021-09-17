@@ -431,6 +431,7 @@ decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
 * ``require_torch_gpu`` - as ``require_torch`` plus requires at least 1 GPU
 * ``require_torch_multi_gpu`` - as ``require_torch`` plus requires at least 2 GPUs
 * ``require_torch_non_multi_gpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
+* ``require_torch_up_to_2_gpus`` - as ``require_torch`` plus requires 0 or 1 or 2 GPUs
 * ``require_torch_tpu`` - as ``require_torch`` plus requires at least 1 TPU
 
 Let's depict the GPU requirements in the following table:
@@ -446,6 +447,8 @@ Let's depict the GPU requirements in the following table:
 | ``>= 2`` | ``@require_torch_multi_gpu``     |
 +----------+----------------------------------+
 | ``< 2``  | ``@require_torch_non_multi_gpu`` |
++----------+----------------------------------+
+| ``< 3``  | ``@require_torch_up_to_2_gpus``  |
 +----------+----------------------------------+
 
 
@@ -1165,6 +1168,23 @@ To start a debugger at the point of the warning, do this:
 .. code-block:: bash
 
     pytest tests/test_logging.py -W error::UserWarning --pdb
+
+
+Working with github actions workflows
+-----------------------------------------------------------------------------------------------------------------------
+
+To trigger a self-push workflow CI job, you must:
+
+1. Create a new branch on ``transformers`` origin (not a fork!).
+2. The branch name has to start with either ``ci_`` or ``ci-`` (``master`` triggers it too, but we can't do PRs on
+   ``master``). It also gets triggered only for specific paths - you can find the up-to-date definition in case it
+   changed since this document has been written `here
+   <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__ under `push:`
+3. Create a PR from this branch.
+4. Then you can see the job appear `here
+   <https://github.com/huggingface/transformers/actions/workflows/self-push.yml>`__. It may not run right away if there
+   is a backlog.
+
 
 
 

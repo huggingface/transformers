@@ -39,6 +39,25 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(self.tmpdirname, legacy_format=False)
         self.tokenizer = tokenizer
 
+    def test_convert_token_and_id(self):
+        """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
+        token = "<pad>"
+        token_id = 1
+
+        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
+        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "<s>")
+        self.assertEqual(vocab_keys[1], "<pad>")
+        self.assertEqual(vocab_keys[-1], "<mask>")
+        self.assertEqual(len(vocab_keys), 101_122)
+
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 101_122)
+
     @require_torch
     def test_prepare_batch(self):
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
@@ -75,3 +94,25 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(sequence)
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
+
+    @slow
+    def test_tokenizer_integration(self):
+        # fmt: off
+        expected_encoding = {'input_ids': [[0, 490, 14328, 4507, 354, 47, 43669, 95, 25, 78117, 20215, 19779, 190, 22, 400, 4, 35343, 80310, 603, 86, 24937, 105, 33438, 94762, 196, 39642, 7, 15, 15933, 173, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 10534, 87, 25, 66, 3358, 196, 55289, 8, 82961, 81, 2204, 75203, 7, 15, 763, 12956, 216, 178, 14328, 9595, 1377, 69693, 7, 448, 71021, 196, 18106, 1437, 13974, 108, 9083, 4, 49315, 7, 39, 86, 1326, 2793, 46333, 4, 448, 196, 74588, 7, 49315, 7, 39, 21, 822, 38470, 74, 21, 66723, 62480, 8, 22050, 5, 2]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # noqa: E501
+        # fmt: on
+
+        # moussaKam/mbarthez is a french model. So we also use french texts.
+        sequences = [
+            "Le transformeur est un modèle d'apprentissage profond introduit en 2017, "
+            "utilisé principalement dans le domaine du traitement automatique des langues (TAL).",
+            "À l'instar des réseaux de neurones récurrents (RNN), les transformeurs sont conçus "
+            "pour gérer des données séquentielles, telles que le langage naturel, pour des tâches "
+            "telles que la traduction et la synthèse de texte.",
+        ]
+
+        self.tokenizer_integration_test_util(
+            expected_encoding=expected_encoding,
+            model_name="moussaKam/mbarthez",
+            revision="c2e4ecbca5e3cd2c37fe1ac285ca4fbdf1366fb6",
+            sequences=sequences,
+        )

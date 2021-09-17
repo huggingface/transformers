@@ -20,7 +20,6 @@ import random
 from typing import Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -46,6 +45,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Speech2TextConfig"
 _TOKENIZER_FOR_DOC = "Speech2TextTokenizer"
+_CHECKPOINT_FOR_DOC = "facebook/s2t-small-librispeech-asr"
 
 
 SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -306,7 +306,7 @@ class Speech2TextAttention(nn.Module):
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -326,7 +326,7 @@ class Speech2TextAttention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -387,15 +387,15 @@ class Speech2TextEncoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         if hidden_states.dtype == torch.float16 and (
@@ -482,7 +482,7 @@ class Speech2TextDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
@@ -502,7 +502,7 @@ class Speech2TextDecoderLayer(nn.Module):
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
-            hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
 
             # add cross-attn to positions 3,4 of present_key_value tuple
@@ -512,9 +512,9 @@ class Speech2TextDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -543,26 +543,26 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _get_subsampled_output_lengths(self, input_lengths: torch.LongTensor):
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
         Computes the output length of the convolutional layers
         """
-
         for i in range(self.config.num_conv_layers):
             input_lengths = (input_lengths - 1) // 2 + 1
 
         return input_lengths
 
-    def _get_subsampled_encoder_attn_mask(self, attention_mask):
+    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 
-        subsampled_lengths = self._get_subsampled_output_lengths(attention_mask.sum(-1))
-        max_len = subsampled_lengths.max().item()
+        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
         bsz = attention_mask.size()[0]
-        attention_mask = torch.zeros((bsz, max_len), dtype=attention_mask.dtype, device=attention_mask.device)
+        attention_mask = torch.zeros(
+            (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
 
         # these two operations makes sure that all values
         # before the output lengths indices are attended to
@@ -646,8 +646,13 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
             `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
-        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
+        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with each tuple having 2 tensors
+            of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+            shape :obj:`(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
@@ -681,7 +686,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
 
     Args:
         config: Speech2TextConfig
-        embed_tokens (torch.nn.Embedding): output embedding
+        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: Speech2TextConfig):
@@ -753,21 +758,20 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if attention_mask is not None:
-            attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
-
         inputs_embeds = self.conv(input_features)
         inputs_embeds = self.embed_scale * inputs_embeds
 
-        if attention_mask is None:
-            padding_mask = torch.zeros_like(inputs_embeds, dtype=torch.long)
-        else:
+        # subsample attention mask if necessary
+        if attention_mask is not None:
+            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
             padding_mask = attention_mask.ne(1).long()
+        else:
+            padding_mask = torch.zeros_like(inputs_embeds, dtype=torch.long)
+
         embed_pos = self.embed_positions(padding_mask)
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
         if attention_mask is not None:
@@ -835,7 +839,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
     Args:
         config: Speech2TextConfig
-        embed_tokens (torch.nn.Embedding): output embedding
+        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: Speech2TextConfig):
@@ -853,7 +857,9 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             config.d_model,
             self.padding_idx,
         )
+
         self.layers = nn.ModuleList([Speech2TextDecoderLayer(config) for _ in range(config.decoder_layers)])
+
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
@@ -939,8 +945,13 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
+            past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+                Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with each tuple having 2
+                tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
+                tensors of shape :obj:`(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+                cross-attention blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential
                 decoding.
 
                 If :obj:`past_key_values` are used, the user can optionally input only the last
@@ -990,7 +1001,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            encoder_attention_mask = self._get_subsampled_encoder_attn_mask(encoder_attention_mask)
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
@@ -998,7 +1008,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1122,7 +1132,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="s2t_transformer_s",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1167,12 +1177,20 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
+        # downsample encoder attention mask
+        if attention_mask is not None:
+            encoder_attention_mask = self._get_feature_vector_attention_mask(
+                encoder_outputs[0].shape[1], attention_mask
+            )
+        else:
+            encoder_attention_mask = None
+
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
@@ -1274,7 +1292,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
             >>> import soundfile as sf
 
             >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
-            >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-small-librispeech-asr")
+            >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])
@@ -1284,7 +1302,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
-            >>> input_features = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt").input_features  # Batch size 1
+            >>> input_features = processor(ds["speech"][0], sampling_rate=16000, return_tensors="pt").input_features  # Batch size 1
             >>> generated_ids = model.generate(input_ids=input_features)
 
             >>> transcription = processor.batch_decode(generated_ids)
@@ -1342,6 +1360,8 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         past=None,
         attention_mask=None,
         head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
         **kwargs
@@ -1356,6 +1376,8 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 

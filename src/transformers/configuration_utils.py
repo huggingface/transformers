@@ -22,7 +22,16 @@ import os
 from typing import Any, Dict, Tuple, Union
 
 from . import __version__
-from .file_utils import CONFIG_NAME, PushToHubMixin, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
+from .file_utils import (
+    CONFIG_NAME,
+    PushToHubMixin,
+    cached_path,
+    copy_func,
+    hf_bucket_url,
+    is_offline_mode,
+    is_remote_url,
+    is_torch_available,
+)
 from .utils import logging
 
 
@@ -48,6 +57,8 @@ class PretrainedConfig(PushToHubMixin):
           :class:`~RagConfig`.
         - **keys_to_ignore_at_inference** (:obj:`List[str]`) -- A list of keys to ignore by default when looking at
           dictionary outputs of the model during inference.
+        - **attribute_map** (:obj:`Dict[str, str]`) -- A dict that maps model specific attribute names to the
+          standardized naming of attributes.
 
     Common attributes (present in all subclasses)
 
@@ -78,7 +89,7 @@ class PretrainedConfig(PushToHubMixin):
             Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
             that can be used as decoder models within the `:class:~transformers.EncoderDecoderModel` class, which
             consists of all models in ``AUTO_MODELS_FOR_CAUSAL_LM``.
-        tie_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`)
+        tie_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
             and decoder model to have the exact same parameter names.
         prune_heads (:obj:`Dict[int, List[int]]`, `optional`, defaults to :obj:`{}`):
@@ -192,6 +203,15 @@ class PretrainedConfig(PushToHubMixin):
         - **tie_word_embeddings** (:obj:`bool`, `optional`, defaults to :obj:`True`) -- Whether the model's input and
           output word embeddings should be tied. Note that this is only relevant if the model has a output word
           embedding layer.
+        - **torch_dtype** (:obj:`str`, `optional`) -- The :obj:`dtype` of the weights. This attribute can be used to
+          initialize the model to a non-default ``dtype`` (which is normally ``float32``) and thus allow for optimal
+          storage allocation. For example, if the saved model is ``float16``, ideally we want to load it back using the
+          minimal amount of memory needed to load ``float16`` weights. Since the config object is stored in plain text,
+          this attribute contains just the floating type string without the ``torch.`` prefix. For example, for
+          ``torch.float16`` ``torch_dtype`` is the ``"float16"`` string.
+
+          This attribute is currently not being used during model loading time, but this may change in the future
+          versions. But we can already start preparing for the future by saving the dtype with save_pretrained.
 
     TensorFlow specific parameters
 
@@ -200,6 +220,17 @@ class PretrainedConfig(PushToHubMixin):
     """
     model_type: str = ""
     is_composition: bool = False
+    attribute_map: Dict[str, str] = {}
+
+    def __setattr__(self, key, value):
+        if key in super().__getattribute__("attribute_map"):
+            key = super().__getattribute__("attribute_map")[key]
+        super().__setattr__(key, value)
+
+    def __getattribute__(self, key):
+        if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
+            key = super().__getattribute__("attribute_map")[key]
+        return super().__getattribute__(key)
 
     def __init__(self, **kwargs):
         # Attributes with defaults
@@ -207,6 +238,7 @@ class PretrainedConfig(PushToHubMixin):
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
+        self.torch_dtype = kwargs.pop("torch_dtype", None)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})
         self.tie_word_embeddings = kwargs.pop(
@@ -255,6 +287,14 @@ class PretrainedConfig(PushToHubMixin):
         else:
             self.num_labels = kwargs.pop("num_labels", 2)
 
+        if self.torch_dtype is not None and isinstance(self.torch_dtype, str):
+            # we will start using self.torch_dtype in v5, but to be consistent with
+            # from_pretrained's torch_dtype arg convert it to an actual torch.dtype object
+            if is_torch_available():
+                import torch
+
+                self.torch_dtype = getattr(torch, self.torch_dtype)
+
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
         self.tokenizer_class = kwargs.pop("tokenizer_class", None)
         self.prefix = kwargs.pop("prefix", None)
@@ -273,7 +313,7 @@ class PretrainedConfig(PushToHubMixin):
         allowed_problem_types = ("regression", "single_label_classification", "multi_label_classification")
         if self.problem_type is not None and self.problem_type not in allowed_problem_types:
             raise ValueError(
-                f"The config parameter `problem_type` wasnot understood: received {self.problem_type}"
+                f"The config parameter `problem_type` was not understood: received {self.problem_type}"
                 "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
             )
 
@@ -323,7 +363,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @num_labels.setter
     def num_labels(self, num_labels: int):
-        if self.id2label is None or len(self.id2label) != num_labels:
+        if not hasattr(self, "id2label") or self.id2label is None or len(self.id2label) != num_labels:
             self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
@@ -337,12 +377,25 @@ class PretrainedConfig(PushToHubMixin):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
             push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it.
+
+                .. warning::
+
+                    Using :obj:`push_to_hub=True` will synchronize the repository you are pushing to with
+                    :obj:`save_directory`, which requires :obj:`save_directory` to be a local clone of the repo you are
+                    pushing to if it's an existing folder. Pass along :obj:`temp_dir=True` to use a temporary directory
+                    instead.
+
             kwargs:
                 Additional key word arguments passed along to the
                 :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+
+        if push_to_hub:
+            commit_message = kwargs.pop("commit_message", None)
+            repo = self._create_or_get_repo(save_directory, **kwargs)
+
         os.makedirs(save_directory, exist_ok=True)
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
@@ -351,7 +404,7 @@ class PretrainedConfig(PushToHubMixin):
         logger.info(f"Configuration saved in {output_config_file}")
 
         if push_to_hub:
-            url = self._push_to_hub(save_files=[output_config_file], **kwargs)
+            url = self._push_to_hub(repo, commit_message=commit_message)
             logger.info(f"Configuration pushed to the hub in this commit: {url}")
 
     @classmethod
@@ -501,6 +554,10 @@ class PretrainedConfig(PushToHubMixin):
                 f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {CONFIG_NAME} file\n\n"
             )
+
+            if revision is not None:
+                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
+
             raise EnvironmentError(msg)
 
         except json.JSONDecodeError:
@@ -546,7 +603,8 @@ class PretrainedConfig(PushToHubMixin):
         for key, value in kwargs.items():
             if hasattr(config, key):
                 setattr(config, key, value)
-                to_remove.append(key)
+                if key != "torch_dtype":
+                    to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
 
@@ -612,6 +670,8 @@ class PretrainedConfig(PushToHubMixin):
             ):
                 serializable_config_dict[key] = value
 
+        self.dict_torch_dtype_to_str(serializable_config_dict)
+
         return serializable_config_dict
 
     def to_dict(self) -> Dict[str, Any]:
@@ -627,6 +687,8 @@ class PretrainedConfig(PushToHubMixin):
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
+
+        self.dict_torch_dtype_to_str(output)
 
         return output
 
@@ -667,7 +729,60 @@ class PretrainedConfig(PushToHubMixin):
         Updates attributes of this class with attributes from ``config_dict``.
 
         Args:
-            config_dict (:obj:`Dict[str, Any]`): Dictionary of attributes that shall be updated for this class.
+            config_dict (:obj:`Dict[str, Any]`): Dictionary of attributes that should be updated for this class.
         """
         for key, value in config_dict.items():
             setattr(self, key, value)
+
+    def update_from_string(self, update_str: str):
+        """
+        Updates attributes of this class with attributes from ``update_str``.
+
+        The expected format is ints, floats and strings as is, and for booleans use ``true`` or ``false``. For example:
+        "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+
+        The keys to change have to already exist in the config object.
+
+        Args:
+            update_str (:obj:`str`): String with attributes that should be updated for this class.
+
+        """
+
+        d = dict(x.split("=") for x in update_str.split(","))
+        for k, v in d.items():
+            if not hasattr(self, k):
+                raise ValueError(f"key {k} isn't in the original config dict")
+
+            old_v = getattr(self, k)
+            if isinstance(old_v, bool):
+                if v.lower() in ["true", "1", "y", "yes"]:
+                    v = True
+                elif v.lower() in ["false", "0", "n", "no"]:
+                    v = False
+                else:
+                    raise ValueError(f"can't derive true or false from {v} (key {k})")
+            elif isinstance(old_v, int):
+                v = int(v)
+            elif isinstance(old_v, float):
+                v = float(v)
+            elif not isinstance(old_v, str):
+                raise ValueError(
+                    f"You can only update int, float, bool or string values in the config, got {v} for key {k}"
+                )
+
+            setattr(self, k, v)
+
+    def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
+        """
+        Checks whether the passed dictionary has a `torch_dtype` key and if it's not None, converts torch.dtype to a
+        string of just the type. For example, :obj:`torch.float32` get converted into `"float32"` string, which can
+        then be stored in the json format.
+        """
+        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
+            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+
+
+PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)
+PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
+    object="config", object_class="AutoConfig", object_files="configuration file"
+)

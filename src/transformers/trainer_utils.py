@@ -17,6 +17,7 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 """
 
 import copy
+import functools
 import gc
 import inspect
 import os
@@ -124,6 +125,13 @@ class EvaluationStrategy(ExplicitEnum):
     EPOCH = "epoch"
 
 
+class HubStrategy(ExplicitEnum):
+    END = "end"
+    EVERY_SAVE = "every_save"
+    CHECKPOINT = "checkpoint"
+    ALL_CHECKPOINTS = "all_checkpoints"
+
+
 class BestRun(NamedTuple):
     """
     The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).
@@ -158,7 +166,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_samples_per_second")]
+    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_per_second")]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())
@@ -232,7 +240,7 @@ def total_processes_number(local_rank):
     return 1
 
 
-def speed_metrics(split, start_time, num_samples=None):
+def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     """
     Measure and return speed performance metrics.
 
@@ -248,8 +256,11 @@ def speed_metrics(split, start_time, num_samples=None):
     runtime = time.time() - start_time
     result = {f"{split}_runtime": round(runtime, 4)}
     if num_samples is not None:
-        samples_per_second = 1 / (runtime / num_samples)
+        samples_per_second = num_samples / runtime
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
+    if num_steps is not None:
+        steps_per_second = num_steps / runtime
+        result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
     return result
 
 
@@ -416,7 +427,7 @@ class TrainerMemoryTracker:
         self.cur_stage = None
 
     def update_metrics(self, stage, metrics):
-        """stop tracking for the passed stage"""
+        """updates the metrics"""
         if self.skip_memory_metrics:
             return
 
@@ -438,7 +449,7 @@ class TrainerMemoryTracker:
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
 
     def stop_and_update_metrics(self, metrics=None):
-        """combine stop + update in one call for simpler code"""
+        """combine stop and metrics update in one call for simpler code"""
         if self.skip_memory_metrics:
             return
 
@@ -463,6 +474,16 @@ def denumpify_detensorize(metrics):
     elif is_torch_available() and isinstance(metrics, torch.Tensor) and metrics.numel() == 1:
         return metrics.item()
     return metrics
+
+
+def number_of_arguments(func):
+    """
+    Return the number of arguments of the passed function, even if it's a partial function.
+    """
+    if isinstance(func, functools.partial):
+        total_args = len(inspect.signature(func.func).parameters)
+        return total_args - len(func.args) - len(func.keywords)
+    return len(inspect.signature(func).parameters)
 
 
 class ShardedDDPOption(ExplicitEnum):

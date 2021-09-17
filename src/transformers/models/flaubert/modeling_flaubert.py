@@ -18,7 +18,8 @@
 import random
 
 import torch
-from torch.nn import functional as F
+from packaging import version
+from torch import nn
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutput
@@ -140,6 +141,10 @@ class FlaubertModel(XLMModel):
         super().__init__(config)
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
+        if version.parse(torch.__version__) > version.parse("1.6.0"):
+            self.register_buffer(
+                "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+            )
 
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -198,10 +203,16 @@ class FlaubertModel(XLMModel):
         # if self.is_decoder and src_enc is not None:
         #     src_mask = torch.arange(src_len.max(), dtype=torch.long, device=lengths.device) < src_len[:, None]
 
-        # position_ids
+        # Setting the position-ids to the registered buffer in constructor, it helps
+        # when tracing the model without passing position-ids, solves
+        # isues similar to issue #5664
         if position_ids is None:
-            position_ids = torch.arange(slen, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).expand((bs, slen))
+            if hasattr(self, "position_ids"):
+                position_ids = self.position_ids[:, :slen]
+                position_ids = position_ids.expand((bs, slen))
+            else:
+                position_ids = torch.arange(slen, dtype=torch.long, device=device)
+                position_ids = position_ids.unsqueeze(0).expand((bs, slen))
         else:
             assert position_ids.size() == (bs, slen)  # (slen, bs)
             # position_ids = position_ids.transpose(0, 1)
@@ -234,7 +245,7 @@ class FlaubertModel(XLMModel):
         if token_type_ids is not None:
             tensor = tensor + self.embeddings(token_type_ids)
         tensor = self.layer_norm_emb(tensor)
-        tensor = F.dropout(tensor, p=self.dropout, training=self.training)
+        tensor = nn.functional.dropout(tensor, p=self.dropout, training=self.training)
         tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # transformer layers
@@ -261,7 +272,7 @@ class FlaubertModel(XLMModel):
                 attn = attn_outputs[0]
                 if output_attentions:
                     attentions = attentions + (attn_outputs[1],)
-                attn = F.dropout(attn, p=self.dropout, training=self.training)
+                attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
                 tensor = tensor + attn
                 tensor = self.layer_norm1[i](tensor)
             else:
@@ -270,13 +281,13 @@ class FlaubertModel(XLMModel):
                 attn = attn_outputs[0]
                 if output_attentions:
                     attentions = attentions + (attn_outputs[1],)
-                attn = F.dropout(attn, p=self.dropout, training=self.training)
+                attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
                 tensor = tensor + attn
 
             # encoder attention (for decoder only)
             # if self.is_decoder and src_enc is not None:
             #     attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
-            #     attn = F.dropout(attn, p=self.dropout, training=self.training)
+            #     attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
             #     tensor = tensor + attn
             #     tensor = self.layer_norm15[i](tensor)
 

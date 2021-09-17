@@ -22,7 +22,6 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -49,6 +48,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FunnelConfig"
 _TOKENIZER_FOR_DOC = "FunnelTokenizer"
+_CHECKPOINT_FOR_DOC = "funnel-transformer/small"
 
 FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "funnel-transformer/small",  # B4-4-4H768
@@ -196,7 +196,7 @@ class FunnelAttentionStructure(nn.Module):
         position_embeds = self.get_position_embeds(seq_len, inputs_embeds.dtype, inputs_embeds.device)
         token_type_mat = self.token_type_ids_to_mat(token_type_ids) if token_type_ids is not None else None
         cls_mask = (
-            F.pad(inputs_embeds.new_ones([seq_len - 1, seq_len - 1]), (1, 0, 1, 0))
+            nn.functional.pad(inputs_embeds.new_ones([seq_len - 1, seq_len - 1]), (1, 0, 1, 0))
             if self.config.separate_cls
             else None
         )
@@ -368,11 +368,11 @@ class FunnelAttentionStructure(nn.Module):
         stride = (stride, 1)
 
         if mode == "mean":
-            tensor = F.avg_pool2d(tensor, stride, stride=stride, ceil_mode=True)
+            tensor = nn.functional.avg_pool2d(tensor, stride, stride=stride, ceil_mode=True)
         elif mode == "max":
-            tensor = F.max_pool2d(tensor, stride, stride=stride, ceil_mode=True)
+            tensor = nn.functional.max_pool2d(tensor, stride, stride=stride, ceil_mode=True)
         elif mode == "min":
-            tensor = -F.max_pool2d(-tensor, stride, stride=stride, ceil_mode=True)
+            tensor = -nn.functional.max_pool2d(-tensor, stride, stride=stride, ceil_mode=True)
         else:
             raise NotImplementedError("The supported modes are 'mean', 'max' and 'min'.")
 
@@ -988,7 +988,7 @@ class FunnelModel(FunnelPreTrainedModel):
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="funnel-transformer/small",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1175,7 +1175,7 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="funnel-transformer/small",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="<mask>",
@@ -1425,7 +1425,7 @@ class FunnelForTokenClassification(FunnelPreTrainedModel):
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="funnel-transformer/small",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1507,7 +1507,7 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="funnel-transformer/small",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1549,8 +1549,8 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
 
         logits = self.qa_outputs(last_hidden_state)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -1561,8 +1561,8 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

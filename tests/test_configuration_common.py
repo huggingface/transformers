@@ -21,7 +21,7 @@ import unittest
 
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
-from transformers import BertConfig
+from transformers import BertConfig, GPT2Config
 from transformers.testing_utils import ENDPOINT_STAGING, PASS, USER, is_staging_test
 
 
@@ -34,11 +34,39 @@ class ConfigTester(object):
 
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
+        common_properties = ["hidden_size", "num_attention_heads", "num_hidden_layers"]
+
+        # Add common fields for text models
         if self.has_text_modality:
-            self.parent.assertTrue(hasattr(config, "vocab_size"))
-        self.parent.assertTrue(hasattr(config, "hidden_size"))
-        self.parent.assertTrue(hasattr(config, "num_attention_heads"))
-        self.parent.assertTrue(hasattr(config, "num_hidden_layers"))
+            common_properties.extend(["vocab_size"])
+
+        # Test that config has the common properties as getters
+        for prop in common_properties:
+            self.parent.assertTrue(hasattr(config, prop), msg=f"`{prop}` does not exist")
+
+        # Test that config has the common properties as setter
+        for idx, name in enumerate(common_properties):
+            try:
+                setattr(config, name, idx)
+                self.parent.assertEqual(
+                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
+                )
+            except NotImplementedError:
+                # Some models might not be able to implement setters for common_properties
+                # In that case, a NotImplementedError is raised
+                pass
+
+        # Test if config class can be called with Config(prop_name=..)
+        for idx, name in enumerate(common_properties):
+            try:
+                config = self.config_class(**{name: idx})
+                self.parent.assertEqual(
+                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
+                )
+            except NotImplementedError:
+                # Some models might not be able to implement setters for common_properties
+                # In that case, a NotImplementedError is raised
+                pass
 
     def create_and_test_config_to_json_string(self):
         config = self.config_class(**self.inputs_dict)
@@ -113,7 +141,7 @@ class ConfigPushToHubTester(unittest.TestCase):
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-config", use_auth_token=self._token)
+            config.save_pretrained(os.path.join(tmp_dir, "test-config"), push_to_hub=True, use_auth_token=self._token)
 
             new_config = BertConfig.from_pretrained(f"{USER}/test-config")
             for k, v in config.__dict__.items():
@@ -127,9 +155,8 @@ class ConfigPushToHubTester(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(
-                tmp_dir,
+                os.path.join(tmp_dir, "test-config-org"),
                 push_to_hub=True,
-                repo_name="test-config-org",
                 use_auth_token=self._token,
                 organization="valid_org",
             )
@@ -138,3 +165,21 @@ class ConfigPushToHubTester(unittest.TestCase):
             for k, v in config.__dict__.items():
                 if k != "transformers_version":
                     self.assertEqual(v, getattr(new_config, k))
+
+
+class ConfigTestUtils(unittest.TestCase):
+    def test_config_from_string(self):
+        c = GPT2Config()
+
+        # attempt to modify each of int/float/bool/str config records and verify they were updated
+        n_embd = c.n_embd + 1  # int
+        resid_pdrop = c.resid_pdrop + 1.0  # float
+        scale_attn_weights = not c.scale_attn_weights  # bool
+        summary_type = c.summary_type + "foo"  # str
+        c.update_from_string(
+            f"n_embd={n_embd},resid_pdrop={resid_pdrop},scale_attn_weights={scale_attn_weights},summary_type={summary_type}"
+        )
+        self.assertEqual(n_embd, c.n_embd, "mismatch for key: n_embd")
+        self.assertEqual(resid_pdrop, c.resid_pdrop, "mismatch for key: resid_pdrop")
+        self.assertEqual(scale_attn_weights, c.scale_attn_weights, "mismatch for key: scale_attn_weights")
+        self.assertEqual(summary_type, c.summary_type, "mismatch for key: summary_type")

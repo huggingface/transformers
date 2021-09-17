@@ -12,12 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import json
+import os
+import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, T5Tokenizer, T5TokenizerFast
 from transformers.file_utils import cached_property, is_tf_available, is_torch_available
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -47,6 +49,25 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # We have a SentencePiece fixture for testing
         tokenizer = T5Tokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
+
+    def test_convert_token_and_id(self):
+        """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
+        token = "<s>"
+        token_id = 1
+
+        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
+        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "<unk>")
+        self.assertEqual(vocab_keys[1], "<s>")
+        self.assertEqual(vocab_keys[-1], "<pad>")
+        self.assertEqual(len(vocab_keys), 1_101)
+
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_100)
 
     def test_full_tokenizer(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB)
@@ -274,3 +295,80 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token_id in p_output)
                 self.assertTrue(special_token_id in r_output)
                 self.assertTrue(special_token_id in cr_output)
+
+    def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
+        tokenizer_list = []
+        if self.test_slow_tokenizer:
+            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
+
+        if self.test_rust_tokenizer:
+            tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
+
+        for tokenizer_class, tokenizer_utils in tokenizer_list:
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tokenizer_utils.save_pretrained(tmp_dir)
+
+                with open(os.path.join(tmp_dir, "special_tokens_map.json"), encoding="utf-8") as json_file:
+                    special_tokens_map = json.load(json_file)
+
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), encoding="utf-8") as json_file:
+                    tokenizer_config = json.load(json_file)
+
+                added_tokens_extra_ids = [f"<extra_id_{i}>" for i in range(100)]
+
+                special_tokens_map["additional_special_tokens"] = added_tokens_extra_ids + [
+                    "an_additional_special_token"
+                ]
+                tokenizer_config["additional_special_tokens"] = added_tokens_extra_ids + [
+                    "an_additional_special_token"
+                ]
+
+                with open(os.path.join(tmp_dir, "special_tokens_map.json"), "w", encoding="utf-8") as outfile:
+                    json.dump(special_tokens_map, outfile)
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as outfile:
+                    json.dump(tokenizer_config, outfile)
+
+                # the following checks allow us to verify that our test works as expected, i.e. that the tokenizer takes
+                # into account the new value of additional_special_tokens given in the "tokenizer_config.json" and
+                # "special_tokens_map.json" files
+                tokenizer_without_change_in_init = tokenizer_class.from_pretrained(
+                    tmp_dir,
+                )
+                self.assertIn(
+                    "an_additional_special_token", tokenizer_without_change_in_init.additional_special_tokens
+                )
+                # self.assertIn("an_additional_special_token",tokenizer_without_change_in_init.get_vocab()) # ByT5Tokenization no vocab
+                self.assertEqual(
+                    ["an_additional_special_token"],
+                    tokenizer_without_change_in_init.convert_ids_to_tokens(
+                        tokenizer_without_change_in_init.convert_tokens_to_ids(["an_additional_special_token"])
+                    ),
+                )
+
+                # Now we test that we can change the value of additional_special_tokens in the from_pretrained
+                new_added_tokens = added_tokens_extra_ids + [AddedToken("a_new_additional_special_token", lstrip=True)]
+                tokenizer = tokenizer_class.from_pretrained(
+                    tmp_dir,
+                    additional_special_tokens=new_added_tokens,
+                )
+
+                self.assertIn("a_new_additional_special_token", tokenizer.additional_special_tokens)
+                self.assertEqual(
+                    ["a_new_additional_special_token"],
+                    tokenizer.convert_ids_to_tokens(
+                        tokenizer.convert_tokens_to_ids(["a_new_additional_special_token"])
+                    ),
+                )
+
+    @slow
+    def test_tokenizer_integration(self):
+        # fmt: off
+        expected_encoding = {'input_ids': [[31220, 7, 41, 14034, 801, 38, 3, 102, 63, 17, 127, 524, 18, 7031, 2032, 277, 11, 3, 102, 63, 17, 127, 524, 18, 2026, 17, 10761, 18, 7041, 61, 795, 879, 18, 19681, 4648, 7, 41, 12920, 382, 6, 350, 6383, 4949, 6, 2158, 12920, 382, 9, 6, 3, 4, 11160, 6, 2043, 17153, 279, 49, 17, 6, 3, 4, 434, 9688, 11439, 21, 6869, 10509, 17725, 41, 567, 9138, 61, 11, 6869, 10509, 11946, 41, 18207, 517, 61, 28, 147, 3538, 1220, 7140, 10761, 2250, 16, 910, 1220, 8024, 11, 1659, 1413, 32, 883, 2020, 344, 2215, 226, 6, 12901, 382, 127, 524, 11, 4738, 7, 127, 15390, 5, 1], [272, 24203, 19, 876, 12, 554, 18, 9719, 1659, 2647, 26352, 6497, 7, 45, 73, 9339, 400, 26, 1499, 57, 22801, 10760, 30, 321, 646, 11, 269, 2625, 16, 66, 7500, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [37, 1704, 4216, 3, 20400, 4418, 7, 147, 8, 19743, 1782, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
+        # fmt: on
+
+        self.tokenizer_integration_test_util(
+            expected_encoding=expected_encoding,
+            model_name="t5-base",
+            revision="5a7ff2d8f5117c194c7e32ec1ccbf04642cca99b",
+        )

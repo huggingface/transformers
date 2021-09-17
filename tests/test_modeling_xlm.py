@@ -13,10 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import unittest
 
-from transformers import is_torch_available
+from transformers import XLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -28,7 +27,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        XLMConfig,
         XLMForMultipleChoice,
         XLMForQuestionAnswering,
         XLMForQuestionAnsweringSimple,
@@ -97,7 +95,22 @@ class XLMModelTester:
             is_impossible_labels = ids_tensor([self.batch_size], 2).float()
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = XLMConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            choice_labels,
+            input_mask,
+        )
+
+    def get_config(self):
+        return XLMConfig(
             vocab_size=self.vocab_size,
             n_special=self.n_special,
             emb_dim=self.hidden_size,
@@ -116,18 +129,6 @@ class XLMModelTester:
             use_proj=self.use_proj,
             num_labels=self.num_labels,
             bos_token_id=self.bos_token_id,
-        )
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_lengths,
-            sequence_labels,
-            token_labels,
-            is_impossible_labels,
-            choice_labels,
-            input_mask,
         )
 
     def create_and_check_xlm_model(

@@ -53,7 +53,7 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.PretrainedConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
@@ -272,7 +272,7 @@ class EncoderDecoderModel(PreTrainedModel):
                       a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args (remaining positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
 
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,

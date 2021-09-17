@@ -24,10 +24,11 @@ from zipfile import ZipFile
 
 import numpy as np
 import torch
+from torch import nn
 from tqdm import tqdm
 
+from huggingface_hub.hf_api import HfApi
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
-from transformers.hf_api import HfApi
 
 
 def remove_suffix(text: str, suffix: str):
@@ -53,7 +54,7 @@ def convert_encoder_layer(opus_dict, layer_prefix: str, converter: dict):
     return sd
 
 
-def load_layers_(layer_lst: torch.nn.ModuleList, opus_state: dict, converter, is_decoder=False):
+def load_layers_(layer_lst: nn.ModuleList, opus_state: dict, converter, is_decoder=False):
     for i, layer in enumerate(layer_lst):
         layer_tag = f"decoder_l{i + 1}_" if is_decoder else f"encoder_l{i + 1}_"
         sd = convert_encoder_layer(opus_state, layer_tag, converter)
@@ -64,7 +65,7 @@ def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
     """Find models that can accept src_lang as input and return tgt_lang as output."""
     prefix = "Helsinki-NLP/opus-mt-"
     api = HfApi()
-    model_list = api.model_list()
+    model_list = api.list_models()
     model_ids = [x.modelId for x in model_list if x.modelId.startswith("Helsinki-NLP")]
     src_and_targ = [
         remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
@@ -543,8 +544,8 @@ class OpusState:
         load_layers_(model.model.decoder.layers, state_dict, BART_CONVERTER, is_decoder=True)
 
         # handle tensors not associated with layers
-        wemb_tensor = torch.nn.Parameter(torch.FloatTensor(self.wemb))
-        bias_tensor = torch.nn.Parameter(torch.FloatTensor(self.final_bias))
+        wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
+        bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
         model.model.shared.weight = wemb_tensor
         model.model.encoder.embed_tokens = model.model.decoder.embed_tokens = model.model.shared
 

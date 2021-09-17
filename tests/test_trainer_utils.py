@@ -24,6 +24,7 @@ from transformers.testing_utils import require_torch
 
 if is_torch_available():
     import torch
+    from torch import nn
     from torch.utils.data import IterableDataset
 
     from transformers.modeling_outputs import SequenceClassifierOutput
@@ -40,18 +41,18 @@ if is_torch_available():
         get_parameter_names,
     )
 
-    class TstLayer(torch.nn.Module):
+    class TstLayer(nn.Module):
         def __init__(self, hidden_size):
             super().__init__()
-            self.linear1 = torch.nn.Linear(hidden_size, hidden_size)
-            self.ln1 = torch.nn.LayerNorm(hidden_size)
-            self.linear2 = torch.nn.Linear(hidden_size, hidden_size)
-            self.ln2 = torch.nn.LayerNorm(hidden_size)
-            self.bias = torch.nn.Parameter(torch.zeros(hidden_size))
+            self.linear1 = nn.Linear(hidden_size, hidden_size)
+            self.ln1 = nn.LayerNorm(hidden_size)
+            self.linear2 = nn.Linear(hidden_size, hidden_size)
+            self.ln2 = nn.LayerNorm(hidden_size)
+            self.bias = nn.Parameter(torch.zeros(hidden_size))
 
         def forward(self, x):
-            h = self.ln1(torch.nn.functional.relu(self.linear1(x)))
-            h = torch.nn.functional.relu(self.linear2(x))
+            h = self.ln1(nn.functional.relu(self.linear1(x)))
+            h = nn.functional.relu(self.linear2(x))
             return self.ln2(x + h + self.bias)
 
     class RandomIterableDataset(IterableDataset):
@@ -151,10 +152,10 @@ class TrainerUtilsTest(unittest.TestCase):
         num_labels = 12
         random_logits = torch.randn(4, 5, num_labels)
         random_labels = torch.randint(0, num_labels, (4, 5))
-        loss = torch.nn.functional.cross_entropy(random_logits.view(-1, num_labels), random_labels.view(-1))
+        loss = nn.functional.cross_entropy(random_logits.view(-1, num_labels), random_labels.view(-1))
         model_output = SequenceClassifierOutput(logits=random_logits)
         label_smoothed_loss = LabelSmoother(0.1)(model_output, random_labels)
-        log_probs = -torch.nn.functional.log_softmax(random_logits, dim=-1)
+        log_probs = -nn.functional.log_softmax(random_logits, dim=-1)
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.mean()
         self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))
 
@@ -163,10 +164,10 @@ class TrainerUtilsTest(unittest.TestCase):
         random_labels[2, 1] = -100
         random_labels[2, 3] = -100
 
-        loss = torch.nn.functional.cross_entropy(random_logits.view(-1, num_labels), random_labels.view(-1))
+        loss = nn.functional.cross_entropy(random_logits.view(-1, num_labels), random_labels.view(-1))
         model_output = SequenceClassifierOutput(logits=random_logits)
         label_smoothed_loss = LabelSmoother(0.1)(model_output, random_labels)
-        log_probs = -torch.nn.functional.log_softmax(random_logits, dim=-1)
+        log_probs = -nn.functional.log_softmax(random_logits, dim=-1)
         # Mask the log probs with the -100 labels
         log_probs[0, 1] = 0.0
         log_probs[2, 1] = 0.0
@@ -230,10 +231,10 @@ class TrainerUtilsTest(unittest.TestCase):
         self.assertEqual(list(sorted(indices_process_0 + indices_process_1)), list(range(100)))
 
     def test_get_parameter_names(self):
-        model = torch.nn.Sequential(TstLayer(128), torch.nn.ModuleList([TstLayer(128), TstLayer(128)]))
+        model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
         # fmt: off
         self.assertEqual(
-            get_parameter_names(model, [torch.nn.LayerNorm]),
+            get_parameter_names(model, [nn.LayerNorm]),
             ['0.linear1.weight', '0.linear1.bias', '0.linear2.weight', '0.linear2.bias', '0.bias', '1.0.linear1.weight', '1.0.linear1.bias', '1.0.linear2.weight', '1.0.linear2.bias', '1.0.bias', '1.1.linear1.weight', '1.1.linear1.bias', '1.1.linear2.weight', '1.1.linear2.bias', '1.1.bias']
         )
         # fmt: on

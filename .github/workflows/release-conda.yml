@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - v*
+    branches:
+      - conda_*
 
 env:
   ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}

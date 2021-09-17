@@ -185,7 +185,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
+        out_string = self.sp_model.decode(tokens)
 
         if self.do_upper_case:
             out_string = out_string.upper()

@@ -13,17 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
 import numpy as np
 
+import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import jaxlib.xla_extension as jax_xla
 from flax.core.frozen_dict import FrozenDict
-from flax.linen import dot_product_attention
+from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
@@ -54,30 +53,30 @@ _CONFIG_FOR_DOC = "ElectraConfig"
 _TOKENIZER_FOR_DOC = "ElectraTokenizer"
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxElectraForPreTrainingOutput(ModelOutput):
     """
     Output type of :class:`~transformers.ElectraForPreTraining`.
 
     Args:
-        logits (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+        logits (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`jax_xla.DeviceArray` (one for the output of the embeddings + one for the output of each
-            layer) of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`jax_xla.DeviceArray` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+        attentions (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`jnp.ndarray` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    logits: jax_xla.DeviceArray = None
-    hidden_states: Optional[Tuple[jax_xla.DeviceArray]] = None
-    attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
+    logits: jnp.ndarray = None
+    hidden_states: Optional[Tuple[jnp.ndarray]] = None
+    attentions: Optional[Tuple[jnp.ndarray]] = None
 
 
 ELECTRA_START_DOCSTRING = r"""
@@ -190,7 +189,8 @@ class FlaxElectraSelfAttention(nn.Module):
     def setup(self):
         if self.config.hidden_size % self.config.num_attention_heads != 0:
             raise ValueError(
-                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`: {self.config.num_attention_heads}"
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`\
+                    : {self.config.num_attention_heads}"
             )
 
         self.query = nn.Dense(
@@ -238,10 +238,9 @@ class FlaxElectraSelfAttention(nn.Module):
         if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
             dropout_rng = self.make_rng("dropout")
 
-        attn_output = dot_product_attention(
+        attn_weights = dot_product_attention_weights(
             query_states,
             key_states,
-            value_states,
             bias=attention_bias,
             dropout_rng=dropout_rng,
             dropout_rate=self.config.attention_probs_dropout_prob,
@@ -251,11 +250,10 @@ class FlaxElectraSelfAttention(nn.Module):
             precision=None,
         )
 
-        outputs = (attn_output.reshape(attn_output.shape[:2] + (-1,)),)
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
 
-        # TODO: at the moment it's not possible to retrieve attn_weights from
-        # dot_product_attention, but should be in the future -> add functionality then
-
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
 
 
@@ -302,7 +300,7 @@ class FlaxElectraAttention(nn.Module):
         outputs = (hidden_states,)
 
         if output_attentions:
-            outputs += attn_outputs[1]
+            outputs += (attn_outputs[1],)
 
         return outputs
 
@@ -399,7 +397,9 @@ class FlaxElectraLayerCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = layer(hidden_states, attention_mask, deterministic=deterministic)
+            layer_outputs = layer(
+                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -533,11 +533,6 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if output_attentions:
-            raise NotImplementedError(
-                "Currently attention scores cannot be returned. Please set `output_attentions` to False for now."
-            )
 
         # init input tensors if not passed
         if token_type_ids is None:
@@ -766,7 +761,7 @@ FLAX_ELECTRA_FOR_PRETRAINING_DOCSTRING = """
         >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
         >>> model = FlaxElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
@@ -787,7 +782,12 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
-        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
+        classifier_dropout = (
+            self.config.classifier_dropout
+            if self.config.classifier_dropout is not None
+            else self.config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Dense(self.config.num_labels)
 
     def __call__(
@@ -1073,7 +1073,12 @@ class FlaxElectraClassificationHead(nn.Module):
 
     def setup(self):
         self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
-        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
+        classifier_dropout = (
+            self.config.classifier_dropout
+            if self.config.classifier_dropout is not None
+            else self.config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.out_proj = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(self, hidden_states, deterministic: bool = True):

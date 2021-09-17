@@ -14,8 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ OpenAI GPT-2 configuration """
+from collections import OrderedDict
+from typing import Any, Mapping, Optional
+
+from transformers import PreTrainedTokenizer, TensorType, is_torch_available
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -125,6 +130,12 @@ class GPT2Config(PretrainedConfig):
 
     model_type = "gpt2"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "hidden_size": "n_embd",
+        "max_position_embeddings": "n_positions",
+        "num_attention_heads": "n_head",
+        "num_hidden_layers": "n_layer",
+    }
 
     def __init__(
         self,
@@ -153,8 +164,6 @@ class GPT2Config(PretrainedConfig):
         eos_token_id=50256,
         **kwargs
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx
         self.n_positions = n_positions
@@ -180,18 +189,62 @@ class GPT2Config(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+
+class GPT2OnnxConfig(OnnxConfigWithPast):
     @property
-    def max_position_embeddings(self):
-        return self.n_positions
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_inputs = OrderedDict({"input_ids": {0: "batch"}})
+        if self.use_past:
+            for i in range(self._config.n_layer * 2):
+                common_inputs[f"past_key_values.{i}"] = {0: "batch", 2: "sequence"}
+
+            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
+        else:
+            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
+
+        return common_inputs
 
     @property
-    def hidden_size(self):
-        return self.n_embd
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_outputs = OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}})
+        if self.use_past:
+            for i in range(self._config.n_layer * 2):
+                common_outputs[f"present.{i}"] = {0: "batch", 2: "sequence"}
 
-    @property
-    def num_attention_heads(self):
-        return self.n_head
+            return common_outputs
 
-    @property
-    def num_hidden_layers(self):
-        return self.n_layer
+        return common_outputs
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+        common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+
+        # We need to order the input in the way they appears in the forward()
+        ordered_inputs = OrderedDict({"input_ids": common_inputs["input_ids"]})
+
+        # Need to add the past_keys
+        if self.use_past:
+            if not is_torch_available():
+                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+            else:
+                import torch
+
+                batch = common_inputs["input_ids"].shape[0]
+                ordered_inputs["past_key_values"] = [
+                    (
+                        torch.zeros((batch, self._config.n_head, 1, self._config.hidden_size // self._config.n_head)),
+                        torch.zeros((batch, self._config.n_head, 1, self._config.hidden_size // self._config.n_head)),
+                    )
+                    for _ in range(self._config.n_layer)
+                ]
+
+        ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
+        return ordered_inputs

@@ -54,7 +54,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class XLMRobertaTokenizer(PreTrainedTokenizer):
     """
-    Adapted from :class:`~transformers.RobertaTokenizer` and class:`~transformers.XLNetTokenizer`. Based on
+    Adapted from :class:`~transformers.RobertaTokenizer` and :class:`~transformers.XLNetTokenizer`. Based on
     `SentencePiece <https://github.com/google/sentencepiece>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
@@ -171,6 +171,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
+        state["sp_model_proto"] = self.sp_model.serialized_model_proto()
         return state
 
     def __setstate__(self, d):
@@ -181,7 +182,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             self.sp_model_kwargs = {}
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(self.vocab_file)
+        self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

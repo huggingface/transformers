@@ -67,7 +67,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" XLM-RoBERTa tokenizer (backed by HuggingFace's `tokenizers` library). Adapted from
-    :class:`~transformers.RobertaTokenizer` and class:`~transformers.XLNetTokenizer`. Based on `BPE
+    :class:`~transformers.RobertaTokenizer` and :class:`~transformers.XLNetTokenizer`. Based on `BPE
     <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
@@ -117,7 +117,7 @@ class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file,
+        vocab_file=None,
         tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",
@@ -145,6 +145,7 @@ class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
+        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -198,6 +199,12 @@ class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory.")
             return

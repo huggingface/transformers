@@ -42,7 +42,7 @@ from transformers import (  # Trainer,; TrainingArguments,
 # Will import SageMaker Model parallelism specific Trainer
 from transformers.sagemaker import SageMakerTrainer as Trainer
 from transformers.sagemaker import SageMakerTrainingArguments as TrainingArguments
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 
 
@@ -206,11 +206,11 @@ def main():
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -218,7 +218,7 @@ def main():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
+    if training_args.should_log:
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
@@ -503,7 +503,7 @@ def main():
 
         for test_dataset, task in zip(test_datasets, tasks):
             # Removing the `label` columns because it contains -1 and Trainer won't like that.
-            test_dataset.remove_columns_("label")
+            test_dataset = test_dataset.remove_columns("label")
             predictions = trainer.predict(test_dataset=test_dataset).predictions
             predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
 

@@ -31,11 +31,11 @@ import random
 import datasets
 import torch
 from datasets import load_dataset
-from torch.utils.data.dataloader import DataLoader
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedType
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -48,9 +48,13 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
+
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
+
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
@@ -169,6 +173,9 @@ def parse_args():
     parser.add_argument(
         "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
     )
+    parser.add_argument(
+        "--no_keep_linebreaks", action="store_true", help="Do not keep line breaks when using TXT files."
+    )
 
     args = parser.parse_args()
 
@@ -196,7 +203,7 @@ def main():
     accelerator = Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
@@ -241,6 +248,7 @@ def main():
             )
     else:
         data_files = {}
+        dataset_args = {}
         if args.train_file is not None:
             data_files["train"] = args.train_file
         if args.validation_file is not None:
@@ -248,7 +256,23 @@ def main():
         extension = args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        raw_datasets = load_dataset(extension, data_files=data_files)
+            dataset_args["keep_linebreaks"] = not args.no_keep_linebreaks
+        raw_datasets = load_dataset(extension, data_files=data_files, **dataset_args)
+        # If no validation data is there, validation_split_percentage will be used to divide the dataset.
+        if "validation" not in raw_datasets.keys():
+            raw_datasets["validation"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[:{args.validation_split_percentage}%]",
+                **dataset_args,
+            )
+            raw_datasets["train"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[{args.validation_split_percentage}%:]",
+                **dataset_args,
+            )
+
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -300,6 +324,7 @@ def main():
         num_proc=args.preprocessing_num_workers,
         remove_columns=column_names,
         load_from_cache_file=not args.overwrite_cache,
+        desc="Running tokenizer on dataset",
     )
 
     if args.block_size is None:
@@ -325,7 +350,8 @@ def main():
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.
-        total_length = (total_length // block_size) * block_size
+        if total_length >= block_size:
+            total_length = (total_length // block_size) * block_size
         # Split by chunks of max_len.
         result = {
             k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
@@ -346,6 +372,7 @@ def main():
         batched=True,
         num_proc=args.preprocessing_num_workers,
         load_from_cache_file=not args.overwrite_cache,
+        desc=f"Grouping texts in chunks of {block_size}",
     )
 
     train_dataset = lm_datasets["train"]
@@ -382,6 +409,10 @@ def main():
     model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader
     )
+
+    # On TPU, the tie weights in our model have been disconnected, so we need to restore the ties.
+    if accelerator.distributed_type == DistributedType.TPU:
+        model.tie_weights()
 
     # Note -> the training dataloader needs to be prepared before we grab his length below (cause its length will be
     # shorter in multiprocess)
@@ -442,7 +473,10 @@ def main():
 
         losses = torch.cat(losses)
         losses = losses[: len(eval_dataset)]
-        perplexity = math.exp(torch.mean(losses))
+        try:
+            perplexity = math.exp(torch.mean(losses))
+        except OverflowError:
+            perplexity = float("inf")
 
         logger.info(f"epoch {epoch}: perplexity: {perplexity}")
 

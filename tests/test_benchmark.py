@@ -49,7 +49,7 @@ class BenchmarkTest(unittest.TestCase):
         self.check_results_dict_not_empty(results.memory_inference_result)
 
     def test_inference_no_configs_only_pretrain(self):
-        MODEL_ID = "sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english"
+        MODEL_ID = "sgugger/tiny-distilbert-classification"
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=False,

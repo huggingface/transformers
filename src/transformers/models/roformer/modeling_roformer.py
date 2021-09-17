@@ -60,7 +60,11 @@ _TOKENIZER_FOR_DOC = "RoFormerTokenizer"
 
 ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "junnyu/roformer_chinese_small",
-    "junnyu/roformer_chinese_base"
+    "junnyu/roformer_chinese_base",
+    "junnyu/roformer_chinese_char_small",
+    "junnyu/roformer_chinese_char_base",
+    "junnyu/roformer_small_discriminator",
+    "junnyu/roformer_small_generator"
     # See all RoFormer models at https://huggingface.co/models?filter=roformer
 ]
 
@@ -327,9 +331,9 @@ class RoFormerSelfAttention(nn.Module):
         # cos [batch_size, num_heads, sequence_length, embed_size_per_head//2]
         sin, cos = sinusoidal_pos.chunk(2, dim=-1)
         # sin [θ0,θ1,θ2......θd/2-1] -> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-        sin_pos = torch.repeat_interleave(sin, 2, dim=-1)
+        sin_pos = torch.stack([sin, sin], dim=-1).reshape_as(sinusoidal_pos)
         # cos [θ0,θ1,θ2......θd/2-1] -> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-        cos_pos = torch.repeat_interleave(cos, 2, dim=-1)
+        cos_pos = torch.stack([cos, cos], dim=-1).reshape_as(sinusoidal_pos)
         # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
         rotate_half_query_layer = torch.stack([-query_layer[..., 1::2], query_layer[..., ::2]], dim=-1).reshape_as(
             query_layer
@@ -740,7 +744,7 @@ ROFORMER_START_DOCSTRING = r"""
 
 ROFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`transformers.RoFormerTokenizer`. See
@@ -748,14 +752,14 @@ ROFORMER_INPUTS_DOCSTRING = r"""
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
 
@@ -769,7 +773,7 @@ ROFORMER_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -828,7 +832,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -884,13 +888,12 @@ class RoFormerModel(RoFormerPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
-            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
@@ -977,7 +980,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1408,7 +1411,7 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1495,7 +1498,7 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1554,8 +1557,8 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

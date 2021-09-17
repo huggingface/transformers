@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ RoBERTa configuration """
+from collections import OrderedDict
+from typing import Mapping
 
+from ...onnx import OnnxConfig
 from ...utils import logging
 from ..bert.configuration_bert import BertConfig
 
@@ -62,3 +65,18 @@ class RobertaConfig(BertConfig):
     def __init__(self, pad_token_id=1, bos_token_id=0, eos_token_id=2, **kwargs):
         """Constructs RobertaConfig."""
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+
+class RobertaOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"}), ("pooler_output", {0: "batch"})])
