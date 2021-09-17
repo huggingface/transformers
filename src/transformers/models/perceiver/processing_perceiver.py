@@ -29,8 +29,8 @@ def generate_fourier_features(
     concat_pos=True, sine_only=False):
   """Generate a Fourier frequency position encoding with linear spacing.
   Args:
-    pos: The position of n points in d dimensional space.
-      A Torch tensor of shape [n, d].
+    pos: The Tensor containing the position of n points in d dimensional space.
+      A Torch tensor of shape [batch_size, n, d].
     num_bands: The number of bands (K) to use.
     max_resolution: The maximum resolution (i.e. the number of pixels per dim).
       A tuple representing resolution for each dimension
@@ -47,19 +47,23 @@ def generate_fourier_features(
          cos(pi*f_1*dim_d), ..., cos(pi*f_K*dim_d)],
        where dim_i is pos[:, i] and f_k is the kth frequency band.
   """
+  
   min_freq = 1.0
   # Nyquist frequency at the target resolution:
 
   freq_bands = torch.stack([
-      torch.linspace(min_freq, res / 2, num=num_bands, endpoint=True)
+      torch.linspace(start=min_freq, end=res / 2, steps=num_bands)
       for res in max_resolution], dim=0)
 
+  print("Shape of pos:", pos.shape)
+  print("Shape of frequency bands:", freq_bands.shape)
+  
   # Get frequency bands for each spatial dimension.
   # Output is size [n, d * num_bands]
-  per_pos_features = pos[:, :, None] * freq_bands[None, :, :]
+  per_pos_features = pos[0,:,:][:, :, None] * freq_bands[None, :, :]
   per_pos_features = torch.reshape(per_pos_features,
                                  [-1, np.prod(per_pos_features.shape[1:])])
-
+  
   if sine_only:
     # Output is size [n, d * num_bands]
     per_pos_features = torch.sin(np.pi * (per_pos_features))
@@ -71,7 +75,7 @@ def generate_fourier_features(
   # Concatenate the raw input positions.
   if concat_pos:
     # Adds d bands to the encoding.
-    per_pos_features = torch.cat([pos, per_pos_features], dim=-1)
+    per_pos_features = torch.cat([pos, per_pos_features.unsqueeze(0)], dim=-1)
   return per_pos_features
 
 
@@ -144,25 +148,21 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
 class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
   """Fourier (Sinusoidal) position encoding."""
 
-  def __init__(self, index_dims, num_bands, concat_pos=True,
-               max_resolution=None, sine_only=False):
+  def __init__(self, num_bands, max_resolution, concat_pos=True, sine_only=False):
     super().__init__()
     self.num_bands = num_bands
+    self.max_resolution = max_resolution 
     self.concat_pos = concat_pos
     self.sine_only = sine_only
-    self.index_dims = index_dims
-    # Use the index dims as the maximum resolution if it's not provided.
-    self.max_resolution = max_resolution or index_dims
 
-  def forward(self, batch_size, pos=None):
-    pos = _check_or_build_spatial_positions(pos, self.index_dims, batch_size)
-    build_ff_fn = functools.partial(
-        generate_fourier_features,
-        num_bands=self.num_bands,
+  def forward(self, index_dims, batch_size, pos=None):
+    pos = _check_or_build_spatial_positions(pos, index_dims, batch_size)
+    fourier_pos_enc = generate_fourier_features(pos, num_bands=self.num_bands,
         max_resolution=self.max_resolution,
         concat_pos=self.concat_pos,
-        sine_only=self.sine_only)
-    return torch.vmap(build_ff_fn, 0, 0)(pos)
+        sine_only=self.sine_only
+    )
+    return fourier_pos_enc
 
 
 class PerceiverTextPreprocessor(nn.Module):
@@ -237,7 +237,7 @@ class PerceiverImagePreprocessor(nn.Module):
         self.conv_after_patching = conv_after_patching
         self.out_channels = out_channels
 
-        if self.prep_type in ["conv", "patches", "pixels"]:
+        if self.prep_type in ["conv", "patches"]:
             raise NotImplementedError(f"Preparation type {prep_type} is not yet supported")
         elif self.prep_type == "conv1x1":
             assert temporal_downsample == 1, "conv1x1 does not downsample in time."
@@ -287,7 +287,7 @@ class PerceiverImagePreprocessor(nn.Module):
             position_ids = torch.arange(0, indices)
             pos_enc = self.position_embeddings(batch_size, position_ids)
         elif self.position_encoding_type == "fourier":
-            pos_enc = None
+            pos_enc = self.position_embeddings(index_dims, batch_size)
 
         #print("Shape of position encodings before projection:", pos_enc.shape)
         #print("First elements of position encodings before projection:", pos_enc[0,:3,:3])
@@ -310,6 +310,9 @@ class PerceiverImagePreprocessor(nn.Module):
             sh = inputs.shape
             pos_enc = torch.reshape(pos_enc, list(sh)[:-1] + [-1])
 
+        print("Shape of inputs:", inputs.shape)
+        print("Shape of pos enc:", pos_enc.shape)
+        
         if self.concat_or_add_pos == "concat":
             inputs_with_pos = torch.cat([inputs, pos_enc], dim=-1)
         elif self.concat_or_add_pos == "add":

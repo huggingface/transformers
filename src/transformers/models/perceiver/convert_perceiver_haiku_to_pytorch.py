@@ -31,6 +31,7 @@ from transformers import (
     PerceiverConfig,
     PerceiverFeatureExtractor,
     PerceiverForImageClassification,
+    PerceiverForImageClassificationFourier,
     PerceiverForMaskedLM,
     PerceiverTokenizer,
 )
@@ -180,7 +181,8 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         checkpoint = pickle.loads(f.read())
 
     if isinstance(checkpoint, dict):
-        assert task == "image_classification", "Make sure to set task to image classification"
+        if task not in ["image_classification", "image_classification_fourier"]:
+            raise ValueError("Make sure to set task to image classification")
         # the image classification checkpoint with conv_preprocessing also has batchnorm state
         params = checkpoint["params"]
         state = checkpoint["state"]
@@ -202,7 +204,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.qk_channels = 8 * 32
         config.v_channels = 1280
         model = PerceiverForMaskedLM(config)
-    elif task == "image_classification":
+    elif "image_classification" in task:
         config.num_latents = 512
         config.d_latents = 1024
         config.d_model = 512
@@ -219,7 +221,15 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
-        model = PerceiverForImageClassification(config)
+        if task == "image_classification":
+            model = PerceiverForImageClassification(config)
+        elif task == "image_classification_fourier":
+            config.d_model = 261
+            model = PerceiverForImageClassificationFourier(config)
+        else:
+            raise ValueError(f"Task {task} not supported")
+    else:
+        raise ValueError(f"Task {task} not supported")
     model.eval()
 
     # load weights
@@ -234,7 +244,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         encoding.input_ids[0, 51:60] = tokenizer.mask_token_id
         inputs = encoding.input_ids
         input_mask = encoding.attention_mask
-    elif task == "image_classification":
+    elif task in ["image_classification", "image_classification_fourier"]:
         feature_extractor = PerceiverFeatureExtractor()
         image = prepare_img()
         encoding = feature_extractor(image, return_tensors="pt")
@@ -262,7 +272,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         print("Predicted string:")
         print(tokenizer.decode(masked_tokens_predictions))
 
-    elif task == "image_classification":
+    elif task in ["image_classification", "image_classification_fourier"]:
         print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
 
     # Finally, save files

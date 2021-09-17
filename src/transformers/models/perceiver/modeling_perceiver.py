@@ -924,6 +924,80 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         )
 
 
+# @add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
+class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.perceiver = PerceiverModel(
+            config,
+            input_preprocessor=PerceiverImagePreprocessor(
+                config,
+                prep_type="pixels",
+                spatial_downsample=1,
+                position_encoding_type="fourier",
+                concat_pos=True,
+                max_resolution=(224, 224),
+                num_bands=64,
+                sine_only=False
+            ),
+            decoder=PerceiverClassificationDecoder(config, num_channels=config.d_latents, use_query_residual=True),
+        )
+
+        self.init_weights()
+
+    # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # @add_code_sample_docstrings(
+    #     tokenizer_class=_TOKENIZER_FOR_DOC,
+    #     checkpoint=_CHECKPOINT_FOR_DOC,
+    #     output_type=SequenceClassifierOutput,
+    #     config_class=_CONFIG_FOR_DOC,
+    # )
+    def forward(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        logits = outputs.logits
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
 class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
     """Perceiver abstract decoder."""
 
