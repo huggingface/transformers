@@ -268,7 +268,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
         object_detector = pipeline("object-detection", model="nielsr/layoutlmv2-finetuned-funsd")
 
         outputs = object_detector([dataset[0]["image_path"], dataset[1]["image_path"]])
-        outputs = [o[:2] for o in outputs]  #
+        outputs = [o[:2] for o in outputs]  # trimming the output
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
