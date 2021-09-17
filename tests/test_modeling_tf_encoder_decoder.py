@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import copy
 import os
 import tempfile
 import unittest
@@ -21,7 +22,7 @@ import unittest
 import numpy as np
 
 from transformers import is_tf_available, is_torch_available
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_torch, slow
+from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_torch, slow, torch_device
 
 from .test_modeling_tf_bert import TFBertModelTester
 from .test_modeling_tf_common import ids_tensor
@@ -45,6 +46,11 @@ if is_tf_available():
         TFRobertaModel,
     )
     from transformers.modeling_tf_outputs import TFBaseModelOutput
+
+if is_torch_available():
+    import torch
+
+    from transformers import BertLMHeadModel, BertModel, EncoderDecoderModel
 
 
 @require_tf
@@ -719,8 +725,15 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         decoder_config = AutoConfig.from_pretrained("bert-base-uncased", is_decoder=True, add_cross_attention=True)
         return EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
 
+    def get_encoder_decoder_config_small(self):
+        encoder_config = AutoConfig.from_pretrained("julien-c/bert-xsmall-dummy")
+        decoder_config = AutoConfig.from_pretrained(
+            "julien-c/bert-xsmall-dummy", is_decoder=True, add_cross_attention=True
+        )
+        return EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+
     def test_encoder_decoder_save_load_from_encoder_decoder(self):
-        config = self.get_encoder_decoder_config()
+        config = self.get_encoder_decoder_config_small()
 
         # create two random BERT models for bert2bert & initialize weights (+cross_attention weights)
         encoder = TFBertModel(config.encoder)
@@ -755,6 +768,45 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         logits_2 = encoder_decoder(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
 
         self.assertTrue(logits_orig.numpy().sum() - logits_2.numpy().sum() < 1e-3)
+
+    @require_torch
+    @is_pt_tf_cross_test
+    def test_encoder_decoder_save_load_from_encoder_decoder_from_pt(self):
+        config = self.get_encoder_decoder_config_small()
+
+        # create two random BERT models for bert2bert & initialize weights (+cross_attention weights)
+        encoder_pt = BertModel(config.encoder).to(torch_device).eval()
+        decoder_pt = BertLMHeadModel(config.decoder).to(torch_device).eval()
+
+        encoder_decoder_pt = EncoderDecoderModel(encoder=encoder_pt, decoder=decoder_pt).to(torch_device).eval()
+
+        # HACK to make PT => TF work; there is currently no easy way of converting a PT to a TF model
+        encoder_decoder_pt.encoder.bert = copy.deepcopy(encoder_decoder_pt.encoder)
+
+        input_ids = ids_tensor([13, 5], encoder_pt.config.vocab_size)
+        decoder_input_ids = ids_tensor([13, 1], decoder_pt.config.vocab_size)
+
+        pt_input_ids = torch.tensor(input_ids.numpy(), device=torch_device, dtype=torch.long)
+        pt_decoder_input_ids = torch.tensor(decoder_input_ids.numpy(), device=torch_device, dtype=torch.long)
+
+        logits_pt = encoder_decoder_pt(input_ids=pt_input_ids, decoder_input_ids=pt_decoder_input_ids).logits
+
+        # PyTorch => TensorFlow
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            encoder_decoder_pt.save_pretrained(tmp_dirname)
+            encoder_decoder_tf = TFEncoderDecoderModel.from_pretrained(tmp_dirname, from_pt=True)
+
+        logits_tf = encoder_decoder_tf(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
+
+        self.assertTrue(logits_pt.detach().cpu().numpy().sum() - logits_tf.numpy().sum() < 4e-2)
+
+        # TensorFlow => PyTorch
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            encoder_decoder_tf.save_pretrained(tmp_dirname)
+            encoder_decoder_pt = EncoderDecoderModel.from_pretrained(tmp_dirname, from_tf=True)
+
+        logits_pt = encoder_decoder_pt(input_ids=pt_input_ids, decoder_input_ids=pt_decoder_input_ids).logits
+        self.assertTrue(logits_pt.detach().cpu().numpy().sum() - logits_tf.numpy().sum() < 4e-2)  # <= this test passes
 
     @slow
     def test_encoder_decoder_from_pretrained(self):
