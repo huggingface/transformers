@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support Encoder-Decoder architectures """
+""" Classes to support TF Encoder-Decoder architectures """
 
 
 from typing import Optional
@@ -181,12 +181,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
         if decoder is None:
             decoder = TFAutoModelForCausalLM.from_config(config.decoder, name="decoder")
-
-        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
-        if encoder.name != "encoder":
-            raise ValueError("encoder model must be created with the name `encoder`.")
-        if decoder.name != "decoder":
-            raise ValueError("decoder model must be created with the name `decoder`.")
 
         self.encoder = encoder
         self.decoder = decoder
@@ -501,6 +495,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         loss = None if decoder_inputs["labels"] is None else decoder_outputs[0]
         logits = decoder_outputs[0] if decoder_inputs["labels"] is None else decoder_outputs[1]
         past_key_values = None
+
         if decoder_inputs["use_cache"]:
             past_key_values = decoder_outputs[1] if decoder_inputs["labels"] is None else decoder_outputs[2]
         # The starting index of the remaining elements in `decoder_outputs`

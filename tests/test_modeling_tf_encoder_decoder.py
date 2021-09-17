@@ -716,8 +716,45 @@ class TFEncoderDecoderModelTest(unittest.TestCase):
 class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
     def get_encoder_decoder_config(self):
         encoder_config = AutoConfig.from_pretrained("bert-base-uncased")
-        decoder_config = AutoConfig.from_pretrained("bert-base-uncased")
+        decoder_config = AutoConfig.from_pretrained("bert-base-uncased", is_decoder=True, add_cross_attention=True)
         return EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+
+    def test_encoder_decoder_save_load_from_encoder_decoder(self):
+        config = self.get_encoder_decoder_config()
+
+        # create two random BERT models for bert2bert & initialize weights (+cross_attention weights)
+        encoder = TFBertModel(config.encoder)
+        encoder(encoder.dummy_inputs)
+        decoder = TFBertLMHeadModel(config.decoder)
+        decoder(decoder.dummy_inputs)
+
+        encoder_decoder_orig = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
+
+        input_ids = ids_tensor([13, 5], encoder.config.vocab_size)
+        decoder_input_ids = ids_tensor([13, 1], decoder.config.vocab_size)
+
+        logits_orig = encoder_decoder_orig(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
+
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            encoder_path = os.path.join(tmp_dirname, "encoder")
+            decoder_path = os.path.join(tmp_dirname, "decoder")
+
+            encoder.save_pretrained(encoder_path)
+            decoder.save_pretrained(decoder_path)
+
+            encoder_decoder = TFEncoderDecoderModel.from_encoder_decoder_pretrained(encoder_path, decoder_path)
+
+        logits_1 = encoder_decoder(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
+
+        self.assertTrue(logits_orig.numpy().sum() - logits_1.numpy().sum() < 1e-3)
+
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            encoder_decoder.save_pretrained(tmp_dirname)
+            encoder_decoder = TFEncoderDecoderModel.from_pretrained(tmp_dirname)
+
+        logits_2 = encoder_decoder(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
+
+        self.assertTrue(logits_orig.numpy().sum() - logits_2.numpy().sum() < 1e-3)
 
     @slow
     def test_encoder_decoder_from_pretrained(self):
