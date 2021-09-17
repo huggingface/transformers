@@ -18,8 +18,8 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    AutoFeatureExtractor,
     Wav2Vec2CTCTokenizer,
-    Wav2Vec2FeatureExtractor,
     Wav2Vec2ForCTC,
     Wav2Vec2Processor,
     set_seed,
@@ -134,8 +134,8 @@ class DataTrainingArguments:
             "value if set."
         },
     )
-    chars_to_ignore: List[str] = list_field(
-        default=[",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�"],
+    chars_to_ignore: Optional[List[str]] = list_field(
+        default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
 
@@ -242,7 +242,7 @@ def main():
     # Log on each process the small summary:
     logger.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
@@ -252,14 +252,14 @@ def main():
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    # Get the datasets:
+    # load datasets:
     train_dataset = datasets.load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
     )
     eval_dataset = datasets.load_dataset(data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name)
 
-    # Create and save tokenizer
-    chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]'
+    # Given training and test labels create vocabulary
+    chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else []
 
     def remove_special_characters(batch):
         batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).lower() + " "
@@ -295,23 +295,22 @@ def main():
     vocab_dict["[UNK]"] = len(vocab_dict)
     vocab_dict["[PAD]"] = len(vocab_dict)
 
+    # save vocabulary
     with open("vocab.json", "w") as vocab_file:
         json.dump(vocab_dict, vocab_file)
 
-    # Load pretrained model and tokenizer
-    #
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
+
+    # Load pretrained model and feature extractor and create tokenizer
     tokenizer = Wav2Vec2CTCTokenizer(
         "vocab.json",
         unk_token="[UNK]",
         pad_token="[PAD]",
         word_delimiter_token="|",
     )
-    feature_extractor = Wav2Vec2FeatureExtractor(
-        feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
-    )
+    feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     model = Wav2Vec2ForCTC.from_pretrained(
@@ -455,6 +454,22 @@ def main():
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
+
+    # Write model card and (optionally) push to hub
+    kwargs = {
+        "finetuned_from": model_args.model_name_or_path,
+        "tasks": "speech-recognition",
+        "tags": ["speech-recognition", data_args.dataset_name],
+        "dataset_args": f"Config: {data_args.dataset_config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
+        "dataset": f"{data_args.dataset_name.upper()} - {data_args.dataset_config_name.upper()}",
+    }
+    if "common_voice" in data_args.dataset_name:
+        kwargs["language"] = data_args.dataset_config_name
+
+    if training_args.push_to_hub:
+        trainer.push_to_hub(**kwargs)
+    else:
+        trainer.create_model_card(**kwargs)
 
     return results
 
