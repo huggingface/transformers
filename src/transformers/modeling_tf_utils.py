@@ -664,7 +664,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-        self.loss_tracker = tf.keras.metrics.Mean(name="loss")  # Used for custom train step only
 
     @classmethod
     def _from_config(cls, config, **kwargs):
@@ -726,8 +725,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             y_pred = self(x, training=True)
             if self.compiled_loss._user_losses is None and "loss" in y_pred:
                 loss = y_pred["loss"]
-                self.loss_tracker.update_state(loss)
-                return_metrics = {"loss": self.loss_tracker.result()}
+                return_metrics = {"loss": loss}
             else:
                 loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
                 return_metrics = {}
