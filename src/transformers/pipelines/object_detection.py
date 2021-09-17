@@ -108,22 +108,42 @@ class ObjectDetectionPipeline(Pipeline):
         image = self.load_image(image)
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.feature_extractor(images=[image], return_tensors="pt")
+        if self._is_layout_detection():
+            encoded_inputs = self.tokenizer(
+                text=inputs["words"],
+                boxes=inputs["boxes"],
+                truncation=True,
+                return_offsets_mapping=True,
+                return_tensors="pt",
+            )
+            encoded_inputs["image"] = inputs.pop("pixel_values")
+            encoded_inputs["target_size"] = target_size
+            return encoded_inputs
         inputs["target_size"] = target_size
         return inputs
 
     def _forward(self, model_inputs):
         target_size = model_inputs.pop("target_size")
+        if self._is_layout_detection():
+            offset_mapping = model_inputs.pop("offset_mapping")
         outputs = self.model(**model_inputs)
         model_outputs = {"outputs": outputs, "target_size": target_size}
+        if self._is_layout_detection():
+            model_outputs["bbox"] = model_inputs["bbox"]
+            model_outputs["offset_mapping"] = offset_mapping
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.9):
-        raw_annotations = self.feature_extractor.post_process(model_outputs["outputs"], model_outputs["target_size"])
+        post_process_inputs = [model_outputs["outputs"], model_outputs["target_size"]]
+        if self._is_layout_detection():
+            post_process_inputs.extend([model_outputs["offset_mapping"], model_outputs["bbox"]])
+        raw_annotations = self.feature_extractor.post_process(*post_process_inputs)
         raw_annotation = raw_annotations[0]
-        keep = raw_annotation["scores"] > threshold
-        scores = raw_annotation["scores"][keep]
-        labels = raw_annotation["labels"][keep]
-        boxes = raw_annotation["boxes"][keep]
+
+        scores, labels, boxes = [raw_annotation[key] for key in ["scores", "labels", "boxes"]]
+        if not self._is_layout_detection():
+            keep = raw_annotation["scores"] > threshold
+            scores, labels, boxes = scores[keep], labels[keep], boxes[keep]
 
         raw_annotation["scores"] = scores.tolist()
         raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
@@ -158,3 +178,6 @@ class ObjectDetectionPipeline(Pipeline):
             "ymax": ymax,
         }
         return bbox
+
+    def _is_layout_detection(self) -> bool:
+        return self.model.__class__.__name__.endswith("ForTokenClassification")

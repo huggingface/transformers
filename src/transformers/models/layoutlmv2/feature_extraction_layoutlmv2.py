@@ -22,10 +22,14 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_pytesseract_available, requires_backends
+from ...file_utils import TensorType, is_pytesseract_available, is_torch_available, requires_backends
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 
+
+if is_torch_available():
+    import torch
+    from torch import nn
 
 # soft dependency
 if is_pytesseract_available():
@@ -44,6 +48,15 @@ def normalize_box(box, width, height):
         int(1000 * (box[1] / height)),
         int(1000 * (box[2] / width)),
         int(1000 * (box[3] / height)),
+    ]
+
+
+def unnormalize_box(box, height, width):
+    return [
+        int(width * (box[0] / 1000)),
+        int(height * (box[1] / 1000)),
+        int(width * (box[2] / 1000)),
+        int(height * (box[3] / 1000)),
     ]
 
 
@@ -220,3 +233,54 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             encoded_inputs["boxes"] = boxes_batch
 
         return encoded_inputs
+
+    def post_process(self, outputs, target_sizes, offset_mapping, bbox):
+        """
+        Converts the output of :class:`~transformers.DetrForObjectDetection` into the format expected by the COCO api.
+        Only supports PyTorch.
+
+        Args:
+            outputs :obj:`Dict`):
+                Raw outputs of the model.
+            target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`):
+                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
+                image size (before any data augmentation). For visualization, this should be the image size after data
+                augment, but before padding.
+            offset_mapping (:obj:`torch.Tensor` of shape :obj:`(batch_size, x, 2)`):
+                TTensor coming that is "offset_mapping" field of outputs from
+                :class:`~transformer.LayoutLMv2TokenizerFast`.
+            bbox (:obj:`torch.Tensor` of shape :obj:`(batch_size, x, 4)`):
+                Tensor coming that is "bbox" field of outputs from :class:`~transformer.LayoutLMv2TokenizerFast`.
+
+        Returns:
+            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an
+            image in the batch as predicted by the model.
+        """
+        out_logits = outputs.logits
+
+        assert len(out_logits) == len(
+            target_sizes
+        ), "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+        assert (
+            target_sizes.shape[1] == 2
+        ), "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+
+        prob = nn.functional.softmax(out_logits, -1)
+        scores, labels = prob[..., :-1].max(-1)
+        scores = scores.tolist()
+        labels = labels.tolist()
+        boxes = bbox.tolist()
+        target_sizes = target_sizes.tolist()
+        is_subword = np.array(offset_mapping.tolist())[:, :, 0] != 0
+
+        results = []
+
+        for s, l, b, _is_subword, (height, width) in zip(scores, labels, boxes, is_subword, target_sizes):
+            # only keep non-subword predictions
+            l = [label for idx, label in enumerate(l) if not _is_subword[idx]]
+            s = [score for idx, score in enumerate(s) if not _is_subword[idx]]
+            b = [unnormalize_box(box, height, width) for idx, box in enumerate(b) if not _is_subword[idx]]
+            results.append(
+                {"scores": torch.FloatTensor(s), "labels": torch.IntTensor(l), "boxes": torch.FloatTensor(b)}
+            )
+        return results

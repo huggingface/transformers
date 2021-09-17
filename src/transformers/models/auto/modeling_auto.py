@@ -263,6 +263,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
         ("detr", "DetrForObjectDetection"),
+        ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
     ]
 )
 
