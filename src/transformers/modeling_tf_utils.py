@@ -294,9 +294,10 @@ def booleans_processing(config, **kwargs):
             final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
     else:
         if (
-            kwargs["output_attentions"] is not None
-            or kwargs["output_hidden_states"] is not None
-            or ("use_cache" in kwargs and kwargs["use_cache"] is not None)
+            kwargs["output_attentions"] not in (None, config.output_attentions)
+            or kwargs["output_hidden_states"] not in (None, config.output_hidden_states)
+            or "use_cache" in kwargs
+            and kwargs["use_cache"] not in (None, config.use_cache)
         ):
             tf_logger.warning(
                 "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
@@ -306,7 +307,7 @@ def booleans_processing(config, **kwargs):
         final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
-        if kwargs["return_dict"] is not None:
+        if kwargs.get("return_dict", None) not in (None, True):
             tf_logger.warning(
                 "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
             )
