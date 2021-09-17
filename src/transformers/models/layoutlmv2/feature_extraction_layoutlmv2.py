@@ -236,7 +236,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     def post_process(self, outputs, target_sizes, offset_mapping, bbox):
         """
-        Converts the output of :class:`~transformers.DetrForObjectDetection` into the format expected by the COCO api.
+        Converts the output of :class:`~transformers.LayoutLMv2ForTokenClassification` into the format expected by the COCO api.
         Only supports PyTorch.
 
         Args:
