@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 
@@ -454,6 +454,7 @@ class FlaxBeitLayerCollection(nn.Module):
     config: BeitConfig
     window_size: Tuple[int, int]
     drop_path_rates: List[float]
+    relative_position_bias: Callable[[], jnp.ndarray]
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
@@ -471,7 +472,6 @@ class FlaxBeitLayerCollection(nn.Module):
     def __call__(
         self,
         hidden_states,
-        relative_position_bias: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -484,6 +484,7 @@ class FlaxBeitLayerCollection(nn.Module):
         for i, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
+            relative_position_bias = self.relative_position_bias() if self.relative_position_bias is not None else None
             layer_outputs = layer(
                 hidden_states, relative_position_bias, deterministic=deterministic, output_attentions=output_attentions
             )
@@ -522,6 +523,9 @@ class FlaxBeitEncoder(nn.Module):
             self.config,
             window_size=self.window_size,
             drop_path_rates=drop_path_rates,
+            relative_position_bias=self.relative_position_bias
+            if self.config.use_shared_relative_position_bias
+            else None,
             dtype=self.dtype,
         )
 
@@ -533,13 +537,8 @@ class FlaxBeitEncoder(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        if self.config.use_shared_relative_position_bias:
-            relative_position_bias = self.relative_position_bias()
-        else:
-            relative_position_bias = None
         return self.layer(
             hidden_states,
-            relative_position_bias=relative_position_bias,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
