@@ -45,7 +45,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5Model"),
         ("wav2vec2", "FlaxWav2Vec2Model"),
         ("marian", "FlaxMarianModel"),
-        ("blenderbot", "FlaxBlenderbotModel")
+        ("blenderbot", "FlaxBlenderbotModel"),
     ]
 )
 

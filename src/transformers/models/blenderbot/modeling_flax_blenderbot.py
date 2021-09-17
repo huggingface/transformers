@@ -45,8 +45,8 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from .configuration_blenderbot import BlenderbotConfig
 from ...utils import logging
+from .configuration_blenderbot import BlenderbotConfig
 
 
 logger = logging.get_logger(__name__)
@@ -1044,7 +1044,9 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
         )
 
     @add_start_docstrings(BLENDERBOT_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=BlenderbotConfig)
+    @replace_return_docstrings(
+        output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=BlenderbotConfig
+    )
     def decode(
         self,
         decoder_input_ids,
@@ -1502,7 +1504,8 @@ FLAX_BLENDERBOT_CONDITIONAL_GENERATION_DOCSTRING = r"""
 """
 
 overwrite_call_docstring(
-    FlaxBlenderbotForConditionalGeneration, BLENDERBOT_INPUTS_DOCSTRING + FLAX_BLENDERBOT_CONDITIONAL_GENERATION_DOCSTRING
+    FlaxBlenderbotForConditionalGeneration,
+    BLENDERBOT_INPUTS_DOCSTRING + FLAX_BLENDERBOT_CONDITIONAL_GENERATION_DOCSTRING,
 )
 append_replace_return_docstrings(
     FlaxBlenderbotForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC

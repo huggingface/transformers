@@ -48,7 +48,7 @@ if is_flax_available():
     _import_structure["modeling_flax_blenderbot"] = [
         "FlaxBlenderbotForConditionalGeneration",
         "FlaxBlenderbotModel",
-        "FlaxBlenderbotPreTrainedModel"
+        "FlaxBlenderbotPreTrainedModel",
     ]
 
 
