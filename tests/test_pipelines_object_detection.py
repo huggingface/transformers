@@ -18,6 +18,7 @@ from transformers import (
     MODEL_FOR_OBJECT_DETECTION_MAPPING,
     AutoFeatureExtractor,
     AutoModelForObjectDetection,
+    AutoTokenizer,
     ObjectDetectionPipeline,
     is_vision_available,
     pipeline,
@@ -26,6 +27,8 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_datasets,
+    require_detectron2,
+    require_pytesseract,
     require_tf,
     require_timm,
     require_torch,
@@ -250,4 +253,65 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
                 {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
                 {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
             ],
+        )
+
+    @require_detectron2
+    @require_datasets
+    @require_pytesseract
+    @require_torch
+    @slow
+    def test_layout_architecture(self):
+        import datasets
+
+        dataset = datasets.load_dataset("nielsr/funsd", split="test")
+
+        object_detector = pipeline("object-detection", model="nielsr/layoutlmv2-finetuned-funsd")
+
+        outputs = object_detector([dataset[0]["image_path"], dataset[1]["image_path"]])
+        outputs = [o[:2] for o in outputs]  #
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [
+                    {"score": 0.8447, "label": "other", "box": {"xmin": 0, "ymin": 0, "xmax": 0, "ymax": 0}},
+                    {"score": 0.9083, "label": "other", "box": {"xmin": 476, "ymin": 59, "xmax": 487, "ymax": 67}},
+                ],
+                [
+                    {"score": 0.7886, "label": "other", "box": {"xmin": 0, "ymin": 0, "xmax": 0, "ymax": 0}},
+                    {"score": 0.9086, "label": "other", "box": {"xmin": 85, "ymin": 78, "xmax": 135, "ymax": 87}},
+                ],
+            ],
+        )
+
+    @require_detectron2
+    @require_datasets
+    @require_pytesseract
+    @require_torch
+    @slow
+    def test_layout_prcoessing(self):
+        model_id = "nielsr/layoutlmv2-finetuned-funsd"
+
+        model = AutoModelForObjectDetection.from_pretrained(model_id)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(
+            model=model, feature_extractor=feature_extractor, tokenizer=tokenizer
+        )
+
+        import datasets
+
+        dataset = datasets.load_dataset("nielsr/funsd", split="test")
+        doc_img = dataset[0]["image_path"]
+
+        pipe_inputs = object_detector.preprocess(doc_img)
+        self.assertEqual(
+            set(pipe_inputs.keys()),
+            {"input_ids", "token_type_ids", "attention_mask", "offset_mapping", "bbox", "image", "target_size"},
+        )
+
+        model_outputs = object_detector.forward(pipe_inputs)
+        self.assertEqual(
+            set(model_outputs.keys()),
+            {"outputs", "target_size", "bbox", "offset_mapping"},
         )
