@@ -552,12 +552,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         config = GPT2Config(vocab_size=100, n_positions=128, n_ctx=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
         x = torch.randint(0, 100, (128,))
-        train_dataset = RepeatDatasetWithInfAndNan(x)
+        train_dataset = RepeatDataset(x)
         args = TrainingArguments("./test", logging_nan_inf_filter=True)
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
         log_history = trainer.state.pop("log_history", None)
-        import ipdb; ipdb.set_trace()
 
     def test_train_and_eval_dataloaders(self):
         n_gpu = max(1, torch.cuda.device_count())
