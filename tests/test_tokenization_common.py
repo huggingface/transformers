@@ -310,6 +310,33 @@ class TokenizerTesterMixin:
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
 
+    # TODO: this test can be combined with `test_sentencepiece_tokenize_and_convert_tokens_to_string` after the latter is extended to all tokenizers.
+    def test_tokenize_special_tokens(self):
+        """Test `tokenize` with special tokens."""
+        tokenizers = self.get_tokenizers(fast=True)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                SPECIAL_TOKEN_1 = "[SPECIAL_TOKEN_1]"
+                SPECIAL_TOKEN_2 = "[SPECIAL_TOKEN_2]"
+
+                # TODO:
+                # Can we combine `unique_no_split_tokens` and `all_special_tokens`(and properties related to it)
+                # with one variable(property) for a better maintainability?
+
+                # `add_tokens` method stores special tokens only in `tokenizer.unique_no_split_tokens`. (in tokenization_utils.py)
+                tokenizer.add_tokens([SPECIAL_TOKEN_1], special_tokens=True)
+                # `add_special_tokens` method stores special tokens in `tokenizer.additional_special_tokens`,
+                # which also occur in `tokenizer.all_special_tokens`. (in tokenization_utils_base.py)
+                tokenizer.add_special_tokens({"additional_special_tokens": [SPECIAL_TOKEN_2]})
+
+                token_1 = tokenizer.tokenize(SPECIAL_TOKEN_1)
+                token_2 = tokenizer.tokenize(SPECIAL_TOKEN_2)
+
+                self.assertEqual(len(token_1), 1)
+                self.assertEqual(len(token_2), 1)
+                self.assertEqual(token_1[0], SPECIAL_TOKEN_1)
+                self.assertEqual(token_2[0], SPECIAL_TOKEN_2)
+
     # TODO: this test could be extended to all tokenizers - not just the sentencepiece
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
         """Test ``_tokenize`` and ``convert_tokens_to_string``."""
