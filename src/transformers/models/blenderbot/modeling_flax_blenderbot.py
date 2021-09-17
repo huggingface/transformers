@@ -681,26 +681,20 @@ class FlaxBlenderbotEncoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
         self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
+            self.config.max_position_embeddings,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
             dtype=self.dtype,
         )
         self.layers = FlaxBlenderbotEncoderLayerCollection(self.config, self.dtype)
-        self.layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
         input_ids,
         attention_mask,
         position_ids,
-        encoder_hidden_states: Optional[jnp.ndarray] = None,
-        encoder_attention_mask: Optional[jnp.ndarray] = None,
-        init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -711,34 +705,28 @@ class FlaxBlenderbotEncoder(nn.Module):
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        # embed positions
-        positions = self.embed_positions(position_ids + self.offset)
-        hidden_states = inputs_embeds + positions
+        embed_pos = self.embed_positions(position_ids)
+
+        hidden_states = inputs_embeds + embed_pos
+        hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
         outputs = self.layers(
             hidden_states,
             attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
             deterministic=deterministic,
-            init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        last_hidden_states = outputs[0]
-        last_hidden_states = self.layer_norm(last_hidden_states)
-
         if not return_dict:
-            return (last_hidden_states,) + outputs[1:]
+            return outputs
 
-        return FlaxBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=last_hidden_states,
+        return FlaxBaseModelOutput(
+            last_hidden_state=outputs.last_hidden_state,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
         )
 
 
@@ -763,11 +751,8 @@ class FlaxBlenderbotDecoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        # Blenderbot is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
         self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
+            self.config.max_position_embeddings,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
             dtype=self.dtype,
@@ -795,7 +780,7 @@ class FlaxBlenderbotDecoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # embed positions
-        positions = self.embed_positions(position_ids + self.offset)
+        positions = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + positions
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
