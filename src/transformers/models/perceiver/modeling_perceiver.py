@@ -163,7 +163,7 @@ class PerceiverSelfAttention(nn.Module):
         #     print("Sum of queries before layernorm:", hidden_states.sum())
         #     print("First few elements of keys + values before layernorm:", inputs[0,:3,:3])
         #     print("Sum of keys + values before layernorm:", inputs.sum())
-        
+
         hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
 
@@ -525,7 +525,7 @@ class PerceiverEncoder(nn.Module):
 
         # print("Shape of inputs before cross-attention:", inputs.shape)
         # print("First few elements of inputs:", inputs[0,:3,:3])
-        
+
         # Apply the cross-attention between the latents (hidden_states) and inputs:
         layer_outputs = self.cross_attention(
             hidden_states,
@@ -543,8 +543,8 @@ class PerceiverEncoder(nn.Module):
         # Apply the block of self-attention layers more than once:
         for _ in range(self.config.num_blocks):
             for i, layer_module in enumerate(self.self_attends):
-                #print(f"Block {i} -----------------------------------------------")
-                #print(f"Hidden states before block {i}:", hidden_states[0, :3, :3])
+                # print(f"Block {i} -----------------------------------------------")
+                # print(f"Hidden states before block {i}:", hidden_states[0, :3, :3])
                 if output_hidden_states:
                     all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -940,7 +940,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
                 concat_pos=True,
                 max_resolution=(224, 224),
                 num_bands=64,
-                sine_only=False
+                sine_only=False,
             ),
             decoder=PerceiverClassificationDecoder(config, num_channels=config.d_latents, use_query_residual=True),
         )
