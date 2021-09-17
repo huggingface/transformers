@@ -61,7 +61,7 @@ SPEECH_ENCODER_DECODER_START_DOCSTRING = r"""
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.PretrainedConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.SpeechEncoderDecoderConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
@@ -152,9 +152,9 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(SPEECH_ENCODER_DECODER_START_DOCSTRING)
 class SpeechEncoderDecoderModel(PreTrainedModel):
     r"""
-    :class:`~transformers.EncoderDecoder` is a generic model class that will be instantiated as a transformer
-    architecture with one of the base model classes of the library as encoder and another one as decoder when created
-    with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
+    :class:`~transformers.SpeechEncoderDecoderModel` is a generic model class that will be instantiated as a
+    transformer architecture with one of the base model classes of the library as encoder and another one as decoder
+    when created with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
     :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
     """
     config_class = SpeechEncoderDecoderConfig
