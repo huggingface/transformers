@@ -59,12 +59,15 @@ XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
 # question-answering
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 DEBERTA_TINY = "hf-internal-testing/tiny-deberta"
+LONGFORMER_TINY = "hf-internal-testing/tiny-random-longformer"
 
 # masked lm
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
 ELECTRA_TINY = "hf-internal-testing/tiny-electra"
 ALBERT_TINY = "hf-internal-testing/tiny-albert"
 LAYOUTLM_TINY = "hf-internal-testing/tiny-layoutlm"
+FUNNEL_TINY = "hf-internal-testing/tiny-random-funnel"
+DEBERTA_V2_TINY = "hf-internal-testing/tiny-random-deberta-v2"
 
 # classification
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
@@ -73,9 +76,6 @@ BERT_TINY = "hf-internal-testing/tiny-bert"
 
 # TODO: to add:
 #
-# deberta-v2
-# funnel
-# longformer
 # dpr
 # gpt_neo
 # camembert
@@ -133,10 +133,13 @@ def make_task_cmds():
             "distilbert",
             "albert",
             "layoutlm",
+            "deberta-v2",
+            "funnel",
         ],
         qa=[
             "roberta",
             "deberta",
+            "longformer",
         ],
         clas=[
             "bert",
