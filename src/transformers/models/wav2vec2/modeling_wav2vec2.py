@@ -37,9 +37,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
-dropouts_probs = [0.05, 0.1, 0.25, 0.5, 0.6]
-
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
@@ -711,8 +708,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-#            dropout_probability = np.random.uniform(0, 1)
-            dropout_probability = dropouts_probs[i % len(dropouts_probs)]
+            dropout_probability = np.random.uniform(0, 1)
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or deepspeed_zero3_is_enabled:

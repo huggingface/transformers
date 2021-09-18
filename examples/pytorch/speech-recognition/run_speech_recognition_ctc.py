@@ -58,6 +58,9 @@ class ModelArguments:
     activation_dropout: Optional[float] = field(
         default=0.1, metadata={"help": "The dropout ratio for activations inside the fully connected layer."}
     )
+    feat_proj_dropout: Optional[float] = field(
+        default=0.0, metadata={"help": "The dropout ratio for the projected features."}
+    )
     hidden_dropout: Optional[float] = field(
         default=0.1,
         metadata={
@@ -317,6 +320,7 @@ def main():
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         activation_dropout=model_args.activation_dropout,
+        feat_proj_dropout=model_args.feat_proj_dropout,
         attention_dropout=model_args.attention_dropout,
         hidden_dropout=model_args.hidden_dropout,
         final_dropout=model_args.final_dropout,
