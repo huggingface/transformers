@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021, The Facebook AI Research Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021, Google and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax MBart model. """
+""" Flax PEGASUS model. """
+
 
 import math
 import random
@@ -30,35 +31,33 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxCausalLMOutputWithCrossAttentions,
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqModelOutput,
-    FlaxSeq2SeqQuestionAnsweringModelOutput,
-    FlaxSeq2SeqSequenceClassifierOutput,
 )
 from ...modeling_flax_utils import (
     ACT2FN,
     FlaxPreTrainedModel,
+    add_start_docstrings_to_model_forward,
     append_call_sample_docstring,
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
 from ...utils import logging
-from .configuration_mbart import MBartConfig
+from .configuration_pegasus import PegasusConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "facebook/mbart-large-cc25"
-_CONFIG_FOR_DOC = "MBartConfig"
-_TOKENIZER_FOR_DOC = "MBartTokenizer"
+_CHECKPOINT_FOR_DOC = "google/pegasus-large"
+_CONFIG_FOR_DOC = "PegasusConfig"
+_TOKENIZER_FOR_DOC = "PegasusTokenizer"
 
-
-MBART_START_DOCSTRING = r"""
+PEGASUS_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
@@ -75,19 +74,19 @@ MBART_START_DOCSTRING = r"""
     - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
 
     Parameters:
-        config (:class:`~transformers.MBartConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.PegasusConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
             model weights.
 """
 
-MBART_INPUTS_DOCSTRING = r"""
+PEGASUS_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.MBartTokenizer`. See
+            Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -102,15 +101,11 @@ MBART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.MBartTokenizer`. See
+            Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
             `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
-
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
-            the right for denoising pre-training following the paper.
         decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -134,13 +129,13 @@ MBART_INPUTS_DOCSTRING = r"""
 """
 
 
-MBART_ENCODE_INPUTS_DOCSTRING = r"""
+PEGASUS_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.MBartTokenizer`. See
+            Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -165,20 +160,16 @@ MBART_ENCODE_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
-MBART_DECODE_INPUTS_DOCSTRING = r"""
+PEGASUS_DECODE_INPUTS_DOCSTRING = r"""
     Args:
         decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.MBartTokenizer`. See
+            Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
             `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
-
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
-            the right for denoising pre-training following the paper.
         encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`):
             Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
@@ -214,31 +205,33 @@ MBART_DECODE_INPUTS_DOCSTRING = r"""
 """
 
 
-def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int) -> jnp.ndarray:
+# Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
+def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
     """
-    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
-    have a single `decoder_start_token_id` in contrast to other Bart-like models.
+    Shift input ids one token to the right.
     """
-    prev_output_tokens = np.array(input_ids).copy()
+    shifted_input_ids = np.zeros_like(input_ids)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1]
+    shifted_input_ids[:, 0] = decoder_start_token_id
 
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
-
-    # replace possible -100 values in labels by `pad_token_id`
-    prev_output_tokens = np.where(prev_output_tokens == -100, pad_token_id, input_ids)
-    index_of_eos = (np.where(prev_output_tokens != pad_token_id, 1, 0).sum(axis=-1) - 1).reshape(-1, 1)
-    decoder_start_tokens = np.array(
-        [prev_output_tokens[i, eos_idx] for i, eos_idx in enumerate(index_of_eos)], dtype=np.int32
-    ).squeeze()
-
-    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].copy()
-    prev_output_tokens[:, 0] = decoder_start_tokens
-
-    return prev_output_tokens
+    shifted_input_ids = np.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    return shifted_input_ids
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->MBart
-class FlaxMBartAttention(nn.Module):
-    config: MBartConfig
+# Copied from transformers.models.marian.modeling_flax_marian.create_sinusoidal_positions
+def create_sinusoidal_positions(n_pos, dim, dtype):
+    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
+    sentinel = dim // 2 + dim % 2
+    out = np.zeros_like(position_enc)
+    out[:, 0:sentinel] = np.sin(position_enc[:, 0::2])
+    out[:, sentinel:] = np.cos(position_enc[:, 1::2])
+
+    return jnp.array(out, dtype=dtype)
+
+
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->Pegasus
+class FlaxPegasusAttention(nn.Module):
+    config: PegasusConfig
     embed_dim: int
     num_heads: int
     dropout: float = 0.0
@@ -402,13 +395,14 @@ class FlaxMBartAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class FlaxMBartEncoderLayer(nn.Module):
-    config: MBartConfig
+# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartEncoderLayer with MBart->Pegasus
+class FlaxPegasusEncoderLayer(nn.Module):
+    config: PegasusConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self) -> None:
         self.embed_dim = self.config.d_model
-        self.self_attn = FlaxMBartAttention(
+        self.self_attn = FlaxPegasusAttention(
             config=self.config,
             embed_dim=self.embed_dim,
             num_heads=self.config.encoder_attention_heads,
@@ -457,14 +451,14 @@ class FlaxMBartEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayerCollection with Bart->MBart
-class FlaxMBartEncoderLayerCollection(nn.Module):
-    config: MBartConfig
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayerCollection with Bart->Pegasus
+class FlaxPegasusEncoderLayerCollection(nn.Module):
+    config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.layers = [
-            FlaxMBartEncoderLayer(self.config, name=str(i), dtype=self.dtype)
+            FlaxPegasusEncoderLayer(self.config, name=str(i), dtype=self.dtype)
             for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
@@ -512,13 +506,14 @@ class FlaxMBartEncoderLayerCollection(nn.Module):
         )
 
 
-class FlaxMBartDecoderLayer(nn.Module):
-    config: MBartConfig
+# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartDecoderLayer with MBart->Pegasus
+class FlaxPegasusDecoderLayer(nn.Module):
+    config: PegasusConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self) -> None:
         self.embed_dim = self.config.d_model
-        self.self_attn = FlaxMBartAttention(
+        self.self_attn = FlaxPegasusAttention(
             config=self.config,
             embed_dim=self.embed_dim,
             num_heads=self.config.decoder_attention_heads,
@@ -530,7 +525,7 @@ class FlaxMBartDecoderLayer(nn.Module):
         self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
 
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
-        self.encoder_attn = FlaxMBartAttention(
+        self.encoder_attn = FlaxPegasusAttention(
             config=self.config,
             embed_dim=self.embed_dim,
             num_heads=self.config.decoder_attention_heads,
@@ -598,14 +593,14 @@ class FlaxMBartDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayerCollection with Bart->MBart
-class FlaxMBartDecoderLayerCollection(nn.Module):
-    config: MBartConfig
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayerCollection with Bart->Pegasus
+class FlaxPegasusDecoderLayerCollection(nn.Module):
+    config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.layers = [
-            FlaxMBartDecoderLayer(self.config, name=str(i), dtype=self.dtype)
+            FlaxPegasusDecoderLayer(self.config, name=str(i), dtype=self.dtype)
             for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.decoder_layerdrop
@@ -669,38 +664,8 @@ class FlaxMBartDecoderLayerCollection(nn.Module):
         )
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartClassificationHead with Bart->MBart
-class FlaxMBartClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    config: MBartConfig
-    inner_dim: int
-    num_classes: int
-    pooler_dropout: float
-    dtype: jnp.dtype = jnp.float32
-
-    def setup(self):
-        self.dense = nn.Dense(
-            self.inner_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
-        )
-        self.dropout = nn.Dropout(rate=self.pooler_dropout)
-        self.out_proj = nn.Dense(
-            self.num_classes,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-        )
-
-    def __call__(self, hidden_states: jnp.ndarray, deterministic: bool):
-        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = jnp.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        hidden_states = self.out_proj(hidden_states)
-        return hidden_states
-
-
-class FlaxMBartEncoder(nn.Module):
-    config: MBartConfig
+class FlaxPegasusEncoder(nn.Module):
+    config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     embed_tokens: Optional[nn.Embed] = None
 
@@ -720,17 +685,10 @@ class FlaxMBartEncoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        # MBart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+        self.embed_positions = create_sinusoidal_positions(
+            self.config.max_position_embeddings, embed_dim, dtype=self.dtype
         )
-        self.layers = FlaxMBartEncoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+        self.layers = FlaxPegasusEncoderLayerCollection(self.config, self.dtype)
         self.layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
@@ -748,12 +706,11 @@ class FlaxMBartEncoder(nn.Module):
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(position_ids + self.offset)
+        # embed positions
+        embed_pos = jnp.take(self.embed_positions, position_ids, axis=0)
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-
         outputs = self.layers(
             hidden_states,
             attention_mask,
@@ -762,22 +719,21 @@ class FlaxMBartEncoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        last_hidden_states = outputs[0]
-        last_hidden_states = self.layer_norm(last_hidden_states)
+        last_hidden_state = outputs[0]
+        last_hidden_state = self.layer_norm(last_hidden_state)
 
         if not return_dict:
-            return (last_hidden_states,) + outputs[1:]
+            return (last_hidden_state,) + outputs[1:]
 
         return FlaxBaseModelOutput(
-            last_hidden_state=last_hidden_states,
+            last_hidden_state=last_hidden_state,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
 
-class FlaxMBartDecoder(nn.Module):
-    config: MBartConfig
+class FlaxPegasusDecoder(nn.Module):
+    config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     embed_tokens: Optional[nn.Embed] = None
 
@@ -797,18 +753,11 @@ class FlaxMBartDecoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        # MBart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+        self.embed_positions = create_sinusoidal_positions(
+            self.config.max_position_embeddings, embed_dim, dtype=self.dtype
         )
 
-        self.layers = FlaxMBartDecoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+        self.layers = FlaxPegasusDecoderLayerCollection(self.config, self.dtype)
         self.layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
@@ -830,13 +779,10 @@ class FlaxMBartDecoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # embed positions
-        positions = self.embed_positions(position_ids + self.offset)
+        positions = jnp.take(self.embed_positions, position_ids, axis=0)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
-
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-
         outputs = self.layers(
             hidden_states,
             attention_mask,
@@ -848,24 +794,23 @@ class FlaxMBartDecoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        last_hidden_states = outputs[0]
-        last_hidden_states = self.layer_norm(last_hidden_states)
+        last_hidden_state = outputs[0]
+        last_hidden_state = self.layer_norm(last_hidden_state)
 
         if not return_dict:
-            return (last_hidden_states,) + outputs[1:]
+            return (last_hidden_state,) + outputs[1:]
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=last_hidden_states,
+            last_hidden_state=last_hidden_state,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartModule with Bart->MBart
-class FlaxMBartModule(nn.Module):
-    config: MBartConfig
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartModule with Bart->Pegasus
+class FlaxPegasusModule(nn.Module):
+    config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
@@ -876,8 +821,8 @@ class FlaxMBartModule(nn.Module):
             dtype=self.dtype,
         )
 
-        self.encoder = FlaxMBartEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
-        self.decoder = FlaxMBartDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+        self.encoder = FlaxPegasusEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+        self.decoder = FlaxPegasusDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
 
     def _get_encoder_module(self):
         return self.encoder
@@ -934,14 +879,14 @@ class FlaxMBartModule(nn.Module):
         )
 
 
-class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
-    config_class = MBartConfig
+class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
+    config_class = PegasusConfig
     base_model_prefix: str = "model"
     module_class: nn.Module = None
 
     def __init__(
         self,
-        config: MBartConfig,
+        config: PegasusConfig,
         input_shape: Tuple[int] = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
@@ -953,8 +898,6 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
-        # make sure initialization pass will work for FlaxMBartForSequenceClassificationModule
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
         decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)
@@ -976,7 +919,6 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
             decoder_position_ids,
         )["params"]
 
-    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartPreTrainedModel.init_cache with Bart->MBart
     def init_cache(self, batch_size, max_length, encoder_outputs):
         r"""
         Args:
@@ -1018,8 +960,8 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    @add_start_docstrings(MBART_ENCODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=MBartConfig)
+    @add_start_docstrings(PEGASUS_ENCODE_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=PegasusConfig)
     def encode(
         self,
         input_ids: jnp.ndarray,
@@ -1037,13 +979,13 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
 
         Example::
 
-            >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
+            >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-            >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-            >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+            >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
+            >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1080,8 +1022,8 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
             method=_encoder_forward,
         )
 
-    @add_start_docstrings(MBART_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=MBartConfig)
+    @add_start_docstrings(PEGASUS_DECODE_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=PegasusConfig)
     def decode(
         self,
         decoder_input_ids,
@@ -1102,13 +1044,13 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
 
         Example::
 
-            >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
+            >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-            >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-            >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+            >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
+            >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
 
             >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1149,7 +1091,7 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
 
         # if past_key_values are passed then cache is already initialized a private flag init_cache has to be
         # passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that
-        # it can be changed by FlaxMBartAttention module
+        # it can be changed by FlaxPegasusAttention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
@@ -1192,7 +1134,7 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
-    @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -1223,7 +1165,9 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
 
         # prepare decoder inputs
         if decoder_input_ids is None:
-            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
+            decoder_input_ids = shift_tokens_right(
+                input_ids, self.config.pad_token_id, decoder_start_token_id=self.config.decoder_start_token_id
+            )
         if decoder_attention_mask is None:
             decoder_attention_mask = jnp.ones_like(decoder_input_ids)
         if decoder_position_ids is None:
@@ -1252,28 +1196,28 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare MBart Model transformer outputting raw hidden-states without any specific head on top.",
-    MBART_START_DOCSTRING,
+    "The bare Pegasus Model transformer outputting raw hidden-states without any specific head on top.",
+    PEGASUS_START_DOCSTRING,
 )
-class FlaxMBartModel(FlaxMBartPreTrainedModel):
-    config: MBartConfig
+class FlaxPegasusModel(FlaxPegasusPreTrainedModel):
+    config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    module_class = FlaxMBartModule
+    module_class = FlaxPegasusModule
 
 
 append_call_sample_docstring(
-    FlaxMBartModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
+    FlaxPegasusModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
 )
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule with Bart->MBart
-class FlaxMBartForConditionalGenerationModule(nn.Module):
-    config: MBartConfig
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule with Bart->Pegasus
+class FlaxPegasusForConditionalGenerationModule(nn.Module):
+    config: PegasusConfig
     dtype: jnp.dtype = jnp.float32
     bias_init: Callable[..., jnp.ndarray] = jax.nn.initializers.zeros
 
     def setup(self):
-        self.model = FlaxMBartModule(config=self.config, dtype=self.dtype)
+        self.model = FlaxPegasusModule(config=self.config, dtype=self.dtype)
         self.lm_head = nn.Dense(
             self.model.shared.num_embeddings,
             use_bias=False,
@@ -1340,14 +1284,14 @@ class FlaxMBartForConditionalGenerationModule(nn.Module):
 
 
 @add_start_docstrings(
-    "The MMBart Model with a language modeling head. Can be used for summarization.", MBART_START_DOCSTRING
+    "The PEGASUS Model with a language modeling head. Can be used for summarization.", PEGASUS_START_DOCSTRING
 )
-class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
-    module_class = FlaxMBartForConditionalGenerationModule
+class FlaxPegasusForConditionalGeneration(FlaxPegasusPreTrainedModel):
+    module_class = FlaxPegasusForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
 
-    @add_start_docstrings(MBART_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=MBartConfig)
+    @add_start_docstrings(PEGASUS_DECODE_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=PegasusConfig)
     def decode(
         self,
         decoder_input_ids,
@@ -1359,7 +1303,7 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        train: bool = False,
+        deterministic: bool = True,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -1368,13 +1312,13 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
 
         Example::
 
-            >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
+            >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-            >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-            >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+            >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
+            >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
 
             >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1415,7 +1359,7 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
 
         # if past_key_values are passed then cache is already initialized a private flag init_cache has to be
         # passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that
-        # it can be changed by FlaxMBartAttention module
+        # it can be changed by FlaxPegasusAttention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
@@ -1451,7 +1395,7 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=not train,
+            deterministic=deterministic,
             rngs=rngs,
             mutable=mutable,
             method=_decoder_forward,
@@ -1518,234 +1462,43 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
         return model_kwargs
 
 
-FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = r"""
+FLAX_PEGASUS_CONDITIONAL_GENERATION_DOCSTRING = """
     Returns:
 
     Summarization example::
 
-        >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration, MBartConfig
+        >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-        >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
+        >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
 
-        >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
+        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
 
         >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True).sequences
-        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+        >>> summary_ids = model.generate(inputs['input_ids']).sequences
+        >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
 
     Mask filling example::
 
-        >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
-        >>> # de_DE is the language symbol id <LID> for German
-        >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
+        >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
+        >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
+        >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-        >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-        >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='np')['input_ids']
+        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
+        >>> input_ids = tokenizer([TXT], return_tensors='np')['input_ids']
         >>> logits = model(input_ids).logits
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero()[0].item()
-        >>> probs = logits[0, masked_index].softmax(dim=0)
-        >>> values, predictions = probs.topk(5)
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
+        >>> values, predictions = jax.lax.top_k(probs)
 
         >>> tokenizer.decode(predictions).split()
 """
 
 overwrite_call_docstring(
-    FlaxMBartForConditionalGeneration, MBART_INPUTS_DOCSTRING + FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING
+    FlaxPegasusForConditionalGeneration, PEGASUS_INPUTS_DOCSTRING + FLAX_PEGASUS_CONDITIONAL_GENERATION_DOCSTRING
 )
 append_replace_return_docstrings(
-    FlaxMBartForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
-)
-
-
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForSequenceClassificationModule with Bart->MBart
-class FlaxMBartForSequenceClassificationModule(nn.Module):
-    config: MBartConfig
-    dtype: jnp.dtype = jnp.float32
-    num_labels: Optional[int] = None
-
-    def setup(self):
-        self.model = FlaxMBartModule(config=self.config, dtype=self.dtype)
-        self.classification_head = FlaxMBartClassificationHead(
-            config=self.config,
-            inner_dim=self.config.d_model,
-            num_classes=self.num_labels if self.num_labels is not None else self.config.num_labels,
-            pooler_dropout=self.config.classifier_dropout,
-        )
-
-    def _get_encoder_module(self):
-        return self.model.encoder
-
-    def _get_decoder_module(self):
-        return self.model.decoder
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        decoder_input_ids,
-        decoder_attention_mask,
-        position_ids,
-        decoder_position_ids,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            position_ids=position_ids,
-            decoder_position_ids=decoder_position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
-
-        hidden_states = outputs[0]  # last hidden state
-
-        eos_mask = jnp.where(input_ids == self.config.eos_token_id, 1, 0)
-
-        # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError during JIT compilation
-        if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
-            if len(jnp.unique(eos_mask.sum(1))) > 1:
-                raise ValueError("All examples must have the same number of <eos> tokens.")
-
-            if any(eos_mask.sum(1) == 0):
-                raise ValueError("There are missing <eos> tokens in input_ids")
-
-            # Ensure to keep 1 only for the last <eos> token for each example
-            eos_mask_noised = eos_mask + jnp.arange(eos_mask.shape[1]) * 1e-6
-            eos_mask = jnp.where(eos_mask_noised == eos_mask_noised.max(1).reshape(-1, 1), 1, 0)
-
-        sentence_representation = jnp.einsum("ijk, ij -> ijk", hidden_states, eos_mask).sum(1)
-        logits = self.classification_head(sentence_representation, deterministic=deterministic)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return output
-
-        return FlaxSeq2SeqSequenceClassifierOutput(
-            logits=logits,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    MBart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
-    tasks.
-    """,
-    MBART_START_DOCSTRING,
-)
-class FlaxMBartForSequenceClassification(FlaxMBartPreTrainedModel):
-    module_class = FlaxMBartForSequenceClassificationModule
-    dtype = jnp.float32
-
-
-append_call_sample_docstring(
-    FlaxMBartForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
-    _CHECKPOINT_FOR_DOC,
-    FlaxSeq2SeqSequenceClassifierOutput,
-    _CONFIG_FOR_DOC,
-)
-
-
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForQuestionAnsweringModule with Bart->MBart
-class FlaxMBartForQuestionAnsweringModule(nn.Module):
-    config: MBartConfig
-    dtype: jnp.dtype = jnp.float32
-    num_labels = 2
-
-    def setup(self):
-        self.model = FlaxMBartModule(config=self.config, dtype=self.dtype)
-        self.qa_outputs = nn.Dense(
-            self.num_labels, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
-        )
-
-    def _get_encoder_module(self):
-        return self.model.encoder
-
-    def _get_decoder_module(self):
-        return self.model.decoder
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        decoder_input_ids,
-        decoder_attention_mask,
-        position_ids,
-        decoder_position_ids,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            position_ids=position_ids,
-            decoder_position_ids=decoder_position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = jnp.split(logits, logits.shape[-1], axis=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return output
-
-        return FlaxSeq2SeqQuestionAnsweringModelOutput(
-            start_logits=start_logits,
-            end_logits=end_logits,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    MBart Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    MBART_START_DOCSTRING,
-)
-class FlaxMBartForQuestionAnswering(FlaxMBartPreTrainedModel):
-    module_class = FlaxMBartForQuestionAnsweringModule
-    dtype = jnp.float32
-
-
-append_call_sample_docstring(
-    FlaxMBartForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
-    _CHECKPOINT_FOR_DOC,
-    FlaxSeq2SeqQuestionAnsweringModelOutput,
-    _CONFIG_FOR_DOC,
+    FlaxPegasusForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )

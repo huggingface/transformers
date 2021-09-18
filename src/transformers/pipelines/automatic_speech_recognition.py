@@ -124,6 +124,13 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
 
             - **text** (:obj:`str`) -- The recognized text.
         """
+        return super().__call__(inputs, **kwargs)
+
+    def _sanitize_parameters(self, **kwargs):
+        # No parameters on this pipeline right now
+        return {}, {}, {}
+
+    def preprocess(self, inputs):
         if isinstance(inputs, str):
             with open(inputs, "rb") as f:
                 inputs = f.read()
@@ -131,27 +138,34 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
 
-        assert isinstance(inputs, np.ndarray), "We expect a numpy ndarray as input"
-        assert len(inputs.shape) == 1, "We expect a single channel audio input for AutomaticSpeechRecognitionPipeline"
+        if not isinstance(inputs, np.ndarray):
+            raise ValueError("We expect a numpy ndarray as input")
+        if len(inputs.shape) != 1:
+            raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
         processed = self.feature_extractor(
             inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
-        processed = self.ensure_tensor_on_device(**processed)
+        return processed
 
+    def _forward(self, model_inputs):
         name = self.model.__class__.__name__
         if name.endswith("ForConditionalGeneration") or name.endswith("EncoderDecoderModel"):
             encoder = self.model.get_encoder()
             # we need to pass `processed.get("attention_mask")` here since audio encoder
             # attention mask  length is different from expected text decoder `encoder_attention_mask` length
+            # `generate` magic to create the mask automatically won't work, we basically need to help
+            # it here.
             tokens = self.model.generate(
-                encoder_outputs=encoder(**processed), attention_mask=processed.get("attention_mask")
+                encoder_outputs=encoder(**model_inputs), attention_mask=model_inputs.get("attention_mask")
             )
             tokens = tokens.squeeze(0)
         elif name.endswith("ForCTC"):
-            outputs = self.model(**processed)
+            outputs = self.model(**model_inputs)
             tokens = outputs.logits.squeeze(0).argmax(dim=-1)
+        return tokens
 
+    def postprocess(self, model_outputs):
         skip_special_tokens = False if "CTC" in self.tokenizer.__class__.__name__ else True
-        recognized_string = self.tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
+        recognized_string = self.tokenizer.decode(model_outputs, skip_special_tokens=skip_special_tokens)
         return {"text": recognized_string}

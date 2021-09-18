@@ -315,6 +315,7 @@ def _insert_values_as_list(metadata, name, values):
         return metadata
     if isinstance(values, str):
         values = [values]
+    values = [v for v in values if v is not None]
     if len(values) == 0:
         return metadata
     metadata[name] = values
@@ -438,7 +439,11 @@ class TrainingSummary:
                         }
                     )
 
-            model_index["results"].append(result)
+            # Remove partial results to avoid the model card being rejected.
+            if "task" in result and "dataset" in result and "metrics" in result:
+                model_index["results"].append(result)
+            else:
+                logger.info(f"Dropping the following result as it does not have all the necessary field:\n{result}")
 
         return [model_index]
 
