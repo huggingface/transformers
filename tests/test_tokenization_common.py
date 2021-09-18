@@ -313,7 +313,7 @@ class TokenizerTesterMixin:
     # TODO: this test can be combined with `test_sentencepiece_tokenize_and_convert_tokens_to_string` after the latter is extended to all tokenizers.
     def test_tokenize_special_tokens(self):
         """Test `tokenize` with special tokens."""
-        tokenizers = self.get_tokenizers(fast=True)
+        tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 SPECIAL_TOKEN_1 = "[SPECIAL_TOKEN_1]"
