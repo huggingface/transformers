@@ -65,7 +65,6 @@ def fix_query_key_value_ordering(param, checkpoint_version, num_splits, num_head
         param = param.transpose(0, 2)
         param = param.transpose(1, 2).contiguous()
     elif checkpoint_version >= 2.0:
-        # print(f"hidden_size={hidden_size}")
         # other versions store [num_heads * num_splits * hidden_size, :]
         saved_shape = (num_heads, num_splits, hidden_size) + input_shape[1:]
         param = param.view(*saved_shape)
@@ -82,11 +81,10 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     output_state_dict = {}
 
     nargs = input_state_dict["args"]
-    from pprint import pprint
+    # from pprint import pprint
+    # pprint(vars(nargs))
 
-    pprint(vars(nargs))
-
-    # XXX: why make the user write a config file when the exact dimensions/sizes are already in the checkpoint?
+    # do not make the user write a config file when the exact dimensions/sizes are already in the checkpoint
     config.vocab_size = nargs.padded_vocab_size
     config.n_positions = nargs.max_position_embeddings
     config.n_ctx = nargs.seq_length
@@ -94,7 +92,6 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     config.n_layer = nargs.num_layers
     config.n_head = nargs.num_attention_heads
     config.n_inner = nargs.ffn_hidden_size
-
     # pprint(config)
 
     # The number of heads.
@@ -116,14 +113,12 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
 
     # The word embeddings.
     word_embeddings = embeddings["word_embeddings"]["weight"]
-    # word_embeddings = embeddings["word_embeddings.weight"]
     # Truncate the embedding table to vocab_size rows.
     word_embeddings = word_embeddings[: config.vocab_size, :]
     output_state_dict["transformer.wte.weight"] = word_embeddings
 
     # The position embeddings.
     pos_embeddings = embeddings["position_embeddings"]["weight"]
-    # pos_embeddings = embeddings["position_embeddings.weight"]
     # Read the hidden dimension.
     n_embed = pos_embeddings.size(1)
     # DEBUG.
