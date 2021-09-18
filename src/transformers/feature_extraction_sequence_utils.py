@@ -27,7 +27,7 @@ from .file_utils import (
     _is_torch,
     is_tf_available,
     is_torch_available,
-    to_py_obj,
+    to_numpy,
 )
 from .utils import logging
 
@@ -178,13 +178,13 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 )
 
             for key, value in processed_features.items():
-                processed_features[key] = to_py_obj(value)
+                processed_features[key] = to_numpy(value)
 
         # Convert padding_strategy in PaddingStrategy
         padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
 
         required_input = processed_features[self.model_input_names[0]]
-        if required_input and not isinstance(required_input[0], (list, tuple)):
+        if required_input and not isinstance(required_input[0], np.ndarray):
             # truncation
             processed_features = self._truncate(
                 processed_features,
@@ -203,9 +203,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             return BatchFeature(processed_features, tensor_type=return_tensors)
 
         batch_size = len(required_input)
-        assert all(
-            len(v) == batch_size for v in processed_features.values()
-        ), "Some items in the output dictionary have a different batch size than others."
+        if not all(len(v) == batch_size for v in processed_features.values()):
+            raise ValueError("Some items in the output dictionary have a different batch size than others.")
 
         truncated_inputs = []
         for i in range(batch_size):
@@ -282,29 +281,43 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            padding_vector = self.feature_size * [self.padding_value] if self.feature_size > 1 else self.padding_value
+            #padding_vector = self.feature_size * [self.padding_value]
             if self.padding_side == "right":
                 if return_attention_mask:
-                    processed_features["attention_mask"] = [1] * len(required_input) + [0] * difference
-                processed_features[self.model_input_names[0]] = required_input + [
-                    padding_vector for _ in range(difference)
-                ]
+                    #processed_features["attention_mask"] = [1] * len(required_input) + [0] * difference
+                    attention_mask = np.zeros(max_length, dtype=np.int32)
+                    attention_mask[:len(required_input)] = 1
+                    processed_features["attention_mask"] = attention_mask
+                #processed_features[self.model_input_names[0]] = required_input + [
+                #    padding_vector for _ in range(difference)
+                #]
+                padding_shape = ((0, difference), (0, 0)) if self.feature_size > 1 else (0, difference)
+                processed_features[self.model_input_names[0]] = np.pad(
+                    required_input, padding_shape, "constant", constant_values=self.padding_value
+                )
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    processed_features["attention_mask"] = [0] * difference + [1] * len(required_input)
-                processed_features[self.model_input_names[0]] = [
-                    padding_vector for _ in range(difference)
-                ] + required_input
+                    #processed_features["attention_mask"] = [0] * difference + [1] * len(required_input)
+                    attention_mask = np.zeros(max_length, dtype=np.int32)
+                    attention_mask[-len(required_input):] = 1
+                    processed_features["attention_mask"] = attention_mask
+                #processed_features[self.model_input_names[0]] = [
+                #    padding_vector for _ in range(difference)
+                #] + required_input
+                padding_shape = ((difference, 0), (0, 0)) if self.feature_size > 1 else (difference, 0)
+                processed_features[self.model_input_names[0]] = np.pad(
+                    required_input, padding_shape, "constant", constant_values=self.padding_value
+                )
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
         elif return_attention_mask and "attention_mask" not in processed_features:
-            processed_features["attention_mask"] = [1] * len(required_input)
+            processed_features["attention_mask"] = np.ones(len(required_input), dtype=np.int32) #[1] * len(required_input)
 
         return processed_features
 
     def _truncate(
         self,
-        processed_features: Union[Dict[str, List[float]], BatchFeature],
+        processed_features: Union[Dict[str, np.ndarray], BatchFeature],
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         truncation: Optional[bool] = None,
