@@ -64,9 +64,9 @@ class ModelArguments:
             "help": "The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler."
         },
     )
-    feat_proj_dropout: Optional[float] = field(
-        default=0.1,
-        metadata={"help": "The dropout probabilitiy for all 1D convolutional layers in feature extractor."},
+    final_dropout: Optional[float] = field(
+        default=0.0,
+        metadata={"help": "The dropout probabilitiy for the final projection layer."},
     )
     mask_time_prob: Optional[float] = field(
         default=0.05,
@@ -77,7 +77,7 @@ class ModelArguments:
         },
     )
     gradient_checkpointing: Optional[bool] = field(
-        default=True,
+        default=False,
         metadata={
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
@@ -303,7 +303,7 @@ def main():
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
 
-    # Load pretrained model and feature extractor and create tokenizer
+    # Load pretrained model, feature extractor and create tokenizer with vocab
     tokenizer = Wav2Vec2CTCTokenizer(
         "vocab.json",
         unk_token="[UNK]",
@@ -319,7 +319,7 @@ def main():
         activation_dropout=model_args.activation_dropout,
         attention_dropout=model_args.attention_dropout,
         hidden_dropout=model_args.hidden_dropout,
-        feat_proj_dropout=model_args.feat_proj_dropout,
+        final_dropout=model_args.final_dropout,
         mask_time_prob=model_args.mask_time_prob,
         gradient_checkpointing=model_args.gradient_checkpointing,
         layerdrop=model_args.layerdrop,
@@ -328,6 +328,8 @@ def main():
         vocab_size=len(processor.tokenizer),
     )
 
+    # prepare dataset
+    # TODO(Patrick) - Once datasets audio feature is merged this part should be updated
     if data_args.max_train_samples is not None:
         train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
@@ -367,8 +369,6 @@ def main():
             batch["labels"] = processor(batch["target_text"]).input_ids
         return batch
 
-    # TODO(Patrick) - Add filter
-
     train_dataset = train_dataset.map(
         prepare_dataset,
         remove_columns=train_dataset.column_names,
@@ -384,7 +384,7 @@ def main():
         num_proc=data_args.preprocessing_num_workers,
     )
 
-    # Metric
+    # Define Metric during training
     wer_metric = datasets.load_metric("wer")
 
     def compute_metrics(pred):
