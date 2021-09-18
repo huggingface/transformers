@@ -1072,6 +1072,95 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         )
 
 
+# @add_start_docstrings("""Example use of Perceiver for optical flow. """, PERCEIVER_START_DOCSTRING)
+class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.perceiver = PerceiverModel(
+            config,
+            input_preprocessor=PerceiverImagePreprocessor(
+                config,
+                prep_type="patches",
+                spatial_downsample=1,
+                conv_after_patching=True,
+                temporal_downsample=2,
+                position_encoding_type="fourier",
+                # position_encoding_kwargs
+                num_bands=64,
+                max_resolution=config.train_size,
+                sine_only=False,
+                concat_pos=True,
+            ),
+            decoder=PerceiverFlowDecoder(
+                config,
+                output_image_shape=config.train_size,
+                rescale_factor=100.0,
+                # decoder kwargs
+                use_query_residual=False,
+                output_num_channels=2,
+                # We query the decoder using the first frame features
+                # rather than a standard decoder position encoding.
+                position_encoding_type="fourier",
+                position_encoding_kwargs=dict(
+                    concat_pos=True, max_resolution=config.train_size, num_bands=64, sine_only=False
+                ),
+            ),
+        )
+
+        self.init_weights()
+
+    # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # @add_code_sample_docstrings(
+    #     tokenizer_class=_TOKENIZER_FOR_DOC,
+    #     checkpoint=_CHECKPOINT_FOR_DOC,
+    #     output_type=SequenceClassifierOutput,
+    #     config_class=_CONFIG_FOR_DOC,
+    # )
+    def forward(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        logits = outputs.logits
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
 class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
     """Perceiver abstract decoder."""
 
@@ -1084,7 +1173,7 @@ class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def forward(self, query, z, *, is_training, query_mask=None):
+    def forward(self, query, z, query_mask=None):
         raise NotImplementedError
 
 
@@ -1101,7 +1190,7 @@ class PerceiverProjectionDecoder(PerceiverAbstractDecoder):
     def output_shape(self, inputs):
         return ((inputs.shape[0], self.num_labels), None)
 
-    def forward(self, query, z, *, is_training, query_mask=None):
+    def forward(self, query, z, query_mask=None):
         # (batch_size, num_latents, d_latents) -> (batch_size, d_latents)
         z = torch.mean(z, dim=1)
         # (batch_size, d_latents) -> (batch_size, config.num_labels)
@@ -1125,6 +1214,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         num_heads=1,
         widening_factor=1,
         use_query_residual=False,
+        concat_preprocessed_input=False,
         final_project=True,
     ):
         super().__init__()
@@ -1148,10 +1238,11 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             widening_factor=widening_factor,
             use_query_residual=use_query_residual,
         )
+        self.concat_preprocessed_input = concat_preprocessed_input
         self.final_layer = nn.Linear(num_channels, output_num_channels) if final_project else nn.Identity()
 
     def output_shape(self, inputs):
-        return ((inputs[0], self._subsampled_index_dims, self._output_num_channels), None)
+        return ((inputs[0], self.subsampled_index_dims, self.output_num_channels), None)
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         assert self.position_encoding_type != "none"  # Queries come from elsewhere
@@ -1159,6 +1250,12 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             raise NotImplementedError("Subsampled points is not yet supported")
         else:
             pos_emb = self.output_position_encodings.expand(inputs.shape[0], -1, -1)
+
+        if self.concat_preprocessed_input:
+            if inputs_without_pos is None:
+                raise ValueError("Value is required for inputs_without_pos if" " concat_preprocessed_input is True")
+            pos_emb = torch.cat([inputs_without_pos, pos_emb], div=-1)
+
         return pos_emb
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
@@ -1209,3 +1306,33 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
         # B x 1 x num_classes -> B x num_classes
         logits = self.decoder(query, z)
         return logits[:, 0, :]
+
+
+class PerceiverFlowDecoder(PerceiverAbstractDecoder):
+    """Cross-attention based flow decoder."""
+
+    def __init__(self, config, output_image_shape, output_num_channels=2, rescale_factor=100.0, **decoder_kwargs):
+        super().__init__()
+
+        self.output_image_shape = output_image_shape
+        self.output_num_channels = output_num_channels
+        self.rescale_factor = rescale_factor
+        self.decoder = PerceiverBasicDecoder(config, output_num_channels=output_num_channels, **decoder_kwargs)
+
+    def output_shape(self, inputs):
+        # The channel dimensions of output here don't necessarily correspond to
+        # (u, v) of flow: they may contain dims needed for the post-processor.
+        return ((inputs.shape[0],) + tuple(self.output_image_shape) + (self.output_num_channels,), None)
+
+    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
+        if subsampled_points is not None:
+            raise ValueError("FlowDecoder doesn't support subsampling yet.")
+        # assumes merged in time
+        return inputs
+
+    def forward(self, query, z, query_mask=None):
+        # Output flow and rescale.
+        preds = self.decoder(query, z)
+        preds /= self.rescale_factor
+
+        return preds.reshape([preds.shape[0]] + list(self.output_image_shape) + [preds.shape[-1]])

@@ -83,6 +83,8 @@ class PerceiverConfig(PretrainedConfig):
             Vocabulary size of the Perceiver model.
         seq_len (:obj:`int`, `optional`, defaults to 2048):
             Sequence length of the Perceiver model.
+        train_size (:obj:`Tuple[int]`, `optional`, defaults to (368, 496)):
+            Training size of the images for the flow model.
 
     Example::
 
@@ -123,6 +125,7 @@ class PerceiverConfig(PretrainedConfig):
         use_query_residual=True,
         vocab_size=262,
         seq_len=2048,
+        train_size=(368, 496),
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -150,3 +153,6 @@ class PerceiverConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.seq_len = seq_len
         # image classification attributes
+
+        # flow attributes
+        self.train_size = train_size

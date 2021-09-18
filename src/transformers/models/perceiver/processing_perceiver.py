@@ -26,6 +26,32 @@ import torch
 import torch.nn as nn
 
 
+def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_block_size: int = 1) -> torch.Tensor:
+    """Space to depth transform, using einops."""
+    try:
+        import einops
+    except ImportError:
+        raise ImportError("Einops is not installed in your environment, which is required.")
+
+    if len(frames.shape) == 4:
+        return einops.rearrange(
+            frames, "b (h dh) (w dw) c -> b h w (dh dw c)", dh=spatial_block_size, dw=spatial_block_size
+        )
+    elif len(frames.shape) == 5:
+        return einops.rearrange(
+            frames,
+            "b (t dt) (h dh) (w dw) c -> b t h w (dt dh dw c)",
+            dt=temporal_block_size,
+            dh=spatial_block_size,
+            dw=spatial_block_size,
+        )
+    else:
+        raise ValueError(
+            "Frames should be of rank 4 (batch, height, width, channels)"
+            " or rank 5 (batch, time, height, width, channels)"
+        )
+
+
 #  ------------------------------------------------------------
 #  -------------------  Up/down-sampling  ---------------------
 #  ------------------------------------------------------------
@@ -322,8 +348,6 @@ class PerceiverImagePreprocessor(nn.Module):
                 # spatial_downsample is unconstrained for 1x1 convolutions.
                 stride=(spatial_downsample, spatial_downsample),
             )
-        elif self.prep_type == "patches":
-            raise NotImplementedError(f"Preparation type {prep_type} is not yet supported")
 
         if self.position_encoding_type == "trainable":
             self.position_embeddings = PerceiverTrainablePositionEncoding(**position_encoding_kwargs)
@@ -333,12 +357,12 @@ class PerceiverImagePreprocessor(nn.Module):
             raise ValueError(f"Unknown position encoding type: {position_encoding_type}.")
 
         # Stack MLPs to get a deeper positional embedding.
-        if n_extra_pos_mlp > 0:
-            raise NotImplementedError("Stacking MLPs is not yet supported")
+        self.positions_projection = (
+            nn.Linear(self.out_channels, project_pos_dim) if project_pos_dim > 0 else nn.Identity()
+        )
 
-        self.positions_projection = None
-        if project_pos_dim > 0:
-            self.positions_projection = nn.Linear(self.out_channels, project_pos_dim)
+        # Optional convolutional layer after patches.
+        self.conv_after_patches = nn.Linear(3, self.out_channels) if conv_after_patching else nn.Identity()
 
     def _build_network_inputs(self, inputs: torch.Tensor, pos: torch.Tensor, network_input_is_1d: bool = True):
         """Construct the final input, including position encoding."""
@@ -373,8 +397,7 @@ class PerceiverImagePreprocessor(nn.Module):
         # print("First elements of weights of position projector:", self.positions_projection.weight[:3,:3])
 
         # Optionally project them to a target dimension.
-        if self.positions_projection is not None:
-            pos_enc = self.positions_projection(pos_enc)
+        pos_enc = self.positions_projection(pos_enc)
 
         # print("Shape of position encodings after projection:", pos_enc.shape)
         # print("First elements of position encodings after projection:", pos_enc[0,:3,:3])
@@ -402,9 +425,7 @@ class PerceiverImagePreprocessor(nn.Module):
         return inputs_with_pos, inputs
 
     def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
-        if self.prep_type == "patches":
-            raise NotImplementedError("TODO")
-        elif self.prep_type == "conv":
+        if self.prep_type == "conv":
             # Convnet image featurization.
             # Downsamples spatially by a factor of 4
             inputs = self.convnet(inputs)
@@ -425,6 +446,20 @@ class PerceiverImagePreprocessor(nn.Module):
                 ]
             else:
                 raise ValueError("Unsupported data format for pixels.")
+
+        elif self.prep_type == "patches":
+            # Space2depth featurization.
+            # Video: B x T x H x W x C
+            inputs = space_to_depth(
+                inputs, temporal_block_size=self.temporal_downsample, spatial_block_size=self.spatial_downsample
+            )
+
+            if inputs.ndim == 5 and inputs.shape[1] == 1:
+                # for flow
+                inputs = inputs.squeeze(dim=1)
+
+            # Optionally apply conv layer.
+            inputs = self.conv_after_patches(inputs)
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
         return inputs
