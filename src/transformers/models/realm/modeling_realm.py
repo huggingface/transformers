@@ -79,20 +79,34 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
+    is_reader_checkpoint = False
+
     for name, shape in init_vars:
         logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
+    
+    for name, array in zip(names, arrays):
+        if "reader" in name:
+            is_reader_checkpoint=True
 
     for name, array in zip(names, arrays):
-
-        # embedder
+        # For embedder and retriever
         embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
         name = name.replace("module/module/module/bert/", f"{embedder_prefix}bert/")
         name = name.replace("module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
         name = name.replace("module/module/dense/", f"{embedder_prefix}cls/dense/")
         name = name.replace("module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
+
+        # For reader
+        if is_reader_checkpoint and isinstance(model, RealmReader) and "reader" not in name:
+            continue
+        name = name.replace("reader/module/bert/", "bert/")
+        name = name.replace("reader/module/cls/", "cls/")
+        name = name.replace("reader/dense/", "qa_outputs/dense_intermediate/")
+        name = name.replace("reader/dense_1/", "qa_outputs/dense_output/")
+        name = name.replace("reader/layer_normalization", "qa_outputs/layer_normalization")
 
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
@@ -120,6 +134,7 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
                     logger.info(f"Skipping {'/'.join(name)}")
                     continue
             if len(scope_names) >= 2:
+                print(scope_names)
                 num = int(scope_names[1])
                 pointer = pointer[num]
         if m_name[-11:] == "_embeddings":
@@ -866,29 +881,28 @@ class RealmRetrieverProjection(nn.Module):
         return hidden_states
 
 
-
-class RealmQuestionAnsweringProjection(nn.Module):
+class RealmReaderProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.span_hidden_size * 2)
-        self.dense_1 = nn.Linear(config.span_hidden_size, 1)
+        self.dense_intermediate = nn.Linear(config.hidden_size, config.span_hidden_size * 2)
+        self.dense_output = nn.Linear(config.span_hidden_size, 1)
         self.layer_normalization = nn.LayerNorm(config.span_hidden_size, eps=config.layer_norm_eps)
 
         self.relu = nn.ReLU()
 
-    def forward(self, hidden_states, start_positions, end_positions):
-        hidden_states = self.dense(hidden_states)
-        
-
+    def forward(self, hidden_states, start_positions=None, end_positions=None):
+        # [reader_beam_size, max_sequence_len, span_hidden_size * 2]
+        hidden_states = self.dense_intermediate(hidden_states)
+        print('dense', hidden_states, hidden_states.shape)
         # [reader_beam_size, max_sequence_len, span_hidden_size]
-        start_projection, end_projection = hidden_states.split(1, dim=-1)
-        
+        start_projection, end_projection = hidden_states.split(2, dim=-1)
+        print(start_projection)
         candidate_hidden = start_projection + end_projection
 
         # [reader_beam_size, max_sequence_len, 1]
         hidden_states = self.relu(hidden_states)
         hidden_states = self.layer_normalization(hidden_states)
-        hidden_states = self.dense_1(hidden_states)
+        hidden_states = self.dense_output(hidden_states)
 
         start_logits = start_logits.squeeze(-1).contiguous()
         end_logits = end_logits.squeeze(-1).contiguous()
@@ -1339,19 +1353,21 @@ class RealmEncoder(RealmPreTrainedModel):
         )
 
 
-class RealmForQuestionAnswering(RealmPreTrainedModel):
+class RealmReader(RealmPreTrainedModel):
 
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", "cls"]
 
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.reader = RealmEncoder(config)
-        self.qa_outputs = RealmQuestionAnsweringProjection(config)
+        self.bert = RealmBertModel(config)
+        self.cls = RealmOnlyMLMHead(config)
+        self.qa_outputs = RealmReaderProjection(config)
 
         self.init_weights()
 
+    """
     @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -1359,6 +1375,7 @@ class RealmForQuestionAnswering(RealmPreTrainedModel):
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    """
     def forward(
         self,
         input_ids=None,
@@ -1367,6 +1384,7 @@ class RealmForQuestionAnswering(RealmPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        relevance_score=None,
         start_positions=None,
         end_positions=None,
         output_attentions=None,
@@ -1382,6 +1400,9 @@ class RealmForQuestionAnswering(RealmPreTrainedModel):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
+
+        Returns:
+
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1399,7 +1420,7 @@ class RealmForQuestionAnswering(RealmPreTrainedModel):
 
         # [batch_size * num_candidates, joint_seq_len, hidden_size]
         sequence_output = outputs[0]
-
+    
         # [batch_size * num_candidates, 1]
         start_logitsm, end_logits = self.qa_outputs(sequence_output)
 
