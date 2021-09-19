@@ -80,19 +80,21 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     # The converted output model.
     output_state_dict = {}
 
-    nargs = input_state_dict["args"]
-    # from pprint import pprint
-    # pprint(vars(nargs))
+    # old versions did not store training args
+    if "args" in input_state_dict:
+        # do not make the user write a config file when the exact dimensions/sizes are already in the checkpoint
+        train_args = input_state_dict["args"]
+        # from pprint import pprint
+        # pprint(vars(train_args))
 
-    # do not make the user write a config file when the exact dimensions/sizes are already in the checkpoint
-    config.vocab_size = nargs.padded_vocab_size
-    config.n_positions = nargs.max_position_embeddings
-    config.n_ctx = nargs.seq_length
-    config.n_embd = nargs.hidden_size
-    config.n_layer = nargs.num_layers
-    config.n_head = nargs.num_attention_heads
-    config.n_inner = nargs.ffn_hidden_size
-    # pprint(config)
+        config.vocab_size = train_args.padded_vocab_size
+        config.n_positions = train_args.max_position_embeddings
+        config.n_ctx = train_args.seq_length
+        config.n_embd = train_args.hidden_size
+        config.n_layer = train_args.num_layers
+        config.n_head = train_args.num_attention_heads
+        config.n_inner = train_args.ffn_hidden_size
+        # pprint(config)
 
     # The number of heads.
     heads = config.n_head
