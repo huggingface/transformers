@@ -45,7 +45,7 @@ jobs:
 
       - name: Run all tests on GPU
         run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_gpu --durations=0 --durations-min=10.0 tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -72,7 +72,7 @@ jobs:
         env:
           RUN_PIPELINE_TESTS: yes
         run: |
-          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu --durations=0 --durations-min=10.0 tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -112,7 +112,7 @@ jobs:
 
       - name: Run all tests on GPU
         run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_flax_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_flax_gpu --durations=0 --durations-min=10.0 tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -154,7 +154,7 @@ jobs:
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
         run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_tf_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_tf_gpu --durations=0 --durations-min=10.0 tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -167,7 +167,7 @@ jobs:
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
         run: |
-          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_gpu --durations=0 --durations-min=10.0 tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -211,7 +211,7 @@ jobs:
         env:
           MKL_SERVICE_FORCE_INTEL: 1
         run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_multi_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_multi_gpu --durations=0 --durations-min=10.0 tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -222,7 +222,7 @@ jobs:
         env:
           RUN_PIPELINE_TESTS: yes
         run: |
-          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu --durations=0 --durations-min=10.0 tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -265,7 +265,7 @@ jobs:
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
         run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_tf_multi_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_tf_multi_gpu --durations=0 --durations-min=10.0 tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -278,7 +278,7 @@ jobs:
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
         run: |
-          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
+          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu --durations=0 --durations-min=10.0 tests
 
       - name: Failure short reports
         if: ${{ always() }}
