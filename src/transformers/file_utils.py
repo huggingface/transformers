@@ -1863,12 +1863,8 @@ def to_numpy(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
     """
-    if isinstance(obj, (dict, UserDict)):
-        return {k: to_numpy(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        if all(isinstance(i, (int, float)) for i in obj):
-            return np.array(obj)
-        return [to_numpy(o) for o in obj]
+    if isinstance(obj, (list, tuple)):
+        return np.array(obj)
     elif is_tf_available() and _is_tensorflow(obj):
         return obj.numpy()
     elif is_torch_available() and _is_torch(obj):
