@@ -5,13 +5,14 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 
 import datasets
 import numpy as np
 import torch
 import torchaudio
 from packaging import version
+from transformers.file_utils import is_apex_available, is_sagemaker_mp_enabled
 
 import transformers
 from transformers import (
@@ -25,6 +26,21 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
+import torch.distributed as dist
+
+
+if is_apex_available():
+    from apex import amp
+
+
+if is_sagemaker_mp_enabled():
+    from .trainer_pt_utils import smp_forward_backward
+
+
+if version.parse(torch.__version__) >= version.parse("1.6"):
+    _is_torch_generator_available = True
+    _is_native_amp_available = True
+    from torch.cuda.amp import autocast
 
 
 """ Fine-tuning a 🤗 Transformers model for image classification"""
@@ -206,6 +222,79 @@ class DataCollatorCTCWithPadding:
         return batch
 
 
+class CTCTrainer(Trainer):
+
+    @staticmethod
+    def multiply_grads(params, c):
+        """Multiplies grads by a constant *c*."""
+        for p in params:
+            if p.grad is not None:
+                if torch.is_tensor(c):
+                    c = c.to(p.grad.device)
+                p.grad.data.mul_(c)
+
+    def training_step(self, model: torch.nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+        """
+        Perform a training step on a batch of inputs.
+        Subclass and override to inject custom behavior.
+        Args:
+            model (:obj:`nn.Module`):
+                The model to train.
+            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+                The inputs and targets of the model.
+                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
+                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
+        Return:
+            :obj:`torch.Tensor`: The tensor with training loss on this batch.
+        """
+
+        model.train()
+        inputs = self._prepare_inputs(inputs)
+
+        if is_sagemaker_mp_enabled():
+            scaler = self.scaler if self.use_amp else None
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
+            return loss_mb.reduce_mean().detach().to(self.args.device)
+
+        if self.use_amp:
+            with autocast():
+                loss = self.compute_loss(model, inputs)
+        else:
+            loss = self.compute_loss(model, inputs)
+
+        if self.args.n_gpu > 1:
+            raise ValueError("`torch.nn.DataParallel` is not supported. Please use `torch.nn.DistributedDataParallel` instead.")
+
+        if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
+            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
+            loss = loss / self.args.gradient_accumulation_steps
+
+        if self.use_amp:
+            self.scaler.scale(loss).backward()
+        elif self.use_apex:
+            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+        elif self.deepspeed:
+            self.deepspeed.backward(loss)
+        else:
+            loss.backward()
+
+        loss.detach()
+
+        # divide gradients by number of labels
+        if self.args.world_size > 1:
+            num_losses = (inputs["labels"] >= 0).sum()
+            dist.all_reduce(num_losses)
+
+            constant = self.args.world_size / num_losses
+
+            self.multiply_grads(model.module.parameters(), constant)
+
+            loss *= constant
+
+        return loss
+
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -327,7 +416,7 @@ def main():
         mask_time_prob=model_args.mask_time_prob,
         gradient_checkpointing=model_args.gradient_checkpointing,
         layerdrop=model_args.layerdrop,
-        ctc_loss_reduction="mean",
+        ctc_loss_reduction="sum" if training_args.world_size > 1 else "mean",
         pad_token_id=processor.tokenizer.pad_token_id,
         vocab_size=len(processor.tokenizer),
     )
@@ -411,8 +500,8 @@ def main():
     # Data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
 
-    # Initialize Trainer
-    trainer = Trainer(
+    # Initialize CTCTrainer
+    trainer = CTCTrainer(
         model=model,
         data_collator=data_collator,
         args=training_args,
