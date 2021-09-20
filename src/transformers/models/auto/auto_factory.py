@@ -20,6 +20,7 @@ from ...configuration_utils import PretrainedConfig
 from ...file_utils import copy_func
 from ...utils import logging
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
+from .dynamic import get_class_from_dynamic_module
 
 
 logger = logging.get_logger(__name__)
@@ -122,6 +123,10 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
+            trust_remote_code (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to :obj:`True` for repositories you trust and in which you have read the code, as it
+                will execute code present on the Hub on your local machine.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -211,6 +216,10 @@ FROM_PRETRAINED_TF_DOCSTRING = """
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
+            trust_remote_code (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to :obj:`True` for repositories you trust and in which you have read the code, as it
+                will execute code present on the Hub on your local machine.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -300,6 +309,10 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
+            trust_remote_code (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to :obj:`True` for repositories you trust and in which you have read the code, as it
+                will execute code present on the Hub on your local machine.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -377,13 +390,31 @@ class _BaseAutoModelClass:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         config = kwargs.pop("config", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
         kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
-
-        if type(config) in cls._model_mapping.keys():
+        if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
+            if not trust_remote_code:
+                raise ValueError(
+                    f"Loading {pretrained_model_name_or_path} requires you to execute the modeling file in that repo "
+                    "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
+                    "the option `trust_remote_code=True` to remove this error."
+                )
+            if kwargs.get("revision", None) is None:
+                logger.warn(
+                    "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
+                    "no malicious code has been contributed in a newer revision."
+                )
+            class_ref = config.auto_map[cls.__name__]
+            module_file, class_name = class_ref.split(".")
+            model_class = get_class_from_dynamic_module(
+                pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+            )
+            return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
             return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
