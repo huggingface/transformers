@@ -245,9 +245,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             outputs (:obj:`Dict`):
                 Raw outputs of the model.
             target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augment, but before padding.
+                Tensor containing the original size (h, w) of each image of the batch. 
             offset_mapping (:obj:`torch.Tensor` of shape :obj:`(batch_size, x, 2)`):
                 Tensor coming from the "offset_mapping" field of the outputs of :class:`~transformer.LayoutLMv2TokenizerFast`.
             bbox (:obj:`torch.Tensor` of shape :obj:`(batch_size, x, 4)`):
