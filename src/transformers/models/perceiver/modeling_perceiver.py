@@ -867,8 +867,13 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
                 position_encoding_type="trainable",
                 concat_or_add_pos="concat",
                 project_pos_dim=256,
-                index_dim=50176,
-                num_channels=256,
+                trainable_position_encoding_kwargs=dict(
+                    index_dim=50176,
+                    num_channels=256,
+                ),
+                #project_pos_dim=256,
+                #index_dim=50176,
+                #num_channels=256,
             ),
             decoder=PerceiverClassificationDecoder(config, num_channels=config.d_latents, use_query_residual=True),
         )
@@ -938,11 +943,12 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
                 config,
                 prep_type="pixels",
                 spatial_downsample=1,
-                position_encoding_type="fourier",
-                concat_pos=True,
-                max_resolution=(224, 224),
-                num_bands=64,
-                sine_only=False,
+                fourier_position_encoding_kwargs=dict(
+                    concat_pos=True,
+                    max_resolution=(224, 224),
+                    num_bands=64,
+                    sine_only=False
+                ),
             ),
             decoder=PerceiverClassificationDecoder(config, num_channels=config.d_latents, use_query_residual=True),
         )
@@ -1013,10 +1019,12 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
                 prep_type="conv",
                 spatial_downsample=1,
                 position_encoding_type="fourier",
+                fourier_position_encoding_kwargs=dict(
                 concat_pos=True,
                 max_resolution=(56, 56),
                 num_bands=64,
-                sine_only=False,
+                sine_only=False
+                ),
             ),
             decoder=PerceiverClassificationDecoder(config, num_channels=config.d_latents, use_query_residual=True),
         )
@@ -1162,6 +1170,32 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
+# Below: position encodings
+
+def build_position_encoding(position_encoding_type, out_channels=None, project_pos_dim=-1,
+                            trainable_position_encoding_kwargs=None,
+                            fourier_position_encoding_kwargs=None):
+    """Builds the position encoding."""
+
+    if position_encoding_type == 'trainable':
+        assert trainable_position_encoding_kwargs is not None
+        output_pos_enc = PerceiverTrainablePositionEncoding(
+            **trainable_position_encoding_kwargs)
+    elif position_encoding_type == 'fourier':
+        assert fourier_position_encoding_kwargs is not None
+        output_pos_enc = PerceiverFourierPositionEncoding(
+            **fourier_position_encoding_kwargs)
+    else:
+        raise ValueError(f'Unknown position encoding type: {position_encoding_type}.')
+
+    # Optionally, project the position encoding to a target dimension:
+    positions_projection = nn.Linear(out_channels, project_pos_dim) if project_pos_dim > 0 else nn.Identity()
+
+    return output_pos_enc, positions_projection
+
+
+# Below: Perceiver decoders
 
 class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
     """Perceiver abstract decoder."""
@@ -1617,7 +1651,7 @@ class PerceiverImagePreprocessor(nn.Module):
         spatial_downsample: int = 4,
         temporal_downsample: int = 1,
         position_encoding_type: str = "fourier",
-        n_extra_pos_mlp: int = 0,
+        # n_extra_pos_mlp: int = 0, TODO: support this argument
         in_channels: int = 3,
         out_channels: int = 64,
         conv_after_patching: bool = False,
@@ -1666,18 +1700,12 @@ class PerceiverImagePreprocessor(nn.Module):
                 stride=(spatial_downsample, spatial_downsample),
             )
 
-        if self.position_encoding_type == "trainable":
-            self.position_embeddings = PerceiverTrainablePositionEncoding(**position_encoding_kwargs)
-        elif self.position_encoding_type == "fourier":
-            self.position_embeddings = PerceiverFourierPositionEncoding(**position_encoding_kwargs)
-        else:
-            raise ValueError(f"Unknown position encoding type: {position_encoding_type}.")
-
-        # Stack MLPs to get a deeper positional embedding.
-        self.positions_projection = (
-            nn.Linear(self.out_channels, project_pos_dim) if project_pos_dim > 0 else nn.Identity()
-        )
-
+        # Position embeddings
+        self.position_embeddings, self.positions_projection = build_position_encoding(position_encoding_type=position_encoding_type,
+                                                                                      out_channels=out_channels,
+                                                                                      project_pos_dim=project_pos_dim,
+                                                                                        **position_encoding_kwargs)
+        
         # Optional convolutional layer after patches.
         self.conv_after_patches = nn.Linear(3, self.out_channels) if conv_after_patching else nn.Identity()
 
