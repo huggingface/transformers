@@ -751,8 +751,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         )
 
     def train_step(self, data):
-        """
-        """
+        """ """
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
         # Run forward pass.
