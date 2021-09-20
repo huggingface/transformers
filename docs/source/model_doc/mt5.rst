@@ -10,7 +10,7 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-MT5
+mT5
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
@@ -24,9 +24,11 @@ The abstract from the paper is the following:
 
 *The recent "Text-to-Text Transfer Transformer" (T5) leveraged a unified text-to-text format and scale to attain
 state-of-the-art results on a wide variety of English-language NLP tasks. In this paper, we introduce mT5, a
-multilingual variant of T5 that was pre-trained on a new Common Crawl-based dataset covering 101 languages. We describe
+multilingual variant of T5 that was pre-trained on a new Common Crawl-based dataset covering 101 languages. We detail
 the design and modified training of mT5 and demonstrate its state-of-the-art performance on many multilingual
-benchmarks. All of the code and model checkpoints*
+benchmarks. We also describe a simple technique to prevent "accidental translation" in the zero-shot setting, where a
+generative model chooses to (partially) translate its prediction into the wrong language. All of the code and model
+checkpoints used in this work are publicly available.*
 
 Note: mT5 was only pre-trained on `mC4 <https://huggingface.co/datasets/mc4>`__ excluding any supervised training.
 Therefore, this model has to be fine-tuned before it is useable on a downstream task, unlike the original T5 model.
