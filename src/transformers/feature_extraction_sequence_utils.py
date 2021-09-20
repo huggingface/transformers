@@ -286,7 +286,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             difference = max_length - len(required_input)
             if self.padding_side == "right":
                 if return_attention_mask:
-                    attention_mask = np.zeros(max_length, dtype=np.int64)
+                    attention_mask = np.zeros(max_length, dtype=np.int32)
                     attention_mask[: len(required_input)] = 1
                     processed_features["attention_mask"] = attention_mask
                 padding_shape = ((0, difference), (0, 0)) if self.feature_size > 1 else (0, difference)
@@ -295,7 +295,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 )
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    attention_mask = np.zeros(max_length, dtype=np.int64)
+                    attention_mask = np.zeros(max_length, dtype=np.int32)
                     attention_mask[-len(required_input) :] = 1
                     processed_features["attention_mask"] = attention_mask
                 padding_shape = ((difference, 0), (0, 0)) if self.feature_size > 1 else (difference, 0)
@@ -305,7 +305,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
         elif return_attention_mask and "attention_mask" not in processed_features:
-            processed_features["attention_mask"] = np.ones(len(required_input), dtype=np.int64)
+            processed_features["attention_mask"] = np.ones(len(required_input), dtype=np.int32)
 
         return processed_features
 
