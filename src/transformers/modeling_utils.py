@@ -935,18 +935,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def gradient_checkpointing_enable(self, flag: bool = True):
         """
-        Activates or deactivates gradient checkpointing for the current model.
+        Activates gradient checkpointing for the current model.
 
         Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
         activations".
-
-        Args:
-            flag (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Will activate gradient checkpointing if :obj:`True`, deactivate it if :obj:`False`.
         """
-        if not self.supports_gradient_checkpointing and flag:
+        if not self.supports_gradient_checkpointing:
             logger.warn(f"{self.__class__.__name__} does not support gradient checkpointing so nothing will happen.")
-        self.config._gradient_checkpointing = flag
+        self.config._gradient_checkpointing = True
+
+    def gradient_checkpointing_disable(self, flag: bool = True):
+        """
+        Deactivates gradient checkpointing for the current model.
+
+        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
+        activations".
+        """
+        self.config._gradient_checkpointing = False
 
     def save_pretrained(
         self,

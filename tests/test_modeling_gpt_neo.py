@@ -476,7 +476,10 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_gpt_neo(self):
         for checkpointing in [True, False]:
             model = self.model
-            model.gradient_checkpointing_enable(checkpointing)
+            if checkpointing:
+                model.gradient_checkpointing_enable()
+            else:
+                model.gradient_checkpointing_disable()
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
             # fmt: off
             # The dog-eared copy of the book, which is a collection of essays by the late author,

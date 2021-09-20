@@ -616,7 +616,10 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_gpt2(self):
         for checkpointing in [True, False]:
             model = GPT2LMHeadModel.from_pretrained("gpt2")
-            model.gradient_checkpointing_enable(checkpointing)
+            if checkpointing:
+                model.gradient_checkpointing_enable()
+            else:
+                model.gradient_checkpointing_disable()
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
             expected_output_ids = [
