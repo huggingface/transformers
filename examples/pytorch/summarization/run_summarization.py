@@ -379,7 +379,7 @@ def main():
     ):
         if model_args.resize_position_embeddings is None:
             logger.warning(
-                f"Increasing the model's number of position embedding vectors from {model.config.max_position_embedding} "
+                f"Increasing the model's number of position embedding vectors from {model.config.max_position_embeddings} "
                 f"to {data_args.max_source_length}."
             )
             model.resize_position_embeddings(data_args.max_source_length)
