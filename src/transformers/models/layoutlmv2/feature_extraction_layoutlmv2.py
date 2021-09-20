@@ -249,8 +249,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 image size (before any data augmentation). For visualization, this should be the image size after data
                 augment, but before padding.
             offset_mapping (:obj:`torch.Tensor` of shape :obj:`(batch_size, x, 2)`):
-                TTensor coming that is "offset_mapping" field of outputs from
-                :class:`~transformer.LayoutLMv2TokenizerFast`.
+                Tensor coming from the "offset_mapping" field of the outputs of :class:`~transformer.LayoutLMv2TokenizerFast`.
             bbox (:obj:`torch.Tensor` of shape :obj:`(batch_size, x, 4)`):
                 Tensor coming that is "bbox" field of outputs from :class:`~transformer.LayoutLMv2TokenizerFast`.
 
