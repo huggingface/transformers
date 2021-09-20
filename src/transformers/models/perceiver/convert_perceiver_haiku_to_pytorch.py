@@ -67,7 +67,7 @@ def rename_keys(state_dict):
         name = name.replace("image_preprocessor/~/conv2_d/b", "input_preprocessor.convnet_1x1.bias")
         name = name.replace(
             "image_preprocessor/~_build_network_inputs/trainable_position_encoding/pos_embs",
-            "input_preprocessor.position_embeddings.position_embeddings.weight",
+            "input_preprocessor.position_embeddings.position_embeddings",
         )
         name = name.replace(
             "image_preprocessor/~_build_network_inputs/position_encoding_projector/linear/w",
@@ -102,6 +102,8 @@ def rename_keys(state_dict):
         ## DECODERS ##
 
         # rename prefix of decoders
+        name = name.replace("classification_decoder/~/basic_decoder/~/trainable_position_encoding/pos_embs", "decoder.decoder.output_position_encodings.position_embeddings")
+        name = name.replace("basic_decoder/~/trainable_position_encoding/pos_embs", "decoder.output_position_encodings.position_embeddings")
         name = name.replace(
             "classification_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
         )
@@ -110,8 +112,6 @@ def rename_keys(state_dict):
         name = name = name.replace("classification_decoder/~/basic_decoder/~/", "decoder.decoder.")
         name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
         name = name.replace("basic_decoder/~/", "decoder.")
-        if "decoder" in name:
-            name = name.replace("trainable_position_encoding/pos_embs", "output_position_encodings")
 
         # rename embedding decoder bias (for MLM model)
         name = name.replace("embedding_decoder/bias", "output_postprocessor.bias")
