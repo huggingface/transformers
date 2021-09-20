@@ -301,11 +301,18 @@ class QuestionAnsweringPipeline(Pipeline):
 
             features = []
             for span_idx in range(num_spans):
+                input_ids_span_idx = encoded_inputs["input_ids"][span_idx]
+                attention_mask_span_idx = (
+                    encoded_inputs["attention_mask"][span_idx] if "attention_mask" in encoded_inputs else None
+                )
+                token_type_ids_span_idx = (
+                    encoded_inputs["token_type_ids"][span_idx] if "token_type_ids" in encoded_inputs else None
+                )
                 features.append(
                     SquadFeatures(
-                        input_ids=encoded_inputs["input_ids"][span_idx],
-                        attention_mask=encoded_inputs["attention_mask"][span_idx],
-                        token_type_ids=encoded_inputs["token_type_ids"][span_idx],
+                        input_ids=input_ids_span_idx,
+                        attention_mask=attention_mask_span_idx,
+                        token_type_ids=token_type_ids_span_idx,
                         p_mask=p_mask[span_idx].tolist(),
                         encoding=encoded_inputs[span_idx],
                         # We don't use the rest of the values - and actually
@@ -358,7 +365,10 @@ class QuestionAnsweringPipeline(Pipeline):
         feature = model_outputs["features"][0]
         example = model_outputs["example"]
         # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
-        undesired_tokens = np.abs(np.array(feature.p_mask) - 1) & feature.attention_mask
+        undesired_tokens = np.abs(np.array(feature.p_mask) - 1)
+
+        if feature.attention_mask is not None:
+            undesired_tokens = undesired_tokens & feature.attention_mask
 
         # Generate mask
         undesired_tokens_mask = undesired_tokens == 0.0
