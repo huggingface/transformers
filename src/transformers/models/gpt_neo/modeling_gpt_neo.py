@@ -361,6 +361,7 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
     config_class = GPTNeoConfig
     load_tf_weights = load_tf_weights_in_gpt_neo
     base_model_prefix = "transformer"
+    supports_gradient_checkpointing = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -592,12 +593,11 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if getattr(self.config, "_gradient_checkpointing", False) and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 

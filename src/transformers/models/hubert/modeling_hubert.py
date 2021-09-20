@@ -564,7 +564,7 @@ class HubertEncoder(nn.Module):
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if getattr(self.config, "_gradient_checkpointing", False) and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -651,7 +651,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if getattr(self.config, "_gradient_checkpointing", False) and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -698,6 +698,7 @@ class HubertPreTrainedModel(PreTrainedModel):
 
     config_class = HubertConfig
     base_model_prefix = "hubert"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):

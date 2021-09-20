@@ -783,6 +783,7 @@ class DetrClassificationHead(nn.Module):
 class DetrPreTrainedModel(PreTrainedModel):
     config_class = DetrConfig
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1084,7 +1085,7 @@ class DetrDecoder(DetrPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if getattr(self.config, "_gradient_checkpointing", False) and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

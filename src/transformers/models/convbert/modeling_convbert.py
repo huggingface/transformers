@@ -248,6 +248,7 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     config_class = ConvBertConfig
     load_tf_weights = load_tf_weights_in_convbert
     base_model_prefix = "convbert"
+    supports_gradient_checkpointing = True
     authorized_missing_keys = [r"position_ids"]
     authorized_unexpected_keys = [r"convbert\.embeddings_project\.weight", r"convbert\.embeddings_project\.bias"]
 
@@ -624,7 +625,7 @@ class ConvBertEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False):
+            if getattr(self.config, "_gradient_checkpointing", False):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

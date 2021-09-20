@@ -450,6 +450,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _keys_to_ignore_on_save = None
 
     is_parallelizable = False
+    supports_gradient_checkpointing = False
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -931,6 +932,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self.config.pruned_heads[layer] = list(union_heads)  # Unfortunately we have to store it as list for JSON
 
         self.base_model._prune_heads(heads_to_prune)
+
+    def gradient_checkpointing_enable(self, flag: bool = True):
+        """
+        Activates or deactivates gradient checkpointing for the current model.
+
+        Args:
+            flag (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Will activate gradient checkpointing if :obj:`True`, deactivate it if :obj:`False`.
+        """
+        if not self.supports_gradient_checkpointing and flag:
+            logger.warn(f"{self.__class__.__name__} does not support gradient checkpointing so nothing will happen.")
+        self.config._gradient_checkpointing = flag
 
     def save_pretrained(
         self,

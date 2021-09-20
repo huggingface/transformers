@@ -600,7 +600,7 @@ class LukeEncoder(nn.Module):
                 all_entity_hidden_states = all_entity_hidden_states + (entity_hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            if getattr(self.config, "gradient_checkpointing", False):
+            if getattr(self.config, "_gradient_checkpointing", False):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -681,6 +681,7 @@ class LukePreTrainedModel(PreTrainedModel):
 
     config_class = LukeConfig
     base_model_prefix = "luke"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
