@@ -461,7 +461,7 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message=f"End of training")
+                repo.push_to_hub(commit_message="End of training")
 
     if args.task_name == "mnli":
         # Final evaluation on mismatched validation set
