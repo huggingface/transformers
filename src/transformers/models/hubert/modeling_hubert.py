@@ -109,6 +109,10 @@ def _compute_mask_indices(
     # scatter indices to mask
     spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, True)
 
+    if attention_mask is not None:
+        # make sure padded input ids cannot be masked
+        spec_aug_mask = torch.where(attention_mask.bool(), spec_aug_mask, False)
+
     return spec_aug_mask
 
 

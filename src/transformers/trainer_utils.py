@@ -125,6 +125,13 @@ class EvaluationStrategy(ExplicitEnum):
     EPOCH = "epoch"
 
 
+class HubStrategy(ExplicitEnum):
+    END = "end"
+    EVERY_SAVE = "every_save"
+    CHECKPOINT = "checkpoint"
+    ALL_CHECKPOINTS = "all_checkpoints"
+
+
 class BestRun(NamedTuple):
     """
     The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).
