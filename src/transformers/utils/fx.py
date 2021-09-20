@@ -11,6 +11,7 @@ from torch.fx import Graph, GraphModule, Node, Proxy, Tracer
 from torch.fx.node import Argument
 
 from .. import (
+    CONFIG_MAPPING,
     MODEL_FOR_CAUSAL_LM_MAPPING,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
@@ -28,17 +29,7 @@ from .. import (
     logging,
 )
 from ..file_utils import TORCH_FX_REQUIRED_VERSION, importlib_metadata, is_torch_fx_available
-from ..models.albert import AlbertConfig
 from ..models.auto import get_values
-from ..models.bert import BertConfig
-from ..models.distilbert import DistilBertConfig
-from ..models.electra import ElectraConfig
-from ..models.gpt2 import GPT2Config
-from ..models.gpt_neo import GPTNeoConfig
-from ..models.gptj import GPTJConfig
-from ..models.megatron_bert import MegatronBertConfig
-from ..models.mobilebert import MobileBertConfig
-from ..models.t5 import T5Config
 from .fx_transformations import (
     _cache_attributes,
     _patch_arguments_,
@@ -56,10 +47,10 @@ TypeOrListOfType = Union[T, List[T]]
 
 
 def _generate_supported_model_classes(
-    model_config_class: Type[PretrainedConfig],
+    model_name: Type[PretrainedConfig],
     supported_tasks: Optional[TypeOrListOfType[str]] = None,
-    other_model_classes: Optional[TypeOrListOfType[Type[PretrainedConfig]]] = None,
 ):
+    model_config_class = CONFIG_MAPPING[model_name]
     task_mapping = {
         "default": MODEL_MAPPING,
         "pretraining": MODEL_FOR_PRETRAINING_MAPPING,
@@ -85,34 +76,31 @@ def _generate_supported_model_classes(
         if model_class:
             model_classes.append(model_class)
 
-    if other_model_classes:
-        if not isinstance(other_model_classes, (tuple, list)):
-            other_model_classes = [other_model_classes]
-        model_classes.extend(other_model_classes)
-
     return tuple(model_classes)
 
 
-_SUPPORTED_MODELS = (
-    *_generate_supported_model_classes(AlbertConfig),
-    *_generate_supported_model_classes(BertConfig),
-    *_generate_supported_model_classes(DistilBertConfig),
-    *_generate_supported_model_classes(MobileBertConfig),
-    *_generate_supported_model_classes(ElectraConfig),
-    *_generate_supported_model_classes(MegatronBertConfig),
-    *_generate_supported_model_classes(GPT2Config, other_model_classes=GPT2DoubleHeadsModel),
-    *_generate_supported_model_classes(GPTJConfig),
-    *_generate_supported_model_classes(GPTNeoConfig),
-    *_generate_supported_model_classes(T5Config),
+_REGULAR_SUPPORTED_MODELS = (
+    *_generate_supported_model_classes("albert"),
+    *_generate_supported_model_classes("bert"),
+    *_generate_supported_model_classes("distilbert"),
+    *_generate_supported_model_classes("mobilebert"),
+    *_generate_supported_model_classes("electra"),
+    *_generate_supported_model_classes("megatron-bert"),
+    *_generate_supported_model_classes("gpt2"),
+    *_generate_supported_model_classes("gptj"),
+    *_generate_supported_model_classes("gpt_neo"),
+    *_generate_supported_model_classes("t5"),
 )
+_SPECIAL_SUPPORTED_MODELS = (GPT2DoubleHeadsModel,)
+_SUPPORTED_MODELS = _REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS
 
 _SUPPORTED_MODELS_FOR_DYNAMIC_AXES = (
-    *_generate_supported_model_classes(AlbertConfig),
-    *_generate_supported_model_classes(BertConfig),
-    *_generate_supported_model_classes(DistilBertConfig),
-    *_generate_supported_model_classes(MobileBertConfig),
-    *_generate_supported_model_classes(ElectraConfig),
-    *_generate_supported_model_classes(MegatronBertConfig),
+    *_generate_supported_model_classes("albert"),
+    *_generate_supported_model_classes("bert"),
+    *_generate_supported_model_classes("distilbert"),
+    *_generate_supported_model_classes("mobilebert"),
+    *_generate_supported_model_classes("electra"),
+    *_generate_supported_model_classes("megatron-bert"),
 )
 
 
