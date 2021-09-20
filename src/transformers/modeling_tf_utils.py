@@ -717,18 +717,42 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             raise NotImplementedError
 
+    def compile(
+        self,
+        optimizer="rmsprop",
+        loss="dummy",
+        metrics=None,
+        loss_weights=None,
+        weighted_metrics=None,
+        run_eagerly=None,
+        steps_per_execution=None,
+        **kwargs
+    ):
+        if loss == "dummy":
+            print(
+                "No loss function specified - reading the model's loss head as the loss value. To disable "
+                "this behaviour, please explicitly pass loss=None !"
+            )
+            loss = {"loss": dummy_loss}
+        super().compile(
+            optimizer=optimizer,
+            loss=loss,
+            metrics=metrics,
+            loss_weight=loss_weights,
+            weighted_metrics=weighted_metrics,
+            run_eagerly=run_eagerly,
+            steps_per_execution=steps_per_execution,
+            **kwargs,
+        )
+
     def train_step(self, data):
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
-            if self.compiled_loss._user_losses is None and "loss" in y_pred:
-                loss = y_pred["loss"]
-                return_metrics = {"loss": loss}
-            else:
-                loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
-                return_metrics = {}
+            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+            return_metrics = {}
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
@@ -739,6 +763,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
+        return_metrics = {key.replace("loss_loss", "loss"): val for key, val in return_metrics.items()}
         return return_metrics
 
     def set_input_embeddings(self, value):
