@@ -34,6 +34,7 @@ from transformers import (
     PerceiverForImageClassificationConvProcessing,
     PerceiverForImageClassificationFourier,
     PerceiverForMaskedLM,
+    PerceiverForOpticalFlow,
     PerceiverTokenizer,
 )
 from transformers.utils import logging
@@ -99,11 +100,24 @@ def rename_keys(state_dict):
             "input_preprocessor.convnet.batchnorm.running_var",
         )
 
+        # rename image preprocessor embeddings (for optical flow model)
+        name = name.replace("image_preprocessor/patches_linear/b", "input_preprocessor.conv_after_patches.bias")
+        name = name.replace("image_preprocessor/patches_linear/w", "input_preprocessor.conv_after_patches.weight")
+        
         ## DECODERS ##
 
         # rename prefix of decoders
-        name = name.replace("classification_decoder/~/basic_decoder/~/trainable_position_encoding/pos_embs", "decoder.decoder.output_position_encodings.position_embeddings")
-        name = name.replace("basic_decoder/~/trainable_position_encoding/pos_embs", "decoder.output_position_encodings.position_embeddings")
+        name = name.replace("flow_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention.")
+        name = name.replace("flow_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
+        name = name.replace("flow_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
+        name = name.replace(
+            "classification_decoder/~/basic_decoder/~/trainable_position_encoding/pos_embs",
+            "decoder.decoder.output_position_encodings.position_embeddings",
+        )
+        name = name.replace(
+            "basic_decoder/~/trainable_position_encoding/pos_embs",
+            "decoder.output_position_encodings.position_embeddings",
+        )
         name = name.replace(
             "classification_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
         )
@@ -207,9 +221,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         checkpoint = pickle.loads(f.read())
 
     state = None
-    if isinstance(checkpoint, dict):
-        if task not in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
-            raise ValueError("Make sure to set task to image classification")
+    if isinstance(checkpoint, dict) and task in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
         # the image classification_conv checkpoint also has batchnorm states (running_mean and running_var)
         params = checkpoint["params"]
         state = checkpoint["state"]
@@ -264,6 +276,15 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
             model = PerceiverForImageClassificationConvProcessing(config)
         else:
             raise ValueError(f"Task {task} not supported")
+    elif task == "optical_flow":
+        config.num_latents = 2048
+        config.d_latents = 512
+        config.d_model = 322
+        config.num_blocks = 1
+        config.num_self_attends_per_block = 24
+        config.num_self_attention_heads = 16
+        config.num_cross_attention_heads = 1
+        model = PerceiverForOpticalFlow(config)
     else:
         raise ValueError(f"Task {task} not supported")
     model.eval()
