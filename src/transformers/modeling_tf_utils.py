@@ -728,6 +728,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         steps_per_execution=None,
         **kwargs
     ):
+        """
+        A minor modification to `tf.keras.Model.compile()` that uses the Model's loss head as the loss if no
+        user-specified loss is present. To disable this behaviour, explicitly pass `loss=None`. For details on the
+        original method, see https://www.tensorflow.org/api_docs/python/tf/keras/Model#compile
+        """
         if loss == "dummy":
             print(
                 "No loss function specified in call to compile() - reading the model's loss head as the loss. "
@@ -746,6 +751,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         )
 
     def train_step(self, data):
+        """
+        """
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
         # Run forward pass.
