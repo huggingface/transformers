@@ -769,7 +769,30 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
-        return_metrics = {key.replace("loss_loss", "loss"): val for key, val in return_metrics.items()}
+        return_metrics = {key: val for key, val in return_metrics.items()
+                          if "loss_loss" not in key}
+        return return_metrics
+
+    def test_step(self, data):
+        """ """
+        data = data_adapter.expand_1d(data)
+        x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+
+        y_pred = self(x, training=False)
+        # Updates stateful loss metrics.
+        self.compiled_loss(
+            y, y_pred, sample_weight, regularization_losses=self.losses)
+        self.compiled_metrics.update_state(y, y_pred, sample_weight)
+        # Collect metrics to return
+        return_metrics = {}
+        for metric in self.metrics:
+            result = metric.result()
+            if isinstance(result, dict):
+                return_metrics.update(result)
+            else:
+                return_metrics[metric.name] = result
+        return_metrics = {key: val for key, val in return_metrics.items()
+                          if "loss_loss" not in key}
         return return_metrics
 
     def set_input_embeddings(self, value):
