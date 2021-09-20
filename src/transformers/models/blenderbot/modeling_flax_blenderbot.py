@@ -688,7 +688,7 @@ class FlaxBlenderbotEncoder(nn.Module):
             dtype=self.dtype,
         )
         self.layers = FlaxBlenderbotEncoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+        self.layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
@@ -708,7 +708,6 @@ class FlaxBlenderbotEncoder(nn.Module):
         embed_pos = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
         outputs = self.layers(
@@ -719,12 +718,14 @@ class FlaxBlenderbotEncoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        last_hidden_states = outputs[0]
+        last_hidden_states = self.layer_norm(last_hidden_states)
 
         if not return_dict:
             return outputs
 
         return FlaxBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
+            last_hidden_state=last_hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
