@@ -307,6 +307,7 @@ class T5Attention(nn.Module):
     def __init__(self, config: T5Config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
+        self.config = config
         self.has_relative_attention_bias = has_relative_attention_bias
 
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
@@ -488,7 +489,7 @@ class T5Attention(nn.Module):
                 position_bias = torch.zeros(
                     (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
                 )
-                if self.training and self.config.get("_gradient_checkpointing", False):
+                if getattr(self.config, "_gradient_checkpointing", False) and self.training:
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(real_seq_length, key_length)
