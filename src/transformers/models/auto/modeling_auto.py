@@ -263,6 +263,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
         ("detr", "DetrForObjectDetection"),
+        # layoutlmv2 is able to detect entities (tokens) within an image with an OCR which we can be interpreted as objects
         ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
     ]
 )
