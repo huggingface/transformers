@@ -364,7 +364,8 @@ class TensorBoardCallback(TrainerCallback):
             if trial_name is not None:
                 log_dir = os.path.join(args.logging_dir, trial_name)
 
-        self._init_summary_writer(args, log_dir)
+        if self.tb_writer is None:
+            self._init_summary_writer(args, log_dir)
 
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", args.to_json_string())
