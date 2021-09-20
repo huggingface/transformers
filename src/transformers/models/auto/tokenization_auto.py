@@ -425,6 +425,17 @@ class AutoTokenizer:
         kwargs["_from_auto"] = True
 
         use_fast = kwargs.pop("use_fast", True)
+        tokenizer_class_name = kwargs.pop("tokenizer_class", None)
+
+        import ipdb; ipdb.set_trace()
+        if tokenizer_class_name is not None:
+            tokenizer_class = tokenizer_class_from_name(tokenizer_class_name)
+
+            if tokenizer_class is None:
+                raise ValueError(
+                    f"Tokenizer class {tokenizer_class_name} does not exist. Make sure `from transformers import {tokenizer_class_name}` works."
+                )
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # First, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
