@@ -17,7 +17,8 @@
 from typing import TYPE_CHECKING, List, Optional
 
 from ...utils import logging
-from ..roberta.tokenization_roberta import RobertaTokenizer
+from ..roberta.tokenization_roberta_fast import RobertaTokenizerFast
+from .tokenization_blenderbot import BlenderbotTokenizer
 
 
 if TYPE_CHECKING:
@@ -43,20 +44,21 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot-3B": 128}
 
 
-class BlenderbotTokenizer(RobertaTokenizer):
+class BlenderbotTokenizerFast(RobertaTokenizerFast):
     r"""
-    Construct a Blenderbot tokenizer.
+    Construct a "fast Blenderbot tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.Blenderbot` is nearly identical to :class:`~transformers.RobertaTokenizer` and runs
+    :class:`~transformers.BlenderbotFast` is nearly identical to :class:`~transformers.RobertaTokenizerFast` and runs
     end-to-end tokenization: punctuation splitting and wordpiece. The only difference is that it doesn't add BOS token
     to the beginning of sequences.
 
-    Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning
+    Refer to superclass :class:`~transformers.RobertaTokenizerFast` for usage examples and documentation concerning
     parameters.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    slow_tokenizer_class = BlenderbotTokenizer
 
     def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None):
         """
