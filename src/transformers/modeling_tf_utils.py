@@ -754,6 +754,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """ """
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+        if y is None and "labels" in x:
+            y = x["labels"]
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
