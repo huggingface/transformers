@@ -55,7 +55,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_utils import AddedToken, Trie
 
 
 if is_torch_available():
@@ -309,6 +309,33 @@ class TokenizerTesterMixin:
             {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
+
+    # TODO: this test can be combined with `test_sentencepiece_tokenize_and_convert_tokens_to_string` after the latter is extended to all tokenizers.
+    def test_tokenize_special_tokens(self):
+        """Test `tokenize` with special tokens."""
+        tokenizers = self.get_tokenizers(fast=True)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                SPECIAL_TOKEN_1 = "[SPECIAL_TOKEN_1]"
+                SPECIAL_TOKEN_2 = "[SPECIAL_TOKEN_2]"
+
+                # TODO:
+                # Can we combine `unique_no_split_tokens` and `all_special_tokens`(and properties related to it)
+                # with one variable(property) for a better maintainability?
+
+                # `add_tokens` method stores special tokens only in `tokenizer.unique_no_split_tokens`. (in tokenization_utils.py)
+                tokenizer.add_tokens([SPECIAL_TOKEN_1], special_tokens=True)
+                # `add_special_tokens` method stores special tokens in `tokenizer.additional_special_tokens`,
+                # which also occur in `tokenizer.all_special_tokens`. (in tokenization_utils_base.py)
+                tokenizer.add_special_tokens({"additional_special_tokens": [SPECIAL_TOKEN_2]})
+
+                token_1 = tokenizer.tokenize(SPECIAL_TOKEN_1)
+                token_2 = tokenizer.tokenize(SPECIAL_TOKEN_2)
+
+                self.assertEqual(len(token_1), 1)
+                self.assertEqual(len(token_2), 1)
+                self.assertEqual(token_1[0], SPECIAL_TOKEN_1)
+                self.assertEqual(token_2[0], SPECIAL_TOKEN_2)
 
     # TODO: this test could be extended to all tokenizers - not just the sentencepiece
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
@@ -1658,6 +1685,34 @@ class TokenizerTesterMixin:
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
                     )
+
+    @require_tokenizers
+    def test_added_token_are_matched_longest_first(self):
+        if not self.test_slow_tokenizer:
+            self.skipTest("This test is only for slow tokenizers")
+            return
+        tokenizers = self.get_tokenizers(fast=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                try:
+                    tokenizer.add_tokens([AddedToken("extra_id_1")])
+                    tokenizer.add_tokens([AddedToken("extra_id_100")])
+                except Exception:
+                    # Canine cannot add tokens which are not codepoints
+                    self.skipTest("Cannot add those Added tokens")
+
+                # XXX: This used to split on `extra_id_1` first we're matching
+                # longest first now.
+                tokens = tokenizer.tokenize("This is some extra_id_100")
+                self.assertIn("extra_id_100", tokens)
+
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokenizer.add_tokens([AddedToken("extra_id_100")])
+                tokenizer.add_tokens([AddedToken("extra_id_1")])
+
+                tokens = tokenizer.tokenize("This is some extra_id_100")
+                self.assertIn("extra_id_100", tokens)
 
     @require_tokenizers
     def test_added_token_serializable(self):
@@ -3489,3 +3544,21 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
             new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+
+
+class TrieTest(unittest.TestCase):
+    def test_trie(self):
+        trie = Trie()
+        trie.add("Hello 友達")
+        self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}})
+        trie.add("Hello")
+        trie.data
+        self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}})
+
+    def test_trie_split(self):
+        trie = Trie()
+        self.assertEqual(trie.split("[CLS] This is a extra_id_100"), ["[CLS] This is a extra_id_100"])
+        trie.add("[CLS]")
+        trie.add("extra_id_1")
+        trie.add("extra_id_100")
+        self.assertEqual(trie.split("[CLS] This is a extra_id_100"), ["[CLS]", " This is a ", "extra_id_100"])
