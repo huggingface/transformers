@@ -38,13 +38,10 @@ if is_torch_available():
         "PerceiverForImageClassificationFourier",
         "PerceiverForMaskedLM",
         "PerceiverForOpticalFlow",
+        "PerceiverImagePreprocessor",
         "PerceiverLayer",
         "PerceiverModel",
         "PerceiverPreTrainedModel",
-    ]
-
-    _import_structure["processing_perceiver"] = [
-        "PerceiverImagePreprocessor",
         "PerceiverTextPostprocessor",
         "PerceiverTextPreprocessor",
     ]
@@ -67,16 +64,13 @@ if TYPE_CHECKING:
             PerceiverForImageClassificationFourier,
             PerceiverForMaskedLM,
             PerceiverForOpticalFlow,
+            PerceiverImagePreprocessor,
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
-        )
-        from .processing_perceiver import (
-            PerceiverImagePreprocessor,
             PerceiverTextPostprocessor,
             PerceiverTextPreprocessor,
         )
-
 
 else:
     import sys
