@@ -173,6 +173,16 @@ class TrainingArguments:
             Whether to log and evaluate the first :obj:`global_step` or not.
         logging_steps (:obj:`int`, `optional`, defaults to 500):
             Number of update steps between two logs if :obj:`logging_strategy="steps"`.
+        logging_nan_inf_filter (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to filter :obj:`nan` and :obj:`inf` losses for logging. If set to obj:`True` the loss of every step
+            that is :obj:`nan` or :obj:`inf` is filtered and the average loss of the current logging window is taken
+            instead.
+
+            .. note::
+
+                :obj:`logging_nan_inf_filter` only influences the logging of loss values, it does not change the
+                behavior the gradient is computed or applied to the model.
+
         save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"steps"`):
             The checkpoint save strategy to adopt during training. Possible values are:
 
@@ -468,6 +478,7 @@ class TrainingArguments:
     )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
+    logging_nan_inf_filter: str = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
     save_strategy: IntervalStrategy = field(
         default="steps",
         metadata={"help": "The checkpoint save strategy to use."},
