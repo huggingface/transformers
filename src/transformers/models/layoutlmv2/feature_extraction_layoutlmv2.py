@@ -242,17 +242,14 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         COCO api. Only supports PyTorch.
 
         Args:
-            outputs :obj:`Dict`):
+            outputs (:obj:`Dict`):
                 Raw outputs of the model.
             target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augment, but before padding.
+                Tensor containing the original size (h, w) of each image of the batch. 
             offset_mapping (:obj:`torch.Tensor` of shape :obj:`(batch_size, x, 2)`):
-                TTensor coming that is "offset_mapping" field of outputs from
-                :class:`~transformer.LayoutLMv2TokenizerFast`.
+                Tensor coming from the "offset_mapping" field of the outputs of :class:`~transformer.LayoutLMv2TokenizerFast`.
             bbox (:obj:`torch.Tensor` of shape :obj:`(batch_size, x, 4)`):
-                Tensor coming that is "bbox" field of outputs from :class:`~transformer.LayoutLMv2TokenizerFast`.
+                Tensor coming from the "bbox" field of the outputs of :class:`~transformer.LayoutLMv2TokenizerFast`.
 
         Returns:
             :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an
@@ -277,11 +274,11 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         results = []
 
-        for s, l, b, _is_subword, (height, width) in zip(scores, labels, boxes, is_subword, target_sizes):
+        for s, l, b, is_subword_example, (height, width) in zip(scores, labels, boxes, is_subword, target_sizes):
             # only keep non-subword predictions
-            l = [label for idx, label in enumerate(l) if not _is_subword[idx]]
-            s = [score for idx, score in enumerate(s) if not _is_subword[idx]]
-            b = [unnormalize_box(box, height, width) for idx, box in enumerate(b) if not _is_subword[idx]]
+            l = [label for idx, label in enumerate(l) if not is_subword_example[idx]]
+            s = [score for idx, score in enumerate(s) if not is_subword_example[idx]]
+            b = [unnormalize_box(box, height, width) for idx, box in enumerate(b) if not is_subword_example[idx]]
             results.append(
                 {"scores": torch.FloatTensor(s), "labels": torch.IntTensor(l), "boxes": torch.FloatTensor(b)}
             )
