@@ -312,7 +312,7 @@ class HFTracer(Tracer):
         if method_names is None:
             method_names = self.default_methods_to_record
 
-        inputs = dict()
+        inputs = {}
         for input_name in input_names:
             inputs.update(self._generate_dummy_input(model, input_name))
 
@@ -379,7 +379,7 @@ class HFTracer(Tracer):
             if path is None:
                 path = self._insert_module_as_submodule(mod)
             if path is None:
-                raise NameError("Module is not installed as a submodule")
+                raise NameError(f"Module named {mod._get_name()} is not installed as a submodule")
             self.prev_module = path
             return path
 
@@ -392,7 +392,7 @@ class HFTracer(Tracer):
                     return n
             path = self._insert_module_as_submodule(mod)
             if path is None:
-                raise NameError("Module is not installed as a submodule")
+                raise NameError(f"Module {mod._get_name()} is not installed as a submodule")
             self.prev_module = path
             return path
 

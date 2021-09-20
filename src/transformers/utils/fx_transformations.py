@@ -70,7 +70,6 @@ def _remove_unused_nodes_(gm: GraphModule, lint_and_recompile: bool = True):
     graph = gm.graph
     for node in graph.nodes:
         if not node.users and node.op != "output":
-            print(node.name)
             graph.erase_node(node)
 
     if lint_and_recompile:
@@ -81,7 +80,7 @@ def _remove_unused_nodes_(gm: GraphModule, lint_and_recompile: bool = True):
 def _insert_batch_size_node_(gm: GraphModule, lint_and_recompile: bool = True) -> Node:
     """Inserts a node that retrieves the batch size dynamically from the input of the model."""
     graph = gm.graph
-    input_names = gm.dummy_inputs.keys()
+    input_names = set(gm.dummy_inputs.keys())
     batch_size_node = None
     for node in graph.nodes:
         if node.op == "placeholder" and node.name in input_names:
@@ -105,11 +104,16 @@ def _insert_batch_size_node_(gm: GraphModule, lint_and_recompile: bool = True) -
 def _insert_encoder_sequence_length_node_(gm: GraphModule, lint_and_recompile: bool = True) -> Node:
     """Inserts a node that retrieves the encoder sequence length dynamically from the input of the model."""
     graph = gm.graph
-    input_names = gm.dummy_inputs.keys()
+    input_names = set(gm.dummy_inputs.keys())
     encoder_sequence_length_node = None
     for node in graph.nodes:
-        if (node.op == "placeholder") and ("decoder" not in node.name) and (node.name in input_names):
+        if node.op == "placeholder" and node.name in input_names and "decoder" not in node.name:
             with graph.inserting_after(node):
+                # There are two cases to handle:
+                #   1. num_choices < 0, meaning that the model is not performing a "multiple choice" task, in this case the
+                #      input shapes is [batch_size, sequence_length] => index 1
+                #   2. num_choices > 0, meaning the model is performing a "multiple choice" task, in this case the input
+                #      shape is [batch_size, num_choices, sequence_length] => index 2
                 encoder_sequence_length_node = graph.call_method("size", args=(node, 1 if gm.num_choices < 0 else 2))
 
     if encoder_sequence_length_node is None:
@@ -202,8 +206,14 @@ def _register_position_ids_and_replace_(gm: GraphModule, sequence_length_node: N
     inserted = False
     position_ids_node = None
     for node in graph.nodes:
-        arg_names = [arg.name if isinstance(arg, Node) else "" for arg in node.args]
-        if position_ids_buffer_name in arg_names:
+        is_position_ids_present = False
+        position_ids_idx = 0
+        for i, arg in enumerate(node.args):
+            if isinstance(arg, Node) and arg.name == position_ids_buffer_name:
+                is_position_ids_present = True
+                position_ids_idx = i
+
+        if is_position_ids_present:
             if not inserted:
                 with graph.inserting_before(node):
                     get_position_ids_node = graph.get_attr(position_ids_buffer_name)
@@ -215,8 +225,7 @@ def _register_position_ids_and_replace_(gm: GraphModule, sequence_length_node: N
                     position_ids_node = graph.call_function(operator.getitem, args=tuple(position_ids_args))
                 inserted = True
 
-            index = arg_names.index(position_ids_buffer_name)
-            old_position_ids_node = node.args[index]
+            old_position_ids_node = node.args[position_ids_idx]
             old_position_ids_node.replace_all_uses_with(position_ids_node)
 
     if lint_and_recompile:
@@ -269,7 +278,7 @@ def _patch_arguments_(
 def transform_to_dynamic_input_(gm: GraphModule, is_retracing: bool = False):
     """Transformation that enables traced models to perform inference on dynamic input shapes."""
     graph = gm.graph
-    input_names = gm.dummy_inputs.keys()
+    input_names = set(gm.dummy_inputs.keys())
     static2dynamic = {}
 
     # Inserting the nodes that will fetch the batch size and sequence lengths dynamically.
