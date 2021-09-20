@@ -728,10 +728,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         steps_per_execution=None,
         **kwargs
     ):
+        """
+        A thin wrapper around Keras's `Model.compile()` method, which passes the value from the model's loss head
+        through as the loss when the user does not specify a loss. This behaviour can be disabled by explicitly
+        setting `loss=None`.
+        """
         if loss == "dummy":
             print(
-                "No loss function specified - reading the model's loss head as the loss value. To disable "
-                "this behaviour, please explicitly pass loss=None !"
+                "No loss function specified in call to compile() - reading the model's loss head as the loss. "
+                "To disable this behaviour, please explicitly pass loss=None !"
             )
             loss = {"loss": dummy_loss}
         super().compile(
