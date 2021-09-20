@@ -124,19 +124,20 @@ class ObjectDetectionPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         target_size = model_inputs.pop("target_size")
-        if self._is_layout_detection():
-            offset_mapping = model_inputs.pop("offset_mapping")
+        offset_mapping = model_inputs.pop("offset_mapping", None)
         outputs = self.model(**model_inputs)
         model_outputs = {"outputs": outputs, "target_size": target_size}
-        if self._is_layout_detection():
+        if offset_mapping is not None:
             model_outputs["bbox"] = model_inputs["bbox"]
             model_outputs["offset_mapping"] = offset_mapping
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.9):
         post_process_inputs = [model_outputs["outputs"], model_outputs["target_size"]]
-        if self._is_layout_detection():
-            post_process_inputs.extend([model_outputs["offset_mapping"], model_outputs["bbox"]])
+        offset_mapping = model_outputs.get("offset_mapping", None)
+        bbox = model_outputs.get("bbox", None)
+        if offset_mapping is not None and bbox is not None:
+            post_process_inputs.extend([offset_mapping, bbox])
         raw_annotations = self.feature_extractor.post_process(*post_process_inputs)
         raw_annotation = raw_annotations[0]
 
