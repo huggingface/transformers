@@ -223,7 +223,6 @@ class DataCollatorCTCWithPadding:
 
 
 class CTCTrainer(Trainer):
-
     @staticmethod
     def multiply_grads(params, c):
         """Multiplies grads by a constant *c*."""
@@ -263,7 +262,9 @@ class CTCTrainer(Trainer):
             loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
-            raise ValueError("`torch.nn.DataParallel` is not supported. Please use `torch.nn.DistributedDataParallel` instead.")
+            raise ValueError(
+                "`torch.nn.DataParallel` is not supported. Please use `torch.nn.DistributedDataParallel` instead."
+            )
 
         if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
             # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
@@ -348,7 +349,9 @@ def main():
     train_dataset = datasets.load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
     )
-    eval_dataset = datasets.load_dataset(data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name)
+    eval_dataset = datasets.load_dataset(
+        data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
+    )
 
     # Given training and test labels create vocabulary
     chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else []
@@ -402,7 +405,9 @@ def main():
         pad_token="[PAD]",
         word_delimiter_token="|",
     )
-    feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir
+    )
     processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     model = Wav2Vec2ForCTC.from_pretrained(
@@ -416,7 +421,8 @@ def main():
         mask_time_prob=model_args.mask_time_prob,
         gradient_checkpointing=model_args.gradient_checkpointing,
         layerdrop=model_args.layerdrop,
-        ctc_loss_reduction="sum" if training_args.world_size > 1 else "mean",
+        #        ctc_loss_reduction="sum" if training_args.world_size > 1 else "mean",
+        ctc_loss_reduction="mean",
         pad_token_id=processor.tokenizer.pad_token_id,
         vocab_size=len(processor.tokenizer),
     )
@@ -501,7 +507,8 @@ def main():
     data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
 
     # Initialize CTCTrainer
-    trainer = CTCTrainer(
+    #    trainer = CTCTrainer(
+    trainer = Trainer(
         model=model,
         data_collator=data_collator,
         args=training_args,

@@ -37,6 +37,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
@@ -703,7 +704,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
-        for i, layer in enumerate(self.layers):
+        for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
