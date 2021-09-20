@@ -937,7 +937,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Activates or deactivates gradient checkpointing for the current model.
 
-        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint activations".
+        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
+        activations".
 
         Args:
             flag (:obj:`bool`, `optional`, defaults to :obj:`True`):
