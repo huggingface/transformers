@@ -743,7 +743,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             optimizer=optimizer,
             loss=loss,
             metrics=metrics,
-            loss_weight=loss_weights,
+            loss_weights=loss_weights,
             weighted_metrics=weighted_metrics,
             run_eagerly=run_eagerly,
             steps_per_execution=steps_per_execution,
