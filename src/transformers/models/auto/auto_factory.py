@@ -405,8 +405,8 @@ class _BaseAutoModelClass:
                 )
             if kwargs.get("revision", None) is None:
                 logger.warn(
-                    "Explicitly passing a `revision` is encouraged when loading a model with custom code to avoid "
-                    "breaking changes if the model maintainer update their code."
+                    "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
+                    "no malicious code has been contributed in a newer revision."
                 )
             class_ref = config.auto_map[cls.__name__]
             module_file, class_name = class_ref.split(".")
