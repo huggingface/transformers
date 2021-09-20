@@ -164,17 +164,18 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             if index < len(required_input):
                 first_element = required_input[index][0]
 
-        if is_tf_available() and _is_tensorflow(first_element):
-            return_tensors = "tf" if return_tensors is None else return_tensors
-        elif is_torch_available() and _is_torch(first_element):
-            return_tensors = "pt" if return_tensors is None else return_tensors
-        elif isinstance(first_element, (int, float, list, tuple, np.ndarray)):
-            return_tensors = "np" if return_tensors is None else return_tensors
-        else:
-            raise ValueError(
-                f"type of {first_element} unknown: {type(first_element)}. "
-                f"Should be one of a python, numpy, pytorch or tensorflow object."
-            )
+        if return_tensors is None:
+            if is_tf_available() and _is_tensorflow(first_element):
+                return_tensors = "tf"
+            elif is_torch_available() and _is_torch(first_element):
+                return_tensors = "pt"
+            elif isinstance(first_element, (int, float, list, tuple, np.ndarray)):
+                return_tensors = "np"
+            else:
+                raise ValueError(
+                    f"type of {first_element} unknown: {type(first_element)}. "
+                    f"Should be one of a python, numpy, pytorch or tensorflow object."
+                )
 
         for key, value in processed_features.items():
             if isinstance(value[0], (int, float)):
@@ -245,7 +246,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _pad(
         self,
-        processed_features: Union[Dict[str, List[float]], BatchFeature],
+        processed_features: Union[Dict[str, np.ndarray], BatchFeature],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
@@ -255,7 +256,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            processed_features: Dictionary of input values (`List[float]`) / input vectors (`List[List[float]]`) or batch of inputs values (`List[List[int]]`) / input vectors (`List[List[List[int]]]`)
+            processed_features: Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
             max_length: maximum length of the returned list and optionally padding length (see below)
             padding_strategy: PaddingStrategy to use for padding.
 
@@ -319,7 +320,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Truncate inputs to predefined length or max length in the batch
 
         Args:
-            processed_features: Dictionary of input values (`List[float]`) / input vectors (`List[List[float]]`) or batch of inputs values (`List[List[int]]`) / input vectors (`List[List[List[int]]]`)
+            processed_features: Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
             max_length: maximum length of the returned list and optionally padding length (see below)
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
