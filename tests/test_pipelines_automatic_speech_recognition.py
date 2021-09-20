@@ -42,9 +42,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
             framework="pt",
         )
-        waveform = np.linspace(0, 1, 34000, dtype=np.float32)
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
-        self.assertEqual(output, {"text": "Il y a de l'espoir dans tout le monde dans le monde entier."})
+        self.assertEqual(output, {"text": "(Applaudissements)"})
 
     @require_torch
     def test_torch_small_no_tokenizer_files(self):
@@ -68,7 +68,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             tokenizer="facebook/wav2vec2-base-960h",
             framework="pt",
         )
-        waveform = np.linspace(0, 1, 34000, dtype=np.float32)
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": ""})
 
@@ -110,7 +110,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         asr = AutomaticSpeechRecognitionPipeline(model=model, tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        waveform = np.linspace(0, 1, 34000, dtype=np.float32)
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = asr(waveform)
         self.assertEqual(output, {"text": ""})
 
@@ -139,10 +139,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         asr = AutomaticSpeechRecognitionPipeline(model=model, tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        waveform = np.linspace(0, 1, 34000, dtype=np.float32)
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
 
         output = asr(waveform)
-        self.assertEqual(output, {"text": "Grazie. (Applausi)"})
+        self.assertEqual(output, {"text": "(Applausi)"})
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
