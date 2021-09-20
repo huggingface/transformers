@@ -240,7 +240,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         Only supports PyTorch.
 
         Args:
-            outputs :obj:`Dict`):
+            outputs (:obj:`Dict`):
                 Raw outputs of the model.
             target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
