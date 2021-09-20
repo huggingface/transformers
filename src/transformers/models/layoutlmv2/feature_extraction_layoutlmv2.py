@@ -43,6 +43,7 @@ ImageInput = Union[
 
 
 def normalize_box(box, width, height):
+    # box values are normalized in the range 0-1000
     return [
         int(1000 * (box[0] / width)),
         int(1000 * (box[1] / height)),
@@ -52,6 +53,7 @@ def normalize_box(box, width, height):
 
 
 def unnormalize_box(box, height, width):
+    # box values are normalized in the range 0-1000
     return [
         int(width * (box[0] / 1000)),
         int(height * (box[1] / 1000)),
@@ -236,8 +238,8 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     def post_process(self, outputs, target_sizes, offset_mapping, bbox):
         """
-        Converts the output of :class:`~transformers.LayoutLMv2ForTokenClassification` into the format expected by the COCO api.
-        Only supports PyTorch.
+        Converts the output of :class:`~transformers.LayoutLMv2ForTokenClassification` into the format expected by the
+        COCO api. Only supports PyTorch.
 
         Args:
             outputs :obj:`Dict`):
