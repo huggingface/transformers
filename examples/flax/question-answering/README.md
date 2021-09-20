@@ -85,8 +85,34 @@ exact_match = 81.03
 
 sample Metrics - [tfhub.dev](https://tensorboard.dev/experiment/6gU75Hx8TGCnc6tr4ZgI9Q)
 
+Here is an example training on 4 TITAN RTX GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD1.1:
+
+```bash
+export CUDA_VISIBLE_DEVICES=0,1,2,3
+python run_qa.py   \
+--model_name_or_path bert-large-uncased-whole-word-masking   \
+--dataset_name squad   \
+--do_train   \
+--do_eval   \
+--per_device_train_batch_size 6   \
+--learning_rate 3e-5   \
+--num_train_epochs 2   \
+--max_seq_length 384   \
+--doc_stride 128   \
+--output_dir /tmp/wwm_uncased_finetuned_squad/ \
+--eval_steps 1000
+```
+
+Training with the previously defined hyper-parameters yields the following results:
+
+```bash
+f1 = 93.31
+exact_match = 87.04
+```
+
 
 ### Usage notes
+
 Note that when contexts are long they may be split into multiple training cases, not all of which may contain
 the answer span. 
 
