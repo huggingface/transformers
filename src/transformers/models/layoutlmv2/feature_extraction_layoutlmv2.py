@@ -272,11 +272,11 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         results = []
 
-        for s, l, b, _is_subword, (height, width) in zip(scores, labels, boxes, is_subword, target_sizes):
+        for s, l, b, is_subword_example, (height, width) in zip(scores, labels, boxes, is_subword, target_sizes):
             # only keep non-subword predictions
-            l = [label for idx, label in enumerate(l) if not _is_subword[idx]]
-            s = [score for idx, score in enumerate(s) if not _is_subword[idx]]
-            b = [unnormalize_box(box, height, width) for idx, box in enumerate(b) if not _is_subword[idx]]
+            l = [label for idx, label in enumerate(l) if not is_subword_example[idx]]
+            s = [score for idx, score in enumerate(s) if not is_subword_example[idx]]
+            b = [unnormalize_box(box, height, width) for idx, box in enumerate(b) if not is_subword_example[idx]]
             results.append(
                 {"scores": torch.FloatTensor(s), "labels": torch.IntTensor(l), "boxes": torch.FloatTensor(b)}
             )
