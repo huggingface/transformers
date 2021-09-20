@@ -339,7 +339,7 @@ class PretrainedConfig(PushToHubMixin):
             self._gradient_checkpointing = kwargs.pop("gradient_checkpointing")
             warnings.warn(
                 "Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 "
-                "Transformers. Using `model.gradient_checkpointing_enable(True) instead, or if you are using the "
+                "Transformers. Using `model.gradient_checkpointing_enable(True)` instead, or if you are using the "
                 "`Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`."
             )
 
