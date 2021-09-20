@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import copy
+import os
 import tempfile
 import unittest
 
@@ -28,6 +29,8 @@ from transformers.testing_utils import (
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
         AutoConfig,
         AutoModel,
@@ -51,6 +54,7 @@ if is_torch_available():
         FunnelModel,
         GPT2Config,
         GPT2LMHeadModel,
+        PreTrainedModel,
         RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
@@ -73,6 +77,44 @@ if is_torch_available():
     from transformers.models.gpt2.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.tapas.modeling_tapas import TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST
+
+
+if is_torch_available():
+
+    class FakeModel(PreTrainedModel):
+        config_class = BertConfig
+        base_model_prefix = "fake"
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
+
+        def forward(self, x):
+            return self.linear(x)
+
+        def _init_weights(self, module):
+            pass
+
+
+# Make sure this is synchronized with the model above.
+FAKE_MODEL_CODE = """
+import torch
+from transformers import BertConfig, PreTrainedModel
+
+class FakeModel(PreTrainedModel):
+    config_class = BertConfig
+    base_model_prefix = "fake"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
+
+    def forward(self, x):
+        return self.linear(x)
+
+    def _init_weights(self, module):
+        pass
+"""
 
 
 @require_torch
@@ -272,3 +314,19 @@ class AutoModelTest(unittest.TestCase):
 
                     for child, parent in [(a, b) for a in child_model for b in parent_model]:
                         assert not issubclass(child, parent), f"{child.__name__} is child of {parent.__name__}"
+
+    def test_from_pretrained_dynamic_model(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        config.auto_map = {"AutoModel": "modeling.FakeModel"}
+        model = FakeModel(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            with open(os.path.join(tmp_dir, "modeling.py"), "w") as f:
+                f.write(FAKE_MODEL_CODE)
+
+            new_model = AutoModel.from_pretrained(tmp_dir, trust_remote_code=True)
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
