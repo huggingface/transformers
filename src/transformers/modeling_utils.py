@@ -473,6 +473,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.name_or_path = config.name_or_path
         if getattr(self.config, "gradient_checkpointing", False):
             self.gradient_checkpointing_enable()
+            # Remove the attribute now that is has been consumed, so it's no saved in the config.
+            delattr(self.config, "gradient_checkpointing")
 
     @classmethod
     def _from_config(cls, config, **kwargs):
