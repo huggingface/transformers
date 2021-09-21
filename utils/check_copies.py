@@ -28,7 +28,10 @@ PATH_TO_DOCS = "docs/source"
 REPO_PATH = "."
 
 # Mapping for files that are full copies of others (keys are copies, values the file to keep them up to data with)
-FULL_COPIES = {"examples/tensorflow/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py"}
+FULL_COPIES = {
+    "examples/tensorflow/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
+    "examples/flax/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
+}
 
 
 LOCALIZED_READMES = {
