@@ -315,4 +315,3 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
             set(model_outputs.keys()),
             {"outputs", "target_size", "bbox", "offset_mapping"},
         )
-        
