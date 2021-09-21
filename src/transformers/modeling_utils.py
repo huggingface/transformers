@@ -471,7 +471,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-        if getattr(self.config, "_gradient_checkpointing", False):
+        if getattr(self.config, "gradient_checkpointing", False):
             self.gradient_checkpointing_enable()
 
     @classmethod

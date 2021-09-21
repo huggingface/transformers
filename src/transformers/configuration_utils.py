@@ -39,9 +39,6 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
-NO_SAVE_CONFIG_KEYS = ["_gradient_checkpointing"]
-
-
 class PretrainedConfig(PushToHubMixin):
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -336,7 +333,6 @@ class PretrainedConfig(PushToHubMixin):
 
         # Deal with gradient checkpointing
         if "gradient_checkpointing" in kwargs:
-            self._gradient_checkpointing = kwargs.pop("gradient_checkpointing")
             warnings.warn(
                 "Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 "
                 "Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the "
@@ -586,11 +582,6 @@ class PretrainedConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {config_file} from cache at {resolved_config_file}")
 
-        # Backward compatibility: deal with old model files that may have gradient_checkpointing in their config
-        # online
-        if "gradient_checkpointing" in config_dict:
-            config_dict["_gradient_checkpointing"] = config_dict.pop("gradient_checkpointing")
-
         return config_dict, kwargs
 
     @classmethod
@@ -700,7 +691,6 @@ class PretrainedConfig(PushToHubMixin):
             :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
-        output = {k: v for k, v in output.items() if k not in NO_SAVE_CONFIG_KEYS}
         if hasattr(self.__class__, "model_type"):
             output["model_type"] = self.__class__.model_type
 
