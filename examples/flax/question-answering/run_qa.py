@@ -674,7 +674,7 @@ def main():
         step = 0
         # create a numpy array and fill it with -100.
         logits_concat = np.full((len(dataset), max_len), -100, dtype=np.float64)
-        # Now since we have create an array now we will populate it with the outputs gathered using accelerator.gather
+        # Now since we have create an array now we will populate it with the outputs of the model.
         for i, output_logit in enumerate(start_or_end_logits):  # populate columns
             # We have to fill it such that we have to take the whole tensor and replace it on the newly created array
             # And after every iteration we have to change the step
