@@ -59,10 +59,36 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def collate_fn(items):
+def no_collate_fn(items):
     if len(items) != 1:
         raise ValueError("This collate_fn is meant to be used with batch_size=1")
     return items[0]
+
+
+def pad_collate_fn(tokenizer):
+    def pad(items, key, pad_token_id):
+        if isinstance(items[0][key], torch.Tensor):
+            # input_values, input_pixels, input_ids, ...
+            # Others include `attention_mask` etc...
+            padding_value = pad_token_id if key.startswith("input_") else 0
+            return torch.nn.utils.rnn.pad_sequence(
+                [item[key].squeeze(0) for item in items],
+                batch_first=True,
+                padding_value=padding_value,
+            )
+        return [item[key] for item in items]
+
+    def inner(items):
+        keys = set(items[0].keys())
+        for item in items:
+            if set(item.keys()) != keys:
+                raise ValueError(
+                    f"The elements of the batch contain different keys `pad_collate_fn` cannot batch them ({set(item.keys())} != {keys})"
+                )
+        padded = {key: pad(items, key, tokenizer.pad_token_id) for key in keys}
+        return padded
+
+    return inner
 
 
 def infer_framework_load_model(
@@ -617,10 +643,17 @@ if is_torch_available():
             return processed
 
     class PipelineIterator(IterableDataset):
-        def __init__(self, loader, infer, params):
+        def __init__(self, loader, infer, params, unbatch_size=None):
             self.loader = loader
             self.infer = infer
             self.params = params
+            if unbatch_size == 1:
+                # Let's spare some time by deactivating altogether
+                unbatch_size = None
+            self.unbatch_size = unbatch_size
+
+            self.unbatch_index = None
+            self.unbatch_data = None
 
         def __len__(self):
             return len(self.loader)
@@ -630,9 +663,35 @@ if is_torch_available():
             return self
 
         def __next__(self):
+            if self.unbatch_index is not None and self.unbatch_index < self.unbatch_size:
+                if isinstance(self.unbatch_data, torch.Tensor):
+                    result = self.unbatch_data[self.unbatch_index]
+                else:
+                    result = self.unbatch_data.__class__(
+                        {k: element[self.unbatch_index].unsqueeze(0) for k, element in self.unbatch_data.items()}
+                    )
+                self.unbatch_index += 1
+                return result
+
             item = next(self.iterator)
             processed = self.infer(item, **self.params)
-            return processed
+            if self.unbatch_size is not None:
+                first_tensor = processed[0]
+                if 0 < first_tensor.shape[0] < self.unbatch_size:
+                    # Could be last batch
+                    self.unbatch_size = first_tensor.shape[0]
+                self.unbatch_data = processed
+                self.unbatch_index = 0
+                if isinstance(self.unbatch_data, torch.Tensor):
+                    result = self.unbatch_data[self.unbatch_index]
+                else:
+                    result = self.unbatch_data.__class__(
+                        {k: element[self.unbatch_index].unsqueeze(0) for k, element in self.unbatch_data.items()}
+                    )
+                self.unbatch_index += 1
+                return result
+            else:
+                return processed
 
     class KeyDataset(Dataset):
         def __init__(self, dataset: Dataset, key: str):
@@ -881,17 +940,20 @@ class Pipeline(_ScikitCompat):
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs
 
-    def get_iterator(self, inputs, num_workers: int, preprocess_params, forward_params, postprocess_params):
+    def get_iterator(
+        self, inputs, num_workers: int, batch_size: int, preprocess_params, forward_params, postprocess_params
+    ):
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
         dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
-        dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=1, collate_fn=collate_fn)
-        model_iterator = PipelineIterator(dataloader, self.forward, forward_params)
+        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer)
+        dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
+        model_iterator = PipelineIterator(dataloader, self.forward, forward_params, unbatch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
 
-    def __call__(self, inputs, *args, num_workers=8, **kwargs):
+    def __call__(self, inputs, *args, num_workers=2, batch_size=1, **kwargs):
         if args:
             logger.warning(f"Ignoring args : {args}")
         preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)
@@ -910,14 +972,16 @@ class Pipeline(_ScikitCompat):
         if isinstance(inputs, list):
             if self.framework == "pt":
                 final_iterator = self.get_iterator(
-                    inputs, num_workers, preprocess_params, forward_params, postprocess_params
+                    inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
                 )
                 outputs = [output for output in final_iterator]
                 return outputs
             else:
                 return self.run_multi(inputs, preprocess_params, forward_params, postprocess_params)
         elif Dataset is not None and isinstance(inputs, Dataset):
-            return self.get_iterator(inputs, num_workers, preprocess_params, forward_params, postprocess_params)
+            return self.get_iterator(
+                inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
+            )
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
