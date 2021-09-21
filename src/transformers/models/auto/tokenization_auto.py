@@ -164,6 +164,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict(
         ("canine", ("CanineTokenizer", None)),
         ("bertweet", ("BertweetTokenizer", None)),
         ("bert-japanese", ("BertJapaneseTokenizer", None)),
+        ("roberta_japanese", ("RobertaJapaneseTokenizer", None)),
         ("byt5", ("ByT5Tokenizer", None)),
         (
             "cpm",
