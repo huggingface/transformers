@@ -866,7 +866,7 @@ class Pipeline(_ScikitCompat):
                 model_inputs["training"] = False
                 model_outputs = self._forward(model_inputs, **forward_params)
             elif self.framework == "pt":
-                with torch.no_grad():
+                with torch.inference_mode():
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                     model_outputs = self._forward(model_inputs, **forward_params)
                     model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
