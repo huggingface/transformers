@@ -159,15 +159,6 @@ class LayoutLMv2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        print(encoded_images.shape)
-        print(
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
-            )
-        )
         self.assertEqual(
             encoded_images.shape,
             (
