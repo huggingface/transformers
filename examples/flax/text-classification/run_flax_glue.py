@@ -148,8 +148,8 @@ def parse_args():
             extension = args.validation_file.split(".")[-1]
             assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
 
-    if args.push_to_hub and args.output_dir is None:
-        raise ValueError("`output_dir` should be passed when `--push_to_hub` is activated.")
+    if args.push_to_hub:
+        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
