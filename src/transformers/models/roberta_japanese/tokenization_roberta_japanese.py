@@ -25,15 +25,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
-PRETRAINED_INIT_CONFIGURATION = {
-    "cl-tohoku/roberta-base-japanese": {
-        "do_lower_case": False,
-        "do_zenkaku": True,
-        "word_tokenizer_type": "mecab",
-        "mecab_kwargs": {"mecab_dic": "unidic_lite"},
-    }
-}
-
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "cl-tohoku/roberta-japanese-base": "https://huggingface.co/cl-tohoku/roberta-base-japanese/resolve/main/sentencepiece.bpe.model",
@@ -50,7 +41,6 @@ class RobertaJapaneseTokenizer(XLMRobertaTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
