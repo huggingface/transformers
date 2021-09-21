@@ -212,6 +212,14 @@ except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
 
 
+_mojimoji_available = importlib.util.find_spec("mojimoji") is not None
+try:
+    _mojimoji_version = importlib_metadata.version("mojimoji")
+    logger.debug(f"Successfully imported mojimoji version {_mojimoji_available}")
+except importlib_metadata.PackageNotFoundError:
+    _mojimoji_version = False
+
+
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 # New default cache, shared with the Datasets library
@@ -479,6 +487,10 @@ def is_torchaudio_available():
 def is_speech_available():
     # For now this depends on torchaudio but the exact dependency might evolve in the future.
     return _torchaudio_available
+
+
+def is_mojimoji_available():
+    return is_mojimoji_available()
 
 
 def torch_only_method(fn):
