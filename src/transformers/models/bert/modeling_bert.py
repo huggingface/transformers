@@ -733,7 +733,7 @@ class BertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module):
+    def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BertEncoder):
             module.gradient_checkpointing = value
 

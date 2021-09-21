@@ -382,6 +382,10 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, GPTNeoModel):
+            module.gradient_checkpointing = value
+
 
 GPT_NEO_START_DOCSTRING = r"""
 
@@ -483,6 +487,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.wte
@@ -593,7 +598,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if getattr(self.config, "_gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(

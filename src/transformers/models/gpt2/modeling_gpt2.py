@@ -395,6 +395,10 @@ class GPT2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, GPT2Model):
+            module.gradient_checkpointing = value
+
 
 @dataclass
 class GPT2DoubleHeadsModelOutput(ModelOutput):
@@ -590,6 +594,7 @@ class GPT2Model(GPT2PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+        self.gradient_checkpointing = False
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -765,7 +770,7 @@ class GPT2Model(GPT2PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if getattr(self.config, "_gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(

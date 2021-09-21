@@ -481,6 +481,10 @@ class PegasusPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (PegasusDecoder, PegasusEncoder)):
+            module.gradient_checkpointing = value
+
 
 PEGASUS_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
@@ -647,6 +651,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
@@ -771,7 +776,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
-                if getattr(self.config, "_gradient_checkpointing", False) and self.training:
+                if self.gradient_checkpointing and self.training:
 
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -841,6 +846,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -1041,7 +1047,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if getattr(self.config, "_gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
