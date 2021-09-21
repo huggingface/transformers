@@ -90,12 +90,14 @@ if is_torch_available():
         AutoModel,
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
+        AutoModelForCTC,
         AutoModelForImageClassification,
         AutoModelForMaskedLM,
         AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
     )
@@ -121,9 +123,7 @@ SUPPORTED_TASKS = {
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
-        # Only load from `config.architectures`, AutoModelForCTC and AutoModelForConditionalGeneration
-        # do not exist yet.
-        "pt": () if is_torch_available() else (),
+        "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
         "default": {"model": {"pt": "facebook/wav2vec2-base-960h"}},
     },
     "feature-extraction": {

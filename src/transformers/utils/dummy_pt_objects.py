@@ -379,6 +379,15 @@ class AutoModelForCausalLM:
         requires_backends(cls, ["torch"])
 
 
+class AutoModelForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class AutoModelForImageClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -452,6 +461,15 @@ class AutoModelForSeq2SeqLM:
 
 
 class AutoModelForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class AutoModelForSpeechSeq2Seq:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
