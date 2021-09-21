@@ -625,13 +625,21 @@ class FlaxBertModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        token_type_ids,
-        position_ids,
+        token_type_ids: Optional[np.ndarray] = None,
+        position_ids: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+        # make sure `token_type_ids` is correctly initialized when not passed
+        if token_type_ids is None:
+            token_type_ids = jnp.zeros_like(input_ids)
+
+        # make sure `position_ids` is correctly initialized when not passed
+        if position_ids is None:
+            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
@@ -749,7 +757,7 @@ FLAX_BERT_FOR_PRETRAINING_DOCSTRING = """
         >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         >>> model = FlaxBertForPreTraining.from_pretrained('bert-base-uncased')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.prediction_logits

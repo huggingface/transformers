@@ -220,8 +220,14 @@ class TFSequenceClassificationLoss:
         return loss_fn(labels, logits)
 
 
-class TFMultipleChoiceLoss(TFSequenceClassificationLoss):
+class TFMultipleChoiceLoss:
     """Loss function suitable for multiple choice tasks."""
+
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        return loss_fn(labels, logits)
 
 
 class TFMaskedLanguageModelingLoss(TFCausalLanguageModelingLoss):
@@ -288,9 +294,10 @@ def booleans_processing(config, **kwargs):
             final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
     else:
         if (
-            kwargs["output_attentions"] is not None
-            or kwargs["output_hidden_states"] is not None
-            or ("use_cache" in kwargs and kwargs["use_cache"] is not None)
+            kwargs["output_attentions"] not in (None, config.output_attentions)
+            or kwargs["output_hidden_states"] not in (None, config.output_hidden_states)
+            or "use_cache" in kwargs
+            and kwargs["use_cache"] not in (None, config.use_cache)
         ):
             tf_logger.warning(
                 "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
@@ -300,7 +307,7 @@ def booleans_processing(config, **kwargs):
         final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
-        if kwargs["return_dict"] is not None:
+        if kwargs.get("return_dict", None) not in (None, True):
             tf_logger.warning(
                 "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
             )
@@ -1120,14 +1127,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             config (:obj:`Union[PretrainedConfig, str]`, `optional`):
                 Can be either:
 
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
                     - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `model id` string of a pretrained
@@ -1334,11 +1341,22 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 ignore_mismatched_sizes=ignore_mismatched_sizes,
                 _prefix=load_weight_prefix,
             )
-        except OSError:
-            raise OSError(
-                "Unable to load weights from h5 file. "
-                "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
-            )
+        except OSError as e:
+            try:
+                with open(resolved_archive_file) as f:
+                    if f.read().startswith("version"):
+                        raise OSError(
+                            "You seem to have cloned a repository without having git-lfs installed. Please install "
+                            "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
+                            "you cloned."
+                        )
+                    else:
+                        raise ValueError from e
+            except (UnicodeDecodeError, ValueError):
+                raise OSError(
+                    "Unable to load weights from h5 file. "
+                    "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
+                )
 
         model(model.dummy_inputs)  # Make sure restore ops are run
 

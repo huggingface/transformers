@@ -211,30 +211,24 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         for i in range(batch_size):
             inputs = dict((k, v[i]) for k, v in processed_features.items())
             # truncation
-            inputs = self._truncate(
+            inputs_slice = self._truncate(
                 inputs,
                 max_length=max_length,
                 pad_to_multiple_of=pad_to_multiple_of,
                 truncation=truncation,
             )
-            truncated_inputs.append(inputs)
+            truncated_inputs.append(inputs_slice)
 
         if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = max(len(inputs) for inputs in required_input)
+            # make sure that `max_length` cannot be longer than the longest truncated length
+            max_length = max(len(input_slice[self.model_input_names[0]]) for input_slice in truncated_inputs)
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
         for i in range(batch_size):
-            # truncation
-            inputs = self._truncate(
-                truncated_inputs[i],
-                max_length=max_length,
-                pad_to_multiple_of=pad_to_multiple_of,
-                truncation=truncation,
-            )
             # padding
             outputs = self._pad(
-                inputs,
+                truncated_inputs[i],
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
@@ -329,9 +323,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         if not truncation:
             return processed_features
         elif truncation and max_length is None:
-            raise ValueError(
-                "When setting ``truncation=True``, make sure that ``max_length`` is defined and ``padding='max_length'``"
-            )
+            raise ValueError("When setting ``truncation=True``, make sure that ``max_length`` is defined.")
 
         required_input = processed_features[self.model_input_names[0]]
 
@@ -348,7 +340,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         return processed_features
 
-    def _get_padding_strategies(self, padding=False, max_length=None, pad_to_multiple_of=None, **kwargs):
+    def _get_padding_strategies(self, padding=False, max_length=None):
         """
         Find the correct padding strategy
         """

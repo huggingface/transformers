@@ -158,6 +158,7 @@ class ReformerConfig(PretrainedConfig):
     """
     model_type = "reformer"
     keys_to_ignore_at_inference = ["past_buckets_states"]
+    attribute_map = {}
 
     def __init__(
         self,
@@ -196,14 +197,6 @@ class ReformerConfig(PretrainedConfig):
         classifier_dropout=None,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_decoder=is_decoder,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-
         self.hash_seed = hash_seed
         self.vocab_size = vocab_size
         self.attention_head_size = attention_head_size
@@ -234,3 +227,10 @@ class ReformerConfig(PretrainedConfig):
         self.attn_layers = attn_layers
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_decoder=is_decoder,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )

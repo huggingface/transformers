@@ -137,6 +137,7 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
+        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -187,6 +188,12 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

@@ -58,9 +58,17 @@ layer, and is expected to be bound by [CLS] and a [SEP] tokens, as in BERT. The 
 appropriately for the textual and visual parts.
 
 The :class:`~transformers.BertTokenizer` is used to encode the text. A custom detector/feature extractor must be used
-to get the visual embeddings. For an example on how to generate visual embeddings, see the `colab notebook
-<https://colab.research.google.com/drive/1bLGxKdldwqnMVA5x4neY7-l_8fKGWQYI?usp=sharing>`__. The following example shows
-how to get the last hidden state using :class:`~transformers.VisualBertModel`:
+to get the visual embeddings. The following example notebooks show how to use VisualBERT with Detectron-like models:
+
+* `VisualBERT VQA demo notebook
+  <https://github.com/huggingface/transformers/tree/master/examples/research_projects/visual_bert>`__ : This notebook
+  contains an example on VisualBERT VQA.
+
+* `Generate Embeddings for VisualBERT (Colab Notebook)
+  <https://colab.research.google.com/drive/1bLGxKdldwqnMVA5x4neY7-l_8fKGWQYI?usp=sharing>`__ : This notebook contains
+  an example on how to generate visual embeddings.
+
+The following example shows how to get the last hidden state using :class:`~transformers.VisualBertModel`:
 
 .. code-block::
 
@@ -74,6 +82,13 @@ how to get the last hidden state using :class:`~transformers.VisualBertModel`:
         >>> # this is a custom function that returns the visual embeddings given the image path
         >>> visual_embeds = get_visual_embeddings(image_path)
 
+        >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
+        >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
+        >>> inputs.update({
+        ...     "visual_embeds": visual_embeds,
+        ...     "visual_token_type_ids": visual_token_type_ids,
+        ...     "visual_attention_mask": visual_attention_mask
+        ... })
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
 

@@ -364,7 +364,8 @@ class TensorBoardCallback(TrainerCallback):
             if trial_name is not None:
                 log_dir = os.path.join(args.logging_dir, trial_name)
 
-        self._init_summary_writer(args, log_dir)
+        if self.tb_writer is None:
+            self._init_summary_writer(args, log_dir)
 
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", args.to_json_string())
@@ -728,6 +729,7 @@ class NeptuneCallback(TrainerCallback):
                 api_token=os.getenv("NEPTUNE_API_TOKEN"),
                 mode=os.getenv("NEPTUNE_CONNECTION_MODE", "async"),
                 name=os.getenv("NEPTUNE_RUN_NAME", None),
+                run=os.getenv("NEPTUNE_RUN_ID", None),
             )
             combined_dict = args.to_dict()
             if hasattr(model, "config") and model.config is not None:

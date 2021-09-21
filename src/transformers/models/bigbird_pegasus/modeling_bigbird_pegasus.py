@@ -952,7 +952,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             from_block_size: int. size of block in from sequence.
             to_block_size: int. size of block in to sequence.
             num_heads: int. total number of heads.
-            plan_from_length: list. plan from length where num_random_blocks are choosen from.
+            plan_from_length: list. plan from length where num_random_blocks are chosen from.
             plan_num_rand_blocks: list. number of rand blocks within the plan.
             window_block_left: int. number of blocks of window to left of a block.
             window_block_right: int. number of blocks of window to right of a block.
@@ -2833,7 +2833,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.pegasus.modeling_pegasus.PegasusForCausalLM with Pegasus->BigBirdPegasus, 'facebook/bart-large'->"google/bigbird-pegasus-large-arxiv"
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BigBirdPegasus, 'facebook/bart-large'->"google/bigbird-pegasus-large-arxiv"
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

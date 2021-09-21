@@ -508,9 +508,9 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
-            input_shape = shape_list(tensor=inputs["input_ids"])
+            input_shape = shape_list(inputs["input_ids"])
         elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(tensor=inputs["inputs_embeds"])[:-1]
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 

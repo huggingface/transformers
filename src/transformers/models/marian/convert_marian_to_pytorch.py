@@ -27,8 +27,8 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
+from huggingface_hub.hf_api import HfApi
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
-from transformers.hf_api import HfApi
 
 
 def remove_suffix(text: str, suffix: str):
@@ -65,7 +65,7 @@ def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
     """Find models that can accept src_lang as input and return tgt_lang as output."""
     prefix = "Helsinki-NLP/opus-mt-"
     api = HfApi()
-    model_list = api.model_list()
+    model_list = api.list_models()
     model_ids = [x.modelId for x in model_list if x.modelId.startswith("Helsinki-NLP")]
     src_and_targ = [
         remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m

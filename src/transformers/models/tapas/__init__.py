@@ -34,6 +34,7 @@ if is_torch_available():
         "TapasForSequenceClassification",
         "TapasModel",
         "TapasPreTrainedModel",
+        "load_tf_weights_in_tapas",
     ]
 
 
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
             TapasForSequenceClassification,
             TapasModel,
             TapasPreTrainedModel,
+            load_tf_weights_in_tapas,
         )
 
 else:

@@ -634,6 +634,120 @@ class TFCTRLPreTrainedModel:
         requires_backends(cls, ["tf"])
 
 
+TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFDebertaForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFDebertaV2ForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaV2ForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaV2ForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaV2ForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaV2Model:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaV2PreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
