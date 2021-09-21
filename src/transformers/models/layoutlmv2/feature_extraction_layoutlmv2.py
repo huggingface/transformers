@@ -276,10 +276,10 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         results = []
 
         for s, l, b, o, (height, width) in zip(scores, labels, boxes, offsets, target_sizes):
-            # only keep start of a particular word (i.e. offset index == 0) (e.g. [San, Fran, ##cis, ##co] -> [San])
-            l = [label for label, (offset_idx, _) in zip(l, o) if offset_idx == 0]
-            s = [score for score, (offset_idx, _) in zip(s, o) if offset_idx == 0]
-            b = [unnormalize_box(box, height, width) for box, (offset_idx, _) in zip(b, o) if offset_idx == 0]
+            # only keep start of a particular word (i.e. offset start == 0) (e.g. [San, Fran, ##cis, ##co] -> [San])
+            l = [label for label, (offset_start, _) in zip(l, o) if offset_start == 0]
+            s = [score for score, (offset_start, _) in zip(s, o) if offset_start == 0]
+            b = [unnormalize_box(box, height, width) for box, (offset_start, _) in zip(b, o) if offset_start == 0]
             results.append(
                 {"scores": torch.FloatTensor(s), "labels": torch.IntTensor(l), "boxes": torch.FloatTensor(b)}
             )
