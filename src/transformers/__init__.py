@@ -1751,6 +1751,14 @@ if is_flax_available():
             "FlaxBartPreTrainedModel",
         ]
     )
+    _import_structure["models.beit"].extend(
+        [
+            "FlaxBeitForImageClassification",
+            "FlaxBeitForMaskedImageModeling",
+            "FlaxBeitModel",
+            "FlaxBeitPreTrainedModel",
+        ]
+    )
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -3323,6 +3331,12 @@ if TYPE_CHECKING:
             FlaxBartForSequenceClassification,
             FlaxBartModel,
             FlaxBartPreTrainedModel,
+        )
+        from .models.beit import (
+            FlaxBeitForImageClassification,
+            FlaxBeitForMaskedImageModeling,
+            FlaxBeitModel,
+            FlaxBeitPreTrainedModel,
         )
         from .models.bert import (
             FlaxBertForMaskedLM,
