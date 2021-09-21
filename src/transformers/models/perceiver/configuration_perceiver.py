@@ -126,6 +126,10 @@ class PerceiverConfig(PretrainedConfig):
         vocab_size=262,
         seq_len=2048,
         train_size=(368, 496),
+        num_frames=16,
+        audio_samples_per_frame=48000 // 25,
+        samples_per_patch=16,
+        image_size=56,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -156,3 +160,9 @@ class PerceiverConfig(PretrainedConfig):
 
         # flow attributes
         self.train_size = train_size
+
+        # multimodal autoencoding attributes
+        self.num_frames = num_frames
+        self.audio_samples_per_frame = audio_samples_per_frame
+        self.samples_per_patch = samples_per_patch
+        self.image_size = image_size

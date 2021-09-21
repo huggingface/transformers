@@ -1178,6 +1178,103 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         )
 
 
+# @add_start_docstrings("""Example use of Perceiver for multimodal autoencoding. """, PERCEIVER_START_DOCSTRING)
+class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        n_audio_samples = config.num_frames * config.audio_samples_per_frame
+        input_preprocessor = PerceiverMultimodalPreprocessor(
+            min_padding_size=4,
+            modalities={
+                "audio": PerceiverAudioPreprocessor(
+                    config,
+                    position_encoding_type="fourier",
+                    fourier_position_encoding_kwargs=dict(
+                        num_bands=192,
+                        max_resolution=(n_audio_samples,),
+                        sine_only=False,
+                        concat_pos=True,
+                    ),
+                    prep_type="patches",
+                    samples_per_patch=16,
+                ),
+                "image": PerceiverImagePreprocessor(
+                    config,
+                    position_encoding_type="fourier",
+                    fourier_position_encoding_kwargs=dict(
+                        num_bands=32,
+                        max_resolution=(config.num_frames, config.image_size, config.image_size),
+                        sine_only=False,
+                        concat_pos=True,
+                    ),
+                    prep_type="patches",
+                    spatial_downsample=4,
+                    temporal_downsample=1,
+                ),
+                "label": PerceiverOneHotPreprocessor(),
+            },
+            mask_probs={"image": 0.0, "audio": 0.0, "label": 1.0},
+        )
+
+        self.perceiver = PerceiverModel(
+            config,
+            input_preprocessor=input_preprocessor,
+        )
+
+        self.init_weights()
+
+    # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # @add_code_sample_docstrings(
+    #     tokenizer_class=_TOKENIZER_FOR_DOC,
+    #     checkpoint=_CHECKPOINT_FOR_DOC,
+    #     output_type=SequenceClassifierOutput,
+    #     config_class=_CONFIG_FOR_DOC,
+    # )
+    def forward(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        logits = outputs.logits
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
 # Below: position encodings
 
 
@@ -1192,13 +1289,15 @@ def build_position_encoding(
     """Builds the position encoding."""
 
     if position_encoding_type == "trainable":
-        assert trainable_position_encoding_kwargs is not None
+        if not trainable_position_encoding_kwargs:
+            raise ValueError("Make sure to pass trainable_position_encoding_kwargs")
         output_pos_enc = PerceiverTrainablePositionEncoding(
             index_dim=np.prod(index_dims), **trainable_position_encoding_kwargs
         )
     elif position_encoding_type == "fourier":
         # We don't use the index_dims argument, as this is only known during the forward pass
-        assert fourier_position_encoding_kwargs is not None
+        if not fourier_position_encoding_kwargs:
+            raise ValueError("Make sure to pass fourier_position_encoding_kwargs")
         output_pos_enc = PerceiverFourierPositionEncoding(**fourier_position_encoding_kwargs)
     else:
         raise ValueError(f"Unknown position encoding type: {position_encoding_type}.")
@@ -1304,7 +1403,8 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         return ((inputs[0], self.subsampled_index_dims, self.output_num_channels), None)
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
-        assert self.position_encoding_type != "none"  # Queries come from elsewhere
+        if self.position_encoding_type == "none":  # Queries come from elsewhere
+            raise ValueError("You cannot construct decoder queries when position_encoding_type is set to none")
         if subsampled_points is not None:
             raise NotImplementedError("Subsampled points is not yet supported")
         else:
@@ -1830,11 +1930,27 @@ class PerceiverImagePreprocessor(nn.Module):
         return inputs, modality_sizes, inputs_without_pos
 
 
+class PerceiverOneHotPreprocessor(nn.Module):
+    """One-hot preprocessor for Perceiver Encoder."""
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
+        # Add a dummy index dimension.
+        inputs = inputs[:, None, :]
+
+        # No position encodings, so the 1st (input) and 3rd (inputs_without_pos)
+        # outputs are identical.
+        return inputs, None, inputs
+
+
 class PerceiverAudioPreprocessor(nn.Module):
     """Audio preprocessing for Perceiver Encoder."""
 
     def __init__(
         self,
+        config,
         prep_type: str = "patches",
         samples_per_patch: int = 96,
         position_encoding_type: str = "fourier",
@@ -1846,6 +1962,7 @@ class PerceiverAudioPreprocessor(nn.Module):
         **position_encoding_kwargs,
     ):
         super().__init__()
+        self.config = config
 
         if prep_type not in ("patches",):
             raise ValueError(f"Prep_type {prep_type} is invalid, can only be 'patches'.")
@@ -1893,3 +2010,78 @@ class PerceiverAudioPreprocessor(nn.Module):
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)
         modality_sizes = None  # Size for each modality, only needed for multimodal
         return inputs, modality_sizes, inputs_without_pos
+
+
+class PerceiverMultimodalPreprocessor(nn.Module):
+    """
+    Multimodal preprocessing for Perceiver Encoder.
+
+    Inputs for each modality are preprocessed, then padded with trainable position embeddings to have the same number
+    of channels.
+    """
+
+    def __init__(self, modalities, mask_probs=None, min_padding_size=2):
+        """
+        Constructor.
+
+        Args:
+            modalities: dict mapping modality name to preprocessor
+            mask_probs: dict mapping modality name to masking probability of that
+                modality
+            min_padding_size: the minimum padding size for all modalities.
+                The final output will have num_channels equal to the maximum channels across all modalities plus
+                min_padding_size.
+        """
+        super().__init__()
+        self.modalities = modalities
+        self.min_padding_size = min_padding_size
+        self.mask_probs = mask_probs
+
+        # we need to register 2 parameter names for each modality: mask + padding
+        # see https://discuss.pytorch.org/t/dynamic-parameter-declaration-in-forward-function/427
+        for modality in self.modalities.keys():
+            self.register_parameter(modality + "_mask", None)
+            self.register_parameter(modality + "_padding", None)
+
+    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
+        # preprocess each modality using the respective preprocessor.
+        outputs = {}
+        inputs_without_pos = {}
+        for modality, preprocessor in self.modalities.items():
+            outputs[modality], _, inputs_without_pos[modality] = preprocessor(
+                inputs[modality], pos=pos, network_input_is_1d=network_input_is_1d
+            )
+
+        common_channel_size = max(o.shape[2] for o in outputs.values()) + self.min_padding_size
+
+        # pad to the same common_channel_size.
+        padded = {}
+        modality_sizes = {}
+        for modality, output in outputs.items():
+            pos_enc = PerceiverTrainablePositionEncoding(1, num_channels=common_channel_size - output.shape[2])
+            padding = torch.broadcast_to(
+                pos_enc(batch_size=output.shape[0]),
+                [output.shape[0], output.shape[1], common_channel_size - output.shape[2]],
+            )
+            output_padded = torch.cat([output, padding], dim=2)
+
+            if self.mask_probs is not None:
+                # Randomly mask out each token corresponding to this modality
+                mask_token = PerceiverTrainablePositionEncoding(1, num_channels=output_padded.shape[2])(
+                    output.shape[0]
+                )
+                mask_prob = self.mask_probs[modality]
+                mask = torch.bernoulli(torch.full([output.shape[0], output.shape[1]], mask_prob))
+                mask = torch.unsqueeze(mask, dim=2)
+                output_padded = (1 - mask) * output_padded + mask * mask_token
+
+            padded[modality] = output_padded
+            modality_sizes[modality] = output_padded.shape[1]
+
+        # Apply a predictable ordering to the modalities
+        padded_ls = [padded[k] for k in sorted(padded.keys())]
+
+        # Finally, concatenate along the time dimension
+        final_inputs = torch.cat(padded_ls, dim=1)
+
+        return (final_inputs, modality_sizes, inputs_without_pos)
