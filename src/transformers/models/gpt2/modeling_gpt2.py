@@ -262,6 +262,7 @@ class GPT2Attention(nn.Module):
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
 
         # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op if otherwise
+        assert attn_weights.dtype == torch.float32, "Error with attention weights upcasting, dtype != torch.float32!"
         attn_weights = attn_weights.type(value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
