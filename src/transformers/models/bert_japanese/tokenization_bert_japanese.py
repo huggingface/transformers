@@ -21,10 +21,15 @@ import os
 import unicodedata
 from typing import Optional
 
-import mojimoji
+from importlib_metadata import ModuleNotFoundError
+from transformers.file_utils import is_mojimoji_available
 
 from ...utils import logging
 from ..bert.tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
+
+
+if is_mojimoji_available():
+    import mojimoji
 
 
 logger = logging.get_logger(__name__)
@@ -215,6 +220,9 @@ class MecabTokenizer:
         Args:
             **do_lower_case**: (`optional`) boolean (default True)
                 Whether to lowercase the input.
+            **do_zenkaku**: (`optional`) boolean (default False)
+                Whether to apply zenkaku normalization (i.e., conversion from halfwidth to fullwidth) to text before
+                tokenization.
             **never_split**: (`optional`) list of str
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
                 :func:`PreTrainedTokenizer.tokenize`) List of tokens not to split.
@@ -230,6 +238,12 @@ class MecabTokenizer:
         self.never_split = never_split if never_split is not None else []
         self.normalize_text = normalize_text
         self.do_zenkaku = do_zenkaku
+
+        if self.do_zenkaku and not is_mojimoji_available():
+            raise ModuleNotFoundError(
+                "You need to install mojimoji to use do_zenkaku option. "
+                "See https://github.com/studio-ousia/mojimoji for installation."
+            )
 
         try:
             import fugashi
