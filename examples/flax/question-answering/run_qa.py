@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team All rights reserved.
+# Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -93,6 +93,12 @@ class ModelArguments:
         metadata={
             "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
             "with private models)."
+        },
+    )
+    dtype: Optional[str] = field(
+        default="float32",
+        metadata={
+            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
         },
     )
 
@@ -727,6 +733,8 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
+        seed=training_args.seed,
+        dtype=getattr(jnp, model_args.dtype),
     )
 
     learning_rate_fn = create_learning_rate_fn(
@@ -820,7 +828,11 @@ def main():
 
                 train_metrics = []
 
-            if (cur_step % training_args.eval_steps == 0 or cur_step % step_per_epoch == 0) and cur_step > 0:
+            if (
+                training_args.do_eval
+                and (cur_step % training_args.eval_steps == 0 or cur_step % step_per_epoch == 0)
+                and cur_step > 0
+            ):
 
                 eval_metrics = {}
                 all_start_logits = []
