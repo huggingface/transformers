@@ -2,7 +2,7 @@ import copy
 import functools
 import inspect
 import random
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 from packaging import version
@@ -42,14 +42,10 @@ from .fx_transformations import (
 logger = logging.get_logger(__name__)
 
 
-T = TypeVar("T")
-TypeOrListOfType = Union[T, List[T]]
-
-
 def _generate_supported_model_classes(
     model_name: Type[PretrainedConfig],
-    supported_tasks: Optional[TypeOrListOfType[str]] = None,
-):
+    supported_tasks: Optional[Union[str, List[str]]] = None,
+) -> List[Type[PreTrainedModel]]:
     model_config_class = CONFIG_MAPPING[model_name]
     task_mapping = {
         "default": MODEL_MAPPING,
@@ -76,31 +72,53 @@ def _generate_supported_model_classes(
         if model_class:
             model_classes.append(model_class)
 
-    return tuple(model_classes)
+    return model_classes
 
 
-_REGULAR_SUPPORTED_MODELS = (
-    *_generate_supported_model_classes("albert"),
-    *_generate_supported_model_classes("bert"),
-    *_generate_supported_model_classes("distilbert"),
-    *_generate_supported_model_classes("mobilebert"),
-    *_generate_supported_model_classes("electra"),
-    *_generate_supported_model_classes("megatron-bert"),
-    *_generate_supported_model_classes("gpt2"),
-    *_generate_supported_model_classes("gptj"),
-    *_generate_supported_model_classes("gpt_neo"),
-    *_generate_supported_model_classes("t5"),
-)
-_SPECIAL_SUPPORTED_MODELS = (GPT2DoubleHeadsModel,)
-_SUPPORTED_MODELS = _REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS
+_REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
+    "albert",
+    "bert",
+    "distilbert",
+    "mobilebert",
+    "electra",
+    "megatron-bert",
+    "gpt2",
+    "gptj",
+    "gpt_neo",
+    "t5",
+]
 
-_SUPPORTED_MODELS_FOR_DYNAMIC_AXES = (
-    *_generate_supported_model_classes("albert"),
-    *_generate_supported_model_classes("bert"),
-    *_generate_supported_model_classes("distilbert"),
-    *_generate_supported_model_classes("mobilebert"),
-    *_generate_supported_model_classes("electra"),
-    *_generate_supported_model_classes("megatron-bert"),
+_REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS_FOR_DYNAMIC_AXES = [
+    "albert",
+    "bert",
+    "distilbert",
+    "mobilebert",
+    "electra",
+    "megatron-bert",
+]
+
+_REGULAR_SUPPORTED_MODELS = []
+for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
+    if isinstance(item, dict):
+        _REGULAR_SUPPORTED_MODELS.extend(_generate_supported_model_classes(**item))
+    else:
+        _REGULAR_SUPPORTED_MODELS.extend(_generate_supported_model_classes(item))
+
+_SPECIAL_SUPPORTED_MODELS = [
+    GPT2DoubleHeadsModel,
+]
+_SUPPORTED_MODELS = tuple(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)
+
+_REGULAR_SUPPORTED_MODELS_FOR_DYNAMIC_AXES = []
+for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS_FOR_DYNAMIC_AXES:
+    if isinstance(item, dict):
+        _REGULAR_SUPPORTED_MODELS_FOR_DYNAMIC_AXES.extend(_generate_supported_model_classes(**item))
+    else:
+        _REGULAR_SUPPORTED_MODELS_FOR_DYNAMIC_AXES.extend(_generate_supported_model_classes(item))
+
+_SPECIAL_SUPPORTED_MODELS_FOR_DYNAMIC_AXES = []
+_SUPPORTED_MODELS_FOR_DYNAMIC_AXES = tuple(
+    _REGULAR_SUPPORTED_MODELS_FOR_DYNAMIC_AXES + _SPECIAL_SUPPORTED_MODELS_FOR_DYNAMIC_AXES
 )
 
 
