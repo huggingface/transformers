@@ -56,6 +56,8 @@ ln -s ~/transformers/examples/flax/question-answering/run_qa.py run_qa.py
 python run_qa.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \
+  --do_train   \
+  --do_eval   \
   --max_seq_length 384 \
   --doc_stride 128 \
   --learning_rate 3e-5 \
@@ -79,8 +81,8 @@ or directly on the hub under *Training metrics*.
 Training with the previously defined hyper-parameters yields the following results:
 
 ```bash
-f1 = 88.50
-exact_match = 81.03
+f1 = 88.62
+exact_match = 81.34
 ```
 
 sample Metrics - [tfhub.dev](https://tensorboard.dev/experiment/6gU75Hx8TGCnc6tr4ZgI9Q)
