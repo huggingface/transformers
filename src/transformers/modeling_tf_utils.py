@@ -773,8 +773,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
-        if sorted(return_metrics.keys()) == ["loss", "loss_loss"]:
-            return_metrics = {"loss": return_metrics["loss"]}
+        if "loss" in return_metrics and "loss_loss" in return_metrics:
+            del return_metrics["loss_loss"]
         return return_metrics
 
     def test_step(self, data):
@@ -797,8 +797,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
-        if sorted(return_metrics.keys()) == ["loss", "loss_loss"]:
-            return_metrics = {"loss": return_metrics["loss"]}
+        if "loss" in return_metrics and "loss_loss" in return_metrics:
+            del return_metrics["loss_loss"]
         return return_metrics
 
     def set_input_embeddings(self, value):
