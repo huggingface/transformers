@@ -133,7 +133,6 @@ class FlaxWav2Vec2ModelTester:
         return config, inputs_dict
 
 
-@unittest.skip("Borken by new Flax release, fix me!")
 @require_flax
 class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (
