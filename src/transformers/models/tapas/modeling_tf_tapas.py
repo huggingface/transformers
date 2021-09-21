@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 Google Research and The HuggingFace Inc. team.
+# Copyright 2021 Google Research and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -135,7 +135,7 @@ class TFTableQuestionAnsweringOutput(ModelOutput):
 
     loss: Optional[tf.Tensor] = None
     logits: tf.Tensor = None
-    logits_aggregation: tf.Tensor = None
+    logits_aggregation: Optional[tf.Tensor] = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
