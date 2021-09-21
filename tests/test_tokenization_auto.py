@@ -38,7 +38,7 @@ from transformers.models.auto.tokenization_auto import (
 from transformers.models.roberta.configuration_roberta import RobertaConfig
 from transformers.testing_utils import (
     DUMMY_DIFF_TOKENIZER_IDENTIFIER,
-    DUMMY_UNKWOWN_IDENTIFIER,
+    DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
     require_tokenizers,
     slow,
@@ -66,7 +66,7 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertEqual(tokenizer.vocab_size, 12)
 
     def test_tokenizer_from_model_type(self):
-        tokenizer = AutoTokenizer.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
+        tokenizer = AutoTokenizer.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER)
         self.assertIsInstance(tokenizer, (RobertaTokenizer, RobertaTokenizerFast))
         self.assertEqual(tokenizer.vocab_size, 20)
 
