@@ -402,6 +402,8 @@ class AutoTokenizer:
                 facebook/rag-token-base), specify it here.
             use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to try to load the fast version of the tokenizer.
+            tokenizer_type (:obj:`str`, `optional`):
+                Tokenizer type to be loaded.
             kwargs (additional keyword arguments, `optional`):
                 Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like
                 ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
@@ -425,8 +427,33 @@ class AutoTokenizer:
         kwargs["_from_auto"] = True
 
         use_fast = kwargs.pop("use_fast", True)
+        tokenizer_type = kwargs.pop("tokenizer_type", None)
 
-        # First, let's try to use the tokenizer_config file to get the tokenizer class.
+        # First, let's see whether the tokenizer_type is passed so that we can leverage it
+        if tokenizer_type is not None:
+            tokenizer_class = None
+            tokenizer_class_tuple = TOKENIZER_MAPPING_NAMES.get(tokenizer_type, None)
+
+            if tokenizer_class_tuple is None:
+                raise ValueError(
+                    f"Passed `tokenizer_type` {tokenizer_type} does not exist. `tokenizer_type` should be one of "
+                    f"{', '.join(c for c in TOKENIZER_MAPPING_NAMES.keys())}."
+                )
+
+            tokenizer_class_name, tokenizer_fast_class_name = tokenizer_class_tuple
+
+            if use_fast and tokenizer_fast_class_name is not None:
+                tokenizer_class = tokenizer_class_from_name(tokenizer_fast_class_name)
+
+            if tokenizer_class is None:
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_name)
+
+            if tokenizer_class is None:
+                raise ValueError(f"Tokenizer class {tokenizer_class_name} is not currently imported.")
+
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         config_tokenizer_class = tokenizer_config.get("tokenizer_class")
 
