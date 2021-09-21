@@ -18,7 +18,7 @@ import unittest
 
 import numpy as np
 
-from transformers.file_utils import is_pytesseract_available, is_torch_available
+from transformers.file_utils import ModelOutput, is_pytesseract_available, is_torch_available
 from transformers.testing_utils import require_pytesseract, require_torch
 
 from .test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
@@ -159,6 +159,15 @@ class LayoutLMv2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
+        print(encoded_images.shape)
+        print(
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+            )
+        )
         self.assertEqual(
             encoded_images.shape,
             (
@@ -218,4 +227,41 @@ class LayoutLMv2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
                 224,
                 224,
             ),
+        )
+
+    def test_post_process(self):
+        # Initialize feature_extractor
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        # Initialize test inputs
+        outputs = ModelOutput(
+            logits=torch.FloatTensor(
+                [
+                    [
+                        [2.9213, -0.6988, -0.3930, -0.7230, -0.6250, -0.8034, -0.2588],
+                        [3.3945, -0.7632, -0.8638, -0.6346, -0.7023, -0.6832, -0.5296],
+                        [3.3949, -0.7318, -0.8169, -0.6397, -0.6878, -0.7218, -0.5687],
+                    ]
+                ]
+            )
+        )
+        target_sizes = torch.IntTensor([[1000, 754]])
+        offset_mapping = torch.IntTensor([[[0, 0], [0, 1], [0, 2]]])
+        bbox = torch.IntTensor([[[0, 0, 0, 0], [632, 59, 647, 67], [137, 88, 168, 98]]])
+
+        outputs = feature_extractor.post_process(outputs, target_sizes, offset_mapping, bbox)
+
+        self.assertTrue(isinstance(outputs, list))
+        self.assertEqual(len(outputs), 1)
+        output = outputs[0]
+        self.assertEqual(
+            output["scores"].shape,
+            (3,),
+        )
+        self.assertEqual(
+            output["labels"].shape,
+            (3,),
+        )
+        self.assertEqual(
+            output["boxes"].shape,
+            (3, 4),
         )
