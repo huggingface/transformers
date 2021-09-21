@@ -21,7 +21,6 @@ import os
 import unicodedata
 from typing import Optional
 
-from importlib_metadata import ModuleNotFoundError
 from transformers.file_utils import is_mojimoji_available
 
 from ...utils import logging
