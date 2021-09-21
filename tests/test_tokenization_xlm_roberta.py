@@ -14,6 +14,9 @@
 # limitations under the License.
 
 import os
+import pickle
+import shutil
+import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, XLMRobertaTokenizer, XLMRobertaTokenizerFast
@@ -140,6 +143,13 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @cached_property
     def big_tokenizer(self):
         return XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
+
+    def test_picklable_without_disk(self):
+        with tempfile.NamedTemporaryFile() as f:
+            shutil.copyfile(SAMPLE_VOCAB, f.name)
+            tokenizer = XLMRobertaTokenizer(f.name, keep_accents=True)
+            pickled_tokenizer = pickle.dumps(tokenizer)
+        pickle.loads(pickled_tokenizer)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
