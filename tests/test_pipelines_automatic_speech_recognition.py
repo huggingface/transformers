@@ -49,10 +49,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @require_torch
     def test_torch_small_no_tokenizer_files(self):
         # test that model without tokenizer file cannot be loaded
-        with pytest.raises(ValueError):
+        with pytest.raises(OSError):
             pipeline(
                 task="automatic-speech-recognition",
-                model="hf-internal-testing/tiny-random-wav2vec2",
+                model="patrickvonplaten/tiny-wav2vec2-no-tokenizer",
                 framework="pt",
             )
 
