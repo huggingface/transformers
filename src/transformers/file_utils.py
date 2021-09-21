@@ -490,7 +490,7 @@ def is_speech_available():
 
 
 def is_mojimoji_available():
-    return is_mojimoji_available()
+    return _mojimoji_available
 
 
 def torch_only_method(fn):
