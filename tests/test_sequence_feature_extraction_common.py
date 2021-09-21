@@ -372,7 +372,7 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         input_np = feat_extract.pad(processed_features, padding="longest", return_tensors="np")[input_name]
         input_pt = feat_extract.pad(processed_features, padding="longest", return_tensors="pt")[input_name]
 
-        self.assertTrue(abs(input_np.astype(np.float32).sum() - input_pt.numpy().sum()) < 1e-2)
+        self.assertTrue(abs(input_np.astype(np.float32).sum() - input_pt.numpy().astype(np.float32).sum()) < 1e-2)
 
     @require_tf
     def test_padding_accepts_tensors_tf(self):
@@ -385,7 +385,7 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         input_np = feat_extract.pad(processed_features, padding="longest", return_tensors="np")[input_name]
         input_tf = feat_extract.pad(processed_features, padding="longest", return_tensors="tf")[input_name]
 
-        self.assertTrue(abs(input_np.astype(np.float32).sum() - input_tf.numpy().sum()) < 1e-2)
+        self.assertTrue(abs(input_np.astype(np.float32).sum() - input_tf.numpy().astype(np.float32).sum()) < 1e-2)
 
     def test_attention_mask(self):
         feat_dict = self.feat_extract_dict

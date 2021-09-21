@@ -99,15 +99,12 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         normalize_vars: Optional[bool] = True,
         padding_value: float = 0.0,
     ) -> np.ndarray:
-        # make sure we normalie float32 arrays
-        mean = x[:input_length].mean(axis=0)
-        square_sums = (x[:input_length] ** 2).sum(axis=0)
-
+        # make sure we normalize float32 arrays
         if normalize_means:
+            mean = x[:input_length].mean(axis=0)
             x = np.subtract(x, mean)
         if normalize_vars:
-            var = square_sums / x[:input_length].shape[0] - mean ** 2
-            std = np.sqrt(np.maximum(var, 1e-10))
+            std = x[:input_length].std(axis=0)
             x = np.divide(x, std)
 
         if input_length < x.shape[0]:
@@ -206,10 +203,10 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
         )
 
-        if is_batched and not isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [np.asarray(speech) for speech in raw_speech]
+        if is_batched:
+            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech)
+            raw_speech = np.asarray(raw_speech, dtype=np.float32)
         elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
             raw_speech = raw_speech.astype(np.float32)
 
