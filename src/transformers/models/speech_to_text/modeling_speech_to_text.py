@@ -716,7 +716,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
-        self.gradient_checkpoiting = False
+        self.gradient_checkpointing = False
 
     def forward(
         self,
