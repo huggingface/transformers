@@ -1834,7 +1834,15 @@ class Trainer:
         else:
             loss.backward()
 
-        return loss.detach()
+        loss = loss.detach()
+
+        # make sure that we display the averaged loss over all workers
+        # in distributed mode
+        if self.args.world_size > 1:
+            dist.reduce(loss)
+            loss /= self.args.world_size
+
+        return loss
 
     def compute_loss(self, model, inputs, return_outputs=False):
         """
