@@ -395,9 +395,9 @@ class GPTJModelTest(unittest.TestCase):
 
     @slow
     def test_batch_generation(self):
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
         model.to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
 
         tokenizer.padding_side = "left"
 
@@ -464,7 +464,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gptj(self):
         for checkpointing in [True, False]:
-            model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", gradient_checkpointing=checkpointing)
+            model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", gradient_checkpointing=checkpointing, revision="float16", torch_dtype=torch.float16)
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
             expected_output_ids = [
@@ -494,8 +494,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gptj_sample(self):
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -520,8 +520,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gptj_sample_max_time(self):
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
         model.to(torch_device)
 
         torch.manual_seed(0)
