@@ -7,10 +7,11 @@ import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union, Any
 
-import datasets
+from datasets import DatasetDict, load_dataset, load_metric
 import numpy as np
 import torch
 import torchaudio
+import functools
 from packaging import version
 from transformers.file_utils import is_apex_available, is_sagemaker_mp_enabled
 
@@ -19,9 +20,10 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    AutoConfig,
     AutoFeatureExtractor,
-    Wav2Vec2CTCTokenizer,
-    Wav2Vec2ForCTC,
+    AutoModelForCTC,
+    AutoTokenizer,
     Wav2Vec2Processor,
     set_seed,
 )
@@ -69,16 +71,16 @@ class ModelArguments:
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
     attention_dropout: Optional[float] = field(
-        default=0.1, metadata={"help": "The dropout ratio for the attention probabilities."}
+        default=0.0, metadata={"help": "The dropout ratio for the attention probabilities."}
     )
     activation_dropout: Optional[float] = field(
-        default=0.1, metadata={"help": "The dropout ratio for activations inside the fully connected layer."}
+        default=0.0, metadata={"help": "The dropout ratio for activations inside the fully connected layer."}
     )
     feat_proj_dropout: Optional[float] = field(
         default=0.0, metadata={"help": "The dropout ratio for the projected features."}
     )
     hidden_dropout: Optional[float] = field(
-        default=0.1,
+        default=0.0,
         metadata={
             "help": "The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler."
         },
@@ -102,6 +104,7 @@ class ModelArguments:
         },
     )
     layerdrop: Optional[float] = field(default=0.0, metadata={"help": "The LayerDrop probability."})
+    ctc_loss_reduction: Optional[str] = field(default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."})
 
 
 @dataclass
@@ -222,15 +225,53 @@ class DataCollatorCTCWithPadding:
         return batch
 
 
+def create_vocabulary_from_data(datasets: DatasetDict, chars_to_ignore: Optional[List] = None):
+    # Given training and test labels create vocabulary
+    chars_to_ignore_regex = f'[{"".join(chars_to_ignore)}]' if chars_to_ignore is not None else []
+
+    def remove_special_characters(batch):
+        batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).lower() + " "
+        return batch
+
+    datasets = datasets.map(remove_special_characters, remove_columns=["sentence"])
+
+    def extract_all_chars(batch):
+        all_text = " ".join(batch["text"])
+        vocab = list(set(all_text))
+        return {"vocab": [vocab], "all_text": [all_text]}
+
+    vocabs = datasets.map(
+        extract_all_chars,
+        batched=True,
+        batch_size=-1,
+        keep_in_memory=True,
+        remove_columns=datasets["train"].column_names,
+    )
+
+    # take union of all unique characters in each dataset
+    vocab_set = functools.reduce(lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values())
+
+    vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
+
+    # replace white space with delimiter token
+    vocab_dict["|"] = vocab_dict[" "]
+    del vocab_dict[" "]
+
+    # add unk and pad token
+    vocab_dict["[UNK]"] = len(vocab_dict)
+    vocab_dict["[PAD]"] = len(vocab_dict)
+
+    return vocab_dict
+
+
 class CTCTrainer(Trainer):
-    @staticmethod
-    def multiply_grads(params, c):
-        """Multiplies grads by a constant *c*."""
+
+    def average_grads(self, params):
+        # average gradients for distributed training
         for p in params:
             if p.grad is not None:
-                if torch.is_tensor(c):
-                    c = c.to(p.grad.device)
-                p.grad.data.mul_(c)
+                dist.all_reduce(p.grad.data)
+                p.grad.data.mul_(1 / self.args.world_size)
 
     def training_step(self, model: torch.nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
@@ -282,16 +323,11 @@ class CTCTrainer(Trainer):
 
         loss.detach()
 
-        # divide gradients by number of labels
         if self.args.world_size > 1:
-            num_losses = (inputs["labels"] >= 0).sum()
-            dist.all_reduce(num_losses)
-
-            constant = self.args.world_size / num_losses
-
-            self.multiply_grads(model.module.parameters(), constant)
-
-            loss *= constant
+            dist.all_reduce(loss)
+            loss = loss / self.args.world_size
+            model = model.module
+            self.average_grads(model.parameters())
 
         return loss
 
@@ -345,62 +381,39 @@ def main():
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    # load datasets:
-    train_dataset = datasets.load_dataset(
+    # load dataset
+    raw_datasets = DatasetDict()
+    raw_datasets["train"] = load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
     )
-    eval_dataset = datasets.load_dataset(
+    raw_datasets["eval"] = load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
     )
 
-    # Given training and test labels create vocabulary
-    chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else []
+    # create vocabulary from data and save
+    # make sure that only first rank saves vocabulary
+    if training_args.world_size == 1 or dist.get_rank() == 0:
+        vocab_dict = create_vocabulary_from_data(raw_datasets, data_args.chars_to_ignore)
 
-    def remove_special_characters(batch):
-        batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).lower() + " "
-        return batch
+        # save vocab dict to be loaded into tokenizer
+        with open(os.path.join(training_args.output_dir, "vocab.json"), "w") as vocab_file:
+            json.dump(vocab_dict, vocab_file)
 
-    train_dataset = train_dataset.map(remove_special_characters, remove_columns=["sentence"])
-    eval_dataset = eval_dataset.map(remove_special_characters, remove_columns=["sentence"])
-
-    def extract_all_chars(batch):
-        all_text = " ".join(batch["text"])
-        vocab = list(set(all_text))
-        return {"vocab": [vocab], "all_text": [all_text]}
-
-    vocab_train = train_dataset.map(
-        extract_all_chars,
-        batched=True,
-        batch_size=-1,
-        keep_in_memory=True,
-        remove_columns=train_dataset.column_names,
-    )
-    vocab_test = train_dataset.map(
-        extract_all_chars,
-        batched=True,
-        batch_size=-1,
-        keep_in_memory=True,
-        remove_columns=eval_dataset.column_names,
-    )
-
-    vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
-    vocab_dict = {v: k for k, v in enumerate(vocab_list)}
-    vocab_dict["|"] = vocab_dict[" "]
-    del vocab_dict[" "]
-    vocab_dict["[UNK]"] = len(vocab_dict)
-    vocab_dict["[PAD]"] = len(vocab_dict)
-
-    # save vocabulary
-    with open("vocab.json", "w") as vocab_file:
-        json.dump(vocab_dict, vocab_file)
+        # make sure all process sync here in distributed training
+        if training_args.world_size > 1:
+            dist.barrier()
 
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
 
-    # Load pretrained model, feature extractor and create tokenizer with vocab
-    tokenizer = Wav2Vec2CTCTokenizer(
-        "vocab.json",
+    # load config
+    config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+
+    # load feature_extractor, tokenizer and create processor
+    tokenizer = AutoTokenizer.from_pretrained(
+        training_args.output_dir,
+        tokenizer_type=config.type,
         unk_token="[UNK]",
         pad_token="[PAD]",
         word_delimiter_token="|",
@@ -410,30 +423,29 @@ def main():
     )
     processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-    model = Wav2Vec2ForCTC.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        activation_dropout=model_args.activation_dropout,
-        feat_proj_dropout=model_args.feat_proj_dropout,
-        attention_dropout=model_args.attention_dropout,
-        hidden_dropout=model_args.hidden_dropout,
-        final_dropout=model_args.final_dropout,
-        mask_time_prob=model_args.mask_time_prob,
-        gradient_checkpointing=model_args.gradient_checkpointing,
-        layerdrop=model_args.layerdrop,
-        #        ctc_loss_reduction="sum" if training_args.world_size > 1 else "mean",
-        ctc_loss_reduction="mean",
-        pad_token_id=processor.tokenizer.pad_token_id,
-        vocab_size=len(processor.tokenizer),
-    )
+    # adapt config
+    config.feat_proj_dropout = model_args.feat_proj_dropout,
+    config.attention_dropout = model_args.attention_dropout,
+    config.hidden_dropout = model_args.hidden_dropout,
+    config.final_dropout = model_args.final_dropout,
+    config.mask_time_prob = model_args.mask_time_prob,
+    config.gradient_checkpointing = model_args.gradient_checkpointing,
+    config.layerdrop = model_args.layerdrop,
+    config.ctc_loss_reduction = model_args.ctc_loss_reduction,
+    config.pad_token_id = processor.tokenizer.pad_token_id,
+    config.vocab_size = len(processor.tokenizer),
+    config.activation_dropout = model_args.activation_dropout,
+
+    # create model
+    model = AutoModelForCTC.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir, config=config)
 
     # prepare dataset
     # TODO(Patrick) - Once datasets audio feature is merged this part should be updated
     if data_args.max_train_samples is not None:
-        train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
 
     if data_args.max_val_samples is not None:
-        eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+        raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_val_samples))
 
     resampler = torchaudio.transforms.Resample(48_000, 16_000)
 
@@ -446,14 +458,9 @@ def main():
         batch["target_text"] = batch["text"]
         return batch
 
-    train_dataset = train_dataset.map(
+    vectorized_datasets = raw_datasets.map(
         speech_file_to_array_fn,
-        remove_columns=train_dataset.column_names,
-        num_proc=data_args.preprocessing_num_workers,
-    )
-    eval_dataset = eval_dataset.map(
-        speech_file_to_array_fn,
-        remove_columns=eval_dataset.column_names,
+        remove_columns=raw_datasets["train"].column_names,
         num_proc=data_args.preprocessing_num_workers,
     )
 
@@ -468,23 +475,16 @@ def main():
             batch["labels"] = processor(batch["target_text"]).input_ids
         return batch
 
-    train_dataset = train_dataset.map(
+    vectorized_datasets = vectorized_datasets.map(
         prepare_dataset,
-        remove_columns=train_dataset.column_names,
-        batch_size=training_args.per_device_train_batch_size,
-        batched=True,
-        num_proc=data_args.preprocessing_num_workers,
-    )
-    eval_dataset = eval_dataset.map(
-        prepare_dataset,
-        remove_columns=eval_dataset.column_names,
+        remove_columns=vectorized_datasets["train"].column_names,
         batch_size=training_args.per_device_train_batch_size,
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
     )
 
     # Define Metric during training
-    wer_metric = datasets.load_metric("wer")
+    wer_metric = load_metric("wer")
 
     def compute_metrics(pred):
         pred_logits = pred.predictions
@@ -507,14 +507,13 @@ def main():
     data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
 
     # Initialize CTCTrainer
-    #    trainer = CTCTrainer(
     trainer = Trainer(
         model=model,
         data_collator=data_collator,
         args=training_args,
         compute_metrics=compute_metrics,
-        train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=eval_dataset if training_args.do_eval else None,
+        train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
+        eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
         tokenizer=processor.feature_extractor,
     )
 
@@ -536,9 +535,9 @@ def main():
 
         metrics = train_result.metrics
         max_train_samples = (
-            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(vectorized_datasets["train"])
         )
-        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
+        metrics["train_samples"] = min(max_train_samples, len(vectorized_datasets["train"]))
 
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
@@ -549,8 +548,8 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate()
-        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
-        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(vectorized_datasets["eval"])
+        metrics["eval_samples"] = min(max_val_samples, len(vectorized_datasets["eval"]))
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
