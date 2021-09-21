@@ -271,17 +271,15 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         labels = labels.tolist()
         boxes = bbox.tolist()
         target_sizes = target_sizes.tolist()
-        subwords = offset_mapping.tolist()
+        offsets = offset_mapping.tolist()
 
         results = []
 
-        for s, l, b, _subwords, (height, width) in zip(scores, labels, boxes, subwords, target_sizes):
-            # only keep start of a particular word (i.e. subword index == 0) (e.g. [San, Fran, ##cis, ##co] -> [San])
-            l = [label for label, (subword_idx, _) in zip(l, _subwords) if subword_idx == 0]
-            s = [score for score, (subword_idx, _) in zip(s, _subwords) if subword_idx == 0]
-            b = [
-                unnormalize_box(box, height, width) for box, (subword_idx, _) in zip(b, _subwords) if subword_idx == 0
-            ]
+        for s, l, b, o, (height, width) in zip(scores, labels, boxes, offsets, target_sizes):
+            # only keep start of a particular word (i.e. offset index == 0) (e.g. [San, Fran, ##cis, ##co] -> [San])
+            l = [label for label, (offset_idx, _) in zip(l, o) if offset_idx == 0]
+            s = [score for score, (offset_idx, _) in zip(s, o) if offset_idx == 0]
+            b = [unnormalize_box(box, height, width) for box, (offset_idx, _) in zip(b, o) if offset_idx == 0]
             results.append(
                 {"scores": torch.FloatTensor(s), "labels": torch.IntTensor(l), "boxes": torch.FloatTensor(b)}
             )
