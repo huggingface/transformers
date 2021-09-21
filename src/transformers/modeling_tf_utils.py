@@ -26,6 +26,7 @@ import h5py
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
+from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.keras.saving import hdf5_format
 
 from .configuration_utils import PretrainedConfig
@@ -52,6 +53,10 @@ tf_logger = tf.get_logger()
 TFModelInputType = Union[
     List[tf.Tensor], List[np.ndarray], Dict[str, tf.Tensor], Dict[str, np.ndarray], np.ndarray, tf.Tensor
 ]
+
+
+def dummy_loss(y_true, y_pred):
+    return tf.reduce_mean(y_pred)
 
 
 class TFModelUtilsMixin:
@@ -711,6 +716,84 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return main_layer.get_input_embeddings()
         else:
             raise NotImplementedError
+
+    def compile(
+        self,
+        optimizer="rmsprop",
+        loss="dummy",
+        metrics=None,
+        loss_weights=None,
+        weighted_metrics=None,
+        run_eagerly=None,
+        steps_per_execution=None,
+        **kwargs
+    ):
+        """
+        A minor modification to `tf.keras.Model.compile()` that uses the Model's loss head as the loss if no
+        user-specified loss is present. To disable this behaviour, explicitly pass `loss=None`. For details on the
+        original method, see https://www.tensorflow.org/api_docs/python/tf/keras/Model#compile
+        """
+        if loss == "dummy":
+            print(
+                "No loss function specified in call to compile() - reading the model's loss head as the loss. "
+                "To disable this behaviour, please explicitly pass loss=None !"
+            )
+            loss = {"loss": dummy_loss}
+        super().compile(
+            optimizer=optimizer,
+            loss=loss,
+            metrics=metrics,
+            loss_weights=loss_weights,
+            weighted_metrics=weighted_metrics,
+            run_eagerly=run_eagerly,
+            steps_per_execution=steps_per_execution,
+            **kwargs,
+        )
+
+    def train_step(self, data):
+        """ """
+        data = data_adapter.expand_1d(data)
+        x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+        if y is None and "labels" in x:
+            y = x["labels"]
+        # Run forward pass.
+        with tf.GradientTape() as tape:
+            y_pred = self(x, training=True)
+            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+            return_metrics = {}
+        # Run backwards pass.
+        self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
+        self.compiled_metrics.update_state(y, y_pred, sample_weight)
+        # Collect metrics to return
+        for metric in self.metrics:
+            result = metric.result()
+            if isinstance(result, dict):
+                return_metrics.update(result)
+            else:
+                return_metrics[metric.name] = result
+        return_metrics = {key: val for key, val in return_metrics.items() if "loss_loss" not in key}
+        return return_metrics
+
+    def test_step(self, data):
+        """ """
+        data = data_adapter.expand_1d(data)
+        x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+        if y is None and "labels" in x:
+            y = x["labels"]
+        y_pred = self(x, training=False)
+        # Updates stateful loss metrics.
+        self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+        self.compiled_metrics.update_state(y, y_pred, sample_weight)
+        # Collect metrics to return
+        return_metrics = {}
+        for metric in self.metrics:
+            result = metric.result()
+            if isinstance(result, dict):
+                return_metrics.update(result)
+            else:
+                return_metrics[metric.name] = result
+        return_metrics = {key: val for key, val in return_metrics.items() if "loss_loss" not in key}
+        return return_metrics
 
     def set_input_embeddings(self, value):
         """
