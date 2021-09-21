@@ -98,7 +98,6 @@ class RealmConfig(PretrainedConfig):
         vocab_size=30522,
         hidden_size=768,
         retriever_proj_size=128,
-        span_hidden_size=256,
         num_hidden_layers=12,
         num_attention_heads=12,
         num_candidates=8,
@@ -111,6 +110,9 @@ class RealmConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
+        span_hidden_size=256,
+        max_span_width=10,
+        reader_layer_norm_eps=1e-3,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -118,11 +120,11 @@ class RealmConfig(PretrainedConfig):
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
+        # Common config
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.retriever_proj_size = retriever_proj_size
-        self.span_hidden_size = span_hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_candidates = num_candidates
@@ -134,3 +136,8 @@ class RealmConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
+
+        # Reader config
+        self.span_hidden_size = span_hidden_size
+        self.max_span_width = max_span_width
+        self.reader_layer_norm_eps = reader_layer_norm_eps

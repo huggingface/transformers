@@ -101,6 +101,7 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
 
         # For reader
         if is_reader_checkpoint and isinstance(model, RealmReader) and "reader" not in name:
+            logger.info(f"Skipping {name} as the it is not reader's parameter")
             continue
         name = name.replace("reader/module/bert/", "bert/")
         name = name.replace("reader/module/cls/", "cls/")
@@ -884,29 +885,70 @@ class RealmRetrieverProjection(nn.Module):
 class RealmReaderProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.dense_intermediate = nn.Linear(config.hidden_size, config.span_hidden_size * 2)
         self.dense_output = nn.Linear(config.span_hidden_size, 1)
-        self.layer_normalization = nn.LayerNorm(config.span_hidden_size, eps=config.layer_norm_eps)
-
+        self.layer_normalization = nn.LayerNorm(config.span_hidden_size, eps=config.reader_layer_norm_eps)
         self.relu = nn.ReLU()
 
-    def forward(self, hidden_states, start_positions=None, end_positions=None):
+    def forward(self, hidden_states, token_type_ids):
+        def span_candidates(masks):
+            """Generate span candidates.
+
+                Args:
+                masks: <int32> [num_retrievals, max_sequence_len]
+
+                Returns:
+                starts: <int32> [num_spans]
+                ends: <int32> [num_spans]
+                span_masks: <int32> [num_retrievals, num_spans]
+            """
+            _, max_sequence_len = masks.shape
+            def _spans_given_width(width):
+                current_starts = torch.arange(max_sequence_len - width + 1)
+                current_ends = torch.arange(width - 1, max_sequence_len)
+                return current_starts, current_ends
+
+            starts, ends = zip(*(_spans_given_width(w + 1)
+                                for w in range(self.config.max_span_width)))
+
+            # [num_spans]
+            starts = torch.cat(starts, 0)
+            ends = torch.cat(ends, 0)
+
+            # [num_retrievals, num_spans]
+            start_masks = torch.index_select(masks, dim=-1, index=starts)
+            end_masks = torch.index_select(masks, dim=-1, index=ends)
+            span_masks = start_masks * end_masks
+
+            return starts, ends, span_masks
+
+        def mask_to_score(mask):
+            return (1.0 - mask.type(torch.float32)) * -10000.0
+
+
         # [reader_beam_size, max_sequence_len, span_hidden_size * 2]
         hidden_states = self.dense_intermediate(hidden_states)
-        print('dense', hidden_states, hidden_states.shape)
         # [reader_beam_size, max_sequence_len, span_hidden_size]
-        start_projection, end_projection = hidden_states.split(2, dim=-1)
-        print(start_projection)
-        candidate_hidden = start_projection + end_projection
+        start_projection, end_projection = hidden_states.chunk(2, dim=-1)
+        block_mask = token_type_ids.detach().clone()
+        block_mask[:, -1] = 0
+        candidates_starts, candidates_ends, candidate_mask = span_candidates(block_mask)
+        
+        candidate_start_projections = torch.index_select(start_projection, dim=1, index=candidates_starts)
+        candidate_end_projections = torch.index_select(end_projection, dim=1, index=candidates_ends)
+        candidate_hidden = candidate_start_projections + candidate_end_projections
 
-        # [reader_beam_size, max_sequence_len, 1]
-        hidden_states = self.relu(hidden_states)
-        hidden_states = self.layer_normalization(hidden_states)
-        hidden_states = self.dense_output(hidden_states)
-
-        start_logits = start_logits.squeeze(-1).contiguous()
-        end_logits = end_logits.squeeze(-1).contiguous()
-        return hidden_states
+        # [reader_beam_size, num_candidates, span_hidden_size]
+        candidate_hidden = self.relu(candidate_hidden)
+        # [reader_beam_size, num_candidates, span_hidden_size]
+        candidate_hidden = self.layer_normalization(candidate_hidden)
+        # [reader_beam_size, num_candidates]
+        reader_logits = self.dense_output(candidate_hidden).squeeze(-1)
+        # [reader_beam_size, num_candidates]
+        reader_logits += mask_to_score(candidate_mask)
+        
+        return reader_logits
 
 
 class RealmPreTrainedModel(PreTrainedModel):
@@ -1406,6 +1448,11 @@ class RealmReader(RealmPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if token_type_ids is None:
+            raise ValueError(
+                "You have to specify `token_type_ids` for separating question block and evidence block."
+            )
+
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -1418,14 +1465,24 @@ class RealmReader(RealmPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # [batch_size * num_candidates, joint_seq_len, hidden_size]
+        # [reader_beam_size, joint_seq_len, hidden_size]
         sequence_output = outputs[0]
     
-        # [batch_size * num_candidates, 1]
-        start_logitsm, end_logits = self.qa_outputs(sequence_output)
+        # [reader_beam_size, num_candidates]
+        reader_logits = self.qa_outputs(sequence_output, token_type_ids)
+        # [retriever_beam_size, 1]
+        retriever_logits = torch.unsequeeze(relevance_score, -1)
+        # [reader_beam_size, num_candidates]
+        reader_logits += retriever_logits
+
+        predicted_block_index = tf.argmax(tf.reduce_max(reader_outputs.logits, 1))
+        predicted_candidate = tf.argmax(tf.reduce_max(reader_outputs.logits, 0))
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
+            
+            
+            
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
                 start_positions = start_positions.squeeze(-1)
