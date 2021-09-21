@@ -797,17 +797,14 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
         if not inputs["return_dict"]:
             return (
                 sequence_output,
-                pooled_output,
             ) + encoder_outputs[1:]
 
-        return TFBaseModelOutputWithPoolingAndCrossAttentions(
+        return TFBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
