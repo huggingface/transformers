@@ -110,6 +110,10 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
     def setUp(self):
         self.feat_extract_tester = Speech2TextFeatureExtractionTester(self)
 
+    def _check_zero_mean_unit_variance(self, input_vector):
+        self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))
+        self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < 1e-3))
+
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -137,17 +141,9 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
 
-        # TODO(Patrick, Suraj, Anton) - It's surprising that "non-padded/non-numpified" padding
-        # results in quite inaccurate variance computation after (see 5e-1 tolerance)
-        # Issue is filed and PR is underway: https://github.com/huggingface/transformers/issues/13539
-        #        paddings = ["longest", "max_length", "do_not_pad"]
-        #        max_lengths = [None, 16, None]
-        #        var_tolerances = [1e-3, 1e-3, 5e-1]
-        paddings = ["longest", "max_length"]
-        max_lengths = [None, 16]
-        var_tolerances = [1e-3, 1e-3]
-        for max_length, padding, var_tol in zip(max_lengths, paddings, var_tolerances):
-
+        paddings = ["longest", "max_length", "do_not_pad"]
+        max_lengths = [None, 16, None]
+        for max_length, padding in zip(max_lengths, paddings):
             inputs = feature_extractor(
                 speech_inputs, padding=padding, max_length=max_length, return_attention_mask=True
             )
@@ -155,28 +151,17 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
             attention_mask = inputs.attention_mask
             fbank_feat_lengths = [np.sum(x) for x in attention_mask]
 
-            def _check_zero_mean_unit_variance(input_vector, var_tol=1e-3):
-                self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))
-                self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < var_tol))
-
-            _check_zero_mean_unit_variance(input_features[0][: fbank_feat_lengths[0]], var_tol)
-            _check_zero_mean_unit_variance(input_features[1][: fbank_feat_lengths[1]], var_tol)
-            _check_zero_mean_unit_variance(input_features[2][: fbank_feat_lengths[2]], var_tol)
+            self._check_zero_mean_unit_variance(input_features[0][: fbank_feat_lengths[0]])
+            self._check_zero_mean_unit_variance(input_features[1][: fbank_feat_lengths[1]])
+            self._check_zero_mean_unit_variance(input_features[2][: fbank_feat_lengths[2]])
 
     def test_cepstral_mean_and_variance_normalization_np(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
 
-        # TODO(Patrick, Suraj, Anton) - It's surprising that "non-padded/non-numpified" padding
-        # results in quite inaccurate variance computation after (see 5e-1 tolerance)
-        # Issue is filed and PR is underway: https://github.com/huggingface/transformers/issues/13539
-        #        paddings = ["longest", "max_length", "do_not_pad"]
-        #        max_lengths = [None, 16, None]
-        #        var_tolerances = [1e-3, 1e-3, 5e-1]
-        paddings = ["longest", "max_length"]
-        max_lengths = [None, 16]
-        var_tolerances = [1e-3, 1e-3]
-        for max_length, padding, var_tol in zip(max_lengths, paddings, var_tolerances):
+        paddings = ["longest", "max_length", "do_not_pad"]
+        max_lengths = [None, 16, None]
+        for max_length, padding in zip(max_lengths, paddings):
             inputs = feature_extractor(
                 speech_inputs, max_length=max_length, padding=padding, return_tensors="np", return_attention_mask=True
             )
@@ -184,15 +169,11 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
             attention_mask = inputs.attention_mask
             fbank_feat_lengths = [np.sum(x) for x in attention_mask]
 
-            def _check_zero_mean_unit_variance(input_vector, var_tol=1e-3):
-                self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))
-                self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < var_tol))
-
-            _check_zero_mean_unit_variance(input_features[0][: fbank_feat_lengths[0]], var_tol)
+            self._check_zero_mean_unit_variance(input_features[0][: fbank_feat_lengths[0]])
             self.assertTrue(input_features[0][fbank_feat_lengths[0] :].sum() < 1e-6)
-            _check_zero_mean_unit_variance(input_features[1][: fbank_feat_lengths[1]], var_tol)
+            self._check_zero_mean_unit_variance(input_features[1][: fbank_feat_lengths[1]])
             self.assertTrue(input_features[0][fbank_feat_lengths[1] :].sum() < 1e-6)
-            _check_zero_mean_unit_variance(input_features[2][: fbank_feat_lengths[2]], var_tol)
+            self._check_zero_mean_unit_variance(input_features[2][: fbank_feat_lengths[2]])
 
     def test_cepstral_mean_and_variance_normalization_trunc_max_length(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -209,13 +190,9 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         attention_mask = inputs.attention_mask
         fbank_feat_lengths = np.sum(attention_mask == 1, axis=1)
 
-        def _check_zero_mean_unit_variance(input_vector):
-            self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))
-            self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < 1e-3))
-
-        _check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
-        _check_zero_mean_unit_variance(input_features[1])
-        _check_zero_mean_unit_variance(input_features[2])
+        self._check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
+        self._check_zero_mean_unit_variance(input_features[1])
+        self._check_zero_mean_unit_variance(input_features[2])
 
     def test_cepstral_mean_and_variance_normalization_trunc_longest(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -232,13 +209,9 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         attention_mask = inputs.attention_mask
         fbank_feat_lengths = np.sum(attention_mask == 1, axis=1)
 
-        def _check_zero_mean_unit_variance(input_vector):
-            self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))
-            self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < 1e-3))
-
-        _check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
-        _check_zero_mean_unit_variance(input_features[1, : fbank_feat_lengths[1]])
-        _check_zero_mean_unit_variance(input_features[2])
+        self._check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
+        self._check_zero_mean_unit_variance(input_features[1, : fbank_feat_lengths[1]])
+        self._check_zero_mean_unit_variance(input_features[2])
 
         # make sure that if max_length < longest -> then pad to max_length
         self.assertEqual(input_features.shape, (3, 4, 24))
@@ -256,9 +229,9 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         attention_mask = inputs.attention_mask
         fbank_feat_lengths = np.sum(attention_mask == 1, axis=1)
 
-        _check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
-        _check_zero_mean_unit_variance(input_features[1, : fbank_feat_lengths[1]])
-        _check_zero_mean_unit_variance(input_features[2])
+        self._check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
+        self._check_zero_mean_unit_variance(input_features[1, : fbank_feat_lengths[1]])
+        self._check_zero_mean_unit_variance(input_features[2])
 
         # make sure that if max_length < longest -> then pad to max_length
         self.assertEqual(input_features.shape, (3, 6, 24))

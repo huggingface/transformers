@@ -724,7 +724,7 @@ class Speech2TextModelIntegrationTests(unittest.TestCase):
             return batch
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-        ds = ds.select(range(num_samples)).map(map_to_array)
+        ds = ds.sort("id").select(range(num_samples)).map(map_to_array)
 
         return ds["speech"][:num_samples]
 
@@ -740,7 +740,9 @@ class Speech2TextModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features)
         generated_transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist"]
+        EXPECTED_TRANSCRIPTIONS = [
+            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+        ]
         self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
 
     def test_generation_librispeech_batched(self):
@@ -759,10 +761,10 @@ class Speech2TextModelIntegrationTests(unittest.TestCase):
         generated_transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         EXPECTED_TRANSCRIPTIONS = [
-            "a man said to the universe sir i exist",
-            "sweat covered brion's body trickling into the titleing cloth that was the only garment he wore",
-            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around him with the thousands of spectators were trivialities not worth thinking about",
-            "his instant of panic was followed by a small sharp blow high on his chest",
+            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
+            "nor is mister cultar's manner less interesting than his matter",
+            "he tells us that at this festive season of the year with christmas and roast beef looming before us similes drawn from eating and its results occur most readily to the mind",
+            "he has grave doubts whether sir frederick leyton's work is really greek after all and can discover in it but little of rocky ithaca",
         ]
 
         self.assertListEqual(generated_transcripts, EXPECTED_TRANSCRIPTIONS)
