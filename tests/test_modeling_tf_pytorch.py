@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_tf_available, is_torch_available
-from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, is_pt_tf_cross_test, slow
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, is_pt_tf_cross_test, slow
 
 
 if is_tf_available():
@@ -232,12 +232,12 @@ class TFPTAutoModelTest(unittest.TestCase):
         self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_from_identifier_from_model_type(self):
-        model = TFAutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER, from_pt=True)
+        model = TFAutoModelWithLMHead.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, from_pt=True)
         self.assertIsInstance(model, TFRobertaForMaskedLM)
         self.assertEqual(model.num_parameters(), 14410)
         self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
-        model = AutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER, from_tf=True)
+        model = AutoModelWithLMHead.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, from_tf=True)
         self.assertIsInstance(model, RobertaForMaskedLM)
         self.assertEqual(model.num_parameters(), 14410)
         self.assertEqual(model.num_parameters(only_trainable=True), 14410)

@@ -19,7 +19,7 @@ import unittest
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.bert.configuration_bert import BertConfig
 from transformers.models.roberta.configuration_roberta import RobertaConfig
-from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
 
 
 SAMPLE_ROBERTA_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/dummy-config.json")
@@ -35,7 +35,7 @@ class AutoConfigTest(unittest.TestCase):
         self.assertIsInstance(config, RobertaConfig)
 
     def test_config_model_type_from_model_identifier(self):
-        config = AutoConfig.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
+        config = AutoConfig.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER)
         self.assertIsInstance(config, RobertaConfig)
 
     def test_config_for_model_str(self):
