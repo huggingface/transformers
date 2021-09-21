@@ -103,11 +103,13 @@ def rename_keys(state_dict):
         # rename image preprocessor embeddings (for optical flow model)
         name = name.replace("image_preprocessor/patches_linear/b", "input_preprocessor.conv_after_patches.bias")
         name = name.replace("image_preprocessor/patches_linear/w", "input_preprocessor.conv_after_patches.weight")
-        
+
         ## DECODERS ##
 
         # rename prefix of decoders
-        name = name.replace("flow_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention.")
+        name = name.replace(
+            "flow_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
+        )
         name = name.replace("flow_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
         name = name.replace("flow_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
         name = name.replace(
@@ -221,7 +223,11 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         checkpoint = pickle.loads(f.read())
 
     state = None
-    if isinstance(checkpoint, dict) and task in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
+    if isinstance(checkpoint, dict) and task in [
+        "image_classification",
+        "image_classification_fourier",
+        "image_classification_conv",
+    ]:
         # the image classification_conv checkpoint also has batchnorm states (running_mean and running_var)
         params = checkpoint["params"]
         state = checkpoint["state"]

@@ -691,7 +691,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
     )
     def forward(
         self,
-        inputs=None,
+        inputs,
         attention_mask=None,
         head_mask=None,
         output_attentions=None,
@@ -704,13 +704,11 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # print("Shape of inputs:", inputs.shape)
-
-        if inputs is None:
-            raise ValueError("You must specify inputs")
-
         if self.input_preprocessor is not None:
-            inputs = self.input_preprocessor(inputs)
+            inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(inputs)
+        else:
+            modality_sizes = None
+            inputs_without_pos = None
 
         if inputs.size()[-1] != self.config.d_model:
             raise ValueError(
@@ -1643,7 +1641,7 @@ class PerceiverTextPreprocessor(nn.Module):
         position_ids = torch.arange(0, self.seq_len)
         embeddings = embeddings + self.position_embeddings(position_ids)
 
-        return embeddings
+        return embeddings, None, None
 
 
 class PerceiverTextPostprocessor(nn.Module):
@@ -1688,7 +1686,7 @@ class PerceiverImagePreprocessor(nn.Module):
         self.config = config
 
         if prep_type not in ("conv", "patches", "pixels", "conv1x1"):
-            raise ValueError("Invalid prep_type!")
+            raise ValueError(f"Prep_type {prep_type} is invalid")
 
         if concat_or_add_pos not in ["concat", "add"]:
             raise ValueError(f"Invalid value {concat_or_add_pos} for concat_or_add_pos.")
@@ -1835,6 +1833,64 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = self.conv_after_patches(inputs)
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
-        return inputs
-        # modality_sizes = None  # Size for each modality, only needed for multimodal
-        # return inputs, modality_sizes, inputs_without_pos
+        modality_sizes = None  # Size for each modality, only needed for multimodal
+        return inputs, modality_sizes, inputs_without_pos
+
+
+class AudioPreprocessor(nn.Module):
+    """Audio preprocessing for Perceiver Encoder."""
+
+    def __init__(
+        self,
+        prep_type: str = "patches",
+        samples_per_patch: int = 96,
+        position_encoding_type: str = "fourier",
+        # n_extra_pos_mlp: int = 0, TODO: support this argument
+        concat_or_add_pos: str = "concat",
+        **position_encoding_kwargs
+    ):
+        super().__init__()
+
+        if prep_type not in ("patches",):
+            raise ValueError(f"Prep_type {prep_type} is invalid")
+
+        if concat_or_add_pos not in ["concat", "add"]:
+            raise ValueError(f"Invalid value {concat_or_add_pos} for concat_or_add_pos.")
+
+        self.samples_per_patch = samples_per_patch
+        self.concat_or_add_pos = concat_or_add_pos
+
+        # Position embeddings
+        self.position_embeddings, self.positions_projection = build_position_encoding(
+            position_encoding_type=position_encoding_type,
+            **position_encoding_kwargs,
+        )
+
+    def _build_network_inputs(self, inputs, pos):
+        """Construct the final input, including position encoding."""
+        batch_size = inputs.shape[0]
+        index_dims = inputs.shape[1:-1]
+
+        # Construct the position encoding.
+        if self.position_encoding_type == "trainable":
+            # position_ids = torch.arange(0, indices)
+            pos_enc = self.position_embeddings(batch_size)
+        elif self.position_encoding_type == "fourier":
+            pos_enc = self.position_embeddings(index_dims, batch_size)
+
+        # Optionally project them to a target dimension.
+        pos_enc = self.positions_projection(pos_enc)
+
+        if self.concat_or_add_pos == "concat":
+            inputs_with_pos = torch.cat([inputs, pos_enc], dim=-1)
+        elif self.concat_or_add_pos == "add":
+            inputs_with_pos = inputs + pos_enc
+
+        return inputs_with_pos, inputs
+
+    def forward(self, inputs, pos, network_input_is_1d: bool = True):
+        inputs = torch.reshape(inputs, [inputs.shape[0], -1, self.samples_per_patch])
+
+        inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)
+        modality_sizes = None  # Size for each modality, only needed for multimodal
+        return inputs, modality_sizes, inputs_without_pos
