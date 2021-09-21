@@ -102,6 +102,10 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
     def setUp(self):
         self.feat_extract_tester = Wav2Vec2FeatureExtractionTester(self)
 
+    def _check_zero_mean_unit_variance(self, input_vector):
+        self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))
+        self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < 1e-3))
+
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -130,15 +134,11 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
             processed = feat_extract(speech_inputs, padding=padding, max_length=max_length, return_tensors="np")
             input_values = processed.input_values
 
-            def _check_zero_mean_unit_variance(input_vector):
-                self.assertTrue(np.abs(np.mean(input_vector)) < 1e-3)
-                self.assertTrue(np.abs(np.var(input_vector) - 1) < 1e-3)
-
-            _check_zero_mean_unit_variance(input_values[0][:800])
+            self._check_zero_mean_unit_variance(input_values[0][:800])
             self.assertTrue(input_values[0][800:].sum() < 1e-6)
-            _check_zero_mean_unit_variance(input_values[1][:1000])
+            self._check_zero_mean_unit_variance(input_values[1][:1000])
             self.assertTrue(input_values[0][1000:].sum() < 1e-6)
-            _check_zero_mean_unit_variance(input_values[2][:1200])
+            self._check_zero_mean_unit_variance(input_values[2][:1200])
 
     def test_zero_mean_unit_variance_normalization(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -152,13 +152,9 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
             processed = feat_extract(speech_inputs, max_length=max_length, padding=padding)
             input_values = processed.input_values
 
-            def _check_zero_mean_unit_variance(input_vector):
-                self.assertTrue(np.abs(np.mean(input_vector)) < 1e-3)
-                self.assertTrue(np.abs(np.var(input_vector) - 1) < 1e-3)
-
-            _check_zero_mean_unit_variance(input_values[0][:800])
-            _check_zero_mean_unit_variance(input_values[1][:1000])
-            _check_zero_mean_unit_variance(input_values[2][:1200])
+            self._check_zero_mean_unit_variance(input_values[0][:800])
+            self._check_zero_mean_unit_variance(input_values[1][:1000])
+            self._check_zero_mean_unit_variance(input_values[2][:1200])
 
     def test_zero_mean_unit_variance_normalization_trunc_np_max_length(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -168,13 +164,9 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         )
         input_values = processed.input_values
 
-        def _check_zero_mean_unit_variance(input_vector):
-            self.assertTrue(np.abs(np.mean(input_vector)) < 1e-3)
-            self.assertTrue(np.abs(np.var(input_vector) - 1) < 1e-3)
-
-        _check_zero_mean_unit_variance(input_values[0, :800])
-        _check_zero_mean_unit_variance(input_values[1])
-        _check_zero_mean_unit_variance(input_values[2])
+        self._check_zero_mean_unit_variance(input_values[0, :800])
+        self._check_zero_mean_unit_variance(input_values[1])
+        self._check_zero_mean_unit_variance(input_values[2])
 
     def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -184,13 +176,9 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         )
         input_values = processed.input_values
 
-        def _check_zero_mean_unit_variance(input_vector):
-            self.assertTrue(np.abs(np.mean(input_vector)) < 1e-3)
-            self.assertTrue(np.abs(np.var(input_vector) - 1) < 1e-3)
-
-        _check_zero_mean_unit_variance(input_values[0, :800])
-        _check_zero_mean_unit_variance(input_values[1, :1000])
-        _check_zero_mean_unit_variance(input_values[2])
+        self._check_zero_mean_unit_variance(input_values[0, :800])
+        self._check_zero_mean_unit_variance(input_values[1, :1000])
+        self._check_zero_mean_unit_variance(input_values[2])
 
         # make sure that if max_length < longest -> then pad to max_length
         self.assertTrue(input_values.shape == (3, 1000))
@@ -201,9 +189,9 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         )
         input_values = processed.input_values
 
-        _check_zero_mean_unit_variance(input_values[0, :800])
-        _check_zero_mean_unit_variance(input_values[1, :1000])
-        _check_zero_mean_unit_variance(input_values[2])
+        self._check_zero_mean_unit_variance(input_values[0, :800])
+        self._check_zero_mean_unit_variance(input_values[1, :1000])
+        self._check_zero_mean_unit_variance(input_values[2])
 
         # make sure that if max_length > longest -> then pad to longest
         self.assertTrue(input_values.shape == (3, 1200))
