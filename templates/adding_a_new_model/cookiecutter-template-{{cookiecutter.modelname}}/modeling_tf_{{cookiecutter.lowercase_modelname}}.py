@@ -674,10 +674,6 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
             kwargs_call=kwargs,
         )
 
-        # Copied from `modeling_bert.py` (we can't do this in `booleans_processing`)
-        if not self.is_decoder:
-            inputs["use_cache"] = False
-
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
