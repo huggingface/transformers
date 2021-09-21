@@ -20,6 +20,7 @@ import re
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
@@ -470,6 +471,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+        if getattr(self.config, "_gradient_checkpointing", False):
+            self.gradient_checkpointing_enable()
 
     @classmethod
     def _from_config(cls, config, **kwargs):
@@ -941,8 +944,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         activations".
         """
         if not self.supports_gradient_checkpointing:
-            logger.warn(f"{self.__class__.__name__} does not support gradient checkpointing so nothing will happen.")
-        self.config._gradient_checkpointing = True
+            raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
+        self.apply(partial(self._set_gradient_checkpointing, value=True))
 
     def gradient_checkpointing_disable(self, flag: bool = True):
         """
@@ -951,7 +954,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
         activations".
         """
-        self.config._gradient_checkpointing = False
+        if self.supports_gradient_checkpointing:
+            self.apply(partial(self._set_gradient_checkpointing, value=False))
 
     def save_pretrained(
         self,
