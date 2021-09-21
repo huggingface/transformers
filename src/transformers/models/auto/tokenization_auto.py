@@ -429,11 +429,7 @@ class AutoTokenizer:
         use_fast = kwargs.pop("use_fast", True)
         tokenizer_type = kwargs.pop("tokenizer_type", None)
 
-        # First, let's try to use the tokenizer_config file to get the tokenizer class.
-        tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
-        config_tokenizer_class = tokenizer_config.get("tokenizer_class")
-
-        # If we have the tokenizer_type we can leverage it
+        # First, let's see whether the tokenizer_type is passed so that we can leverage it
         if tokenizer_type is not None:
             tokenizer_class = None
             tokenizer_class_tuple = TOKENIZER_MAPPING_NAMES.get(tokenizer_type, None)
@@ -456,6 +452,10 @@ class AutoTokenizer:
                 raise ValueError(f"Tokenizer class {tokenizer_class_name} is not currently imported.")
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Next, let's try to use the tokenizer_config file to get the tokenizer class.
+        tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
+        config_tokenizer_class = tokenizer_config.get("tokenizer_class")
 
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
