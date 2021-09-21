@@ -1197,6 +1197,7 @@ def build_position_encoding(
             index_dim=np.prod(index_dims), **trainable_position_encoding_kwargs
         )
     elif position_encoding_type == "fourier":
+        # We don't use the index_dims argument, as this is only known during the forward pass
         assert fourier_position_encoding_kwargs is not None
         output_pos_enc = PerceiverFourierPositionEncoding(**fourier_position_encoding_kwargs)
     else:
@@ -1249,7 +1250,13 @@ class PerceiverProjectionDecoder(PerceiverAbstractDecoder):
 
 
 class PerceiverBasicDecoder(PerceiverAbstractDecoder):
-    """Cross-attention-based decoder."""
+    """
+    Cross-attention-based decoder.
+
+    Here, `output_num_channels` refers to the number of output channels. `num_channels` refers to the number of
+    channels of the output queries.
+
+    """
 
     def __init__(
         self,
@@ -1275,7 +1282,6 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         self.output_position_encodings = None
         self.position_encoding_type = position_encoding_type
         if position_encoding_type != "none":
-            # self.output_position_encodings = nn.Parameter(torch.randn(output_index_dims, num_channels))
             self.output_position_encodings, self.positions_projection = build_position_encoding(
                 position_encoding_type=position_encoding_type, index_dims=output_index_dims, **position_encoding_kwargs
             )
@@ -1302,7 +1308,15 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         if subsampled_points is not None:
             raise NotImplementedError("Subsampled points is not yet supported")
         else:
-            pos_emb = self.output_position_encodings.position_embeddings.expand(inputs.shape[0], -1, -1)
+            batch_size = inputs.shape[0]
+            index_dims = inputs.shape[2:]
+
+            # Construct the position encoding.
+            if self.position_encoding_type == "trainable":
+                pos_emb = self.output_position_encodings(batch_size)
+            elif self.position_encoding_type == "fourier":
+                pos_emb = self.output_position_encodings(index_dims, batch_size)
+
             # Optionally project them to a target dimension.
             pos_emb = self.positions_projection(pos_emb)
 
@@ -1507,9 +1521,6 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
         [torch.linspace(start=min_freq, end=res / 2, steps=num_bands) for res in max_resolution], dim=0
     )
 
-    print("Shape of pos:", pos.shape)
-    print("Shape of frequency bands:", freq_bands.shape)
-
     # Get frequency bands for each spatial dimension.
     # Output is size [n, d * num_bands]
     per_pos_features = pos[0, :, :][:, :, None] * freq_bands[None, :, :]
@@ -1663,7 +1674,14 @@ class PerceiverTextPostprocessor(nn.Module):
 
 
 class PerceiverImagePreprocessor(nn.Module):
-    """Image preprocessing for Perceiver Encoder."""
+    """
+    Image preprocessing for Perceiver Encoder.
+
+    Note: the `out_channels` argument refers to the output channels of a convolutional layer, if `prep_type` is set to
+    "conv1x1" or "conv". If one adds absolute position embeddings, one must make sure the `num_channels` of the
+    position encoding kwargs are set equal to the `out_channels`.
+
+    """
 
     def __init__(
         self,
@@ -1678,8 +1696,8 @@ class PerceiverImagePreprocessor(nn.Module):
         conv_after_patching: bool = False,
         conv2d_use_batchnorm: bool = True,
         concat_or_add_pos: str = "concat",
-        project_pos_dim=-1,
-        index_dims=50176,
+        project_pos_dim: int = -1,
+        index_dims=50176,  # only relevant when position_encoding_type = "trainable"
         **position_encoding_kwargs,
     ):
         super().__init__()
@@ -1749,10 +1767,6 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = torch.moveaxis(inputs, 1, -1)
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
 
-        # print("Shape of inputs:", inputs.shape)
-        # print("First elements of inputs:", inputs[0,:3,:3])
-        # print("Sum of inputs before adding position encodings:", inputs.sum())
-
         # Construct the position encoding.
         if self.position_encoding_type == "trainable":
             # position_ids = torch.arange(0, indices)
@@ -1760,19 +1774,8 @@ class PerceiverImagePreprocessor(nn.Module):
         elif self.position_encoding_type == "fourier":
             pos_enc = self.position_embeddings(index_dims, batch_size)
 
-        # print("Shape of position encodings before projection:", pos_enc.shape)
-        # print("First elements of position encodings before projection:", pos_enc[0,:3,:3])
-        # print("Sum of position encodings before projection:", pos_enc.sum())
-
-        # print("Shape of weights of position projector:", self.positions_projection.weight.shape)
-        # print("First elements of weights of position projector:", self.positions_projection.weight[:3,:3])
-
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
-
-        # print("Shape of position encodings after projection:", pos_enc.shape)
-        # print("First elements of position encodings after projection:", pos_enc[0,:3,:3])
-        # print("Sum of position encodings after projection:", pos_enc.sum())
 
         if not network_input_is_1d:
             # Reshape pos to match the input feature shape
@@ -1780,18 +1783,10 @@ class PerceiverImagePreprocessor(nn.Module):
             sh = inputs.shape
             pos_enc = torch.reshape(pos_enc, list(sh)[:-1] + [-1])
 
-        print("Shape of inputs:", inputs.shape)
-        print("Shape of pos enc:", pos_enc.shape)
-
         if self.concat_or_add_pos == "concat":
             inputs_with_pos = torch.cat([inputs, pos_enc], dim=-1)
         elif self.concat_or_add_pos == "add":
             inputs_with_pos = inputs + pos_enc
-
-        # print("Inputs with position encodings:", inputs_with_pos[0,:3,:3])
-        # print("Sum of inputs with position encodings:", inputs_with_pos.sum())
-        # print("Inputs without position encodings:", inputs[0,:3,:3])
-        # print("Sum of inputs without position encodings:", inputs.sum())
 
         return inputs_with_pos, inputs
 
@@ -1804,8 +1799,6 @@ class PerceiverImagePreprocessor(nn.Module):
         elif self.prep_type == "conv1x1":
             # map inputs to self.out_channels
             inputs = self.convnet_1x1(inputs)
-            # print("Inputs after conv:", inputs[0,:3,:3,:3])
-            # print("Sum of inputs after conv:", inputs.sum())
 
         elif self.prep_type == "pixels":
             # if requested, downsamples in the crudest way
@@ -1837,7 +1830,7 @@ class PerceiverImagePreprocessor(nn.Module):
         return inputs, modality_sizes, inputs_without_pos
 
 
-class AudioPreprocessor(nn.Module):
+class PerceiverAudioPreprocessor(nn.Module):
     """Audio preprocessing for Perceiver Encoder."""
 
     def __init__(
@@ -1847,15 +1840,18 @@ class AudioPreprocessor(nn.Module):
         position_encoding_type: str = "fourier",
         # n_extra_pos_mlp: int = 0, TODO: support this argument
         concat_or_add_pos: str = "concat",
-        **position_encoding_kwargs
+        out_channels=64,
+        index_dims=50176,  # only relevant when position_encoding_type = "trainable"
+        project_pos_dim=-1,
+        **position_encoding_kwargs,
     ):
         super().__init__()
 
         if prep_type not in ("patches",):
-            raise ValueError(f"Prep_type {prep_type} is invalid")
+            raise ValueError(f"Prep_type {prep_type} is invalid, can only be 'patches'.")
 
         if concat_or_add_pos not in ["concat", "add"]:
-            raise ValueError(f"Invalid value {concat_or_add_pos} for concat_or_add_pos.")
+            raise ValueError(f"Concat_or_pos {concat_or_add_pos} is invalid, can only be 'concat' or 'add'.")
 
         self.samples_per_patch = samples_per_patch
         self.concat_or_add_pos = concat_or_add_pos
@@ -1863,6 +1859,9 @@ class AudioPreprocessor(nn.Module):
         # Position embeddings
         self.position_embeddings, self.positions_projection = build_position_encoding(
             position_encoding_type=position_encoding_type,
+            index_dims=index_dims,
+            out_channels=out_channels,
+            project_pos_dim=project_pos_dim,
             **position_encoding_kwargs,
         )
 
