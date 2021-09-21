@@ -87,7 +87,7 @@ class ObjectDetectionPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
-            threshold (:obj:`float`, `optional`, defaults to 0.9):
+            threshold (:obj:`float`, `optional`, defaults to 0.5):
                 The probability necessary to make a prediction.
 
         Return:
@@ -132,7 +132,7 @@ class ObjectDetectionPipeline(Pipeline):
             model_outputs["offset_mapping"] = offset_mapping
         return model_outputs
 
-    def postprocess(self, model_outputs, threshold=0.9):
+    def postprocess(self, model_outputs, threshold=0.5):
         post_process_inputs = [model_outputs["outputs"], model_outputs["target_size"]]
         offset_mapping = model_outputs.get("offset_mapping", None)
         bbox = model_outputs.get("bbox", None)
@@ -142,9 +142,8 @@ class ObjectDetectionPipeline(Pipeline):
         raw_annotation = raw_annotations[0]
 
         scores, labels, boxes = [raw_annotation[key] for key in ["scores", "labels", "boxes"]]
-        if not self._is_layout_detection():
-            keep = raw_annotation["scores"] > threshold
-            scores, labels, boxes = scores[keep], labels[keep], boxes[keep]
+        keep = raw_annotation["scores"] > threshold
+        scores, labels, boxes = scores[keep], labels[keep], boxes[keep]
 
         raw_annotation["scores"] = scores.tolist()
         raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
