@@ -24,7 +24,7 @@ from .tokenization_layoutlm import LayoutLMTokenizer
 
 
 _import_structure = {
-    "configuration_layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig"],
+    "configuration_layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMOnnxConfig"],
     "tokenization_layoutlm": ["LayoutLMTokenizer"],
 }
 
@@ -54,7 +54,7 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
+    from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMOnnxConfig
     from .tokenization_layoutlm import LayoutLMTokenizer
 
     if is_tokenizers_available():
