@@ -500,7 +500,13 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
+        if torch_device == "cuda":
+            EXPECTED_OUTPUT_STR = (
+                "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
+            )
+        else:
+            EXPECTED_OUTPUT_STR = "Today is a nice day and one of those days that feels a bit more alive. I am ready"
+
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
@@ -517,7 +523,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
         input_ids = tokenized.input_ids.to(torch_device)
 
-        MAX_TIME = 0.5
+        MAX_TIME = 1
 
         start = datetime.datetime.now()
         model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
