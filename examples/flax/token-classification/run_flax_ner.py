@@ -313,7 +313,7 @@ def main():
             repo_name = get_full_repo_name(Path(training_args.output_dir).name, token=training_args.hub_token)
         else:
             repo_name = training_args.hub_model_id
-        repo = repository(training_args.output_dir, clone_from=repo_name)
+        repo = Repository(training_args.output_dir, clone_from=repo_name)
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets for token classification task available on the hub at https://huggingface.co/datasets/
