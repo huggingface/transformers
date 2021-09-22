@@ -18,7 +18,7 @@ import datetime
 import unittest
 
 from transformers import GPTJConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, tooslow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
@@ -398,9 +398,9 @@ class GPTJModelTest(unittest.TestCase):
 
     @slow
     def test_batch_generation(self):
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
         model.to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
 
         tokenizer.padding_side = "left"
 
@@ -458,7 +458,7 @@ class GPTJModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GPTJModel.from_pretrained(model_name)
+            model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
             self.assertIsNotNone(model)
 
 
@@ -467,42 +467,27 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gptj(self):
         for checkpointing in [True, False]:
-            model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+            model = GPTJForCausalLM.from_pretrained(
+                "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
+            )
             if checkpointing:
                 model.gradient_checkpointing_enable()
             else:
                 model.gradient_checkpointing_disable()
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            expected_output_ids = [
-                464,
-                3290,
-                1528,
-                286,
-                3931,
-                389,
-                2402,
-                514,
-                11,
-                290,
-                326,
-                1724,
-                340,
-                447,
-                247,
-                82,
-                640,
-                284,
-                923,
-                3612,
-            ]  # The dog days of summer are upon us, and that means it’s time to start thinking
+            # fmt: off
+            # The dog is a man's best friend. It is a loyal companion, and it is a friend
+            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]
+            # fmt: on
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
-    @slow
+    @tooslow
     def test_gptj_sample(self):
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+        # Marked as @tooslow due to GPU OOM (issue #13676)
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -519,7 +504,13 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
+        if torch_device == "cuda":
+            EXPECTED_OUTPUT_STR = (
+                "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
+            )
+        else:
+            EXPECTED_OUTPUT_STR = "Today is a nice day and one of those days that feels a bit more alive. I am ready"
+
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
@@ -527,8 +518,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gptj_sample_max_time(self):
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+        tokenizer = AutoTokenizer.from_pretrained("anton-l/gpt-j-tiny-random")
+        model = GPTJForCausalLM.from_pretrained("anton-l/gpt-j-tiny-random")
         model.to(torch_device)
 
         torch.manual_seed(0)
