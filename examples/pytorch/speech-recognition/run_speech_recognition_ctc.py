@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import functools
 import json
 import logging
 import os
@@ -7,27 +8,26 @@ import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
-from datasets import DatasetDict, load_dataset, load_metric
 import numpy as np
 import torch
-import functools
-import librosa
-import audioread
+import torch.distributed as dist
+from datasets import DatasetDict, load_dataset, load_metric
 
+import audioread
+import librosa
 import transformers
 from transformers import (
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
     AutoConfig,
     AutoFeatureExtractor,
     AutoModelForCTC,
     AutoTokenizer,
+    HfArgumentParser,
+    Trainer,
+    TrainingArguments,
     Wav2Vec2Processor,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-import torch.distributed as dist
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
@@ -98,7 +98,9 @@ class ModelArguments:
         },
     )
     layerdrop: Optional[float] = field(default=0.0, metadata={"help": "The LayerDrop probability."})
-    ctc_loss_reduction: Optional[str] = field(default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."})
+    ctc_loss_reduction: Optional[str] = field(
+        default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."}
+    )
 
 
 @dataclass
@@ -131,15 +133,11 @@ class DataTrainingArguments:
     )
     audio_column_name: Optional[str] = field(
         default="audio",
-        metadata={
-            "help": "The name of the dataset colmun containing the audio data. Defaults to 'audio'"
-        },
+        metadata={"help": "The name of the dataset colmun containing the audio data. Defaults to 'audio'"},
     )
     text_column_name: Optional[str] = field(
         default="text",
-        metadata={
-            "help": "The name of the dataset colmun containing the text data. Defaults to 'text'"
-        },
+        metadata={"help": "The name of the dataset colmun containing the text data. Defaults to 'text'"},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
@@ -165,6 +163,15 @@ class DataTrainingArguments:
     chars_to_ignore: Optional[List[str]] = list_field(
         default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},
+    )
+    max_duration_in_seconds: Optional[float] = field(
+        default=20.0,
+        metadata={
+            "help": "Truncate audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
+        },
+    )
+    min_duration_in_seconds: Optional[float] = field(
+        default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
     )
 
 
@@ -195,9 +202,7 @@ class DataCollatorCTCWithPadding:
     """
 
     processor: Wav2Vec2Processor
-    padding: Union[bool, str] = True
-    max_length: Optional[int] = None
-    max_length_labels: Optional[int] = None
+    padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
 
@@ -207,24 +212,17 @@ class DataCollatorCTCWithPadding:
         input_features = [{"input_values": feature["input_values"]} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
-        import ipdb; ipdb.set_trace()
-
         batch = self.processor.pad(
             input_features,
             padding=self.padding,
-            max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
-
-        # (TODO): Remove once issue: https://github.com/huggingface/transformers/issues/13689 is fixed
-        batch["input_values"] = batch["input_values"].float()
 
         with self.processor.as_target_processor():
             labels_batch = self.processor.pad(
                 label_features,
                 padding=self.padding,
-                max_length=self.max_length_labels,
                 pad_to_multiple_of=self.pad_to_multiple_of_labels,
                 return_tensors="pt",
             )
@@ -253,7 +251,9 @@ def create_vocabulary_from_data(datasets: DatasetDict):
     )
 
     # take union of all unique characters in each dataset
-    vocab_set = functools.reduce(lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values())
+    vocab_set = functools.reduce(
+        lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values()
+    )
 
     vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
 
@@ -352,7 +352,9 @@ def main():
     # E.g. characters, such as `,` and `.` do not really have an acoustic characteristic
     # that could be easily picked up by the model
 
-    chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else None
+    chars_to_ignore_regex = (
+        f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else None
+    )
 
     def remove_special_characters(batch):
         if chars_to_ignore_regex is not None:
@@ -398,22 +400,26 @@ def main():
     processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     # adapt config
-    config.update({
-        "feat_proj_dropout": model_args.feat_proj_dropout,
-        "attention_dropout": model_args.attention_dropout,
-        "hidden_dropout": model_args.hidden_dropout,
-        "final_dropout": model_args.final_dropout,
-        "mask_time_prob": model_args.mask_time_prob,
-        "gradient_checkpointing": model_args.gradient_checkpointing,
-        "layerdrop": model_args.layerdrop,
-        "ctc_loss_reduction": model_args.ctc_loss_reduction,
-        "pad_token_id": processor.tokenizer.pad_token_id,
-        "vocab_size": len(processor.tokenizer),
-        "activation_dropout": model_args.activation_dropout,
-    })
+    config.update(
+        {
+            "feat_proj_dropout": model_args.feat_proj_dropout,
+            "attention_dropout": model_args.attention_dropout,
+            "hidden_dropout": model_args.hidden_dropout,
+            "final_dropout": model_args.final_dropout,
+            "mask_time_prob": model_args.mask_time_prob,
+            "gradient_checkpointing": model_args.gradient_checkpointing,
+            "layerdrop": model_args.layerdrop,
+            "ctc_loss_reduction": model_args.ctc_loss_reduction,
+            "pad_token_id": processor.tokenizer.pad_token_id,
+            "vocab_size": len(processor.tokenizer),
+            "activation_dropout": model_args.activation_dropout,
+        }
+    )
 
     # create model
-    model = AutoModelForCTC.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir, config=config)
+    model = AutoModelForCTC.from_pretrained(
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, config=config
+    )
 
     # freeze encoder
     if model_args.freeze_feature_extractor:
@@ -425,16 +431,24 @@ def main():
     # https://github.com/huggingface/datasets/pull/2324 is merged
 
     # Preprocessing the datasets.
-    # We need to read the aduio files as arrays and tokenize the targets.
+    # We need to read the audio files as arrays and tokenize the targets.
+
+    # derive max & min input length for sample rate & max duration
+    max_input_length = data_args.max_duration_in_seconds * processor.feature_extractor.sampling_rate
+    min_input_length = data_args.min_duration_in_seconds * processor.feature_extractor.sampling_rate
 
     def prepare_dataset(batch):
         # load and if necessary resample dataset
         try:
-            speech_array, sampling_rate = librosa.load(batch[data_args.audio_column_name], sr=processor.feature_extractor.sampling_rate)
+            speech_array, sampling_rate = librosa.load(
+                batch[data_args.audio_column_name], sr=processor.feature_extractor.sampling_rate
+            )
         except audioread.NoBackendError:
             raise ImportError("Make sure you have install `ffmpeg` correctly for MP3 decoding")
 
-        batch["input_values"] = processor(speech_array, sampling_rate=sampling_rate).input_values
+        batch["input_values"] = processor(
+            speech_array, sampling_rate=sampling_rate, truncate=True, max_length=max_input_length
+        ).input_values[0]
 
         # Setup the processor for targets
         with processor.as_target_processor():
@@ -446,6 +460,9 @@ def main():
         remove_columns=raw_datasets["train"].column_names,
         num_proc=data_args.preprocessing_num_workers,
     )
+
+    # filter data that is shorter then min_input_length
+    vectorized_datasets = vectorized_datasets.filter(lambda data: len(data["input_values"]) > min_input_length)
 
     # 6. Next, we can prepare the training.
     # Let's word error rate (WER) as our evaluation metric,
@@ -469,7 +486,7 @@ def main():
         return {"wer": wer}
 
     # Instantiate custom data collator
-    data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+    data_collator = DataCollatorCTCWithPadding(processor=processor)
 
     # Initialize Trainer
     trainer = Trainer(
@@ -504,7 +521,9 @@ def main():
 
         metrics = train_result.metrics
         max_train_samples = (
-            data_args.max_train_samples if data_args.max_train_samples is not None else len(vectorized_datasets["train"])
+            data_args.max_train_samples
+            if data_args.max_train_samples is not None
+            else len(vectorized_datasets["train"])
         )
         metrics["train_samples"] = min(max_train_samples, len(vectorized_datasets["train"]))
 
@@ -517,7 +536,9 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate()
-        max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(vectorized_datasets["eval"])
+        max_eval_samples = (
+            data_args.max_eval_samples if data_args.max_eval_samples is not None else len(vectorized_datasets["eval"])
+        )
         metrics["eval_samples"] = min(max_eval_samples, len(vectorized_datasets["eval"]))
 
         trainer.log_metrics("eval", metrics)

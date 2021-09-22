@@ -50,10 +50,10 @@ if SRC_DIRS is not None:
     import run_generation
     import run_glue
     import run_image_classification
-    import run_speech_recognition_ctc
     import run_mlm
     import run_ner
     import run_qa as run_squad
+    import run_speech_recognition_ctc
     import run_summarization
     import run_swag
     import run_translation
@@ -409,5 +409,4 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_speech_recognition_ctc.main()
             result = get_results(tmp_dir)
-            import ipdb; ipdb.set_trace()
-            self.assertGreaterEqual(result["eval_accuracy"], 0.8)
+            self.assertLess(result["eval_loss"], result["train_loss"])
