@@ -19,6 +19,7 @@ import random
 import unittest
 
 import numpy as np
+import torch
 
 from transformers import WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST, Wav2Vec2Config, Wav2Vec2FeatureExtractor
 from transformers.testing_utils import require_torch, slow
@@ -195,6 +196,18 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         # make sure that if max_length > longest -> then pad to longest
         self.assertTrue(input_values.shape == (3, 1200))
+
+    @require_torch
+    def test_double_precision_pad(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        np_speech_inputs = np.random.rand(100).astype(np.float64)
+        py_speech_inputs = np_speech_inputs.tolist()
+
+        for inputs in [py_speech_inputs, np_speech_inputs]:
+            np_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="np")
+            self.assertTrue(np_processed.input_values.dtype == np.float32)
+            pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
+            self.assertTrue(pt_processed.input_values.dtype == torch.float32)
 
     @slow
     @require_torch

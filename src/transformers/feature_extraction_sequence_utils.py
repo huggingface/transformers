@@ -240,6 +240,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             for key, value in outputs.items():
                 if key not in batch_outputs:
                     batch_outputs[key] = []
+                if value.dtype is np.dtype(np.float64):
+                    value = value.astype(np.float32)
                 batch_outputs[key].append(value)
 
         return BatchFeature(batch_outputs, tensor_type=return_tensors)
