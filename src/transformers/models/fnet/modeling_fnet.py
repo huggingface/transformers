@@ -174,7 +174,7 @@ class FNetBasicFourierTransform(nn.Module):
                     "dft_mat_hidden", torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64)
                 )
                 self.register_buffer(
-                    "dft_mat_seq", torch.tensor(linalg.dft(config.tpu_short_sequence_length), dtype=torch.complex64)
+                    "dft_mat_seq", torch.tensor(linalg.dft(config.tpu_short_seq_length), dtype=torch.complex64)
                 )
                 self.fourier_transform = partial(
                     two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
