@@ -174,8 +174,3 @@ python run_clm.py --model_type gpt2 --tokenizer_name gpt2 \ --config_overrides="
 ```
 
 This feature is only available in `run_clm.py`, `run_plm.py` and `run_mlm.py`.
-
-This feature can also be used to activate gradient checkpointing by passing:
-```
---config_overrides "gradient_checkpointing=true,use_cache=False"
-```

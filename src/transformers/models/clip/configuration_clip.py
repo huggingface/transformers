@@ -68,8 +68,6 @@ class CLIPTextConfig(PretrainedConfig):
         initializer_factor (:obj:`float`, `optional`, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
     Example::
 
@@ -103,7 +101,6 @@ class CLIPTextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        gradient_checkpointing=False,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -120,7 +117,6 @@ class CLIPTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
-        self.gradient_checkpointing = gradient_checkpointing
 
 
 class CLIPVisionConfig(PretrainedConfig):
@@ -161,8 +157,6 @@ class CLIPVisionConfig(PretrainedConfig):
         initializer_factor (:obj:`float`, `optional`, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
     Example::
 
@@ -194,7 +188,6 @@ class CLIPVisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        gradient_checkpointing=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -211,7 +204,6 @@ class CLIPVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.gradient_checkpointing = gradient_checkpointing
 
 
 class CLIPConfig(PretrainedConfig):

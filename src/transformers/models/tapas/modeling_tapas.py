@@ -627,6 +627,7 @@ class TapasEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([TapasLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -649,7 +650,7 @@ class TapasEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False):
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -763,6 +764,7 @@ class TapasPreTrainedModel(PreTrainedModel):
 
     config_class = TapasConfig
     base_model_prefix = "tapas"
+    supports_gradient_checkpointing = True
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -780,6 +782,10 @@ class TapasPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, TapasEncoder):
+            module.gradient_checkpointing = value
 
 
 TAPAS_START_DOCSTRING = r"""

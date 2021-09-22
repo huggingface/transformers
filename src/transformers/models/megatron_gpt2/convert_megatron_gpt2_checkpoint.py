@@ -279,7 +279,6 @@ def main():
             summary_proj_to_labels=True,
             summary_first_dropout=0.1,
             scale_attn_weights=True,
-            gradient_checkpointing=False,
             use_cache=True,
             bos_token_id=50256,
             eos_token_id=50256,

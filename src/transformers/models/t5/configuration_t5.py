@@ -77,8 +77,6 @@ class T5Config(PretrainedConfig):
             the :obj:`"gated-gelu"` feed forward projection. Original T5 uses :obj:`"relu"`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
     """
     model_type = "t5"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -102,7 +100,6 @@ class T5Config(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
-        gradient_checkpointing=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -120,7 +117,6 @@ class T5Config(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-        self.gradient_checkpointing = gradient_checkpointing
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

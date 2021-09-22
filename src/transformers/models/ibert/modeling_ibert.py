@@ -579,17 +579,13 @@ class IBertEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
-                raise NotImplementedError("gradient checkpointing is not currently supported")
-
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    hidden_states_scaling_factor,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                hidden_states_scaling_factor,
+                attention_mask,
+                layer_head_mask,
+                output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
             if output_attentions:
