@@ -1854,21 +1854,17 @@ class PerceiverImagePreprocessor(nn.Module):
         self.conv_after_patches = nn.Linear(conv_after_patching_in_channels, self.out_channels) if conv_after_patching else nn.Identity()
 
     def _build_network_inputs(self, inputs: torch.Tensor, pos: torch.Tensor, network_input_is_1d: bool = True):
-        """Construct the final input, including position encoding."""
-        # inputs have shape (batch_size, num_channels, height, width)
+        """Construct the final input, including position encoding.
+        
+        This method expects the inputs to always have channels as last dimension.
+        
+        """        
         batch_size = inputs.shape[0]
-        index_dims = inputs.shape[-2:]
+        index_dims = inputs.shape[1:-1]
         indices = np.prod(index_dims)
-
-        print("Index_dims:", index_dims)
-        print("Indices:", indices)
-        print("Shape of inputs before reshape:", inputs.shape)
         
         # Reshape input features to a 1D index dimension if necessary.
         if len(inputs.shape) > 3 and network_input_is_1d:
-            # Move axes from (batch_size, num_channels, height, width) to (batch_size, height, width, num_channels)
-            # as the original implementation expects the channels to be as last dimension before flattening
-            inputs = torch.moveaxis(inputs, 1, -1)
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
 
         print("Shape of inputs after reshape:", inputs.shape)
@@ -1923,22 +1919,23 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = space_to_depth(
                 inputs, temporal_block_size=self.temporal_downsample, spatial_block_size=self.spatial_downsample
             )
-
-            print("Shape of inputs after space to depth:", inputs.shape)
             
             if inputs.ndim == 5 and inputs.shape[1] == 1:
                 # for flow
                 inputs = inputs.squeeze(dim=1)
-
-            print("Shape of inputs after squeezing:", inputs.shape)
             
             # Optionally apply conv layer.
             inputs = self.conv_after_patches(inputs)
-            # Move channels first (as conv layer is implemented as nn.Linear layer)
-            inputs = torch.moveaxis(inputs, -1, 1)
 
-            print("Shape of inputs after conv layer:", inputs.shape)
-
+        if self.prep_type != "patches":
+            # move channels to last dimension
+            if inputs.ndim == 4:
+                inputs = torch.moveaxis(inputs, 1, -1)
+            elif inputs.ndim == 5:
+                inputs = torch.moveaxis(inputs, 2, -1)
+            else:
+                raise ValueError("Unsupported data format for conv1x1.")
+        
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
         modality_sizes = None  # Size for each modality, only needed for multimodal
         
