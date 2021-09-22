@@ -3,14 +3,13 @@ from tempfile import NamedTemporaryFile
 from unittest import TestCase
 from unittest.mock import patch
 
-from transformers import (  # LongformerConfig,; T5Config,
+from transformers import (  # LongformerConfig,; T5Config,; LayoutLMConfig,
     AlbertConfig,
     AutoTokenizer,
     BartConfig,
     DistilBertConfig,
     GPT2Config,
     GPTNeoConfig,
-    LayoutLMConfig,
     MBartConfig,
     RobertaConfig,
     XLMRobertaConfig,
@@ -24,7 +23,8 @@ from transformers.models.distilbert import DistilBertOnnxConfig
 # from transformers.models.longformer import LongformerOnnxConfig
 from transformers.models.gpt2 import GPT2OnnxConfig
 from transformers.models.gpt_neo import GPTNeoOnnxConfig
-from transformers.models.layoutlm import LayoutLMOnnxConfig
+
+# from transformers.models.layoutlm import LayoutLMOnnxConfig
 from transformers.models.mbart import MBartOnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
 
@@ -188,14 +188,13 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 
 
 if is_torch_available():
-    from transformers import (  # T5Model,
+    from transformers import (  # T5Model,; LayoutLMModel,
         AlbertModel,
         BartModel,
         BertModel,
         DistilBertModel,
         GPT2Model,
         GPTNeoModel,
-        LayoutLMModel,
         MBartModel,
         RobertaModel,
         XLMRobertaModel,
@@ -211,7 +210,7 @@ if is_torch_available():
         # ("LongFormer", "longformer-base-4096", LongformerModel, LongformerConfig, LongformerOnnxConfig),
         ("Roberta", "roberta-base", RobertaModel, RobertaConfig, RobertaOnnxConfig),
         ("XLM-Roberta", "roberta-base", XLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
-        ("LayoutLM", "microsoft/layoutlm-base-uncased", LayoutLMModel, LayoutLMConfig, LayoutLMOnnxConfig),
+        # ("LayoutLM", "microsoft/layoutlm-base-uncased", LayoutLMModel, LayoutLMConfig, LayoutLMOnnxConfig),
         ("MBart", "sshleifer/tiny-mbart", MBartModel, MBartConfig, MBartOnnxConfig),
         # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig),
     }
