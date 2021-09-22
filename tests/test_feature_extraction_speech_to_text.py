@@ -235,3 +235,16 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
         # make sure that if max_length < longest -> then pad to max_length
         self.assertEqual(input_features.shape, (3, 6, 24))
+
+    def test_double_precision_pad(self):
+        import torch
+
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        np_speech_inputs = np.random.rand(100, 32).astype(np.float64)
+        py_speech_inputs = np_speech_inputs.tolist()
+
+        for inputs in [py_speech_inputs, np_speech_inputs]:
+            np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
+            self.assertTrue(np_processed.input_features.dtype == np.float32)
+            pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
+            self.assertTrue(pt_processed.input_features.dtype == torch.float32)
