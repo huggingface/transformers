@@ -1750,7 +1750,7 @@ class PerceiverTextPreprocessor(nn.Module):
     def forward(self, inputs):
 
         embeddings = self.embeddings(inputs)
-        position_ids = torch.arange(0, self.seq_len)
+        position_ids = torch.arange(0, self.seq_len, device=inputs.device)
         embeddings = embeddings + self.position_embeddings(position_ids)
 
         return embeddings, None, None
