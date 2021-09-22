@@ -79,8 +79,6 @@ class M2M100Config(PretrainedConfig):
             https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
         Example::
 
@@ -121,7 +119,6 @@ class M2M100Config(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=2,
         scale_embedding=True,
-        gradient_checkpointing=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -145,7 +142,6 @@ class M2M100Config(PretrainedConfig):
         self.decoder_layerdrop = decoder_layerdrop
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         super().__init__(

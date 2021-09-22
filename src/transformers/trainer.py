@@ -990,7 +990,7 @@ class Trainer:
             elif isinstance(model, PreTrainedModel):
                 # find_unused_parameters breaks checkpointing as per
                 # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-                find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
+                find_unused_parameters = not getattr(model.config, "_gradient_checkpointing", False)
             else:
                 find_unused_parameters = True
             model = nn.parallel.DistributedDataParallel(
@@ -1161,6 +1161,10 @@ class Trainer:
 
         self.state = TrainerState()
         self.state.is_hyper_param_search = trial is not None
+
+        # Activate gradient checkpointing if needed
+        if args.gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
 
         model = self._wrap_model(self.model_wrapped)
 
