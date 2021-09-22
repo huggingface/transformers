@@ -811,7 +811,8 @@ def main():
             params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(training_args.output_dir, params=params)
             tokenizer.save_pretrained(training_args.output_dir)
-            repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
+            if training_args.push_to_hub:
+                repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
 
 
 if __name__ == "__main__":

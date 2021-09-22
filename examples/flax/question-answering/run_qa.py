@@ -904,7 +904,8 @@ def main():
                     params = jax.device_get(unreplicate(state.params))
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
-                    repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
+                    if training_args.push_to_hub:
+                        repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
         epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
     # endregion
 
