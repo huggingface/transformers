@@ -14,71 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Text classification examples
+# Automatic Speech Recognition examples
 
-## GLUE tasks
 
-Based on the script [`run_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py).
+## Connectionist Temporal Classification without Language Model (CTC w/o LM)
 
-Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding
-Evaluation](https://gluebenchmark.com/). This script can fine-tune any of the models on the [hub](https://huggingface.co/models)
-and can also be used for a dataset hosted on our [hub](https://huggingface.co/datasets) or your own data in a csv or a JSON file 
-(the script might need some tweaks in that case, refer to the comments inside for help).
+The script [`run_speech_recognition_ctc.py`](https://github.com/huggingface/transformers/blob/master/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py) can be used to fine-tune any pretrained [Connectionist Temporal Classification Model](https://huggingface.co/transformers/master/model_doc/auto.html?highlight=automodelforctc#automodelforctc) for automatic speech 
+recognition on one of the [official speech recognition datasets](https://huggingface.co/datasets?task_ids=task_ids:automatic-speech-recognition) or a custom dataset.
 
-GLUE is made up of a total of 9 different tasks. Here is how to run the script on one of them:
+Speech recognition models that have been pretrained in unsupervised fashion on audio data alone, *e.g.* [Wav2Vec2](https://huggingface.co/transformers/master/model_doc/wav2vec2.html), [HuBERT](https://huggingface.co/transformers/master/model_doc/hubert.html), [XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html), have shown to require only 
+very little annotated data to yield good performance on automatic speech recognition datasets.
 
-```bash
-export TASK_NAME=mrpc
-
-python run_glue.py \
-  --model_name_or_path bert-base-cased \
-  --task_name $TASK_NAME \
-  --do_train \
-  --do_eval \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/
-```
-
-where task name can be one of cola, sst2, mrpc, stsb, qqp, mnli, qnli, rte, wnli.
-
-We get the following results on the dev set of the benchmark with the previous commands (with an exception for MRPC and
-WNLI which are tiny and where we used 5 epochs instead of 3). Trainings are seeded so you should obtain the same
-results with PyTorch 1.6.0 (and close results with different versions), training times are given for information (a
-single Titan RTX was used):
-
-| Task  | Metric                       | Result      | Training time |
-|-------|------------------------------|-------------|---------------|
-| CoLA  | Matthews corr                | 56.53       | 3:17          |
-| SST-2 | Accuracy                     | 92.32       | 26:06         |
-| MRPC  | F1/Accuracy                  | 88.85/84.07 | 2:21          |
-| STS-B | Pearson/Spearman corr.       | 88.64/88.48 | 2:13          |
-| QQP   | Accuracy/F1                  | 90.71/87.49 | 2:22:26       |
-| MNLI  | Matched acc./Mismatched acc. | 83.91/84.10 | 2:35:23       |
-| QNLI  | Accuracy                     | 90.66       | 40:57         |
-| RTE   | Accuracy                     | 65.70       | 57            |
-| WNLI  | Accuracy                     | 56.34       | 24            |
-
-Some of these results are significantly different from the ones reported on the test set of GLUE benchmark on the
-website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the website.
-
-The following example fine-tunes BERT on the `imdb` dataset hosted on our [hub](https://huggingface.co/datasets):
-
-```bash
-python run_glue.py \
-  --model_name_or_path bert-base-cased \
-  --dataset_name imdb  \
-  --do_train \
-  --do_predict \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --output_dir /tmp/imdb/
-```
-
+In the script [`run_speech_recognition_ctc`], we first create a vocabulary from all unique characters of both the training data and evaluation data. Then, we preprocesses the speech recognition dataset, which includes correct resampling, normalization and padding. Finally, the pretrained speech recognition model is fine-tuned on the annotated speech recognition datasets using CTC loss.
 
 ### Mixed precision training
 
@@ -86,85 +33,90 @@ If you have a GPU with mixed precision capabilities (architecture Pascal or more
 training with PyTorch 1.6.0 or latest, or by installing the [Apex](https://github.com/NVIDIA/apex) library for previous
 versions. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
 
-Using mixed precision training usually results in 2x-speedup for training with the same final results:
+Using mixed precision training usually results in 2x-speedup for training with the same final results.
 
-| Task  | Metric                       | Result      | Training time | Result (FP16) | Training time (FP16) |
+### Single-GPU
+
+The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using a single GPU in half-precision.
+
+```bash
+python run_speech_recognition_ctc.py \
+	--dataset_name="common_voice" \
+	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
+	--dataset_config_name="tr" \
+	--output_dir="./wav2vec2-common_voice-tr-demo" \
+	--overwrite_output_dir \
+	--num_train_epochs="15" \
+	--per_device_train_batch_size="16" \
+	--gradient_accumulation_steps="2" \
+	--learning_rate="3e-4" \
+	--warmup_steps="500" \
+	--evaluation_strategy="steps" \
+	--audio_column_name="path" \
+	--text_column_name="sentence" \
+	--save_steps="400" \
+	--eval_steps="100" \
+	--layerdrop="0.0" \
+	--save_total_limit="3" \
+	--freeze_feature_extractor \
+	--gradient_checkpointing \
+	--chars_to_ignore , ? . ! - \; \: \" “ % ‘ ” � \
+	--fp16 \
+	--group_by_length \
+	--push_to_hub \
+	--do_train --do_eval 
+```
+
+On a single V100 GPU, this script should run in *ca.* 1 hour 20 minutes and yield a CTC loss of **0.39** and word error rate
+of **0.35**.
+
+### Multi-GPU
+
+The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
+
+```bash
+python -m torch.distributed.launch \
+	--nproc_per_node 8 run_speech_recognition_ctc.py \
+	--dataset_name="common_voice" \
+	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
+	--dataset_config_name="tr" \
+	--output_dir="./wav2vec2-common_voice-tr-demo-dist" \
+	--preprocessing_num_workers="16" \
+	--overwrite_output_dir \
+	--num_train_epochs="15" \
+	--per_device_train_batch_size="4" \
+	--learning_rate="3e-4" \
+	--warmup_steps="500" \
+	--evaluation_strategy="steps" \
+	--audio_column_name="path" \
+	--text_column_name="sentence" \
+	--save_steps="400" \
+	--eval_steps="100" \
+	--logging_steps="1" \
+	--layerdrop="0.0" \
+	--save_total_limit="3" \
+	--freeze_feature_extractor \
+	--gradient_checkpointing \
+	--chars_to_ignore , ? . ! - \; \: \" “ % ‘ ” � \
+	--fp16 \
+	--group_by_length \
+	--push_to_hub \
+	--do_train --do_eval
+```
+
+On 8 V100 GPUs, this script should run in *ca.* 18 minutes and yield a CTC loss of **0.39** and word error rate
+of **0.36**.
+
+### Examples
+
+In the following a couple of demonstration fine-tuning runs are listed.
+It has been verified that the script works for the following datasets:
+
+- [Common Voice](https://huggingface.co/datasets/common_voice)
+- [Librispeech](https://huggingface.co/datasets/librispeech_asr)
+
+| Dataset | Dataset Config | Pretrained Model | Result | GPU setup | Training time |
 |-------|------------------------------|-------------|---------------|---------------|----------------------|
-| CoLA  | Matthews corr                | 56.53       | 3:17          | 56.78         | 1:41                 |
-| SST-2 | Accuracy                     | 92.32       | 26:06         | 91.74         | 13:11                |
-| MRPC  | F1/Accuracy                  | 88.85/84.07 | 2:21          | 88.12/83.58   | 1:10                 |
-| STS-B | Pearson/Spearman corr.       | 88.64/88.48 | 2:13          | 88.71/88.55   | 1:08                 |
-| QQP   | Accuracy/F1                  | 90.71/87.49 | 2:22:26       | 90.67/87.43   | 1:11:54              |
-| MNLI  | Matched acc./Mismatched acc. | 83.91/84.10 | 2:35:23       | 84.04/84.06   | 1:17:06              |
-| QNLI  | Accuracy                     | 90.66       | 40:57         | 90.96         | 20:16                |
-| RTE   | Accuracy                     | 65.70       | 57            | 65.34         | 29                   |
-| WNLI  | Accuracy                     | 56.34       | 24            | 56.34         | 12                   |
-
-
-## PyTorch version, no Trainer
-
-Based on the script [`run_glue_no_trainer.py`](https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue_no_trainer.py).
-
-Like `run_glue.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) on a
-text classification task, either a GLUE task or your own data in a csv or a JSON file. The main difference is that this
-script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like.
-
-It offers less options than the script with `Trainer` (for instance you can easily change the options for the optimizer
-or the dataloaders directly in the script) but still run in a distributed setup, on TPU and supports mixed precision by
-the mean of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library. You can use the script normally
-after installing it:
-
-```bash
-pip install accelerate
-```
-
-then
-
-```bash
-export TASK_NAME=mrpc
-
-python run_glue_no_trainer.py \
-  --model_name_or_path bert-base-cased \
-  --task_name $TASK_NAME \
-  --max_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/
-```
-
-You can then use your usual launchers to run in it in a distributed environment, but the easiest way is to run
-
-```bash
-accelerate config
-```
-
-and reply to the questions asked. Then
-
-```bash
-accelerate test
-```
-
-that will check everything is ready for training. Finally, you can launch training with
-
-```bash
-export TASK_NAME=mrpc
-
-accelerate launch run_glue_no_trainer.py \
-  --model_name_or_path bert-base-cased \
-  --task_name $TASK_NAME \
-  --max_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/
-```
-
-This command is the same and will work for:
-
-- a CPU-only setup
-- a setup with one GPU
-- a distributed training with several GPUs (single or multi node)
-- a training on TPUs
-
-Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
+| [Librispeech](https://huggingface.co/datasets/librispeech_asr)| `"clean"` - `"train.100"` | [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base)       | [here](https://huggingface.co/patrickvonplaten/wav2vec2-librispeech-clean-100h-demo-dist)      |  8 GPU V100   |   TO FILL |
+| [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53)       | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo)      |  1 GPU V100   |  1h20min                 |
+| [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53)       | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo-dist)      |  8 GPU V100   |  18min                 |
