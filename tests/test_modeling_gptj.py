@@ -514,8 +514,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gptj_sample_max_time(self):
-        tokenizer = AutoTokenizer.from_pretrained("/home/crocopie/repos/hf-models/gpt-j-tiny-random")
-        model = GPTJForCausalLM.from_pretrained("/home/crocopie/repos/hf-models/gpt-j-tiny-random")
+        tokenizer = AutoTokenizer.from_pretrained("anton-l/gpt-j-tiny-random")
+        model = GPTJForCausalLM.from_pretrained("anton-l/gpt-j-tiny-random")
         model.to(torch_device)
 
         torch.manual_seed(0)
