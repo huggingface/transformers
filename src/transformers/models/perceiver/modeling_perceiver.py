@@ -1098,6 +1098,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
                 prep_type="patches",
                 spatial_downsample=1,
                 conv_after_patching=True,
+                conv_after_patching_in_channels=54,
                 temporal_downsample=2,
                 position_encoding_type="fourier",
                 # position_encoding_kwargs
@@ -1790,10 +1791,10 @@ class PerceiverImagePreprocessor(nn.Module):
         spatial_downsample: int = 4,
         temporal_downsample: int = 1,
         position_encoding_type: str = "fourier",
-        # n_extra_pos_mlp: int = 0, TODO: support this argument
         in_channels: int = 3,
         out_channels: int = 64,
         conv_after_patching: bool = False,
+        conv_after_patching_in_channels: int = 54, # only relevant when conv_after_patching = True
         conv2d_use_batchnorm: bool = True,
         concat_or_add_pos: str = "concat",
         project_pos_dim: int = -1,
@@ -1850,16 +1851,19 @@ class PerceiverImagePreprocessor(nn.Module):
         )
 
         # Optional convolutional layer after patches.
-        # TODO: replace hard-coded 54
-        self.conv_after_patches = nn.Linear(54, self.out_channels) if conv_after_patching else nn.Identity()
+        self.conv_after_patches = nn.Linear(conv_after_patching_in_channels, self.out_channels) if conv_after_patching else nn.Identity()
 
     def _build_network_inputs(self, inputs: torch.Tensor, pos: torch.Tensor, network_input_is_1d: bool = True):
         """Construct the final input, including position encoding."""
         # inputs have shape (batch_size, num_channels, height, width)
         batch_size = inputs.shape[0]
-        index_dims = inputs.shape[2:]
+        index_dims = inputs.shape[-2:]
         indices = np.prod(index_dims)
 
+        print("Index_dims:", index_dims)
+        print("Indices:", indices)
+        print("Shape of inputs before reshape:", inputs.shape)
+        
         # Reshape input features to a 1D index dimension if necessary.
         if len(inputs.shape) > 3 and network_input_is_1d:
             # Move axes from (batch_size, num_channels, height, width) to (batch_size, height, width, num_channels)
@@ -1867,6 +1871,8 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = torch.moveaxis(inputs, 1, -1)
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
 
+        print("Shape of inputs after reshape:", inputs.shape)
+        
         # Construct the position encoding.
         if self.position_encoding_type == "trainable":
             # position_ids = torch.arange(0, indices)
@@ -1918,15 +1924,26 @@ class PerceiverImagePreprocessor(nn.Module):
                 inputs, temporal_block_size=self.temporal_downsample, spatial_block_size=self.spatial_downsample
             )
 
+            print("Shape of inputs after space to depth:", inputs.shape)
+            
             if inputs.ndim == 5 and inputs.shape[1] == 1:
                 # for flow
                 inputs = inputs.squeeze(dim=1)
 
+            print("Shape of inputs after squeezing:", inputs.shape)
+            
             # Optionally apply conv layer.
             inputs = self.conv_after_patches(inputs)
+            # Move channels first (as conv layer is implemented as nn.Linear layer)
+            inputs = torch.moveaxis(inputs, -1, 1)
+
+            print("Shape of inputs after conv layer:", inputs.shape)
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
         modality_sizes = None  # Size for each modality, only needed for multimodal
+        
+        print("Shape of inputs after preprocessing:", inputs.shape)
+        
         return inputs, modality_sizes, inputs_without_pos
 
 
@@ -1954,7 +1971,6 @@ class PerceiverAudioPreprocessor(nn.Module):
         prep_type: str = "patches",
         samples_per_patch: int = 96,
         position_encoding_type: str = "fourier",
-        # n_extra_pos_mlp: int = 0, TODO: support this argument
         concat_or_add_pos: str = "concat",
         out_channels=64,
         index_dims=50176,  # only relevant when position_encoding_type = "trainable"
@@ -2037,7 +2053,7 @@ class PerceiverMultimodalPreprocessor(nn.Module):
         self.min_padding_size = min_padding_size
         self.mask_probs = mask_probs
 
-        # we need to register 2 parameter names for each modality: mask + padding
+        # we need to register 2 parameters for each modality: mask + padding
         # see https://discuss.pytorch.org/t/dynamic-parameter-declaration-in-forward-function/427
         for modality in self.modalities.keys():
             self.register_parameter(modality + "_mask", None)
@@ -2058,18 +2074,30 @@ class PerceiverMultimodalPreprocessor(nn.Module):
         padded = {}
         modality_sizes = {}
         for modality, output in outputs.items():
-            pos_enc = PerceiverTrainablePositionEncoding(1, num_channels=common_channel_size - output.shape[2])
+            parameter_name = modality + "_padding"
+            if hasattr(self, parameter_name) and getattr(self, parameter_name) is None:
+                setattr(
+                    self,
+                    parameter_name,
+                    PerceiverTrainablePositionEncoding(1, num_channels=common_channel_size - output.shape[2]),
+                )
+            pos_enc = getattr(self, parameter_name)(batch_size=output.shape[0])
             padding = torch.broadcast_to(
-                pos_enc(batch_size=output.shape[0]),
+                pos_enc,
                 [output.shape[0], output.shape[1], common_channel_size - output.shape[2]],
             )
             output_padded = torch.cat([output, padding], dim=2)
 
             if self.mask_probs is not None:
                 # Randomly mask out each token corresponding to this modality
-                mask_token = PerceiverTrainablePositionEncoding(1, num_channels=output_padded.shape[2])(
-                    output.shape[0]
-                )
+                parameter_name = modality + "_mask"
+                if hasattr(self, parameter_name) and getattr(self, parameter_name) is None:
+                    setattr(
+                        self,
+                        parameter_name,
+                        PerceiverTrainablePositionEncoding(1, num_channels=output_padded.shape[2]),
+                    )
+                mask_token = getattr(self, parameter_name)(output.shape[0])
                 mask_prob = self.mask_probs[modality]
                 mask = torch.bernoulli(torch.full([output.shape[0], output.shape[1]], mask_prob))
                 mask = torch.unsqueeze(mask, dim=2)

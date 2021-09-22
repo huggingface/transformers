@@ -299,6 +299,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
     model.load_state_dict(state_dict)
 
     # prepare dummy input
+    input_mask = None
     if task == "MLM":
         tokenizer = PerceiverTokenizer.from_pretrained("/Users/NielsRogge/Documents/Perceiver/Tokenizer files")
         text = "This is an incomplete sentence where some words are missing."
@@ -312,7 +313,8 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         image = prepare_img()
         encoding = feature_extractor(image, return_tensors="pt")
         inputs = encoding.pixel_values
-        input_mask = None
+    elif task  == "optical_flow":
+        inputs = torch.randn(1, 2, 368, 496, 27)
 
     # forward pass
     outputs = model(inputs=inputs, attention_mask=input_mask)
