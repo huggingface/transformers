@@ -1351,8 +1351,6 @@ class Trainer:
                         self.scaler.update()
                         scale_after = self.scaler.get_scale()
                         optimizer_was_run = scale_before <= scale_after
-                        if not optimizer_was_run:
-                            print(f"Rescaling happening at {step} with {scale_after}")
                     else:
                         self.optimizer.step()
 
