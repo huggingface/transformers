@@ -85,6 +85,7 @@ class ModelArguments:
             "with private models)."
         },
     )
+    save_onnx: bool = field(default=False, metadata={"help": "Whether to save model to onnx."})
 
 
 @dataclass
@@ -319,7 +320,7 @@ def main():
     # Preprocessing is slighlty different for training and evaluation.
     if training_args.do_train:
         column_names = raw_datasets["train"].column_names
-    elif training_args.do_eval:
+    elif training_args.do_eval or model_args.save_onnx:
         column_names = raw_datasets["validation"].column_names
     else:
         column_names = raw_datasets["test"].column_names
@@ -473,7 +474,7 @@ def main():
 
         return tokenized_examples
 
-    if training_args.do_eval:
+    if training_args.do_eval or model_args.save_onnx:
         if "validation" not in raw_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         eval_examples = raw_datasets["validation"]
@@ -560,8 +561,8 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=eval_dataset if training_args.do_eval else None,
-        eval_examples=eval_examples if training_args.do_eval else None,
+        eval_dataset=eval_dataset if training_args.do_eval or model_args.save_onnx else None,
+        eval_examples=eval_examples if training_args.do_eval or model_args.save_onnx else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
         post_process_function=post_processing_function,
@@ -625,6 +626,9 @@ def main():
 
         trainer.push_to_hub(**kwargs)
 
+    if model_args.save_onnx:
+        logger.info("Exporting model to onnx")
+        results = trainer.save_onnx(output_dir=training_args.output_dir, device=training_args.device, logger=logger)
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)

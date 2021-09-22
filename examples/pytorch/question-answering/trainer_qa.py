@@ -103,3 +103,42 @@ class QuestionAnsweringTrainer(Trainer):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=predictions.predictions, label_ids=predictions.label_ids, metrics=metrics)
+
+    def save_onnx(self, device, logger, output_dir="./"):
+        eval_dataset = self.eval_dataset
+        eval_dataloader = self.get_eval_dataloader(eval_dataset)
+
+        batch = next(iter(eval_dataloader))
+        
+        # convert to tuple
+        input_tuple = tuple(v.to(device) for k,v in batch.items())
+
+        logger.info("Converting model to be onnx compatible")
+        
+        model = self.model.to(device)
+
+        model.eval()
+        model.float()
+
+        model_to_save = model.module if hasattr(model, 'module') else model
+
+        import os
+        output_model_file = os.path.join(output_dir, 'model.onnx')
+        logger.info(f"exporting model to {output_model_file}")
+
+        axes={0:'batch_size', 1:'seq_len'}
+
+        import torch
+        torch.onnx.export(model_to_save,
+                          input_tuple,
+                          output_model_file,
+                          export_params=True,
+                          opset_version=13,
+                          do_constant_folding=True,
+                          input_names=['input_ids', 'attention_mask', 'token_type_ids'],
+                          output_names=['output_start_logits', 'output_end_logits'],
+                          dynamic_axes={'input_ids':axes, 'attention_mask':axes, 'token_type_ids':axes,
+                                        'output_start_logits':axes, 'output_end_logits':axes},
+                          verbose=True
+                         )
+        logger.info("onnx export finished")

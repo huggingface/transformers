@@ -23,11 +23,13 @@ from ...utils import logging
 # Add modeling imports here
 from ..qdqbert.modeling_qdqbert import (
     QDQBertForMaskedLM,
-    QDQBertForCausalLM,
     QDQBertForMultipleChoice,
+    QDQBertForNextSentencePrediction,
+    QDQBertForPreTraining,
     QDQBertForQuestionAnswering,
     QDQBertForSequenceClassification,
     QDQBertForTokenClassification,
+    QDQBertLMHeadModel,
     QDQBertModel,
 )
 from ..albert.modeling_albert import (
@@ -454,6 +456,7 @@ MODEL_MAPPING = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
         # Model for pre-training mapping
+        (QDQBertConfig, QDQBertForPreTraining),
         (VisualBertConfig, VisualBertForPreTraining),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (RetriBertConfig, RetriBertModel),
@@ -493,7 +496,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-(QDQBertConfig, QDQBertForMaskedLM),
+        (QDQBertConfig, QDQBertForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
         (GPTNeoConfig, GPTNeoForCausalLM),
@@ -542,7 +545,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-        (QDQBertConfig, QDQBertForCausalLM),
+        (QDQBertConfig, QDQBertLMHeadModel),
         (RoFormerConfig, RoFormerForCausalLM),
         (BigBirdPegasusConfig, BigBirdPegasusForCausalLM),
         (GPTNeoConfig, GPTNeoForCausalLM),
@@ -585,7 +588,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-(QDQBertConfig, QDQBertForMaskedLM),
+        (QDQBertConfig, QDQBertForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
@@ -732,7 +735,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
-(QDQBertConfig, QDQBertForTokenClassification),
+        (QDQBertConfig, QDQBertForTokenClassification),
         (CanineConfig, CanineForTokenClassification),
         (RoFormerConfig, RoFormerForTokenClassification),
         (BigBirdConfig, BigBirdForTokenClassification),
@@ -764,7 +767,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
-(QDQBertConfig, QDQBertForMultipleChoice),
+        (QDQBertConfig, QDQBertForMultipleChoice),
         (CanineConfig, CanineForMultipleChoice),
         (RoFormerConfig, RoFormerForMultipleChoice),
         (BigBirdConfig, BigBirdForMultipleChoice),
@@ -791,6 +794,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
 
 MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
     [
+        (QDQBertConfig, QDQBertForNextSentencePrediction),
         (BertConfig, BertForNextSentencePrediction),
         (MegatronBertConfig, MegatronBertForNextSentencePrediction),
         (MobileBertConfig, MobileBertForNextSentencePrediction),

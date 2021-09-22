@@ -30,12 +30,14 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        QDQBertForCausalLM,
         QDQBertForMaskedLM,
         QDQBertForMultipleChoice,
+        QDQBertForNextSentencePrediction,
+        QDQBertForPreTraining,
         QDQBertForQuestionAnswering,
         QDQBertForSequenceClassification,
         QDQBertForTokenClassification,
+        QDQBertLMHeadModel,
         QDQBertModel,
     )
     from transformers.models.qdqbert.modeling_qdqbert import (
@@ -213,7 +215,7 @@ class QDQBertModelTester:
             encoder_hidden_states,
             encoder_attention_mask,
     ):
-        model = QDQBertForCausalLM(config=config)
+        model = QDQBertLMHeadModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -226,6 +228,39 @@ class QDQBertModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_model_for_causal_lm_as_decoder(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.add_cross_attention = True
+        model = QDQBertLMHeadModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+        )
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            encoder_hidden_states=encoder_hidden_states,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_decoder_model_past_large_inputs(
@@ -242,7 +277,7 @@ class QDQBertModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = QDQBertForCausalLM(config=config)
+        model = QDQBertLMHeadModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -289,6 +324,36 @@ class QDQBertModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+def create_and_check_for_next_sequence_prediction(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = QDQBertForNextSentencePrediction(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=sequence_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
+
+    def create_and_check_for_pretraining(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = QDQBertForPreTraining(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            next_sentence_label=sequence_labels,
+        )
+        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -366,16 +431,18 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
         (
             QDQBertModel,
             QDQBertForMaskedLM,
-            QDQBertForCausalLM,
             QDQBertForMultipleChoice,
+            QDQBertForNextSentencePrediction,
+            QDQBertForPreTraining,
             QDQBertForQuestionAnswering,
             QDQBertForSequenceClassification,
             QDQBertForTokenClassification,
+            QDQBertLMHeadModel,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (QDQBertForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (QDQBertLMHeadModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = QDQBertModelTester(self)
@@ -393,30 +460,6 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
-    def test_for_multiple_choice(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-
-    def test_for_token_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     def test_model_as_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
@@ -450,6 +493,45 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
             encoder_attention_mask,
         )
 
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+
+    def test_for_masked_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
+    def test_for_causal_lm_decoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
+
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
+
+    def test_for_next_sequence_prediction(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_next_sequence_prediction(*config_and_inputs)
+
+    def test_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
+
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
     @slow
     def test_model_from_pretrained(self):
         for model_name in QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

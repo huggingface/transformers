@@ -29,7 +29,9 @@ if is_torch_available():
     _import_structure["modeling_qdqbert"] = [
         "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "QDQBertForMaskedLM",
-        "QDQBertForCausalLM",
+        "QDQBertLMHeadModel",
+        "QDQBertForNextSentencePrediction",
+        "QDQBertForPreTraining",
         "QDQBertForMultipleChoice",
         "QDQBertForQuestionAnswering",
         "QDQBertForSequenceClassification",
@@ -54,7 +56,9 @@ if TYPE_CHECKING:
         from .modeling_qdqbert import (
             QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             QDQBertForMaskedLM,
-            QDQBertForCausalLM,
+            QDQBertLMHeadModel,
+            QDQBertForNextSentencePrediction,
+            QDQBertForPreTraining,
             QDQBertForMultipleChoice,
             QDQBertForQuestionAnswering,
             QDQBertForSequenceClassification,

@@ -499,7 +499,9 @@ if is_torch_available():
         [
             "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "QDQBertForMaskedLM",
-            "QDQBertForCausalLM",
+            "QDQBertLMHeadModel",
+            "QDQBertForNextSentencePrediction",
+            "QDQBertForPreTraining",
             "QDQBertForMultipleChoice",
             "QDQBertForQuestionAnswering",
             "QDQBertForSequenceClassification",
@@ -2054,7 +2056,9 @@ if TYPE_CHECKING:
         from .models.qdqbert import (
             QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             QDQBertForMaskedLM,
-            QDQBertForCausalLM,
+            QDQBertLMHeadModel,
+            QDQBertForNextSentencePrediction,
+            QDQBertForPreTraining,
             QDQBertForMultipleChoice,
             QDQBertForQuestionAnswering,
             QDQBertForSequenceClassification,
