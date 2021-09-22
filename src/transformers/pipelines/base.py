@@ -65,12 +65,25 @@ def no_collate_fn(items):
     return items[0]
 
 
-def pad_collate_fn(tokenizer):
-    def pad(items, key, pad_token_id):
+def pad_collate_fn(tokenizer, feature_extractor):
+    if tokenizer is None and feature_extractor is None:
+        raise ValueError("Pipeline without tokenizer or feature_extractor cannot do batching")
+    if tokenizer is not None:
+        if tokenizer.pad_token_id is None:
+            raise ValueError("Pipeline with tokenizer without pad_token cannot do batching")
+        else:
+            padding_value = tokenizer.pad_token_id
+    if feature_extractor is not None:
+        if feature_extractor.padding_value is None:
+            raise ValueError("Pipeline with feature_extractor without padding_value cannot do batching")
+        else:
+            padding_value = feature_extractor.padding_value
+
+    def pad(items, key, padding_value):
         if isinstance(items[0][key], torch.Tensor):
             # input_values, input_pixels, input_ids, ...
             # Others include `attention_mask` etc...
-            padding_value = pad_token_id if key.startswith("input_") else 0
+            padding_value = padding_value if key.startswith("input_") else 0
             return torch.nn.utils.rnn.pad_sequence(
                 [item[key].squeeze(0) for item in items],
                 batch_first=True,
@@ -85,7 +98,7 @@ def pad_collate_fn(tokenizer):
                 raise ValueError(
                     f"The elements of the batch contain different keys `pad_collate_fn` cannot batch them ({set(item.keys())} != {keys})"
                 )
-        padded = {key: pad(items, key, tokenizer.pad_token_id) for key in keys}
+        padded = {key: pad(items, key, padding_value) for key in keys}
         return padded
 
     return inner
@@ -947,7 +960,7 @@ class Pipeline(_ScikitCompat):
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
         dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
-        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer)
+        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, self.feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelineIterator(dataloader, self.forward, forward_params, unbatch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)

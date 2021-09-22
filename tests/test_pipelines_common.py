@@ -14,6 +14,7 @@
 
 import importlib
 import logging
+import random
 import string
 import unittest
 from abc import abstractmethod
@@ -136,7 +137,16 @@ class PipelineTestCaseMeta(type):
                 else:
                     tokenizer = None
                 feature_extractor = get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config)
-                self.run_pipeline_test(model, tokenizer, feature_extractor)
+                pipeline, examples = self.get_test_pipeline(model, tokenizer, feature_extractor)
+                self.run_pipeline_test(pipeline, examples)
+
+                def run_batch_test(pipeline, examples):
+                    dataset = [random.choice(examples) for i in range(10)]
+
+                    for item in pipeline(dataset, batch_size=4):
+                        pass
+
+                run_batch_test(pipeline, examples)
 
             return test
 
