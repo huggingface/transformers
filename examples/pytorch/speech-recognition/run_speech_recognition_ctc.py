@@ -13,8 +13,7 @@ import torch
 import torch.distributed as dist
 from datasets import DatasetDict, load_dataset, load_metric
 
-import audioread
-import librosa
+import torchaudio
 import transformers
 from transformers import (
     AutoConfig,
@@ -328,14 +327,14 @@ def main():
 
     if data_args.audio_column_name not in raw_datasets["train"].column_names:
         raise ValueError(
-            f"--audio_column_name {data_args.audio_column_name} not found in dataset. "
+            f"--audio_column_name {data_args.audio_column_name} not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--audio_column_name` to the correct audio column - one of "
             f"{', '.join(raw_datasets['train'].column_names)}."
         )
 
     if data_args.text_column_name not in raw_datasets["train"].column_names:
         raise ValueError(
-            f"--text_column_name {data_args.audio_column_name} not found in dataset. "
+            f"--text_column_name {data_args.audio_column_name} not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--text_column_name` to the correct text column - one of "
             f"{', '.join(raw_datasets['train'].column_names)}."
         )
@@ -371,11 +370,18 @@ def main():
     if training_args.world_size == 1 or dist.get_rank() == 0:
         vocab_dict = create_vocabulary_from_data(raw_datasets)
 
-        # save vocab dict to be loaded into tokenizer
-        with open(os.path.join(training_args.output_dir, "vocab.json"), "w") as vocab_file:
-            json.dump(vocab_dict, vocab_file)
+        vocab_file = os.path.join(training_args.output_dir, "vocab.json")
 
-    # make sure all process sync here in distributed training to be sure to load the same vocab
+        # save vocab dict to be loaded into tokenizer
+        os.makedirs(training_args.output_dir, exist_ok=True)
+        if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
+            os.remove(vocab_file)
+
+        if not os.path.isfile(vocab_file):
+            with open(vocab_file, "w") as vocab_file:
+                json.dump(vocab_dict, vocab_file)
+
+    # make sure all processes wait until vocab is created
     if training_args.world_size > 1:
         dist.barrier()
 
@@ -388,7 +394,7 @@ def main():
 
     # load feature_extractor, tokenizer and create processor
     tokenizer = AutoTokenizer.from_pretrained(
-        training_args.output_dir,
+        "./" + training_args.output_dir,
         tokenizer_type=config.model_type,
         unk_token="[UNK]",
         pad_token="[PAD]",
@@ -437,14 +443,26 @@ def main():
     max_input_length = data_args.max_duration_in_seconds * processor.feature_extractor.sampling_rate
     min_input_length = data_args.min_duration_in_seconds * processor.feature_extractor.sampling_rate
 
+    resampler = None
+    if raw_datasets["train"][data_args.audio_column_name][0].split(".")[-1] == "mp3":
+        # TODO(PVP) - remove hard-coded 48_000 after audio feature is merged
+        resampler = torchaudio.transforms.Resample(48_000, processor.feature_extractor.sampling_rate)
+
+    # Preprocessing the datasets.
+    # We need to read the aduio files as arrays and tokenize the targets.
+    def speech_file_to_array_fn(batch):
+        speech_array, sampling_rate = torchaudio.load(batch["path"])
+        batch["speech"] = resampler(speech_array).squeeze().numpy()
+
     def prepare_dataset(batch):
-        # load and if necessary resample dataset
-        try:
-            speech_array, sampling_rate = librosa.load(
-                batch[data_args.audio_column_name], sr=processor.feature_extractor.sampling_rate
-            )
-        except audioread.NoBackendError:
-            raise ImportError("Make sure you have install `ffmpeg` correctly for MP3 decoding")
+        # load audio
+        speech_array, sampling_rate = torchaudio.load(batch[data_args.audio_column_name])
+
+        # if necessary resample audio
+        if resampler is not None:
+            # TODO(PVP) - remove hard-coded 48_000 after audio feature is merged
+            speech_array = resampler(speech_array).squeeze().numpy()
+            sampling_rate = resampler.new_freq
 
         batch["input_values"] = processor(
             speech_array, sampling_rate=sampling_rate, truncate=True, max_length=max_input_length
