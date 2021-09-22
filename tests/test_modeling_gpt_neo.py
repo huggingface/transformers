@@ -97,7 +97,7 @@ class GPTNeoModelTester:
     def get_large_model_config(self):
         return GPTNeoConfig.from_pretrained("gpt_neo")
 
-    def prepare_config_and_inputs(self, gradient_checkpointing=False):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -120,7 +120,7 @@ class GPTNeoModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = self.get_config(gradient_checkpointing=False)
+        config = self.get_config()
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
 
@@ -136,18 +136,17 @@ class GPTNeoModelTester:
             choice_labels,
         )
 
-    def get_config(self, gradient_checkpointing=False):
+    def get_config(self):
         return GPTNeoConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_layers=self.num_hidden_layers,
             num_heads=self.num_attention_heads,
             max_position_embeddings=self.max_position_embeddings,
-            use_cache=not gradient_checkpointing,
+            use_cache=True,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
-            gradient_checkpointing=gradient_checkpointing,
             window_size=self.window_size,
             attention_types=self.attention_types,
         )
@@ -329,8 +328,12 @@ class GPTNeoModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_forward_and_backwards(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_forward_and_backwards(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
+    ):
         model = GPTNeoForCausalLM(config)
+        if gradient_checkpointing:
+            model.gradient_checkpointing_enable()
         model.to(torch_device)
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -411,8 +414,8 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         self.model_tester.create_and_check_gpt_neo_for_sequence_classification(*config_and_inputs)
 
     def test_gpt_neo_gradient_checkpointing(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
 
     def _get_hidden_states(self):
         return torch.tensor(
@@ -473,7 +476,10 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_gpt_neo(self):
         for checkpointing in [True, False]:
             model = self.model
-            model.config.gradient_checkpointing = checkpointing
+            if checkpointing:
+                model.gradient_checkpointing_enable()
+            else:
+                model.gradient_checkpointing_disable()
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
             # fmt: off
             # The dog-eared copy of the book, which is a collection of essays by the late author,

@@ -180,7 +180,6 @@ def convert_megatron_checkpoint(args, input_state_dict):
         "type_vocab_size": 2,
         "initializer_range": 0.2,
         "layer_norm_eps": 1e-12,
-        "gradient_checkpointing": False,
         "position_embedding_type": "absolute",
         "use_cache": False,
     }
