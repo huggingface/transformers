@@ -61,8 +61,6 @@ class CanineConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
         downsampling_rate (:obj:`int`, `optional`, defaults to 4):
             The rate at which to downsample the original character sequence length before applying the deep Transformer
             encoder.
