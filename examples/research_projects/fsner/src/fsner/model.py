@@ -1,6 +1,7 @@
 import torch
 
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel
+
 
 class FSNERModel(torch.nn.Module):
     """
