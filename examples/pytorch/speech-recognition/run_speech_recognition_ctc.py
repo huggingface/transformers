@@ -11,9 +11,9 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 import torch
 import torch.distributed as dist
+import torchaudio
 from datasets import DatasetDict, load_dataset, load_metric
 
-import torchaudio
 import transformers
 from transformers import (
     AutoConfig,
@@ -457,12 +457,15 @@ def main():
     def prepare_dataset(batch):
         # load audio
         speech_array, sampling_rate = torchaudio.load(batch[data_args.audio_column_name])
+        speech_array = speech_array.squeeze()
 
         # if necessary resample audio
         if resampler is not None:
             # TODO(PVP) - remove hard-coded 48_000 after audio feature is merged
-            speech_array = resampler(speech_array).squeeze().numpy()
+            speech_array = resampler(speech_array)
             sampling_rate = resampler.new_freq
+
+        speech_array = speech_array.numpy()
 
         batch["input_values"] = processor(
             speech_array, sampling_rate=sampling_rate, truncate=True, max_length=max_input_length
