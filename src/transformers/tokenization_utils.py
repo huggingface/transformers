@@ -363,7 +363,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         tokens_to_add = []
         for token in new_tokens:
             if not isinstance(token,str):
-                raise TypeError(f"Token ({token}) is not a string")
+                raise TypeError(f"Token {token} is not a string.")
             if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
                 token = token.lower()
             if (
