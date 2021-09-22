@@ -314,7 +314,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         encoding = feature_extractor(image, return_tensors="pt")
         inputs = encoding.pixel_values
     elif task  == "optical_flow":
-        inputs = torch.randn(1, 2, 368, 496, 27)
+        inputs = torch.randn(1, 2, 27, 368, 496)
 
     # forward pass
     outputs = model(inputs=inputs, attention_mask=input_mask)

@@ -1520,20 +1520,20 @@ def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_b
 
     if len(frames.shape) == 4:
         return einops.rearrange(
-            frames, "b (h dh) (w dw) c -> b h w (dh dw c)", dh=spatial_block_size, dw=spatial_block_size
+            frames, "b c (h dh) (w dw) -> b h w (dh dw c)", dh=spatial_block_size, dw=spatial_block_size
         )
     elif len(frames.shape) == 5:
         return einops.rearrange(
             frames,
-            "b (t dt) (h dh) (w dw) c -> b t h w (dt dh dw c)",
+            "b (t dt) c (h dh) (w dw) -> b t h w (dt dh dw c)",
             dt=temporal_block_size,
             dh=spatial_block_size,
             dw=spatial_block_size,
         )
     else:
         raise ValueError(
-            "Frames should be of rank 4 (batch, height, width, channels)"
-            " or rank 5 (batch, time, height, width, channels)"
+            "Frames should be of rank 4 (batch, channels, height, width)"
+            " or rank 5 (batch, time, channels, height, width)"
         )
 
 
@@ -1863,6 +1863,8 @@ class PerceiverImagePreprocessor(nn.Module):
         index_dims = inputs.shape[1:-1]
         indices = np.prod(index_dims)
         
+        print("Shape of inputs before _build_network_inputs:", inputs.shape)
+        
         # Reshape input features to a 1D index dimension if necessary.
         if len(inputs.shape) > 3 and network_input_is_1d:
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
@@ -1928,7 +1930,7 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = self.conv_after_patches(inputs)
 
         if self.prep_type != "patches":
-            # move channels to last dimension
+            # move channels to last dimension, as the _build_network_inputs method below expects this
             if inputs.ndim == 4:
                 inputs = torch.moveaxis(inputs, 1, -1)
             elif inputs.ndim == 5:
