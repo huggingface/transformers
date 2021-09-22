@@ -852,9 +852,7 @@ class TrainingArguments:
         del self_as_dict["per_gpu_train_batch_size"]
         del self_as_dict["per_gpu_eval_batch_size"]
 
-        for key in self_as_dict.keys():
-            if key.endswith("_token"):
-                self_as_dict[key] = f"<{key.upper()}>"
+        self_as_dict = {k: f"<{k.upper()}>" if k.endswith("_token") else v for k, v in self_as_dict.items()}
 
         attrs_as_str = [f"{k}={v},\n" for k, v in sorted(self_as_dict.items())]
         return f"{self.__class__.__name__}(\n{''.join(attrs_as_str)})"
