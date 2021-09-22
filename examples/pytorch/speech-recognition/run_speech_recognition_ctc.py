@@ -10,8 +10,9 @@ from typing import Dict, List, Optional, Union
 from datasets import DatasetDict, load_dataset, load_metric
 import numpy as np
 import torch
-import torchaudio
 import functools
+import librosa
+import audioread
 
 import transformers
 from transformers import (
@@ -27,6 +28,15 @@ from transformers import (
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 import torch.distributed as dist
+from transformers.utils import check_min_version
+from transformers.utils.versions import require_version
+
+
+# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+check_min_version("4.11.0.dev0")
+
+# TODO(Patrick) Bump up as soon as audio features are merged
+require_version("datasets>=1.12.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
 
 """ Fine-tuning a 🤗 Transformers model for image classification"""
@@ -119,6 +129,18 @@ class DataTrainingArguments:
             "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
         },
     )
+    audio_column_name: Optional[str] = field(
+        default="audio",
+        metadata={
+            "help": "The name of the dataset colmun containing the audio data. Defaults to 'audio'"
+        },
+    )
+    text_column_name: Optional[str] = field(
+        default="text",
+        metadata={
+            "help": "The name of the dataset colmun containing the text data. Defaults to 'text'"
+        },
+    )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
@@ -133,7 +155,7 @@ class DataTrainingArguments:
             "value if set."
         },
     )
-    max_val_samples: Optional[int] = field(
+    max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
@@ -185,6 +207,8 @@ class DataCollatorCTCWithPadding:
         input_features = [{"input_values": feature["input_values"]} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
+        import ipdb; ipdb.set_trace()
+
         batch = self.processor.pad(
             input_features,
             padding=self.padding,
@@ -193,7 +217,7 @@ class DataCollatorCTCWithPadding:
             return_tensors="pt",
         )
 
-        # (TODO): Remove once issue is fixed
+        # (TODO): Remove once issue: https://github.com/huggingface/transformers/issues/13689 is fixed
         batch["input_values"] = batch["input_values"].float()
 
         with self.processor.as_target_processor():
@@ -216,7 +240,7 @@ class DataCollatorCTCWithPadding:
 def create_vocabulary_from_data(datasets: DatasetDict):
     # Given training and test labels create vocabulary
     def extract_all_chars(batch):
-        all_text = " ".join(batch["text"])
+        all_text = " ".join(batch["target_text"])
         vocab = list(set(all_text))
         return {"vocab": [vocab], "all_text": [all_text]}
 
@@ -293,7 +317,7 @@ def main():
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    # load dataset
+    # 1. First, let's load the dataset
     raw_datasets = DatasetDict()
     raw_datasets["train"] = load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
@@ -302,17 +326,46 @@ def main():
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
     )
 
-    # remove special characters from datasets that are not useful for speech recognition
-    chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else []
+    if data_args.audio_column_name not in raw_datasets["train"].column_names:
+        raise ValueError(
+            f"--audio_column_name {data_args.audio_column_name} not found in dataset. "
+            "Make sure to set `--audio_column_name` to the correct audio column - one of "
+            f"{', '.join(raw_datasets['train'].column_names)}."
+        )
+
+    if data_args.text_column_name not in raw_datasets["train"].column_names:
+        raise ValueError(
+            f"--text_column_name {data_args.audio_column_name} not found in dataset. "
+            "Make sure to set `--text_column_name` to the correct text column - one of "
+            f"{', '.join(raw_datasets['train'].column_names)}."
+        )
+
+    # prepare dataset
+    if data_args.max_train_samples is not None:
+        raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
+
+    if data_args.max_eval_samples is not None:
+        raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_eval_samples))
+
+    # 2. We remove some special characters from the datasets
+    # that make training complicated and do not help in transcriping the speech
+    # E.g. characters, such as `,` and `.` do not really have an acoustic characteristic
+    # that could be easily picked up by the model
+
+    chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else None
 
     def remove_special_characters(batch):
-        batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).lower() + " "
+        if chars_to_ignore_regex is not None:
+            batch["target_text"] = re.sub(chars_to_ignore_regex, "", batch[data_args.text_column_name]).lower() + " "
+        else:
+            batch["target_text"] = batch[data_args.text_column_name].lower() + " "
         return batch
 
-    raw_datasets = raw_datasets.map(remove_special_characters, remove_columns=["sentence"])
+    raw_datasets = raw_datasets.map(remove_special_characters, remove_columns=[data_args.text_column_name])
 
-    # create vocabulary from data and save
-    # make sure that only first rank saves vocabulary
+    # 3. Next, we create the vocabulary of the model by extracting all unique characters from
+    # the training and evaluation datasets
+    # We need to make sure that only first rank saves vocabulary
     if training_args.world_size == 1 or dist.get_rank() == 0:
         vocab_dict = create_vocabulary_from_data(raw_datasets)
 
@@ -324,9 +377,9 @@ def main():
     if training_args.world_size > 1:
         dist.barrier()
 
-    # Distributed training:
-    # The .from_pretrained methods guarantee that only one local process can concurrently
-    # download model & vocab.
+    # 4. Now we can instantiate the configuration, feature extractor, tokenizer and model
+    # Note for distributed training, the .from_pretrained methods guarantee that only
+    # one local process can concurrently download model & vocab.
 
     # load config
     config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
@@ -362,49 +415,41 @@ def main():
     # create model
     model = AutoModelForCTC.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir, config=config)
 
-    # prepare dataset
-    if data_args.max_train_samples is not None:
-        raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
+    # freeze encoder
+    if model_args.freeze_feature_extractor:
+        model.freeze_feature_extractor()
 
-    if data_args.max_val_samples is not None:
-        raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_val_samples))
+    # 5. Now we preprocess the datasets which includes loading the audio, resampling and padding
 
-    resampler = torchaudio.transforms.Resample(48_000, 16_000)
+    # The following code should be cleaned up as soon as
+    # https://github.com/huggingface/datasets/pull/2324 is merged
 
     # Preprocessing the datasets.
     # We need to read the aduio files as arrays and tokenize the targets.
-    def speech_file_to_array_fn(batch):
-        speech_array, sampling_rate = torchaudio.load(batch["path"])
-        batch["speech"] = resampler(speech_array).squeeze().numpy()
-        batch["sampling_rate"] = 16_000
-        batch["target_text"] = batch["text"]
-        return batch
-
-    vectorized_datasets = raw_datasets.map(
-        speech_file_to_array_fn,
-        remove_columns=raw_datasets["train"].column_names,
-        num_proc=data_args.preprocessing_num_workers,
-    )
 
     def prepare_dataset(batch):
-        # check that all files have the correct sampling rate
-        assert (
-            len(set(batch["sampling_rate"])) == 1
-        ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
-        batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
+        # load and if necessary resample dataset
+        try:
+            speech_array, sampling_rate = librosa.load(batch[data_args.audio_column_name], sr=processor.feature_extractor.sampling_rate)
+        except audioread.NoBackendError:
+            raise ImportError("Make sure you have install `ffmpeg` correctly for MP3 decoding")
+
+        batch["input_values"] = processor(speech_array, sampling_rate=sampling_rate).input_values
 
         # Setup the processor for targets
         with processor.as_target_processor():
             batch["labels"] = processor(batch["target_text"]).input_ids
         return batch
 
-    vectorized_datasets = vectorized_datasets.map(
+    vectorized_datasets = raw_datasets.map(
         prepare_dataset,
-        remove_columns=vectorized_datasets["train"].column_names,
-        batch_size=training_args.per_device_train_batch_size,
-        batched=True,
+        remove_columns=raw_datasets["train"].column_names,
         num_proc=data_args.preprocessing_num_workers,
     )
+
+    # 6. Next, we can prepare the training.
+    # Let's word error rate (WER) as our evaluation metric,
+    # instantiate a data collator and the trainer
 
     # Define Metric during training
     wer_metric = load_metric("wer")
@@ -423,10 +468,7 @@ def main():
 
         return {"wer": wer}
 
-    if model_args.freeze_feature_extractor:
-        model.freeze_feature_extractor()
-
-    # Data collator
+    # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
 
     # Initialize Trainer
@@ -440,8 +482,12 @@ def main():
         tokenizer=processor.feature_extractor,
     )
 
+    # 7. Finally, we can start training
+
     # Training
     if training_args.do_train:
+
+        # use last checkpoint if exist
         if last_checkpoint is not None:
             checkpoint = last_checkpoint
         elif os.path.isdir(model_args.model_name_or_path):
@@ -471,8 +517,8 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate()
-        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(vectorized_datasets["eval"])
-        metrics["eval_samples"] = min(max_val_samples, len(vectorized_datasets["eval"]))
+        max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(vectorized_datasets["eval"])
+        metrics["eval_samples"] = min(max_eval_samples, len(vectorized_datasets["eval"]))
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
