@@ -370,6 +370,7 @@ if is_tokenizers_available():
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
+    _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -2182,6 +2183,7 @@ if TYPE_CHECKING:
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
+        from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
