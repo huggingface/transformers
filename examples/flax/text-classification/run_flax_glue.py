@@ -519,7 +519,7 @@ def main():
             params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(args.output_dir, params=params)
             tokenizer.save_pretrained(args.output_dir)
-            if training_args.push_to_hub:
+            if args.push_to_hub:
                 repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
 
 
