@@ -512,18 +512,17 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
         )  # token_type_ids should change output
 
-    @tooslow
+    @slow
     def test_gptj_sample_max_time(self):
-        # Marked as @tooslow due to GPU OOM (issue #13676)
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
+        tokenizer = AutoTokenizer.from_pretrained("/home/crocopie/repos/hf-models/gpt-j-tiny-random")
+        model = GPTJForCausalLM.from_pretrained("/home/crocopie/repos/hf-models/gpt-j-tiny-random")
         model.to(torch_device)
 
         torch.manual_seed(0)
         tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
         input_ids = tokenized.input_ids.to(torch_device)
 
-        MAX_TIME = 1
+        MAX_TIME = 0.5
 
         start = datetime.datetime.now()
         model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
