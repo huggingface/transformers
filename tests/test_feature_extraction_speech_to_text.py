@@ -19,7 +19,6 @@ import random
 import unittest
 
 import numpy as np
-import torch
 
 from transformers import is_speech_available
 from transformers.testing_utils import require_torch, require_torchaudio
@@ -238,6 +237,8 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         self.assertEqual(input_features.shape, (3, 6, 24))
 
     def test_double_precision_pad(self):
+        import torch
+
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         np_speech_inputs = np.random.rand(100, 32).astype(np.float64)
         py_speech_inputs = np_speech_inputs.tolist()

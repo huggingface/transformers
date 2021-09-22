@@ -19,7 +19,6 @@ import random
 import unittest
 
 import numpy as np
-import torch
 
 from transformers import WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST, Wav2Vec2Config, Wav2Vec2FeatureExtractor
 from transformers.testing_utils import require_torch, slow
@@ -199,6 +198,8 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
     @require_torch
     def test_double_precision_pad(self):
+        import torch
+
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         np_speech_inputs = np.random.rand(100).astype(np.float64)
         py_speech_inputs = np_speech_inputs.tolist()
