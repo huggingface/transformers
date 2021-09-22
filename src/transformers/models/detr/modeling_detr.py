@@ -783,6 +783,7 @@ class DetrClassificationHead(nn.Module):
 class DetrPreTrainedModel(PreTrainedModel):
     config_class = DetrConfig
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -806,6 +807,10 @@ class DetrPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, DetrDecoder):
+            module.gradient_checkpointing = value
 
 
 DETR_START_DOCSTRING = r"""
@@ -997,6 +1002,7 @@ class DetrDecoder(DetrPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -1084,7 +1090,7 @@ class DetrDecoder(DetrPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

@@ -94,8 +94,6 @@ class BigBirdPegasusConfig(PretrainedConfig):
             "block_sparse"`.
         scale_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`)
             Whether to rescale embeddings with (hidden_size ** 0.5).
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
         Example::
 
@@ -141,7 +139,6 @@ class BigBirdPegasusConfig(PretrainedConfig):
         decoder_start_token_id=2,
         classifier_dropout=0.0,
         scale_embedding=True,
-        gradient_checkpointing=False,
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=1,
@@ -170,7 +167,6 @@ class BigBirdPegasusConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         # extra config

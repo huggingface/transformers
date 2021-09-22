@@ -108,7 +108,6 @@ class Speech2Text2Config(PretrainedConfig):
         decoder_start_token_id=2,
         classifier_dropout=0.0,
         scale_embedding=True,
-        gradient_checkpointing=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -130,7 +129,6 @@ class Speech2Text2Config(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = decoder_layers
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions

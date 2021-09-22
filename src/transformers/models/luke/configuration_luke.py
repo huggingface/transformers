@@ -68,8 +68,6 @@ class LukeConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         use_entity_aware_attention (:obj:`bool`, defaults to :obj:`True`):
             Whether or not the model should use the entity-aware self-attention mechanism proposed in `LUKE: Deep
             Contextualized Entity Representations with Entity-aware Self-attention (Yamada et al.)
@@ -106,7 +104,6 @@ class LukeConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        gradient_checkpointing=False,
         use_entity_aware_attention=True,
         pad_token_id=1,
         bos_token_id=0,
@@ -130,5 +127,4 @@ class LukeConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.gradient_checkpointing = gradient_checkpointing
         self.use_entity_aware_attention = use_entity_aware_attention

@@ -64,8 +64,6 @@ class FNetConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
         use_tpu_fourier_optimizations (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Determines whether to use TPU optimized FFTs. If :obj:`True`, the model will favor axis-wise FFTs
             transforms. Set to :obj:`False` for GPU/CPU hardware, in which case n-dimensional FFTs are used.

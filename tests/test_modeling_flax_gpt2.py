@@ -82,7 +82,7 @@ class FlaxGPT2ModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def prepare_config_and_inputs(self, gradient_checkpointing=False):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -100,7 +100,6 @@ class FlaxGPT2ModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
-            gradient_checkpointing=gradient_checkpointing,
         )
 
         return (config, input_ids, input_mask)

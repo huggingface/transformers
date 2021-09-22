@@ -86,7 +86,7 @@ class FlaxGPTNeoModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def prepare_config_and_inputs(self, gradient_checkpointing=False):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -105,7 +105,6 @@ class FlaxGPTNeoModelTester:
             pad_token_id=self.pad_token_id,
             window_size=self.window_size,
             attention_types=self.attention_types,
-            gradient_checkpointing=gradient_checkpointing,
         )
 
         return (config, input_ids, input_mask)

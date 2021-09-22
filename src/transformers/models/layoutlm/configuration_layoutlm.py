@@ -71,8 +71,6 @@ class LayoutLMConfig(BertConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         max_2d_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
             The maximum value that the 2D position embedding might ever used. Typically set this to something large
             just in case (e.g., 1024).
@@ -108,7 +106,6 @@ class LayoutLMConfig(BertConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        gradient_checkpointing=False,
         max_2d_position_embeddings=1024,
         **kwargs
     ):
@@ -126,7 +123,6 @@ class LayoutLMConfig(BertConfig):
             initializer_range=initializer_range,
             layer_norm_eps=layer_norm_eps,
             pad_token_id=pad_token_id,
-            gradient_checkpointing=gradient_checkpointing,
             **kwargs,
         )
         self.max_2d_position_embeddings = max_2d_position_embeddings

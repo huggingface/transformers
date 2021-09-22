@@ -370,15 +370,14 @@ class ModelTesterMixin:
 
     def test_training_gradient_checkpointing(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.model_tester.is_training or not hasattr(config, "gradient_checkpointing"):
+        if not self.model_tester.is_training:
             return
 
-        config.gradient_checkpointing = True
         config.use_cache = False
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
                 continue
             model = model_class(config)
             model.to(torch_device)

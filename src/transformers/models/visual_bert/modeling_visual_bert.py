@@ -398,6 +398,7 @@ class VisualBertEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([VisualBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -417,7 +418,7 @@ class VisualBertEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -532,6 +533,7 @@ class VisualBertPreTrainedModel(PreTrainedModel):
 
     config_class = VisualBertConfig
     base_model_prefix = "visual_bert"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -546,6 +548,10 @@ class VisualBertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, VisualBertEncoder):
+            module.gradient_checkpointing = value
 
 
 @dataclass

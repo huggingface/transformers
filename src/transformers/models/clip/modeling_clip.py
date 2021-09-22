@@ -338,6 +338,7 @@ class CLIPPreTrainedModel(PreTrainedModel):
 
     config_class = CLIPConfig
     base_model_prefix = "clip"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -382,6 +383,10 @@ class CLIPPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, CLIPEncoder):
+            module.gradient_checkpointing = value
 
 
 CLIP_START_DOCSTRING = r"""
@@ -499,6 +504,7 @@ class CLIPEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -551,7 +557,7 @@ class CLIPEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

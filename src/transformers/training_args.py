@@ -372,6 +372,8 @@ class TrainingArguments:
         hub_token (:obj:`str`, `optional`):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             :obj:`huggingface-cli login`.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
     """
 
     output_dir: str = field(
@@ -650,6 +652,12 @@ class TrainingArguments:
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
     hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
+    )
     # Deprecated arguments
     push_to_hub_model_id: str = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
