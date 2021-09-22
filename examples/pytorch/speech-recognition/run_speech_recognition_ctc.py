@@ -11,9 +11,9 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 import torch
 import torch.distributed as dist
+import torchaudio
 from datasets import DatasetDict, load_dataset, load_metric
 
-import torchaudio
 import transformers
 from transformers import (
     AutoConfig,
