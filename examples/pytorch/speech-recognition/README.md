@@ -30,7 +30,8 @@ In the script [`run_speech_recognition_ctc`], we first create a vocabulary from 
 ---
 **NOTE**
 
-If you wish to use multi-processing for data preprocessing by setting `--preprocessing_num_workers` > 1, 
+It is currently not recommended to make use of `--preprocessing_num_workers`.
+If however, you wish to use multi-processing for data preprocessing by setting `--preprocessing_num_workers` > 1, 
 please make sure to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
 
 ```bash
