@@ -18,7 +18,6 @@
 """
 import argparse
 import logging
-import io
 import os
 import onnxruntime
 import sys
@@ -26,8 +25,9 @@ import torch
 
 import numpy as np
 
-from datasets import load_metric
-from tqdm.auto import tqdm
+from bart_onnx.reduce_onnx_size import remove_dup_initializers
+from datetime import datetime
+
 
 import transformers
 from transformers import (
@@ -116,7 +116,7 @@ def load_model_tokenizer(model_name, device='cpu'):
 
     return huggingface_model, tokenizer
 
-def export_and_validate_model(model, tokenizer, output_obj, num_beams, max_length, device='cpu'):
+def export_and_validate_model(model, tokenizer, onnx_file_path, num_beams, max_length, device='cpu'):
     model.eval()
     ort_sess = None
     onnx_bart = torch.jit.script(BARTBeamSearchGenerator(model))
@@ -134,11 +134,10 @@ def export_and_validate_model(model, tokenizer, output_obj, num_beams, max_lengt
                         early_stopping=True,
                         decoder_start_token_id=model.config.decoder_start_token_id)
 
-        results = onnx_bart(inputs['input_ids'], inputs['attention_mask'], torch.tensor(num_beams), torch.tensor(max_length), torch.tensor(model.config.decoder_start_token_id))
         if not ort_sess:
             torch.onnx.export(onnx_bart,
                 (inputs['input_ids'], inputs['attention_mask'], num_beams, max_length, model.config.decoder_start_token_id),
-                output_obj,
+                onnx_file_path,
                 opset_version=14,
                 input_names=['input_ids', 'attention_mask', 'num_beams', 'max_length', 'decoder_start_token_id'],
                 output_names = ['output_ids'],
@@ -150,11 +149,9 @@ def export_and_validate_model(model, tokenizer, output_obj, num_beams, max_lengt
                 strip_doc_string=False,
                 example_outputs=summary_ids)
 
-            if isinstance(output_obj, str):
-                ort_sess = onnxruntime.InferenceSession(output_obj)
-            else:
-                ort_sess = onnxruntime.InferenceSession(output_obj.getvalue())
+            new_onnx_file_path = remove_dup_initializers(os.path.abspath(onnx_file_path))
 
+            ort_sess = onnxruntime.InferenceSession(new_onnx_file_path)
             ort_out = ort_sess.run(None, {
                 'input_ids': inputs['input_ids'].cpu().numpy(),
                 'attention_mask': inputs['attention_mask'].cpu().numpy(),
@@ -192,7 +189,6 @@ def main():
     else:
         raise ValueError("Make sure that model name has been passed")
 
-    # model.resize_token_embeddings(len(tokenizer))
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
@@ -205,10 +201,9 @@ def main():
     if args.output_file_path:
         output_name = args.output_file_path
     else:
-        output_name = io.BytesIO()
+        output_name = 'onnx_model_{}.onnx'.format(datetime.now().utcnow().microsecond)
 
     export_and_validate_model(model, tokenizer, output_name, local_num_beams, local_max_length, local_device)
-
 
     logger.info("***** Running export *****")
 
