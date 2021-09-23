@@ -130,6 +130,7 @@ _import_structure = {
         "is_optuna_available",
         "is_ray_available",
         "is_ray_tune_available",
+        "is_sigopt_available",
         "is_tensorboard_available",
         "is_wandb_available",
     ],
@@ -1951,6 +1952,7 @@ if TYPE_CHECKING:
         is_optuna_available,
         is_ray_available,
         is_ray_tune_available,
+        is_sigopt_available,
         is_tensorboard_available,
         is_wandb_available,
     )
