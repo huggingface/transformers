@@ -1,4 +1,20 @@
-#!/usr/bin/env python4
+#!/usr/bin/env python
+# coding=utf-8
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+
+""" Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
+
 import functools
 import json
 import logging
@@ -28,8 +44,6 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
-
-""" Fine-tuning a 🤗 Transformers model for speech recognition"""
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.11.0.dev0")
@@ -395,7 +409,7 @@ def main():
 
     # load feature_extractor, tokenizer and create processor
     tokenizer = AutoTokenizer.from_pretrained(
-        "./" + training_args.output_dir,
+        training_args.output_dir,
         tokenizer_type=config.model_type,
         unk_token="[UNK]",
         pad_token="[PAD]",
