@@ -45,6 +45,7 @@ from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
+
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.11.0.dev0")
 
@@ -496,7 +497,7 @@ def main():
             prepare_dataset,
             remove_columns=raw_datasets["train"].column_names,
             num_proc=data_args.preprocessing_num_workers,
-            desc="preprocess datasets"
+            desc="preprocess datasets",
         )
 
         # filter data that is shorter than min_input_length
