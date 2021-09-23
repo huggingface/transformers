@@ -1437,6 +1437,12 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         # key, value: B x N x K; query: B x M x K
         # Attention maps -> B x N x M
         # Output -> B x M x K
+        print("Shape of query before decoder cross attention:", query.shape)
+        print("First elements of query before decoder cross attention:", query[0,:3,:3])
+
+        print("Shape of z before decoder cross attention:", z.shape)
+        print("First elements of z before decoder cross attention:", z[0,:3,:3])
+
         layer_outputs = self.decoding_cross_attention(
             query,
             attention_mask=query_mask,
@@ -1446,6 +1452,10 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             output_attentions=output_attentions,
         )
         output = layer_outputs[0]
+
+        print("Shape of output after decoder cross attention:", output.shape)
+        print("First elements of output after decoder cross attention:", output[0,:3,:3])
+
         output = self.final_layer(output)
         return output
 
