@@ -359,7 +359,7 @@ def main():
         raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_eval_samples))
 
     # 2. We remove some special characters from the datasets
-    # that make training complicated and do not help in transcriping the speech
+    # that make training complicated and do not help in transcribing the speech
     # E.g. characters, such as `,` and `.` do not really have an acoustic characteristic
     # that could be easily picked up by the model
 
@@ -499,11 +499,11 @@ def main():
             desc="preprocess datasets"
         )
 
-        # filter data that is shorter then min_input_length
+        # filter data that is shorter than min_input_length
         vectorized_datasets = vectorized_datasets.filter(lambda data: len(data["input_values"]) > min_input_length)
 
     # 6. Next, we can prepare the training.
-    # Let's word error rate (WER) as our evaluation metric,
+    # Let's use word error rate (WER) as our evaluation metric,
     # instantiate a data collator and the trainer
 
     # Define Metric during training
