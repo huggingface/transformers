@@ -46,7 +46,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot-3B": 128}
 
 class BlenderbotTokenizerFast(RobertaTokenizerFast):
     r"""
-    Construct a "fast Blenderbot tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" Blenderbot tokenizer (backed by HuggingFace's `tokenizers` library).
 
     :class:`~transformers.BlenderbotFast` is nearly identical to :class:`~transformers.RobertaTokenizerFast` and runs
     end-to-end tokenization: punctuation splitting and wordpiece. The only difference is that it doesn't add BOS token
