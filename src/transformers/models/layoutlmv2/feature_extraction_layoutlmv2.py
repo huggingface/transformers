@@ -276,7 +276,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         results = []
 
         for _score, _labels, _boxes, _offsets, (height, width) in zip(scores, labels, boxes, offsets, target_sizes):
-            # only keep start of a particular word (i.e. offset start == 0) (e.g. [San, Fran, ##cis, ##co] -> [San, Fran])
+            # only keep start of a particular word (i.e. offset start == 0) (e.g. [San, Fran, ##cis, ##co] -> [San])
             _labels = [label for label, (offset_start, _) in zip(_labels, _offsets) if offset_start == 0]
             _score = [score for score, (offset_start, _) in zip(_score, _offsets) if offset_start == 0]
             _boxes = [
