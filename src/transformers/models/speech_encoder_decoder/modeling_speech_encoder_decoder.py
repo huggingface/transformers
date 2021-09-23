@@ -402,7 +402,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import SpeechEncoderDecoderModel, Speech2Text2Processor
+            >>> from transformers import Speech2Text2Processor, SpeechEncoderDecoderModel
             >>> import torch
 
             >>> processor = Speech2Text2Processor.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
@@ -474,6 +474,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
+            labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
@@ -486,6 +487,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
+            loss=decoder_outputs.loss,
             logits=decoder_outputs.logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
