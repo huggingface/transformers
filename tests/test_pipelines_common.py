@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import importlib
 import logging
 import random
@@ -74,6 +75,12 @@ def get_tiny_config_from_class(configuration_class):
 @lru_cache(maxsize=100)
 def get_tiny_tokenizer_from_checkpoint(checkpoint):
     tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+    if tokenizer.vocab_size < 300:
+        # Wav2Vec2ForCTC for instance
+        # ByT5Tokenizer
+        # all are already small enough and have no Fast version that can
+        # be retrained
+        return tokenizer
     logger.info("Training new from iterator ...")
     vocabulary = string.ascii_letters + string.digits + " "
     tokenizer = tokenizer.train_new_from_iterator(vocabulary, vocab_size=len(vocabulary), show_progress=False)
@@ -88,6 +95,12 @@ def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config):
         feature_extractor = None
     if hasattr(tiny_config, "image_size") and feature_extractor:
         feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
+
+    # Speech2TextModel specific.
+    if hasattr(tiny_config, "input_feat_per_channel") and feature_extractor:
+        feature_extractor = feature_extractor.__class__(
+            feature_size=tiny_config.input_feat_per_channel, num_mel_bins=tiny_config.input_feat_per_channel
+        )
     return feature_extractor
 
 
@@ -138,10 +151,20 @@ class PipelineTestCaseMeta(type):
                     tokenizer = None
                 feature_extractor = get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config)
                 pipeline, examples = self.get_test_pipeline(model, tokenizer, feature_extractor)
+                if pipeline is None:
+                    # The test can disable itself, but it should be very marginal
+                    # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
+                    return
                 self.run_pipeline_test(pipeline, examples)
 
                 def run_batch_test(pipeline, examples):
-                    dataset = [random.choice(examples) for i in range(10)]
+                    # Need to copy because `Conversation` are stateful
+                    if pipeline.tokenizer is not None and pipeline.tokenizer.pad_token_id is None:
+                        return  # No batching for this and it's OK
+
+                    # 10 examples with batch size 4 means there needs to be a unfinished batch
+                    # which is important for the unbatcher
+                    dataset = [copy.deepcopy(random.choice(examples)) for i in range(10)]
 
                     for item in pipeline(dataset, batch_size=4):
                         pass

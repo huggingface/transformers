@@ -183,6 +183,9 @@ class ZeroShotClassificationPipeline(Pipeline):
             - **labels** (:obj:`List[str]`) -- The labels sorted by order of likelihood.
             - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
         """
+        if kwargs.get("batch_size", 1) > 1:
+            logger.warning("Batch size is deactivated for zero-shot pipeline")
+            kwargs["batch_size"] = 1
 
         if len(args) == 0:
             pass

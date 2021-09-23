@@ -26,6 +26,7 @@ from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from packaging import version
+import numpy as np
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
@@ -74,10 +75,8 @@ def pad_collate_fn(tokenizer, feature_extractor):
         else:
             padding_value = tokenizer.pad_token_id
     if feature_extractor is not None:
-        if feature_extractor.padding_value is None:
-            raise ValueError("Pipeline with feature_extractor without padding_value cannot do batching")
-        else:
-            padding_value = feature_extractor.padding_value
+        # Feature extractor can be images, where no padding is expected
+        padding_value = getattr(feature_extractor, "padding_value", None)
 
     def pad(items, key, padding_value):
         if isinstance(items[0][key], torch.Tensor):
@@ -665,8 +664,9 @@ if is_torch_available():
                 unbatch_size = None
             self.unbatch_size = unbatch_size
 
-            self.unbatch_index = None
-            self.unbatch_data = None
+            # Internal bookkeeping
+            self._unbatch_index = None
+            self._unbatch_data = None
 
         def __len__(self):
             return len(self.loader)
@@ -676,32 +676,56 @@ if is_torch_available():
             return self
 
         def __next__(self):
-            if self.unbatch_index is not None and self.unbatch_index < self.unbatch_size:
-                if isinstance(self.unbatch_data, torch.Tensor):
-                    result = self.unbatch_data[self.unbatch_index]
+            if self._unbatch_index is not None and self._unbatch_index < self.unbatch_size:
+                if isinstance(self._unbatch_data, torch.Tensor):
+                    result = self._unbatch_data[self._unbatch_index]
                 else:
-                    result = self.unbatch_data.__class__(
-                        {k: element[self.unbatch_index].unsqueeze(0) for k, element in self.unbatch_data.items()}
+                    result = self._unbatch_data.__class__(
+                        {
+                            k: element[self._unbatch_index].unsqueeze(0)
+                            if isinstance(element[self._unbatch_index], torch.Tensor)
+                            else np.expand_dims(element[self._unbatch_index], 0)
+                            if isinstance(element[self._unbatch_index], np.ndarray)
+                            else element[self._unbatch_index]
+                            for k, element in self._unbatch_data.items()
+                            if k != "past_key_values"
+                        }
                     )
-                self.unbatch_index += 1
+                self._unbatch_index += 1
                 return result
 
             item = next(self.iterator)
             processed = self.infer(item, **self.params)
             if self.unbatch_size is not None:
-                first_tensor = processed[0]
-                if 0 < first_tensor.shape[0] < self.unbatch_size:
-                    # Could be last batch
-                    self.unbatch_size = first_tensor.shape[0]
-                self.unbatch_data = processed
-                self.unbatch_index = 0
-                if isinstance(self.unbatch_data, torch.Tensor):
-                    result = self.unbatch_data[self.unbatch_index]
+                if isinstance(processed, torch.Tensor):
+                    first_tensor = processed
                 else:
-                    result = self.unbatch_data.__class__(
-                        {k: element[self.unbatch_index].unsqueeze(0) for k, element in self.unbatch_data.items()}
+                    key = list(processed.keys())[0]
+                    first_tensor = processed[key]
+                if isinstance(first_tensor, list):
+                    N = len(first_tensor)
+                else:
+                    N = first_tensor.shape[0]
+                if 0 < N < self.unbatch_size:
+                    # Could be last batch
+                    self.unbatch_size = N
+                self._unbatch_data = processed
+                self._unbatch_index = 0
+                if isinstance(self._unbatch_data, torch.Tensor):
+                    result = self._unbatch_data[self._unbatch_index]
+                else:
+                    result = self._unbatch_data.__class__(
+                        {
+                            k: element[self._unbatch_index].unsqueeze(0)
+                            if isinstance(element[self._unbatch_index], torch.Tensor)
+                            else np.expand_dims(element[self._unbatch_index], 0)
+                            if isinstance(element[self._unbatch_index], np.ndarray)
+                            else element[self._unbatch_index]
+                            for k, element in self._unbatch_data.items()
+                            if k != "past_key_values"
+                        }
                     )
-                self.unbatch_index += 1
+                self._unbatch_index += 1
                 return result
             else:
                 return processed

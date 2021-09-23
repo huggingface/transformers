@@ -14,11 +14,22 @@
 
 import unittest
 
+import numpy as np
 import pytest
 
 from transformers import AutoFeatureExtractor, AutoTokenizer, Speech2TextForConditionalGeneration, Wav2Vec2ForCTC
+from transformers.models.auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.testing_utils import is_pipeline_test, require_datasets, require_torch, require_torchaudio, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    require_datasets,
+    require_tf,
+    require_torch,
+    require_torchaudio,
+    slow,
+)
+
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
 # We can't use this mixin because it assumes TF support.
@@ -26,14 +37,42 @@ from transformers.testing_utils import is_pipeline_test, require_datasets, requi
 
 
 @is_pipeline_test
-class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
+class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = {k: v for k, v in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()}
+
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        if tokenizer is None:
+            # Side effect of no Fast Tokenizer class for these model, so skipping
+            # But the slow tokenizer test should still run as they're quite small
+            self.skipTest("No tokenizer available")
+            return
+            # return None, None
+
+        import datasets
+
+        speech_recognizer = AutomaticSpeechRecognitionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
+
+        # test with a raw waveform
+        audio = np.zeros((34000,))
+        dataset = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        filename = dataset[0]["file"]
+        return speech_recognizer, [filename, audio]
+
+    @require_datasets
+    def run_pipeline_test(self, speech_recognizer, examples):
+        filename, audio = examples
+        outputs = speech_recognizer(audio)
+        self.assertEqual(outputs, {"text": ANY(str)})
+
     @require_torch
     @slow
     def test_pt_defaults(self):
         pipeline("automatic-speech-recognition", framework="pt")
 
     @require_torch
-    def test_torch_small(self):
+    def test_small_model_pt(self):
         import numpy as np
 
         speech_recognizer = pipeline(
@@ -45,6 +84,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
+
+    @require_tf
+    def test_small_model_tf(self):
+        self.skipTest("Tensorflow not supported yet.")
 
     @require_torch
     def test_torch_small_no_tokenizer_files(self):
