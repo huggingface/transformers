@@ -995,8 +995,8 @@ class Trainer:
                 find_unused_parameters = True
             model = nn.parallel.DistributedDataParallel(
                 model,
-                device_ids=[self.args.local_rank] if self.args.n_gpu != 0 else None,
-                output_device=self.args.local_rank if self.args.n_gpu != 0 else None,
+                device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
+                output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
                 find_unused_parameters=find_unused_parameters,
             )
 
