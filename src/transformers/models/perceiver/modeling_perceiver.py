@@ -735,6 +735,9 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         embedding_output = self.embeddings(batch_size=batch_size)
 
+        print("Shape of inputs before going into perceiver:", inputs.shape)
+        print("First elements of inputs:", inputs[0,:3,:3])
+        
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=None,
@@ -1726,7 +1729,6 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
 
     def forward(self, index_dims, batch_size, device, pos=None):
         pos = _check_or_build_spatial_positions(pos, index_dims, batch_size)
-        print("Shape of pos:", pos.shape)
         fourier_pos_enc = generate_fourier_features(
             pos,
             num_bands=self.num_bands,
@@ -1734,8 +1736,6 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
             concat_pos=self.concat_pos,
             sine_only=self.sine_only,
         ).to(device)
-        print("Shape of Fourier pos enc:", fourier_pos_enc.shape)
-        print("Device of Fourier pos enc:", fourier_pos_enc.device)
         return fourier_pos_enc
 
 
@@ -1863,15 +1863,11 @@ class PerceiverImagePreprocessor(nn.Module):
         batch_size = inputs.shape[0]
         index_dims = inputs.shape[1:-1]
         indices = np.prod(index_dims)
-        
-        print("Shape of inputs before _build_network_inputs:", inputs.shape)
-        
+                
         # Reshape input features to a 1D index dimension if necessary.
         if len(inputs.shape) > 3 and network_input_is_1d:
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
-
-        print("Shape of inputs after reshape:", inputs.shape)
-        
+                    
         # Construct the position encoding.
         if self.position_encoding_type == "trainable":
             pos_enc = self.position_embeddings(batch_size)
@@ -1938,10 +1934,11 @@ class PerceiverImagePreprocessor(nn.Module):
             else:
                 raise ValueError("Unsupported data format for conv1x1.")
         
+        print("Shape of inputs before _build_network_inputs:", inputs.shape)
+        print("First elements of inputs before _build_network_inputs:", inputs[0,:3,:3,:3])
+        
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
         modality_sizes = None  # Size for each modality, only needed for multimodal
-        
-        print("Shape of inputs after preprocessing:", inputs.shape)
         
         return inputs, modality_sizes, inputs_without_pos
 
