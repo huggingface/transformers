@@ -147,6 +147,13 @@ class DataTrainingArguments:
             "than this will be truncated, sequences shorter will be padded."
         },
     )
+    generation_max_length: Optional[int] = field(
+        default=128,
+        metadata={
+            "help": "The maximum total sequence length for generation text after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
     val_max_target_length: Optional[int] = field(
         default=None,
         metadata={
@@ -164,6 +171,7 @@ class DataTrainingArguments:
             "efficient on GPU but very bad for TPU."
         },
     )
+
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
