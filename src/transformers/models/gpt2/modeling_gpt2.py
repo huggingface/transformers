@@ -158,7 +158,7 @@ class GPT2Attention(nn.Module):
         self.is_cross_attention = is_cross_attention
 
         # Layer-wise attention scaling, reordering, and upcasting
-        self.scale_attn_by_layer_idx = config.scale_attn_by_layer_idx
+        self.scale_attn_by_inverse_layer_idx = config.scale_attn_by_inverse_layer_idx
         self.layer_idx = layer_idx
         self.reorder_and_upcast_attn = config.reorder_and_upcast_attn
 
@@ -190,14 +190,13 @@ class GPT2Attention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
             attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
 
         # Layer-wise attention scaling
-        if self.scale_attn_by_layer_idx:
+        if self.scale_attn_by_inverse_layer_idx:
             attn_weights = attn_weights / float(self.layer_idx + 1)
 
         if not self.is_cross_attention:
@@ -212,7 +211,7 @@ class GPT2Attention(nn.Module):
 
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
 
-        # Downcast (if necessary) back to V dtype (half/fp16 if mixed-precision) -- No-Op if in float()
+        # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op otherwise
         attn_weights = attn_weights.type(value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
@@ -236,7 +235,7 @@ class GPT2Attention(nn.Module):
         if self.scale_attn_weights:
             scale_factor /= float(value.size(-1)) ** 0.5
 
-        if self.scale_attn_by_layer_idx:
+        if self.scale_attn_by_inverse_layer_idx:
             scale_factor /= float(self.layer_idx + 1)
 
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
@@ -262,7 +261,9 @@ class GPT2Attention(nn.Module):
 
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
 
-        # Downcast (if necessary) back to V dtype (half/fp16 if mixed-precision) -- No-Op if in float()
+        # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op if otherwise
+        if attn_weights.dtype != torch.float32:
+            raise RuntimeError("Error with upcasting, attn_weights does not have dtype torch.float32")
         attn_weights = attn_weights.type(value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
