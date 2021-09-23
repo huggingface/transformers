@@ -755,7 +755,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         logits = None
         if self.decoder:
-            decoder_query = self.decoder.decoder_query(inputs)  # shape (batch_size, seq_len, d_model)
+            decoder_query = self.decoder.decoder_query(inputs)  # shape (batch_size, seq_len, d_model) in case of MLM
             logits = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
 
             if self.output_postprocessor:
@@ -1457,6 +1457,9 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         print("First elements of output after decoder cross attention:", output[0,:3,:3])
 
         output = self.final_layer(output)
+        
+        
+        
         return output
 
 
@@ -1524,9 +1527,14 @@ class PerceiverFlowDecoder(PerceiverAbstractDecoder):
         print("First elements of z in decoder:", z[0,:3,:3])
         
         preds = self.decoder(query, z)
+        
+        print("Shape of preds before rescaling:", preds.shape)
+        print("First elements of preds before rescaling:", preds[0,:3,:3])
+
         preds /= self.rescale_factor
 
-        print("Shape of preds:", preds.shape)
+        print("Shape of preds after rescaling:", preds.shape)
+        print("First elements of preds after rescaling:", preds[0,:3,:3])
 
         return preds.reshape([preds.shape[0]] + list(self.output_image_shape) + [preds.shape[-1]])
 
