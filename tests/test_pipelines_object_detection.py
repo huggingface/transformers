@@ -55,7 +55,9 @@ else:
 class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
+    @require_detectron2
     @require_datasets
+    @require_pytesseract
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
         object_detector = ObjectDetectionPipeline(
             model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
