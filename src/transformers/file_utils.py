@@ -248,6 +248,8 @@ if (
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(hf_cache_home, "modules"))
+TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
 DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False) in ENV_VARS_TRUE_VALUES
 
@@ -1853,8 +1855,28 @@ def to_py_obj(obj):
         return obj.numpy().tolist()
     elif is_torch_available() and _is_torch(obj):
         return obj.detach().cpu().tolist()
+    elif is_flax_available() and _is_jax(obj):
+        return np.asarray(obj).tolist()
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
+    else:
+        return obj
+
+
+def to_numpy(obj):
+    """
+    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
+    """
+    if isinstance(obj, (dict, UserDict)):
+        return {k: to_numpy(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return np.array(obj)
+    elif is_tf_available() and _is_tensorflow(obj):
+        return obj.numpy()
+    elif is_torch_available() and _is_torch(obj):
+        return obj.detach().cpu().numpy()
+    elif is_flax_available() and _is_jax(obj):
+        return np.asarray(obj)
     else:
         return obj
 

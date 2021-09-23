@@ -40,8 +40,10 @@ from .integrations import (  # isort: split
     is_fairscale_available,
     is_optuna_available,
     is_ray_tune_available,
+    is_sigopt_available,
     run_hp_search_optuna,
     run_hp_search_ray,
+    run_hp_search_sigopt,
 )
 
 import numpy as np
@@ -231,9 +233,9 @@ class Trainer:
             A function that instantiates the model to be used. If provided, each call to
             :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
 
-            The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be
-            able to choose different architectures according to hyper parameters (such as layer count, sizes of inner
-            layers, dropout probabilities etc).
+            The function may have zero argument, or a single one containing the optuna/Ray Tune/SigOpt trial object, to
+            be able to choose different architectures according to hyper parameters (such as layer count, sizes of
+            inner layers, dropout probabilities etc).
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
@@ -869,6 +871,8 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.RAY:
             params = trial
             params.pop("wandb", None)
+        elif self.hp_search_backend == HPSearchBackend.SIGOPT:
+            params = {k: int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
 
         for key, value in params.items():
             if not hasattr(self.args, key):
@@ -883,6 +887,8 @@ class Trainer:
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             logger.info("Trial:", trial.params)
+        if self.hp_search_backend == HPSearchBackend.SIGOPT:
+            logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from transformers.deepspeed import HfDeepSpeedConfig
@@ -990,13 +996,13 @@ class Trainer:
             elif isinstance(model, PreTrainedModel):
                 # find_unused_parameters breaks checkpointing as per
                 # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-                find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
+                find_unused_parameters = not getattr(model.config, "_gradient_checkpointing", False)
             else:
                 find_unused_parameters = True
             model = nn.parallel.DistributedDataParallel(
                 model,
-                device_ids=[self.args.local_rank],
-                output_device=self.args.local_rank,
+                device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
+                output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
                 find_unused_parameters=find_unused_parameters,
             )
 
@@ -1162,6 +1168,10 @@ class Trainer:
         self.state = TrainerState()
         self.state.is_hyper_param_search = trial is not None
 
+        # Activate gradient checkpointing if needed
+        if args.gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
+
         model = self._wrap_model(self.model_wrapped)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
@@ -1228,7 +1238,7 @@ class Trainer:
         self.callback_handler.lr_scheduler = self.lr_scheduler
         self.callback_handler.train_dataloader = train_dataloader
         self.state.trial_name = self.hp_name(trial) if self.hp_name is not None else None
-        self.state.trial_params = hp_params(trial) if trial is not None else None
+        self.state.trial_params = hp_params(trial.assignments) if trial is not None else None
         # This should be the same if the state has been saved but in case the training arguments changed, it's safer
         # to set this after the load.
         self.state.max_steps = max_steps
@@ -1297,9 +1307,16 @@ class Trainer:
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():
-                        tr_loss += self.training_step(model, inputs)
+                        tr_loss_step = self.training_step(model, inputs)
                 else:
-                    tr_loss += self.training_step(model, inputs)
+                    tr_loss_step = self.training_step(model, inputs)
+
+                if args.logging_nan_inf_filter and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step)):
+                    # if loss is nan or inf simply add the average of previous logged losses
+                    tr_loss += tr_loss / 1 + (self.state.global_step - self._globalstep_last_logged)
+                else:
+                    tr_loss += tr_loss_step
+
                 self.current_flos += float(self.floating_point_ops(inputs))
 
                 # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
@@ -1513,10 +1530,12 @@ class Trainer:
         if self.hp_search_backend is not None and trial is not None:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
-            else:
+            elif self.hp_search_backend == HPSearchBackend.RAY:
                 from ray import tune
 
                 run_id = tune.get_trial_id()
+            elif self.hp_search_backend == HPSearchBackend.SIGOPT:
+                run_id = trial.id
             run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
             run_dir = os.path.join(self.args.output_dir, run_name)
         else:
@@ -1660,9 +1679,9 @@ class Trainer:
         **kwargs,
     ) -> BestRun:
         """
-        Launch an hyperparameter search using ``optuna`` or ``Ray Tune``. The optimized quantity is determined by
-        :obj:`compute_objective`, which defaults to a function returning the evaluation loss when no metric is
-        provided, the sum of all metrics otherwise.
+        Launch an hyperparameter search using ``optuna`` or ``Ray Tune`` or ``SigOpt``. The optimized quantity is
+        determined by :obj:`compute_objective`, which defaults to a function returning the evaluation loss when no
+        metric is provided, the sum of all metrics otherwise.
 
         .. warning::
 
@@ -1675,7 +1694,8 @@ class Trainer:
             hp_space (:obj:`Callable[["optuna.Trial"], Dict[str, float]]`, `optional`):
                 A function that defines the hyperparameter search space. Will default to
                 :func:`~transformers.trainer_utils.default_hp_space_optuna` or
-                :func:`~transformers.trainer_utils.default_hp_space_ray` depending on your backend.
+                :func:`~transformers.trainer_utils.default_hp_space_ray` or
+                :func:`~transformers.trainer_utils.default_hp_space_sigopt` depending on your backend.
             compute_objective (:obj:`Callable[[Dict[str, float]], float]`, `optional`):
                 A function computing the objective to minimize or maximize from the metrics returned by the
                 :obj:`evaluate` method. Will default to :func:`~transformers.trainer_utils.default_compute_objective`.
@@ -1686,8 +1706,8 @@ class Trainer:
                 pick :obj:`"minimize"` when optimizing the validation loss, :obj:`"maximize"` when optimizing one or
                 several metrics.
             backend(:obj:`str` or :class:`~transformers.training_utils.HPSearchBackend`, `optional`):
-                The backend to use for hyperparameter search. Will default to optuna or Ray Tune, depending on which
-                one is installed. If both are installed, will default to optuna.
+                The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
+                on which one is installed. If all are installed, will default to optuna.
             kwargs:
                 Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`. For
                 more information see:
@@ -1696,6 +1716,7 @@ class Trainer:
                   <https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html>`__
                 - the documentation of `tune.run
                   <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
+                - the documentation of `sigopt <https://app.sigopt.com/docs/endpoints/experiments/create>`__
 
         Returns:
             :class:`transformers.trainer_utils.BestRun`: All the information about the best run.
@@ -1707,6 +1728,7 @@ class Trainer:
                     "At least one of optuna or ray should be installed. "
                     "To install optuna run `pip install optuna`."
                     "To install ray run `pip install ray[tune]`."
+                    "To install sigopt run `pip install sigopt`."
                 )
         backend = HPSearchBackend(backend)
         if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
@@ -1715,6 +1737,8 @@ class Trainer:
             raise RuntimeError(
                 "You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
             )
+        if backend == HPSearchBackend.SIGOPT and not is_sigopt_available():
+            raise RuntimeError("You picked the sigopt backend, but it is not installed. Use `pip install sigopt`.")
         self.hp_search_backend = backend
         if self.model_init is None:
             raise RuntimeError(
@@ -1725,8 +1749,12 @@ class Trainer:
         self.hp_name = hp_name
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        run_hp_search = run_hp_search_optuna if backend == HPSearchBackend.OPTUNA else run_hp_search_ray
-        best_run = run_hp_search(self, n_trials, direction, **kwargs)
+        backend_dict = {
+            HPSearchBackend.OPTUNA: run_hp_search_optuna,
+            HPSearchBackend.RAY: run_hp_search_ray,
+            HPSearchBackend.SIGOPT: run_hp_search_sigopt,
+        }
+        best_run = backend_dict[backend](self, n_trials, direction, **kwargs)
 
         self.hp_search_backend = None
         return best_run
@@ -1977,7 +2005,9 @@ class Trainer:
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
         if self.args.local_rank != -1:
-            self.state.total_flos += distributed_broadcast_scalars([self.current_flos]).sum().item()
+            self.state.total_flos += (
+                distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
+            )
             self.current_flos = 0
         else:
             self.state.total_flos += self.current_flos

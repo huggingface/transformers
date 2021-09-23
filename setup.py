@@ -90,7 +90,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.5.1",
+    "deepspeed>=0.5.3",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -134,7 +134,8 @@ _deps = [
     "sacremoses",
     "sagemaker>=2.31.0",
     "scikit-learn",
-    "sentencepiece==0.1.91",
+    "sentencepiece>=0.1.91,!=0.1.92",
+    "sigopt",
     "soundfile",
     "sphinx-copybutton",
     "sphinx-markdown-tables",
@@ -248,8 +249,9 @@ extras["deepspeed"] = deps_list("deepspeed")
 extras["fairscale"] = deps_list("fairscale")
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
+extras["sigopt"] = deps_list("sigopt")
 
-extras["integrations"] = extras["optuna"] + extras["ray"]
+extras["integrations"] = extras["optuna"] + extras["ray"]+ extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list("soundfile")

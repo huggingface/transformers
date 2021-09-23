@@ -130,6 +130,7 @@ _import_structure = {
         "is_optuna_available",
         "is_ray_available",
         "is_ray_tune_available",
+        "is_sigopt_available",
         "is_tensorboard_available",
         "is_wandb_available",
     ],
@@ -209,6 +210,7 @@ _import_structure = {
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
+    "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig", "FNetTokenizer"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
@@ -365,9 +367,11 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
+    _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -555,6 +559,7 @@ if is_torch_available():
             "AutoModel",
             "AutoModelForAudioClassification",
             "AutoModelForCausalLM",
+            "AutoModelForCTC",
             "AutoModelForImageClassification",
             "AutoModelForMaskedLM",
             "AutoModelForMultipleChoice",
@@ -564,6 +569,7 @@ if is_torch_available():
             "AutoModelForQuestionAnswering",
             "AutoModelForSeq2SeqLM",
             "AutoModelForSequenceClassification",
+            "AutoModelForSpeechSeq2Seq",
             "AutoModelForTableQuestionAnswering",
             "AutoModelForTokenClassification",
             "AutoModelWithLMHead",
@@ -798,6 +804,21 @@ if is_torch_available():
             "FlaubertForTokenClassification",
             "FlaubertModel",
             "FlaubertWithLMHeadModel",
+        ]
+    )
+    _import_structure["models.fnet"].extend(
+        [
+            "FNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FNetForMaskedLM",
+            "FNetForMultipleChoice",
+            "FNetForNextSentencePrediction",
+            "FNetForPreTraining",
+            "FNetForQuestionAnswering",
+            "FNetForSequenceClassification",
+            "FNetForTokenClassification",
+            "FNetLayer",
+            "FNetModel",
+            "FNetPreTrainedModel",
         ]
     )
     _import_structure["models.fsmt"].extend(["FSMTForConditionalGeneration", "FSMTModel", "PretrainedFSMTModel"])
@@ -1732,6 +1753,14 @@ if is_flax_available():
             "FlaxBartPreTrainedModel",
         ]
     )
+    _import_structure["models.beit"].extend(
+        [
+            "FlaxBeitForImageClassification",
+            "FlaxBeitForMaskedImageModeling",
+            "FlaxBeitModel",
+            "FlaxBeitPreTrainedModel",
+        ]
+    )
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -1923,6 +1952,7 @@ if TYPE_CHECKING:
         is_optuna_available,
         is_ray_available,
         is_ray_tune_available,
+        is_sigopt_available,
         is_tensorboard_available,
         is_wandb_available,
     )
@@ -2000,6 +2030,7 @@ if TYPE_CHECKING:
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
+    from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
@@ -2154,6 +2185,7 @@ if TYPE_CHECKING:
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
+        from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
@@ -2161,6 +2193,7 @@ if TYPE_CHECKING:
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
+        from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.herbert import HerbertTokenizerFast
@@ -2301,6 +2334,7 @@ if TYPE_CHECKING:
             AutoModel,
             AutoModelForAudioClassification,
             AutoModelForCausalLM,
+            AutoModelForCTC,
             AutoModelForImageClassification,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
@@ -2310,6 +2344,7 @@ if TYPE_CHECKING:
             AutoModelForQuestionAnswering,
             AutoModelForSeq2SeqLM,
             AutoModelForSequenceClassification,
+            AutoModelForSpeechSeq2Seq,
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
             AutoModelWithLMHead,
@@ -2504,6 +2539,19 @@ if TYPE_CHECKING:
             FlaubertForTokenClassification,
             FlaubertModel,
             FlaubertWithLMHeadModel,
+        )
+        from .models.fnet import (
+            FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FNetForMaskedLM,
+            FNetForMultipleChoice,
+            FNetForNextSentencePrediction,
+            FNetForPreTraining,
+            FNetForQuestionAnswering,
+            FNetForSequenceClassification,
+            FNetForTokenClassification,
+            FNetLayer,
+            FNetModel,
+            FNetPreTrainedModel,
         )
         from .models.fsmt import FSMTForConditionalGeneration, FSMTModel, PretrainedFSMTModel
         from .models.funnel import (
@@ -3287,6 +3335,12 @@ if TYPE_CHECKING:
             FlaxBartForSequenceClassification,
             FlaxBartModel,
             FlaxBartPreTrainedModel,
+        )
+        from .models.beit import (
+            FlaxBeitForImageClassification,
+            FlaxBeitForMaskedImageModeling,
+            FlaxBeitModel,
+            FlaxBeitPreTrainedModel,
         )
         from .models.bert import (
             FlaxBertForMaskedLM,
