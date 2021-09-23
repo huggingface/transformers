@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
+from ..file_utils import is_torch_available
 from ..utils import logging
 from .base import Pipeline
 
@@ -24,6 +25,9 @@ if TYPE_CHECKING:
     from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 logger = logging.get_logger(__name__)
+
+if is_torch_available():
+    from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
 
 def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
@@ -102,6 +106,8 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         if self.framework == "tf":
             raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
 
+        self.check_model_type(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items())
+
     def __call__(
         self,
         inputs: Union[np.ndarray, bytes, str],
@@ -149,8 +155,8 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         return processed
 
     def _forward(self, model_inputs):
-        name = self.model.__class__.__name__
-        if name.endswith("ForConditionalGeneration") or name.endswith("EncoderDecoderModel"):
+        model_class = self.model.__class__
+        if model_class in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
             encoder = self.model.get_encoder()
             # we need to pass `processed.get("attention_mask")` here since audio encoder
             # attention mask  length is different from expected text decoder `encoder_attention_mask` length
@@ -160,7 +166,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
                 encoder_outputs=encoder(**model_inputs), attention_mask=model_inputs.get("attention_mask")
             )
             tokens = tokens.squeeze(0)
-        elif name.endswith("ForCTC"):
+        elif model_class in MODEL_FOR_CTC_MAPPING.values():
             outputs = self.model(**model_inputs)
             tokens = outputs.logits.squeeze(0).argmax(dim=-1)
         return tokens

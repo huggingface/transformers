@@ -130,6 +130,7 @@ _import_structure = {
         "is_optuna_available",
         "is_ray_available",
         "is_ray_tune_available",
+        "is_sigopt_available",
         "is_tensorboard_available",
         "is_wandb_available",
     ],
@@ -370,6 +371,7 @@ if is_tokenizers_available():
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
+    _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -558,6 +560,7 @@ if is_torch_available():
             "AutoModel",
             "AutoModelForAudioClassification",
             "AutoModelForCausalLM",
+            "AutoModelForCTC",
             "AutoModelForImageClassification",
             "AutoModelForMaskedLM",
             "AutoModelForMultipleChoice",
@@ -567,6 +570,7 @@ if is_torch_available():
             "AutoModelForQuestionAnswering",
             "AutoModelForSeq2SeqLM",
             "AutoModelForSequenceClassification",
+            "AutoModelForSpeechSeq2Seq",
             "AutoModelForTableQuestionAnswering",
             "AutoModelForTokenClassification",
             "AutoModelWithLMHead",
@@ -1750,6 +1754,14 @@ if is_flax_available():
             "FlaxBartPreTrainedModel",
         ]
     )
+    _import_structure["models.beit"].extend(
+        [
+            "FlaxBeitForImageClassification",
+            "FlaxBeitForMaskedImageModeling",
+            "FlaxBeitModel",
+            "FlaxBeitPreTrainedModel",
+        ]
+    )
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -1941,6 +1953,7 @@ if TYPE_CHECKING:
         is_optuna_available,
         is_ray_available,
         is_ray_tune_available,
+        is_sigopt_available,
         is_tensorboard_available,
         is_wandb_available,
     )
@@ -2174,6 +2187,7 @@ if TYPE_CHECKING:
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
         from .models.blenderbot import BlenderbotTokenizerFast
+        from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
@@ -2322,6 +2336,7 @@ if TYPE_CHECKING:
             AutoModel,
             AutoModelForAudioClassification,
             AutoModelForCausalLM,
+            AutoModelForCTC,
             AutoModelForImageClassification,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
@@ -2331,6 +2346,7 @@ if TYPE_CHECKING:
             AutoModelForQuestionAnswering,
             AutoModelForSeq2SeqLM,
             AutoModelForSequenceClassification,
+            AutoModelForSpeechSeq2Seq,
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
             AutoModelWithLMHead,
@@ -3321,6 +3337,12 @@ if TYPE_CHECKING:
             FlaxBartForSequenceClassification,
             FlaxBartModel,
             FlaxBartPreTrainedModel,
+        )
+        from .models.beit import (
+            FlaxBeitForImageClassification,
+            FlaxBeitForMaskedImageModeling,
+            FlaxBeitModel,
+            FlaxBeitPreTrainedModel,
         )
         from .models.bert import (
             FlaxBertForMaskedLM,
