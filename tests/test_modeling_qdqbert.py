@@ -326,7 +326,7 @@ class QDQBertModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-def create_and_check_for_next_sequence_prediction(
+    def create_and_check_for_next_sequence_prediction(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = QDQBertForNextSentencePrediction(config=config)
