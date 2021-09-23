@@ -1416,7 +1416,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             if self.position_encoding_type == "trainable":
                 pos_emb = self.output_position_encodings(batch_size)
             elif self.position_encoding_type == "fourier":
-                pos_emb = self.output_position_encodings(index_dims, batch_size)
+                pos_emb = self.output_position_encodings(index_dims, batch_size, device=inputs.device)
 
             # Optionally project them to a target dimension.
             pos_emb = self.positions_projection(pos_emb)
@@ -1609,7 +1609,7 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
         frequency band.
 
     Returns:
-      embedding: A 1D Torch tensor of shape [n, n_channels]. If concat_pos is True and sine_only is False, output
+      embedding: A Torch tensor of shape [batch_size, n, n_channels]. If concat_pos is True and sine_only is False, output
       dimensions are ordered as: [dim_1, dim_2, ..., dim_d, sin(pi*f_1*dim_1), ..., sin(pi*f_K*dim_1), ...,
       sin(pi*f_1*dim_d), ..., sin(pi*f_K*dim_d), cos(pi*f_1*dim_1), ..., cos(pi*f_K*dim_1), ..., cos(pi*f_1*dim_d),
       ..., cos(pi*f_K*dim_d)], where dim_i is pos[:, i] and f_k is the kth frequency band.
@@ -1679,8 +1679,6 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
         self.position_embeddings = nn.Parameter(torch.randn(index_dim, num_channels))
 
     def forward(self, batch_size):
-        # position_embeddings = self.position_embeddings(position_ids)
-
         position_embeddings = self.position_embeddings
 
         if batch_size is not None:
@@ -1726,15 +1724,18 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
         self.concat_pos = concat_pos
         self.sine_only = sine_only
 
-    def forward(self, index_dims, batch_size, pos=None):
+    def forward(self, index_dims, batch_size, device, pos=None):
         pos = _check_or_build_spatial_positions(pos, index_dims, batch_size)
+        print("Shape of pos:", pos.shape)
         fourier_pos_enc = generate_fourier_features(
             pos,
             num_bands=self.num_bands,
             max_resolution=self.max_resolution,
             concat_pos=self.concat_pos,
             sine_only=self.sine_only,
-        )
+        ).to(device)
+        print("Shape of Fourier pos enc:", fourier_pos_enc.shape)
+        print("Device of Fourier pos enc:", fourier_pos_enc.device)
         return fourier_pos_enc
 
 
@@ -1873,10 +1874,9 @@ class PerceiverImagePreprocessor(nn.Module):
         
         # Construct the position encoding.
         if self.position_encoding_type == "trainable":
-            # position_ids = torch.arange(0, indices)
             pos_enc = self.position_embeddings(batch_size)
         elif self.position_encoding_type == "fourier":
-            pos_enc = self.position_embeddings(index_dims, batch_size)
+            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device)
 
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
@@ -2004,10 +2004,9 @@ class PerceiverAudioPreprocessor(nn.Module):
 
         # Construct the position encoding.
         if self.position_encoding_type == "trainable":
-            # position_ids = torch.arange(0, indices)
             pos_enc = self.position_embeddings(batch_size)
         elif self.position_encoding_type == "fourier":
-            pos_enc = self.position_embeddings(index_dims, batch_size)
+            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device)
 
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
