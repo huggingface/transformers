@@ -18,7 +18,6 @@ from transformers import (
     MODEL_FOR_OBJECT_DETECTION_MAPPING,
     AutoFeatureExtractor,
     AutoModelForObjectDetection,
-    AutoTokenizer,
     ObjectDetectionPipeline,
     is_vision_available,
     pipeline,
@@ -58,7 +57,9 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
 
     @require_datasets
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
+        object_detector = ObjectDetectionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
         outputs = object_detector("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
 
         self.assertGreater(len(outputs), 0)
@@ -101,12 +102,26 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
                     },
                 )
 
+        if object_detector._is_layout_detection():
+            pipe_inputs = object_detector.preprocess("./tests/fixtures/tests_samples/COCO/000000039769.png")
+            self.assertEqual(
+                set(pipe_inputs.keys()),
+                {"input_ids", "token_type_ids", "attention_mask", "offset_mapping", "bbox", "image", "target_size"},
+            )
+
+            model_outputs = object_detector.forward(pipe_inputs)
+            self.assertEqual(
+                set(model_outputs.keys()),
+                {"outputs", "target_size", "bbox", "offset_mapping"},
+            )
+
     @require_tf
     @unittest.skip("Object detection not implemented in TF")
     def test_small_model_tf(self):
         pass
 
     @require_torch
+    @unittest.skip("Object detection not implemented in TF")
     def test_small_model_pt(self):
         model_id = "mishig/tiny-detr-mobilenetsv3"
 
@@ -282,36 +297,4 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
                     {"score": 0.9086, "label": "other", "box": {"xmin": 85, "ymin": 78, "xmax": 135, "ymax": 87}},
                 ],
             ],
-        )
-
-    @require_detectron2
-    @require_datasets
-    @require_pytesseract
-    @require_torch
-    @slow
-    def test_layout_prcoessing(self):
-        model_id = "nielsr/layoutlmv2-finetuned-funsd"
-
-        model = AutoModelForObjectDetection.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        object_detector = ObjectDetectionPipeline(
-            model=model, feature_extractor=feature_extractor, tokenizer=tokenizer
-        )
-
-        import datasets
-
-        dataset = datasets.load_dataset("nielsr/funsd", split="test")
-        doc_img = dataset[0]["image_path"]
-
-        pipe_inputs = object_detector.preprocess(doc_img)
-        self.assertEqual(
-            set(pipe_inputs.keys()),
-            {"input_ids", "token_type_ids", "attention_mask", "offset_mapping", "bbox", "image", "target_size"},
-        )
-
-        model_outputs = object_detector.forward(pipe_inputs)
-        self.assertEqual(
-            set(model_outputs.keys()),
-            {"outputs", "target_size", "bbox", "offset_mapping"},
         )
