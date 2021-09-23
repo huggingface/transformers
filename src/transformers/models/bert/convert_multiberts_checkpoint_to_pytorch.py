@@ -89,11 +89,13 @@ def convert_multibert_checkpoint_to_pytorch(tf_checkpoint_path, config_path, sav
 
         new_state_dict[pt_weight_name] = torch.from_numpy(name_to_array[weight_name])
 
+    new_state_dict["cls.predictions.decoder.weight"] = new_state_dict["bert.embeddings.word_embeddings.weight"].clone()
+    new_state_dict["cls.predictions.decoder.bias"] = new_state_dict["cls.predictions.bias"].clone().T
     # Load State Dict
     model.load_state_dict(new_state_dict)
 
     # Save PreTrained
-    logging.info(f"Saving pretrained model to {save_path}")
+    logger.info(f"Saving pretrained model to {save_path}")
     model.save_pretrained(save_path)
 
     return model
@@ -103,7 +105,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--tf_checkpoint_path",
-        type=True,
+        type=str,
         default="./seed_0/bert.ckpt",
         required=False,
         help="Path to the TensorFlow 2.x checkpoint path.",
@@ -112,7 +114,7 @@ if __name__ == "__main__":
         "--bert_config_file",
         type=str,
         default="./bert_config.json",
-        required=True,
+        required=False,
         help="The config json file corresponding to the BERT model. This specifies the model architecture.",
     )
     parser.add_argument(
