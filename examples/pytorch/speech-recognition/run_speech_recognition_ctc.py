@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python4
 import functools
 import json
 import logging
@@ -10,7 +10,6 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
-import torch.distributed as dist
 import torchaudio
 from datasets import DatasetDict, load_dataset, load_metric
 
@@ -30,6 +29,7 @@ from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
+""" Fine-tuning a 🤗 Transformers model for speech recognition"""
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.11.0.dev0")
@@ -37,8 +37,6 @@ check_min_version("4.11.0.dev0")
 # TODO(Patrick) Bump up as soon as audio features are merged
 require_version("datasets>=1.12.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
-
-""" Fine-tuning a 🤗 Transformers model for image classification"""
 
 logger = logging.getLogger(__name__)
 
@@ -362,12 +360,19 @@ def main():
             batch["target_text"] = batch[data_args.text_column_name].lower() + " "
         return batch
 
-    raw_datasets = raw_datasets.map(remove_special_characters, remove_columns=[data_args.text_column_name])
+    with training_args.main_process_first(desc="dataset map special characters removal"):
+        raw_datasets = raw_datasets.map(
+            remove_special_characters,
+            remove_columns=[data_args.text_column_name],
+            desc="remove special characters from datasets",
+        )
 
     # 3. Next, we create the vocabulary of the model by extracting all unique characters from
     # the training and evaluation datasets
     # We need to make sure that only first rank saves vocabulary
-    if training_args.world_size == 1 or dist.get_rank() == 0:
+    # make sure all processes wait until vocab is created
+
+    with training_args.main_process_first(desc="dataset map vocabulary creation"):
         vocab_dict = create_vocabulary_from_data(raw_datasets)
 
         vocab_file = os.path.join(training_args.output_dir, "vocab.json")
@@ -380,10 +385,6 @@ def main():
         if not os.path.isfile(vocab_file):
             with open(vocab_file, "w") as vocab_file:
                 json.dump(vocab_dict, vocab_file)
-
-    # make sure all processes wait until vocab is created
-    if training_args.world_size > 1:
-        dist.barrier()
 
     # 4. Now we can instantiate the configuration, feature extractor, tokenizer and model
     # Note for distributed training, the .from_pretrained methods guarantee that only
@@ -476,14 +477,16 @@ def main():
             batch["labels"] = processor(batch["target_text"]).input_ids
         return batch
 
-    vectorized_datasets = raw_datasets.map(
-        prepare_dataset,
-        remove_columns=raw_datasets["train"].column_names,
-        num_proc=data_args.preprocessing_num_workers,
-    )
+    with training_args.main_process_first(desc="dataset map preprocessing"):
+        vectorized_datasets = raw_datasets.map(
+            prepare_dataset,
+            remove_columns=raw_datasets["train"].column_names,
+            num_proc=data_args.preprocessing_num_workers,
+            desc="preprocess datasets"
+        )
 
-    # filter data that is shorter then min_input_length
-    vectorized_datasets = vectorized_datasets.filter(lambda data: len(data["input_values"]) > min_input_length)
+        # filter data that is shorter then min_input_length
+        vectorized_datasets = vectorized_datasets.filter(lambda data: len(data["input_values"]) > min_input_length)
 
     # 6. Next, we can prepare the training.
     # Let's word error rate (WER) as our evaluation metric,

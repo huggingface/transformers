@@ -27,13 +27,19 @@ very little annotated data to yield good performance on automatic speech recogni
 
 In the script [`run_speech_recognition_ctc`], we first create a vocabulary from all unique characters of both the training data and evaluation data. Then, we preprocesses the speech recognition dataset, which includes correct resampling, normalization and padding. Finally, the pretrained speech recognition model is fine-tuned on the annotated speech recognition datasets using CTC loss.
 
-### Mixed precision training
+---
+**NOTE**
 
-If you have a GPU with mixed precision capabilities (architecture Pascal or more recent), you can use mixed precision
-training with PyTorch 1.6.0 or latest, or by installing the [Apex](https://github.com/NVIDIA/apex) library for previous
-versions. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
+If you wish to use multi-processing for data preprocessing by setting `--preprocessing_num_workers` > 1, 
+please make sure to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
 
-Using mixed precision training usually results in 2x-speedup for training with the same final results.
+```bash
+OMP_NUM_THREADS=1 python run_speech_recognition_ctc ...
+```
+
+If the environment variable is not set, the training script might hang, *i.e.* see: https://github.com/pytorch/audio/issues/1021#issuecomment-726915239
+
+---
 
 ### Single-GPU
 
@@ -115,8 +121,8 @@ It has been verified that the script works for the following datasets:
 - [Common Voice](https://huggingface.co/datasets/common_voice)
 - [Librispeech](https://huggingface.co/datasets/librispeech_asr)
 
-| Dataset | Dataset Config | Pretrained Model | Result | GPU setup | Training time |
-|-------|------------------------------|-------------|---------------|---------------|----------------------|
-| [Librispeech](https://huggingface.co/datasets/librispeech_asr)| `"clean"` - `"train.100"` | [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base)       | [here](https://huggingface.co/patrickvonplaten/wav2vec2-librispeech-clean-100h-demo-dist)      |  8 GPU V100   |   1h30min |
-| [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53)       | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo)      |  1 GPU V100   |  1h20min                 |
-| [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53)       | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo-dist)      |  8 GPU V100   |  18min                 |
+| Dataset | Dataset Config | Pretrained Model | Word error rate on eval | GPU setup | Training time | Fine-tuned Model & Logs |
+|-------|------------------------------|-------------|---------------|---------------|----------------------|-------------|
+| [Librispeech](https://huggingface.co/datasets/librispeech_asr)| `"clean"` - `"train.100"` |  [facebook/wav2vec2-large-lv60](https://huggingface.co/facebook/wav2vec2-large-lv60) | 0.042 | 8 GPU V100 | 1h30min  | [here](https://huggingface.co/patrickvonplaten/wav2vec2-librispeech-clean-100h-demo-dist) |
+| [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53)  | 0.36     | 8 GPU V100   |  18min                 | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo-dist)      |  
+| [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) | 0.35 | 1 GPU V100   |  1h20min                      | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo)  | 
