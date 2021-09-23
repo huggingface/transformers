@@ -15,6 +15,7 @@ env:
   OMP_NUM_THREADS: 16
   MKL_NUM_THREADS: 16
   PYTEST_TIMEOUT: 600
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
 
 jobs:
   run_all_tests_torch_gpu:

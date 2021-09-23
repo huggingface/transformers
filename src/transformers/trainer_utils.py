@@ -198,14 +198,29 @@ def default_hp_space_ray(trial) -> Dict[str, float]:
     }
 
 
+def default_hp_space_sigopt(trial):
+    return [
+        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformamtion": "log"},
+        {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
+        {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
+        {
+            "categorical_values": ["4", "8", "16", "32", "64"],
+            "name": "per_device_train_batch_size",
+            "type": "categorical",
+        },
+    ]
+
+
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
+    SIGOPT = "sigopt"
 
 
 default_hp_space = {
     HPSearchBackend.OPTUNA: default_hp_space_optuna,
     HPSearchBackend.RAY: default_hp_space_ray,
+    HPSearchBackend.SIGOPT: default_hp_space_sigopt,
 }
 
 
