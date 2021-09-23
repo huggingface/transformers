@@ -569,7 +569,7 @@ class PretrainedConfig(PushToHubMixin):
 
             raise EnvironmentError(msg)
 
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             msg = (
                 f"Couldn't reach server at '{config_file}' to download configuration file or "
                 "configuration file is not a valid JSON file. "
