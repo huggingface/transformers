@@ -750,7 +750,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-        # print("Encoder outputs:", sequence_output[0, :3, :3])
+        print("Shape of encoder outputs:", sequence_output.shape)
+        print("Encoder outputs:", sequence_output[0, :3, :3])
 
         logits = None
         if self.decoder:
