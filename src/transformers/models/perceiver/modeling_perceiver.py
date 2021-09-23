@@ -1506,8 +1506,17 @@ class PerceiverFlowDecoder(PerceiverAbstractDecoder):
 
     def forward(self, query, z, query_mask=None):
         # Output flow and rescale.
+        
+        print("Shape of query in decoder:", query.shape)
+        print("First elements of query in decoder:", query[0,:3,:3])
+
+        print("Shape of z in decoder:", z.shape)
+        print("First elements of z in decoder:", z[0,:3,:3])
+        
         preds = self.decoder(query, z)
         preds /= self.rescale_factor
+
+        print("Shape of preds:", preds.shape)
 
         return preds.reshape([preds.shape[0]] + list(self.output_image_shape) + [preds.shape[-1]])
 
