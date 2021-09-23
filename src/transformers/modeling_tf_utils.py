@@ -641,6 +641,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     _keys_to_ignore_on_load_unexpected = None
     _requires_load_weight_prefix = False
 
+
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         """
@@ -664,6 +665,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+        self.loss_tracker = tf.keras.metrics.Mean(name="loss")
 
     @classmethod
     def _from_config(cls, config, **kwargs):
@@ -717,52 +719,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             raise NotImplementedError
 
-    def compile(
-        self,
-        optimizer="rmsprop",
-        loss="dummy",
-        metrics=None,
-        loss_weights=None,
-        weighted_metrics=None,
-        run_eagerly=None,
-        steps_per_execution=None,
-        **kwargs
-    ):
-        """
-        A minor modification to `tf.keras.Model.compile()` that uses the Model's loss head as the loss if no
-        user-specified loss is present. To disable this behaviour, explicitly pass `loss=None`. For details on the
-        original method, see https://www.tensorflow.org/api_docs/python/tf/keras/Model#compile
-        """
-        if loss == "dummy":
-            print(
-                "No loss function specified in call to compile() - reading the model's loss head as the loss. "
-                "To disable this behaviour, please explicitly pass loss=None !"
-            )
-            loss = {"loss": dummy_loss}
-        super().compile(
-            optimizer=optimizer,
-            loss=loss,
-            metrics=metrics,
-            loss_weights=loss_weights,
-            weighted_metrics=weighted_metrics,
-            run_eagerly=run_eagerly,
-            steps_per_execution=steps_per_execution,
-            **kwargs,
-        )
-
     def train_step(self, data):
         """ """
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-        if y is None and "labels" in x:
-            y = x["labels"]
-        elif y is not None and "labels" not in x:
-            x["labels"] = y
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
-            return_metrics = {}
+            if not self.loss:
+                loss = y_pred.loss
+                self.loss_tracker.update_state(loss)
+                return_metrics = {"loss": self.loss_tracker.result()}
+            else:
+                loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+                return_metrics = {}
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
@@ -773,19 +743,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
-        if "loss" in return_metrics and "loss_loss" in return_metrics:
-            del return_metrics["loss_loss"]
         return return_metrics
 
     def test_step(self, data):
         """ """
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-        if y is None and "labels" in x:
-            y = x["labels"]
-        elif y is not None and "labels" not in x:
-            x["labels"] = y
         y_pred = self(x, training=False)
+        if not self.loss:
+            self.add_loss(y_pred.loss)
         # Updates stateful loss metrics.
         self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
@@ -797,8 +763,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
-        if "loss" in return_metrics and "loss_loss" in return_metrics:
-            del return_metrics["loss_loss"]
         return return_metrics
 
     def set_input_embeddings(self, value):
