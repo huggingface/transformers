@@ -471,10 +471,6 @@ class GPT2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-        def _set_gradient_checkpointing(self, module, value=False):
-            if isinstance(module, GPT2Model):
-                module.gradient_checkpointing = value
-
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
         #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
@@ -485,6 +481,10 @@ class GPT2PreTrainedModel(PreTrainedModel):
             if "c_proj" in name and "weight" in name:
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, GPT2Model):
+            module.gradient_checkpointing = value
 
 
 @dataclass
