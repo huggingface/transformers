@@ -138,8 +138,6 @@ class Wav2Vec2Config(PretrainedConfig):
             instance of :class:`~transformers.Wav2Vec2ForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
     Example::
 
@@ -198,7 +196,6 @@ class Wav2Vec2Config(PretrainedConfig):
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
         classifier_proj_size=256,
-        gradient_checkpointing=False,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -229,7 +226,6 @@ class Wav2Vec2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
-        self.gradient_checkpointing = gradient_checkpointing
         self.use_weighted_layer_sum = use_weighted_layer_sum
         self.classifier_proj_size = classifier_proj_size
 

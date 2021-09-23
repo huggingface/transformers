@@ -51,11 +51,11 @@ from .file_utils import (
     is_torchaudio_available,
     is_vision_available,
 )
-from .integrations import is_optuna_available, is_ray_available
+from .integrations import is_optuna_available, is_ray_available, is_sigopt_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
-DUMMY_UNKWOWN_IDENTIFIER = "julien-c/dummy-unknown"
+DUMMY_UNKNOWN_IDENTIFIER = "julien-c/dummy-unknown"
 DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
 # Used to test Auto{Config, Model, Tokenizer} model_type detection.
 
@@ -514,6 +514,19 @@ def require_ray(test_case):
     """
     if not is_ray_available():
         return unittest.skip("test requires Ray/tune")(test_case)
+    else:
+        return test_case
+
+
+def require_sigopt(test_case):
+    """
+    Decorator marking a test that requires SigOpt.
+
+    These tests are skipped when SigOpt isn't installed.
+
+    """
+    if not is_sigopt_available():
+        return unittest.skip("test requires SigOpt")(test_case)
     else:
         return test_case
 
