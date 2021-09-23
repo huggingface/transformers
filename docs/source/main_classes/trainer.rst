@@ -64,9 +64,9 @@ classification:
 
     class MultilabelTrainer(Trainer):
         def compute_loss(self, model, inputs, return_outputs=False):
-            labels = inputs.pop("labels")
+            labels = inputs.get("labels")
             outputs = model(**inputs)
-            logits = outputs.logits
+            logits = outputs.get('logits')
             loss_fct = nn.BCEWithLogitsLoss()
             loss = loss_fct(logits.view(-1, self.model.config.num_labels),
                             labels.float().view(-1, self.model.config.num_labels))
@@ -117,6 +117,29 @@ TFTrainingArguments
 
 .. autoclass:: transformers.TFTrainingArguments
     :members:
+
+
+Checkpoints
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, :class:`~transformers.Trainer` will save all checkpoints in the :obj:`output_dir` you set in the
+:class:`~transformers.TrainingArguments` you are using. Those will go in subfolder named :obj:`checkpoint-xxx` with xxx
+being the step at which the training was at.
+
+Resuming training from a checkpoint can be done when calling :meth:`~transformers.Trainer.train` with either:
+
+- :obj:`resume_from_checkpoint=True` which will resume training from the latest checkpoint
+- :obj:`resume_from_checkpoint=checkpoint_dir` which will resume training from the specific checkpoint in the directory
+  passed.
+
+In addition, you can easily save your checkpoints on the Model Hub when using :obj:`push_to_hub=True`. By default, all
+the models saved in intermediate checkpoints are saved in different commits, but not the optimizer state. You can adapt
+the :obj:`hub-strategy` value of your :class:`~transformers.TrainingArguments` to either:
+
+- :obj:`"checkpoint"`: the latest checkpoint is also pushed in a subfolder named last-checkpoint, allowing you to
+  resume training easily with :obj:`trainer.train(resume_from_checkpoint="output_dir/last-checkpoint")`.
+- :obj:`"all_checkpoints"`: all checkpoints are pushed like they appear in the output folder (so you will get one
+  checkpoint folder per folder in your final repository)
 
 
 Logging
@@ -197,7 +220,7 @@ which should make the "stop and resume" style of training as close as possible t
 However, due to various default non-deterministic pytorch settings this might not fully work. If you want full
 determinism please refer to `Controlling sources of randomness
 <https://pytorch.org/docs/stable/notes/randomness.html>`__. As explained in the document, that some of those settings
-that make things determinstic (.e.g., ``torch.backends.cudnn.deterministic``) may slow things down, therefore this
+that make things deterministic (.e.g., ``torch.backends.cudnn.deterministic``) may slow things down, therefore this
 can't be done by default, but you can enable those yourself if needed.
 
 

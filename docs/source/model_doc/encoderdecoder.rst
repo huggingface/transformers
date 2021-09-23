@@ -40,3 +40,10 @@ EncoderDecoderModel
 
 .. autoclass:: transformers.EncoderDecoderModel
     :members: forward, from_encoder_decoder_pretrained
+
+
+FlaxEncoderDecoderModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxEncoderDecoderModel
+    :members: __call__, from_encoder_decoder_pretrained

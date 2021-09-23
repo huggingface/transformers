@@ -547,6 +547,7 @@ class ProphetNetDecoderLMOutput(ModelOutput):
 class ProphetNetPreTrainedModel(PreTrainedModel):
     config_class = ProphetNetConfig
     base_model_prefix = "prophetnet"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -557,6 +558,10 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (ProphetNetDecoder, ProphetNetEncoder)):
+            module.gradient_checkpointing = value
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -1262,6 +1267,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         self.layers = nn.ModuleList([ProphetNetEncoderLayer(config) for _ in range(config.num_encoder_layers)])
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.word_embeddings
@@ -1337,7 +1343,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             if output_hidden_states:
                 encoder_hidden_states = encoder_hidden_states + (hidden_states,)
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1406,6 +1412,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.word_embeddings
@@ -1566,12 +1573,11 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
@@ -1812,15 +1818,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             >>> last_hidden_states = outputs.last_hidden_state  # main stream hidden states
             >>> last_hidden_states_ngram = outputs.last_hidden_state_ngram  # predict hidden states
         """
-
-        if self.training:
-            logger.warning(
-                "There is a known issue with ProphetNet training/fine-tuning that hasn't been fixed yet:"
-                "https://github.com/huggingface/transformers/issues/9804. Please try to use an off-the-shelf"
-                "checkpoint from the model hub or fine-tune another architecture instead."
-            )
-
-        use_cache == use_cache if use_cache is not None else self.config.use_cache
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2006,6 +2004,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 break
             expend_targets[i, :, :] = labels
 
+        logits = logits.transpose(0, 1).contiguous()
         lprobs = nn.functional.log_softmax(
             logits.view(-1, logits.size(-1)),
             dim=-1,
@@ -2250,6 +2249,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
                 break
             expend_targets[i, :, :] = labels
 
+        logits = logits.transpose(0, 1).contiguous()
         lprobs = nn.functional.log_softmax(
             logits.view(-1, logits.size(-1)),
             dim=-1,

@@ -131,7 +131,7 @@ def get_model_table_from_auto_modules():
 
     # Let's build that table!
     model_names = list(model_name_to_config.keys())
-    model_names.sort()
+    model_names.sort(key=str.lower)
     columns = ["Model", "Tokenizer slow", "Tokenizer fast", "PyTorch support", "TensorFlow support", "Flax Support"]
     # We'll need widths to properly display everything in the center (+2 is to leave one extra space on each side).
     widths = [len(c) + 2 for c in columns]

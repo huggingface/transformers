@@ -54,6 +54,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RemBertConfig"
 _TOKENIZER_FOR_DOC = "RemBertTokenizer"
+_CHECKPOINT_FOR_DOC = "google/rembert"
 
 REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/rembert",
@@ -500,6 +501,7 @@ class RemBertEncoder(nn.Module):
 
         self.embedding_hidden_mapping_in = nn.Linear(config.input_embedding_size, config.hidden_size)
         self.layer = nn.ModuleList([RemBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -527,12 +529,11 @@ class RemBertEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warn(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
@@ -647,6 +648,7 @@ class RemBertPreTrainedModel(PreTrainedModel):
     config_class = RemBertConfig
     load_tf_weights = load_tf_weights_in_rembert
     base_model_prefix = "rembert"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -664,6 +666,10 @@ class RemBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, RemBertEncoder):
+            module.gradient_checkpointing = value
 
 
 REMBERT_START_DOCSTRING = r"""
@@ -829,13 +835,12 @@ class RemBertModel(RemBertPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
-            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length

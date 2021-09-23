@@ -229,6 +229,7 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     all_model_classes = (PegasusModel, PegasusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (PegasusForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
+    test_resize_position_embeddings = True
     test_pruning = False
     test_missing_keys = False
 
@@ -526,6 +527,7 @@ class PegasusStandaloneDecoderModelTester:
 class PegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusDecoder, PegasusForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (PegasusForCausalLM,) if is_torch_available() else ()
+    test_resize_position_embeddings = True
     test_pruning = False
     is_encoder_decoder = False
 

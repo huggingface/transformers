@@ -20,6 +20,7 @@ import unittest
 
 from transformers import DeiTConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -340,9 +341,30 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # DeiTForImageClassificationWithTeacher supports inference-only
             if (
-                model_class in MODEL_MAPPING.values()
+                model_class in get_values(MODEL_MAPPING)
                 or model_class.__name__ == "DeiTForImageClassificationWithTeacher"
             ):
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_training_gradient_checkpointing(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.model_tester.is_training:
+            return
+
+        config.use_cache = False
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
+                continue
+            # DeiTForImageClassificationWithTeacher supports inference-only
+            if model_class.__name__ == "DeiTForImageClassificationWithTeacher":
                 continue
             model = model_class(config)
             model.to(torch_device)

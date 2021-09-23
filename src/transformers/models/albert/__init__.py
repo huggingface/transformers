@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from ...file_utils import (
     _LazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
@@ -65,6 +66,17 @@ if is_tf_available():
         "TFAlbertPreTrainedModel",
     ]
 
+if is_flax_available():
+    _import_structure["modeling_flax_albert"] = [
+        "FlaxAlbertForMaskedLM",
+        "FlaxAlbertForMultipleChoice",
+        "FlaxAlbertForPreTraining",
+        "FlaxAlbertForQuestionAnswering",
+        "FlaxAlbertForSequenceClassification",
+        "FlaxAlbertForTokenClassification",
+        "FlaxAlbertModel",
+        "FlaxAlbertPreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig, AlbertOnnxConfig
@@ -103,6 +115,17 @@ if TYPE_CHECKING:
             TFAlbertPreTrainedModel,
         )
 
+    if is_flax_available():
+        from .modeling_flax_albert import (
+            FlaxAlbertForMaskedLM,
+            FlaxAlbertForMultipleChoice,
+            FlaxAlbertForPreTraining,
+            FlaxAlbertForQuestionAnswering,
+            FlaxAlbertForSequenceClassification,
+            FlaxAlbertForTokenClassification,
+            FlaxAlbertModel,
+            FlaxAlbertPreTrainedModel,
+        )
 else:
     import sys
 

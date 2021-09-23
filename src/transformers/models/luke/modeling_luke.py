@@ -579,6 +579,7 @@ class LukeEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([LukeLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -600,7 +601,7 @@ class LukeEncoder(nn.Module):
                 all_entity_hidden_states = all_entity_hidden_states + (entity_hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            if getattr(self.config, "gradient_checkpointing", False):
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -681,6 +682,7 @@ class LukePreTrainedModel(PreTrainedModel):
 
     config_class = LukeConfig
     base_model_prefix = "luke"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
@@ -698,6 +700,10 @@ class LukePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, LukeEncoder):
+            module.gradient_checkpointing = value
 
 
 LUKE_START_DOCSTRING = r"""
@@ -887,13 +893,12 @@ class LukeModel(LukePreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
-            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if attention_mask is None:

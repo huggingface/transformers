@@ -91,7 +91,7 @@ class Wav2Vec2Config(PretrainedConfig):
         num_conv_pos_embedding_groups (:obj:`int`, `optional`, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
         do_stable_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether do apply `stable` layer norm architecture of the Transformer encoder. ``do_stable_layer_norm is
+            Whether to apply `stable` layer norm architecture of the Transformer encoder. ``do_stable_layer_norm is
             True`` corresponds to applying layer norm before the attention layer, whereas ``do_stable_layer_norm is
             False`` corresponds to applying layer norm after the attention layer.
         apply_spec_augment (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -133,8 +133,11 @@ class Wav2Vec2Config(PretrainedConfig):
             Whether to zero infinite losses and the associated gradients of ``torch.nn.CTCLoss``. Infinite losses
             mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
             instance of :class:`~transformers.Wav2Vec2ForCTC`.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        use_weighted_layer_sum (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
+            instance of :class:`~transformers.Wav2Vec2ForSequenceClassification`.
+        classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
+            Dimensionality of the projection before token mean-pooling for classification.
 
     Example::
 
@@ -191,7 +194,8 @@ class Wav2Vec2Config(PretrainedConfig):
         diversity_loss_weight=0.1,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
-        gradient_checkpointing=False,
+        use_weighted_layer_sum=False,
+        classifier_proj_size=256,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -222,7 +226,8 @@ class Wav2Vec2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
-        self.gradient_checkpointing = gradient_checkpointing
+        self.use_weighted_layer_sum = use_weighted_layer_sum
+        self.classifier_proj_size = classifier_proj_size
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
