@@ -8,6 +8,7 @@ from ..models.bert import BertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
+from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.longformer import LongformerOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
@@ -77,6 +78,13 @@ class FeaturesManager:
             "causal-lm-with-past",
             "sequence-classification-with-past",
             onnx_config_cls=GPTNeoOnnxConfig,
+        ),
+        "layoutlm": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls=LayoutLMOnnxConfig,
         ),
     }
 

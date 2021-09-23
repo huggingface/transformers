@@ -220,6 +220,8 @@ class TrainingArguments:
             can harm metric values.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
+        xpu_backend (:obj:`str`, `optional`):
+            The backend to use for xpu distributed training. Must be one of :obj:`"mpi"` or :obj:`"ccl"`.
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the number of TPU cores (automatically passed by launcher script).
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -372,6 +374,8 @@ class TrainingArguments:
         hub_token (:obj:`str`, `optional`):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             :obj:`huggingface-cli login`.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
     """
 
     output_dir: str = field(
@@ -524,7 +528,10 @@ class TrainingArguments:
         metadata={"help": "Whether to use full 16-bit precision evaluation instead of 32-bit"},
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
-
+    xpu_backend: str = field(
+        default=None,
+        metadata={"help": "The backend to be used for distributed training on Intel XPU.", "choices": ["mpi", "ccl"]},
+    )
     tpu_num_cores: Optional[int] = field(
         default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
     )
@@ -650,6 +657,12 @@ class TrainingArguments:
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
     hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
+    )
     # Deprecated arguments
     push_to_hub_model_id: str = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
@@ -844,6 +857,8 @@ class TrainingArguments:
         del self_as_dict["per_gpu_train_batch_size"]
         del self_as_dict["per_gpu_eval_batch_size"]
 
+        self_as_dict = {k: f"<{k.upper()}>" if k.endswith("_token") else v for k, v in self_as_dict.items()}
+
         attrs_as_str = [f"{k}={v},\n" for k, v in sorted(self_as_dict.items())]
         return f"{self.__class__.__name__}(\n{''.join(attrs_as_str)})"
 
@@ -884,6 +899,14 @@ class TrainingArguments:
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
+            if self.local_rank != -1:
+                # Initializes distributed backend for cpu
+                if self.xpu_backend not in ("mpi", "ccl"):
+                    raise ValueError(
+                        "CPU distributed training backend is not properly set. "
+                        "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
+                    )
+                torch.distributed.init_process_group(backend=self.xpu_backend)
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
@@ -1153,7 +1176,8 @@ class TrainingArguments:
 
     def to_dict(self):
         """
-        Serializes this instance while replace `Enum` by their values (for JSON serialization support).
+        Serializes this instance while replace `Enum` by their values (for JSON serialization support). It obfuscates
+        the token values by removing their value.
         """
         d = asdict(self)
         for k, v in d.items():
@@ -1161,6 +1185,8 @@ class TrainingArguments:
                 d[k] = v.value
             if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
                 d[k] = [x.value for x in v]
+            if k.endswith("_token"):
+                d[k] = f"<{k.upper()}>"
         return d
 
     def to_json_string(self):

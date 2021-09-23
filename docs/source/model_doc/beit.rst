@@ -59,7 +59,8 @@ Tips:
   :obj:`use_relative_position_bias` attribute of :class:`~transformers.BeitConfig` to :obj:`True` in order to add
   position embeddings.
 
-This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
+This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The JAX/FLAX version of this model was
+contributed by `kamalkraj <https://huggingface.co/kamalkraj>`__. The original code can be found `here
 <https://github.com/microsoft/unilm/tree/master/beit>`__.
 
 BeitConfig
@@ -95,3 +96,24 @@ BeitForImageClassification
 
 .. autoclass:: transformers.BeitForImageClassification
     :members: forward
+
+
+FlaxBeitModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBeitModel
+    :members: __call__
+
+
+FlaxBeitForMaskedImageModeling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBeitForMaskedImageModeling
+    :members: __call__
+
+
+FlaxBeitForImageClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBeitForImageClassification
+    :members: __call__
