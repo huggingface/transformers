@@ -43,7 +43,7 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_realm import RealmConfig
-
+from .utils_realm import load_scann_searcher
 
 logger = logging.get_logger(__name__)
 _BERT_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-bert"
@@ -108,6 +108,9 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         name = name.replace("reader/dense/", "qa_outputs/dense_intermediate/")
         name = name.replace("reader/dense_1/", "qa_outputs/dense_output/")
         name = name.replace("reader/layer_normalization", "qa_outputs/layer_normalization")
+
+        ## For block_emb
+        #name = name.replace("block_emb", "block_emb")
 
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
@@ -1393,6 +1396,76 @@ class RealmEncoder(RealmPreTrainedModel):
             hidden_states=joint_outputs.hidden_states,
             attentions=joint_outputs.attentions,
         )
+
+
+class RealmSearcher(RealmPreTrainedModel):
+
+    _keys_to_ignore_on_load_unexpected = [r"pooler", "cls"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.embedder = RealmEmbedder(config)
+        self.block_emb = torch.zeros(()).new_empty(
+            size=(config.num_block_records, config.retriever_proj_size),
+            dtype=torch.float32,
+            device=torch.device('cpu')
+        )
+        self.init_weights()
+    
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is not None and input_ids.shape[0] != 1) or (inputs_embeds is not None and inputs_embeds.shape[0] != 1):
+            raise ValueError(
+                "The batch_size of inputs should be 1."
+            )
+
+        if self.training:
+            beam_size = self.config.searcher_beam_size
+        else:
+            beam_size = self.config.reader_beam_size
+       
+        question_outputs = self.embedder(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        # [1, projection_size]
+        question_projection = question_outputs[0]
+
+        searcher = load_scann_searcher(
+            db = self.block_emb,
+            num_neighbors=beam_size)
+        
+        retrieved_block_ids, _ = searcher.search_batched(question_projection)
+        # [retriever_beam_size]
+        retrieved_block_ids = torch.tensor(retrieved_block_ids.astype('int64').squeeze())
+
+        # [retriever_beam_size, projection_size]
+        retrieved_block_emb = torch.index_select(self.block_emb, dim=0, index=retrieved_block_ids)
+
+        retrieved_logits = torch.einsum("D,BD->B", question_projection.squeeze(), retrieved_block_emb)
+
+        print(retrieved_logits)
+
 
 
 class RealmReader(RealmPreTrainedModel):
