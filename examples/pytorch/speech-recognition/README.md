@@ -117,6 +117,6 @@ It has been verified that the script works for the following datasets:
 
 | Dataset | Dataset Config | Pretrained Model | Result | GPU setup | Training time |
 |-------|------------------------------|-------------|---------------|---------------|----------------------|
-| [Librispeech](https://huggingface.co/datasets/librispeech_asr)| `"clean"` - `"train.100"` | [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base)       | [here](https://huggingface.co/patrickvonplaten/wav2vec2-librispeech-clean-100h-demo-dist)      |  8 GPU V100   |   TO FILL |
+| [Librispeech](https://huggingface.co/datasets/librispeech_asr)| `"clean"` - `"train.100"` | [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base)       | [here](https://huggingface.co/patrickvonplaten/wav2vec2-librispeech-clean-100h-demo-dist)      |  8 GPU V100   |   1h30min |
 | [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53)       | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo)      |  1 GPU V100   |  1h20min                 |
 | [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53)       | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo-dist)      |  8 GPU V100   |  18min                 |
