@@ -1001,8 +1001,8 @@ class Trainer:
                 find_unused_parameters = True
             model = nn.parallel.DistributedDataParallel(
                 model,
-                device_ids=[self.args.local_rank],
-                output_device=self.args.local_rank,
+                device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
+                output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
                 find_unused_parameters=find_unused_parameters,
             )
 
@@ -2005,7 +2005,9 @@ class Trainer:
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
         if self.args.local_rank != -1:
-            self.state.total_flos += distributed_broadcast_scalars([self.current_flos]).sum().item()
+            self.state.total_flos += (
+                distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
+            )
             self.current_flos = 0
         else:
             self.state.total_flos += self.current_flos

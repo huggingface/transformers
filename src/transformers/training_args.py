@@ -220,6 +220,8 @@ class TrainingArguments:
             can harm metric values.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
+        xpu_backend (:obj:`str`, `optional`):
+            The backend to use for xpu distributed training. Must be one of :obj:`"mpi"` or :obj:`"ccl"`.
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the number of TPU cores (automatically passed by launcher script).
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -526,7 +528,10 @@ class TrainingArguments:
         metadata={"help": "Whether to use full 16-bit precision evaluation instead of 32-bit"},
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
-
+    xpu_backend: str = field(
+        default=None,
+        metadata={"help": "The backend to be used for distributed training on Intel XPU.", "choices": ["mpi", "ccl"]},
+    )
     tpu_num_cores: Optional[int] = field(
         default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
     )
@@ -894,6 +899,14 @@ class TrainingArguments:
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
+            if self.local_rank != -1:
+                # Initializes distributed backend for cpu
+                if self.xpu_backend not in ("mpi", "ccl"):
+                    raise ValueError(
+                        "CPU distributed training backend is not properly set. "
+                        "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
+                    )
+                torch.distributed.init_process_group(backend=self.xpu_backend)
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
