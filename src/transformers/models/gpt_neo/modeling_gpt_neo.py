@@ -23,18 +23,24 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import (
+from transformers.activations import ACT2FN
+from transformers.file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
+from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     CausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import logging
-from .configuration_gpt_neo import GPTNeoConfig
+from transformers.modeling_utils import PreTrainedModel
+from transformers.utils import logging
+
+from ...parallelization_utils import ParallelizationMixin, ParallelLayer
+from .configuration_gpt_neo import GPTNeoConfig, GPTNeoParallelismPolicy
 
 
 logger = logging.get_logger(__name__)
@@ -109,7 +115,14 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
                 num = int(scope_names[1])
                 pointer = pointer[num]
 
-        if name[-1] == "w" and name[-2] in ["out_proj", "k_proj", "q_proj", "v_proj", "c_proj", "c_fc"]:
+        if name[-1] == "w" and name[-2] in [
+            "out_proj",
+            "k_proj",
+            "q_proj",
+            "v_proj",
+            "c_proj",
+            "c_fc",
+        ]:
             array = array.transpose()
 
         if name == ["wte"]:
@@ -148,7 +161,6 @@ class GPTNeoSelfAttention(nn.Module):
         # all other tokens are masked except the previous window_size tokens.
         if attention_type == "local":
             bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
-
         self.register_buffer("bias", bias)
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
@@ -352,7 +364,7 @@ class GPTNeoBlock(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
-class GPTNeoPreTrainedModel(PreTrainedModel):
+class GPTNeoPreTrainedModel(PreTrainedModel, ParallelizationMixin):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -495,6 +507,12 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
+    def _get_default_model_object(self):
+        return self
+
+    def _get_parallelism_policy(self):
+        return GPTNeoParallelismPolicy
+
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -550,7 +568,12 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
         if position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(
+                past_length,
+                input_shape[-1] + past_length,
+                dtype=torch.long,
+                device=device,
+            )
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
         # Attention mask.
@@ -645,7 +668,16 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    presents,
+                    all_hidden_states,
+                    all_self_attentions,
+                ]
+                if v is not None
+            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -682,6 +714,21 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def _get_default_model_object(self):
+        return self.transformer
+
+    def _get_parallelism_policy(self):
+        return GPTNeoParallelismPolicy
+
+    def _get_head_layers(self):
+        return [
+            ParallelLayer(
+                name="lm_head",
+                weight=self.lm_head.weight,
+                bias=self.lm_head.bias,
+            )
+        ]
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
@@ -824,6 +871,21 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         self.init_weights()
+
+    def _get_default_model_object(self):
+        return self.transformer
+
+    def _get_parallelism_policy(self):
+        return GPTNeoParallelismPolicy
+
+    def _get_head_layers(self):
+        return [
+            ParallelLayer(
+                name="score",
+                weight=self.score.weight,
+                bias=self.score.bias,
+            )
+        ]
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

@@ -17,10 +17,13 @@
 from collections import OrderedDict
 from typing import Any, Dict, Iterable, Mapping, Optional
 
-from ... import PreTrainedTokenizer, TensorType, is_torch_available
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast
-from ...utils import logging
+from transformers import PreTrainedTokenizer, TensorType, is_torch_available
+from transformers.configuration_utils import PretrainedConfig
+from transformers.onnx import OnnxConfigWithPast
+from transformers.utils import logging
+
+from ...modeling_utils import ColumnParallelLinear, RowParallelLinear, VocabParallelEmbedding
+from ...parallelization_utils import ParallelismPolicy, ParallelLayer
 
 
 logger = logging.get_logger(__name__)
@@ -95,7 +98,10 @@ class GPTNeoConfig(PretrainedConfig):
     """
     model_type = "gpt_neo"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+    }
 
     def __init__(
         self,
@@ -118,10 +124,11 @@ class GPTNeoConfig(PretrainedConfig):
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
+        vocab_parallel_embedding=True,
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -141,6 +148,7 @@ class GPTNeoConfig(PretrainedConfig):
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
+        self.vocab_parallel_embedding = vocab_parallel_embedding
         self.use_cache = use_cache
 
         self.bos_token_id = bos_token_id
@@ -213,10 +221,19 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
             for i in range(self._config.num_layers):
-                common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "past_sequence"}
+                common_inputs[f"past_key_values.{i}.key"] = {
+                    0: "batch",
+                    2: "past_sequence",
+                }
+                common_inputs[f"past_key_values.{i}.value"] = {
+                    0: "batch",
+                    2: "past_sequence",
+                }
 
-            common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
+            common_inputs["attention_mask"] = {
+                0: "batch",
+                1: "past_sequence + sequence",
+            }
         else:
             common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
 
@@ -227,8 +244,14 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         common_outputs = super().outputs
         if self.use_past:
             for i in range(self._config.num_layers):
-                common_outputs[f"present.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
-                common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+                common_outputs[f"present.{i}.key"] = {
+                    0: "batch",
+                    2: "past_sequence + sequence",
+                }
+                common_outputs[f"present.{i}.value"] = {
+                    0: "batch",
+                    2: "past_sequence + sequence",
+                }
 
             return common_outputs
 
@@ -255,7 +278,12 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
                 import torch
 
                 batch = common_inputs["input_ids"].shape[0]
-                past_shape = (batch, self._config.num_heads, 1, self._config.hidden_size // self._config.num_heads)
+                past_shape = (
+                    batch,
+                    self._config.num_heads,
+                    1,
+                    self._config.hidden_size // self._config.num_heads,
+                )
                 ordered_inputs["past_key_values"] = [
                     (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self._config.num_layers)
                 ]
@@ -279,3 +307,119 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
             return flatten_output
 
         return super().flatten_output_collection_property(name, field)
+
+
+class GPTNeoParallelismPolicy(ParallelismPolicy):
+    @staticmethod
+    def replace_arguments(layer, world_size, config):
+        layer.attn.attention.embed_dim = config.hidden_size // world_size
+        layer.attn.attention.num_heads = config.num_heads // world_size
+
+    @staticmethod
+    def attn_qkv(layer, config):
+        return [
+            ParallelLayer(
+                name="self_attention_q",
+                weight=layer.attn.attention.q_proj.weight,
+                replace={layer.attn.attention.q_proj: ColumnParallelLinear},
+                scale_attention=False,
+            ),
+            ParallelLayer(
+                name="self_attention_k",
+                weight=layer.attn.attention.k_proj.weight,
+                replace={layer.attn.attention.k_proj: ColumnParallelLinear},
+                scale_attention=False,
+            ),
+            ParallelLayer(
+                name="self_attention_v",
+                weight=layer.attn.attention.v_proj.weight,
+                replace={layer.attn.attention.v_proj: ColumnParallelLinear},
+                scale_attention=False,
+            ),
+        ]
+
+    @staticmethod
+    def attn_out(layer, config):
+        return [
+            ParallelLayer(
+                name="self_attention_out",
+                weight=layer.attn.attention.out_proj.weight,
+                bias=layer.attn.attention.out_proj.bias,
+                replace={layer.attn.attention.out_proj: RowParallelLinear},
+            ),
+        ]
+
+    @staticmethod
+    def mlp_in(layer, config):
+        return [
+            ParallelLayer(
+                name="mlp_in",
+                weight=layer.mlp.c_fc.weight,
+                bias=layer.mlp.c_fc.bias,
+                replace={layer.mlp.c_fc: ColumnParallelLinear},
+            )
+        ]
+
+    @staticmethod
+    def mlp_out(layer, config):
+        return [
+            ParallelLayer(
+                name="mlp_out",
+                weight=layer.mlp.c_proj.weight,
+                bias=layer.mlp.c_proj.bias,
+                replace={layer.mlp.c_proj: RowParallelLinear},
+            )
+        ]
+
+    @staticmethod
+    def word_embedding(model, config):
+        return [
+            ParallelLayer(
+                name="word_embedding",
+                weight=model.wte.weight,
+                replace={model.wte: VocabParallelEmbedding},
+            ),
+        ]
+
+    @staticmethod
+    def layerwise_copy_to_all(layer, config):
+        return [
+            ParallelLayer(
+                name="ln_in",
+                weight=layer.ln_1.weight,
+                bias=layer.ln_1.bias,
+            ),
+            ParallelLayer(
+                name="ln_out",
+                weight=layer.ln_2.weight,
+                bias=layer.ln_2.bias,
+            ),
+            ParallelLayer(
+                name="self_attention_bias",
+                bias=layer.attn.attention.bias,
+            ),
+            ParallelLayer(
+                name="self_attention_masked_bias",
+                bias=layer.attn.attention.masked_bias,
+            ),
+        ]
+
+    @staticmethod
+    def modelwise_copy_to_all(model, config):
+        return [
+            ParallelLayer(
+                name="positional_embedding",
+                weight=model.wpe.weight,
+            ),
+            ParallelLayer(
+                name="ln_final",
+                weight=model.ln_f.weight,
+                bias=model.ln_f.bias,
+            ),
+        ]
+
+    @staticmethod
+    def original_layer_class():
+        from oslo.models.gpt_neo.modeling_gpt_neo import GPTNeoBlock
+
+        return GPTNeoBlock

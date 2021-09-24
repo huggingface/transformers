@@ -2328,3 +2328,347 @@ def apply_chunking_to_forward(
         return torch.cat(output_chunks, dim=chunk_dim)
 
     return forward_fn(*input_tensors)
+
+
+def set_tensor_model_parallel_attributes(tensor, is_parallel, dim, stride):
+    setattr(tensor, "tensor_model_parallel", is_parallel)
+    setattr(tensor, "partition_dim", dim)
+    setattr(tensor, "partition_stride", stride)
+
+
+def initialize_affine_weight(weight, init_method, partition_dim, stride=1):
+    """Initialize affine weight for model parallel."""
+    set_tensor_model_parallel_attributes(tensor=weight, is_parallel=True, dim=partition_dim, stride=stride)
+    import deepspeed
+
+    # these code will be used for megatron-friendly model parallelism
+    with deepspeed.checkpointing.get_cuda_rng_tracker().fork():
+        init_method(weight)
+
+
+def vocab_size_with_padding(vocab_size, make_vocab_size_divisible_by, world_size):
+    """Pad vocab size so it is divisible by model parallel size and
+    still having GPU friendly size."""
+
+    after = vocab_size
+    multiple = make_vocab_size_divisible_by * world_size
+
+    while (after % multiple) != 0:
+        after += 1
+
+    return after
+
+
+class VocabUtils(object):
+    @staticmethod
+    def vocab_range_from_per_partition_vocab_size(
+        per_partition_vocab_size: int,
+        rank: int,
+    ) -> Tuple[int, int]:
+        """
+        Compute partitioned vocab range of current rank.
+
+        Args:
+            per_partition_vocab_size (int): partitioned vocab size (vocab_size // tensor_parallel_size)
+            rank (int): current rank
+
+        Returns:
+            Tuple[int, int]: start index, end index
+
+        Examples:
+            >>> per_partition_vocab_size = 25000
+            >>> VocabUtils.vocab_range_from_per_partition_vocab_size(per_partition_vocab_size, rank=0)
+            (0, 24999)
+            >>> VocabUtils.vocab_range_from_per_partition_vocab_size(per_partition_vocab_size, rank=1)
+            (25000, 49999)
+        """
+        start_idx = rank * per_partition_vocab_size
+        end_idx = start_idx + per_partition_vocab_size
+        return start_idx, end_idx
+
+    @staticmethod
+    def vocab_range_from_global_vocab_size(
+        global_vocab_size: int,
+        rank: int,
+        world_size: int,
+    ):
+        """
+        Compute global vocab range of current rank.
+
+        Args:
+            global_vocab_size (int): total vocab size across all GPUs
+            rank (int): current rank
+            world_size (int): world size
+
+        Returns:
+            Tuple[int, int]: start index, end index
+
+        Examples:
+            >>> global_vocab_size = 50000
+            >>> VocabUtils.vocab_range_from_global_vocab_size(global_vocab_size, rank=0, world_size=4)
+            (0, 12499)
+            >>> VocabUtils.vocab_range_from_global_vocab_size(global_vocab_size, rank=1, world_size=4)
+            (12500, 24999)
+        """
+
+        return VocabUtils.vocab_range_from_per_partition_vocab_size(
+            global_vocab_size // world_size,
+            rank,
+        )
+
+
+class VocabParallelEmbedding(nn.Module):
+    """Embedding parallelized in the vocabulary dimension."""
+
+    def __init__(
+        self,
+        mpu,
+        num_embeddings,
+        embedding_dim,
+        init_method,
+        dtype,
+        weight=None,
+    ):
+        super(VocabParallelEmbedding, self).__init__()
+        self.mpu = mpu
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        self.padding_idx = None
+        self.max_norm = None
+        self.norm_type = 2.0
+        self.scale_grad_by_freq = False
+        self.sparse = False
+        self._weight = None
+
+        indices = VocabUtils.vocab_range_from_global_vocab_size(
+            self.num_embeddings,
+            mpu.get_tensor_model_parallel_rank(),
+            mpu.get_tensor_model_parallel_world_size(),
+        )
+
+        vocab_start_index, vocab_end_index = indices
+        num_embeddings_per_partition = vocab_end_index - vocab_start_index
+
+        if weight is None:
+            self.weight = nn.Parameter(
+                torch.empty(
+                    num_embeddings_per_partition,
+                    self.embedding_dim,
+                    device=torch.device(torch.cuda.current_device()),
+                    dtype=dtype,
+                )
+            )
+
+            initialize_affine_weight(
+                self.weight,
+                init_method=init_method,
+                partition_dim=0,
+                stride=1,
+            )
+        else:
+            self.weight = nn.Parameter(weight)
+
+            set_tensor_model_parallel_attributes(
+                tensor=self.weight,
+                is_parallel=True,
+                dim=0,
+                stride=1,
+            )
+
+    def forward(self, inputs):
+        tensor_model_parallel_size = self.mpu.get_tensor_model_parallel_world_size()
+
+        if tensor_model_parallel_size > 1:
+            indices = VocabUtils.vocab_range_from_global_vocab_size(
+                self.num_embeddings,
+                self.mpu.get_tensor_model_parallel_rank(),
+                self.mpu.get_tensor_model_parallel_world_size(),
+            )
+
+            vocab_start_index, vocab_end_index = indices
+            input_mask = (inputs < vocab_start_index) | (inputs >= vocab_end_index)
+            masked_input = inputs.clone() - vocab_start_index
+            masked_input[input_mask] = 0
+        else:
+            masked_input = inputs
+
+        output_parallel = F.embedding(
+            masked_input,
+            self.weight,
+            self.padding_idx,
+            self.max_norm,
+            self.norm_type,
+            self.scale_grad_by_freq,
+            self.sparse,
+        )
+
+        if tensor_model_parallel_size > 1:
+            output_parallel[input_mask, :] = 0.0
+
+        return self.mpu.reduce(output_parallel)
+
+
+class ColumnParallelLinear(nn.Module):
+    """Linear layer with column parallelism."""
+
+    def __init__(
+        self,
+        mpu,
+        input_size,
+        output_size,
+        init_method,
+        dtype,
+        weight=None,
+        bias=None,
+        skip_bias_add=False,
+        reversed=False,
+    ):
+        super(ColumnParallelLinear, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.reversed = reversed
+        self.mpu = mpu
+
+        world_size = mpu.get_tensor_model_parallel_world_size()
+        self.output_size_per_partition = output_size // world_size
+        self.skip_bias_add = skip_bias_add
+
+        if weight is None:
+            self.weight = nn.Parameter(
+                torch.empty(
+                    self.output_size_per_partition,
+                    self.input_size,
+                    device=torch.device(torch.cuda.current_device()),
+                    dtype=dtype,
+                )
+            )
+
+            initialize_affine_weight(
+                weight=self.weight,
+                init_method=init_method,
+                partition_dim=0,
+                stride=1,
+            )
+        else:
+            self.weight = nn.Parameter(weight)
+
+            set_tensor_model_parallel_attributes(
+                tensor=self.weight,
+                is_parallel=True,
+                dim=0,
+                stride=1,
+            )
+
+        if bias is None:
+            self.bias = nn.Parameter(
+                torch.empty(
+                    self.output_size_per_partition,
+                    device=torch.device(torch.cuda.current_device()),
+                    dtype=dtype,
+                )
+            )
+
+            with torch.no_grad():
+                self.bias.zero_()
+
+        else:
+            self.bias = nn.Parameter(bias)
+
+        set_tensor_model_parallel_attributes(
+            tensor=self.bias,
+            is_parallel=True,
+            dim=0,
+            stride=1,
+        )
+
+    def forward(self, inputs):
+        inputs = self.mpu.broadcast(inputs)
+
+        if self.reversed:
+            outputs = torch.matmul(inputs, self.weight)
+        else:
+            outputs = torch.matmul(inputs, self.weight.t())
+
+        if not self.skip_bias_add:
+            return outputs + self.bias if self.bias is not None else outputs
+        else:
+            return outputs, self.bias
+
+
+class RowParallelLinear(nn.Module):
+    """Linear layer with row parallelism."""
+
+    def __init__(
+        self,
+        mpu,
+        input_size,
+        output_size,
+        init_method,
+        dtype,
+        weight=None,
+        bias=None,
+        skip_bias_add=False,
+        reversed=False,
+    ):
+        super(RowParallelLinear, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.reversed = reversed
+        self.mpu = mpu
+
+        world_size = mpu.get_tensor_model_parallel_world_size()
+        self.input_size_per_partition = input_size // world_size
+        self.skip_bias_add = skip_bias_add
+
+        if weight is None:
+            self.weight = nn.Parameter(
+                torch.empty(
+                    self.output_size,
+                    self.input_size_per_partition,
+                    device=torch.device(torch.cuda.current_device()),
+                    dtype=dtype,
+                )
+            )
+
+            initialize_affine_weight(
+                self.weight,
+                init_method=init_method,
+                partition_dim=1,
+                stride=1,
+            )
+        else:
+            self.weight = nn.Parameter(weight)
+
+            set_tensor_model_parallel_attributes(
+                self.weight,
+                is_parallel=True,
+                dim=1,
+                stride=1,
+            )
+
+        if bias is None:
+            self.bias = nn.Parameter(
+                torch.empty(
+                    self.output_size,
+                    device=torch.device(torch.cuda.current_device()),
+                    dtype=dtype,
+                )
+            )
+
+            with torch.no_grad():
+                self.bias.zero_()
+        else:
+            self.bias = nn.Parameter(bias)
+
+    def forward(self, inputs):
+        if self.reversed:
+            outputs = torch.matmul(inputs, self.weight)
+        else:
+            outputs = torch.matmul(inputs, self.weight.t())
+
+        outputs = self.mpu.reduce(outputs)
+
+        if not self.skip_bias_add:
+            return outputs + self.bias if self.bias is not None else outputs
+        else:
+            return outputs, self.bias
