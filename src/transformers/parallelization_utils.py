@@ -847,14 +847,13 @@ class ParallelEngine(object):
             config=config,
         )
 
-        if self.vocab_parallel_embedding:
-            self._process_word_embedding(
-                model=model,
-                mpu=mpu,
-                gpu_index=gpu_index,
-                world_size=world_size,
-                config=config,
-            )
+        self._process_word_embedding(
+            model=model,
+            mpu=mpu,
+            gpu_index=gpu_index,
+            world_size=world_size,
+            config=config,
+        )
 
         non_cuda_tensors = []
         for k, v in dict(model.state_dict()).items():
@@ -897,8 +896,12 @@ class ParallelEngine(object):
 
             # embedding layer has (vocab_size, embedding_dims) tensor
             # so dimension for chunking must be 0 for vocab parallel embedding
-            chunked_weight = torch.chunk(layer.weight, world_size, dim=0)
-            layer.weight.data = chunked_weight[gpu_index].to(self.device)
+            if self.vocab_parallel_embedding:
+                chunked_weight = torch.chunk(layer.weight, world_size, dim=0)
+                layer.weight.data = chunked_weight[gpu_index].to(self.device)
+            else:
+                layer.weight.data = layer.weight.to(self.device)
+
             self._postprocess(layer, {"mpu": mpu})
 
     def _process_repeated_layers(self, model, mpu, gpu_index, world_size, config):
