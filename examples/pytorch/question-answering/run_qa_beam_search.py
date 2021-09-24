@@ -656,7 +656,6 @@ def main():
         trainer.log_metrics("predict", metrics)
         trainer.save_metrics("predict", metrics)
 
-    
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "question-answering"}
     if data_args.dataset_name is not None:
         kwargs["dataset_tags"] = data_args.dataset_name
