@@ -941,6 +941,15 @@ class Trainer:
 
         return model
 
+    def _get_process_group(self, model, deepspeed=False):
+        if hasattr(model, "mpu"):
+            if deepspeed:
+                return model.mpu
+            else:
+                return model.mpu.get_data_parallel_group()
+        else:
+            return None
+
     def _wrap_model(self, model, training=True):
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
@@ -973,7 +982,7 @@ class Trainer:
         if self.sharded_ddp is not None:
             # Sharded DDP!
             if self.sharded_ddp == ShardedDDPOption.SIMPLE:
-                model = ShardedDDP(model, self.optimizer)
+                model = ShardedDDP(model, self.optimizer, process_group=self._get_process_group(model))
             else:
                 mixed_precision = self.args.fp16
                 cpu_offload = ShardedDDPOption.OFFLOAD in self.args.sharded_ddp
@@ -986,10 +995,11 @@ class Trainer:
                     mixed_precision=mixed_precision,
                     reshard_after_forward=zero_3,
                     cpu_offload=cpu_offload,
+                    process_group=self._get_process_group(model),
                 ).to(self.args.device)
 
         elif is_sagemaker_dp_enabled():
-            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
+            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False, process_group=self._get_process_group(model))
         elif self.args.local_rank != -1:
             if self.args.ddp_find_unused_parameters is not None:
                 find_unused_parameters = self.args.ddp_find_unused_parameters
@@ -1004,6 +1014,7 @@ class Trainer:
                 device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
                 output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
                 find_unused_parameters=find_unused_parameters,
+                process_group=self._get_process_group(model)
             )
 
         return model
