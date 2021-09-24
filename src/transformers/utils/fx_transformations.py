@@ -129,7 +129,7 @@ def compose_transformations(
     return functools.reduce(reduce_func, reversed(args), lambda x: x)
 
 
-def _remove_unused_nodes_(gm: GraphModule, lint_and_recompile: bool = True):
+def remove_unused_nodes_(gm: GraphModule, lint_and_recompile: bool = True):
     """Removes all the unused nodes in a GraphModule."""
     graph = gm.graph
     for node in graph.nodes:
@@ -375,7 +375,7 @@ def transform_to_dynamic_input_(gm: GraphModule, is_retracing: bool = False):
     ):
         _register_position_ids_and_replace_(gm, encoder_sequence_length_node, lint_and_recompile=False)
 
-    _remove_unused_nodes_(gm, lint_and_recompile=False)
+    remove_unused_nodes_(gm, lint_and_recompile=False)
 
     graph.lint()
     gm.recompile()

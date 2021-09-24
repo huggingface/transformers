@@ -354,6 +354,19 @@ class HFTracer(Tracer):
 
         _reset_tensor_methods(self.original_methods)
 
+        # TODO: keep this until necessary.
+        # This is necessary because concrete args are added as input to the traced module since
+        # https://github.com/pytorch/pytorch/pull/55888.
+        # A PR that solves this was posted: https://github.com/pytorch/pytorch/pull/59569 but it was not merged yet.
+        for node in graph.nodes:
+            if node.op == "placeholder":
+                # Removing default values for inputs as the forward pass will fail with them.
+                if node.target in input_names:
+                    node.args = ()
+                # It is a concrete arg so it is not used and should be removed.
+                else:
+                    graph.erase_node(node)
+
         return graph
 
     def _insert_module_as_submodule(self, mod):
@@ -453,7 +466,7 @@ def retrace_graph_with(
         return traced
 
 
-def _generate_random_int(low: int = 10, high: int = 100, forbidden_values: Optional[List[int]] = None):
+def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
     if forbidden_values is None:
         forbidden_values = []
     value = random.randint(low, high)
@@ -504,7 +517,6 @@ def symbolic_trace(
         input_names = model.dummy_inputs.keys()
 
     sig = inspect.signature(model.forward)
-    # TODO: how to handle the case of the "return_dict" parameter.
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
     # Preparing HFTracer batch_size and sequence_lenght values for potential dynamic axes.
