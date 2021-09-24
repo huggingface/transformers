@@ -1296,7 +1296,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
     def test_batch_size_stability(self):
         # https://github.com/huggingface/transformers/issues/13612
 
-        checkpoint = 'microsoft/prophetnet-large-uncased'
+        checkpoint = "microsoft/prophetnet-large-uncased"
         model = ProphetNetForConditionalGeneration.from_pretrained(checkpoint)
         model.to(torch_device)
 
@@ -1309,19 +1309,37 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
 
         input_single = tokenizer(SENTENCE1, return_tensors="pt")
         input_batched = tokenizer([SENTENCE1, SENTENCE2], return_tensors="pt", padding=True)
-        short_sentence_num_tokens = input_single['input_ids'].shape[1]
+        short_sentence_num_tokens = input_single["input_ids"].shape[1]
 
-        result_single = model(input_ids=input_single['input_ids'], attention_mask=None, decoder_input_ids=torch.ones((1,1), dtype=torch.int64), output_hidden_states=True)
+        result_single = model(
+            input_ids=input_single["input_ids"],
+            attention_mask=None,
+            decoder_input_ids=torch.ones((1, 1), dtype=torch.int64),
+            output_hidden_states=True,
+        )
 
-        result_batched = model(input_ids=input_batched['input_ids'], attention_mask=input_batched['attention_mask'], 
-                        decoder_input_ids=torch.ones((input_batched['input_ids'].shape[0], 1), dtype=torch.int64), output_hidden_states=True)
+        result_batched = model(
+            input_ids=input_batched["input_ids"],
+            attention_mask=input_batched["attention_mask"],
+            decoder_input_ids=torch.ones((input_batched["input_ids"].shape[0], 1), dtype=torch.int64),
+            output_hidden_states=True,
+        )
 
         # logits the same
         self.assert_(torch.allclose(result_single.logits, result_batched.logits[0], atol=1e-4))
 
         # last encoder state the same
-        self.assert_(torch.allclose(result_single.encoder_last_hidden_state[0, :, :],
-               result_batched.encoder_last_hidden_state[0, :short_sentence_num_tokens, :], atol=1e-4))
-        
+        self.assert_(
+            torch.allclose(
+                result_single.encoder_last_hidden_state[0, :, :],
+                result_batched.encoder_last_hidden_state[0, :short_sentence_num_tokens, :],
+                atol=1e-4,
+            )
+        )
+
         # last decoder state the same
-        self.assert_(torch.allclose(result_single.decoder_hidden_states[-1], result_batched.decoder_hidden_states[-1][0], atol=1e-4))
+        self.assert_(
+            torch.allclose(
+                result_single.decoder_hidden_states[-1], result_batched.decoder_hidden_states[-1][0], atol=1e-4
+            )
+        )
