@@ -17,13 +17,12 @@
 from collections import OrderedDict
 from typing import Any, Dict, Iterable, Mapping, Optional
 
-from transformers import PreTrainedTokenizer, TensorType, is_torch_available
-from transformers.configuration_utils import PretrainedConfig
-from transformers.onnx import OnnxConfigWithPast
-from transformers.utils import logging
-
+from ... import PreTrainedTokenizer, TensorType, is_torch_available
+from ...configuration_utils import PretrainedConfig
 from ...modeling_utils import ColumnParallelLinear, RowParallelLinear, VocabParallelEmbedding
+from ...onnx import OnnxConfigWithPast
 from ...parallelization_utils import ParallelismPolicy, ParallelLayer
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
