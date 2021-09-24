@@ -30,14 +30,15 @@ In the script [`run_speech_recognition_ctc`], we first create a vocabulary from 
 ---
 **NOTE**
 
-If you encounter problems with data preprocessing by setting `--preprocessing_num_workers` > 1, 
-you might want to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
+It is currently not recommended to make use of `--preprocessing_num_workers`.
+If however, you wish to use multi-processing for data preprocessing by setting `--preprocessing_num_workers` > 1, 
+please make sure to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
 
 ```bash
 OMP_NUM_THREADS=1 python run_speech_recognition_ctc ...
 ```
 
-If the environment variable is not set, the training script might freeze, *i.e.* see: https://github.com/pytorch/audio/issues/1021#issuecomment-726915239
+If the environment variable is not set, the training script might hang, *i.e.* see: https://github.com/pytorch/audio/issues/1021#issuecomment-726915239
 
 ---
 
