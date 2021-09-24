@@ -68,8 +68,6 @@ class GPTJConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_attn_weights (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Scale attention weights by dividing by sqrt(hidden_size).
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -111,7 +109,6 @@ class GPTJConfig(PretrainedConfig):
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         scale_attn_weights=True,
-        gradient_checkpointing=False,
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
@@ -131,7 +128,6 @@ class GPTJConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
 

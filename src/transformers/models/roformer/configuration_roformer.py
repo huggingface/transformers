@@ -80,8 +80,6 @@ class RoFormerConfig(PretrainedConfig):
             relevant if ``config.is_decoder=True``.
         rotary_value (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not apply rotary position embeddings on value layer.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
 
     Example::
 
@@ -114,7 +112,6 @@ class RoFormerConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        gradient_checkpointing=False,
         rotary_value=False,
         use_cache=True,
         **kwargs
@@ -134,6 +131,5 @@ class RoFormerConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.gradient_checkpointing = gradient_checkpointing
         self.rotary_value = rotary_value
         self.use_cache = use_cache

@@ -30,7 +30,7 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..bert.modeling_bert import BertModel
+from ..bert.modeling_bert import BertEncoder, BertModel
 from .configuration_dpr import DPRConfig
 
 
@@ -300,6 +300,10 @@ class DPRPretrainedQuestionEncoder(PreTrainedModel):
     def init_weights(self):
         self.question_encoder.init_weights()
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, BertEncoder):
+            module.gradient_checkpointing = value
+
 
 class DPRPretrainedReader(PreTrainedModel):
     """
@@ -316,6 +320,10 @@ class DPRPretrainedReader(PreTrainedModel):
         self.span_predictor.encoder.init_weights()
         self.span_predictor.qa_classifier.apply(self.span_predictor.encoder.bert_model._init_weights)
         self.span_predictor.qa_outputs.apply(self.span_predictor.encoder.bert_model._init_weights)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, BertEncoder):
+            module.gradient_checkpointing = value
 
 
 ###############
