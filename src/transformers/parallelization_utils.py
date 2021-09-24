@@ -1,4 +1,4 @@
-# Copyright 2021 TUNiB Inc, Nvidia Corporation and The Hugging Face Team. All Rights Reserved.
+# Copyright 2021 TUNiB Inc, NVIDIA CORPORATION and The Hugging Face Team. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
