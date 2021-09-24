@@ -32,6 +32,8 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
+        if feature_extractor is not None:
+            self.skipTest("`text-classification` cannot handle bimodal models yet.")
         classifier = ZeroShotClassificationPipeline(model=model, tokenizer=tokenizer)
 
         outputs = classifier("Who are you voting for in 2020?", candidate_labels="politics")
