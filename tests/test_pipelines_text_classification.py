@@ -73,6 +73,8 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
 
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
+        if feature_extractor is not None:
+            self.skipTest("`text-classification` cannot handle bimodal models yet.")
         text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
 
         # Small inputs because BartTokenizer tiny has maximum position embeddings = 22
