@@ -188,7 +188,10 @@ class DataTrainingArguments:
     only_data_preprocessing: Optional[bool] = field(
         default=False,
         metadata={
-            "help": "Whether to only do data preprocessing and skip training. This is especially useful when data preprocessing errors out in distributed training due to timeout. In this case, one should run the preprocessing in a non-distributed setup with `only_data_preprocessing=True` so that the cached datasets can consequently be loaded in distributed training"
+            "help": "Whether to only do data preprocessing and skip training. "
+            "This is especially useful when data preprocessing errors out in distributed training due to timeout. "
+            "In this case, one should run the preprocessing in a non-distributed setup with `only_data_preprocessing=True` "
+            "so that the cached datasets can consequently be loaded in distributed training"
         },
     )
 
