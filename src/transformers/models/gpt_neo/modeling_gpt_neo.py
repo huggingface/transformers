@@ -32,7 +32,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, VocabParallelCrossEntropy
 from ...parallelization_utils import ParallelizationMixin, ParallelLayer
 from ...utils import logging
 from .configuration_gpt_neo import GPTNeoConfig, GPTNeoParallelismPolicy
@@ -807,7 +807,12 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
+            if self.config.vocab_parallel_embedding:
+                assert hasattr(self, "mpu"), "mpu is necessary if you want to use vocab parallel embedding."
+                loss_fct = VocabParallelCrossEntropy(self.mpu)
+            else:
+                loss_fct = CrossEntropyLoss()
+
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
             lm_logits = lm_logits.to(hidden_states.dtype)

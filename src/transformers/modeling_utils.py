@@ -24,6 +24,7 @@ from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
+import torch.distributed as dist
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
@@ -2672,3 +2673,141 @@ class RowParallelLinear(nn.Module):
             return outputs + self.bias if self.bias is not None else outputs
         else:
             return outputs, self.bias
+
+
+class VocabParallelCrossEntropyFunction(torch.autograd.Function):
+    """
+    Reimplementation of vocab parallel cross entropy
+
+    Notes:
+        After last transformer layer, LM performs linear projection to vocab size to compute loss.
+        But in this case, output logit tensors are parallelized by tensor model parallelism.
+        The problem is vocab size is too huge, so communication cost of transfering logits tensors is very expensive.
+        To solve this problem, Megatron just computes loss with sliced logit tensors without all-gather ops.
+        Then Megatron transfers 'loss' to other device, not 'logits'. and all loss will be merged by all-reduce.
+
+    Examples:
+        The following is a simple example of vocab parallel cross entropy
+
+        1) Arguments setting
+        >>> world_size = 2
+        >>> vocab_size = 50000
+        >>> total_vocab = [0, 1, ..., 49999]
+
+        2) Get parallel logits
+        >>> # device="cuda:0", size=(bsz, seq_len, vocab_size//2)
+        >>> parallel_logits_0 = [
+        ...     [0.6, 0.2, 0.01, ..., 0.02],
+        ...     [0.2, 0.02, 0.02, ..., 0.1],
+        ...     ...,
+        ...     [0.2, 0.1, 0.62, ..., 0.01],
+        ... ]   # 0,   1,   2,   ..., 24999
+        >>> # device="cuda:1", size=(bsz, seq_len, vocab_size//2)
+        >>> parallel_logits_1 = [
+        ...     [0.0, 0.3, 0.01, ..., 0.04],
+        ...     [0.3, 0.2, 0.02, ..., 0.05],
+        ...     ...,
+        ...     [0.1, 0.6, 0.23, ..., 0.07],
+        ... ]   # 25000, 25001,  ..., 49999
+
+        3) Vocab partitioning
+        >>> partitioned_vocab_0 = [0, 1, ..., 24999]  # device:0
+        >>> partitioned_vocab_1 = [25000, 25001, ..., 49999] # device:1
+
+        4) Target masking by partitioned vocab
+        >>> target = [0, 12425, 49331, 2321, 33433, 2]
+        >>> partitioned_target_0 = [0, 12425, "MASK", 2321, "MASK", 2]  # by partitioned vocab 0
+        >>> partitioned_target_1 = ["MASK", "MASK", 49331, "MASK", 33433, "MASK"]  # by partitioned vocab 1
+
+        5) Compute loss
+        >>> partitioned_loss_0 = loss_func(parallel_logits_0, partitioned_target_0)
+        >>> partitioned_loss_1 = loss_func(parallel_logits_1, partitioned_target_1)
+
+        6) distributed communication
+        >>> total_loss = torch.distributed.all_reduce(partitioned_loss_n)
+        >>> total_loss.do_backward()
+    """
+
+    @staticmethod
+    def forward(ctx, vocab_parallel_logits, target, mpu):
+        logits_max = torch.max(vocab_parallel_logits, dim=-1)[0]
+
+        dist.all_reduce(
+            logits_max,
+            op=torch.distributed.ReduceOp.MAX,
+            group=mpu.get_tensor_model_parallel_group(),
+        )
+
+        vocab_parallel_logits.sub_(logits_max.unsqueeze(-1))
+        vocab_range = VocabUtils.vocab_range_from_per_partition_vocab_size
+        partition_vocab_size = vocab_parallel_logits.size()[-1]
+        vocab_start_idx, vocab_end_idx = vocab_range(
+            per_partition_vocab_size=partition_vocab_size,
+            rank=mpu.get_tensor_model_parallel_rank(),
+        )
+
+        target_mask = (target < vocab_start_idx) | (target >= vocab_end_idx)
+        masked_target = target.clone() - vocab_start_idx
+        masked_target[target_mask] = 0
+        logits_2d = vocab_parallel_logits.view(-1, partition_vocab_size)
+        masked_target_1d = masked_target.view(-1)
+
+        arange_1d = torch.arange(
+            start=0,
+            end=logits_2d.size()[0],
+            device=logits_2d.device,
+        )
+
+        predicted_logits_1d = logits_2d[arange_1d, masked_target_1d]
+        predicted_logits_1d = predicted_logits_1d.clone().contiguous()
+        predicted_logits = predicted_logits_1d.view_as(target)
+        predicted_logits[target_mask] = 0.0
+        dist.all_reduce(
+            predicted_logits,
+            group=mpu.get_tensor_model_parallel_group(),
+        )
+
+        exp_logits = vocab_parallel_logits
+        torch.exp(vocab_parallel_logits, out=exp_logits)
+        sum_exp_logits = exp_logits.sum(dim=-1)
+        dist.all_reduce(
+            sum_exp_logits,
+            group=mpu.get_tensor_model_parallel_group(),
+        )
+
+        loss = torch.log(sum_exp_logits) - predicted_logits
+        exp_logits.div_(sum_exp_logits.unsqueeze(dim=-1))
+        ctx.save_for_backward(exp_logits, target_mask, masked_target_1d)
+        return loss
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        softmax, target_mask, masked_target_1d = ctx.saved_tensors
+        grad_input = softmax
+
+        partition_vocab_size = softmax.size()[-1]
+        grad_2d = grad_input.view(-1, partition_vocab_size)
+        arange_1d = torch.arange(
+            start=0,
+            end=grad_2d.size()[0],
+            device=grad_2d.device,
+        )
+
+        grad_2d[arange_1d, masked_target_1d] -= 1.0 - target_mask.view(-1).float()
+        grad_input.mul_(grad_output.unsqueeze(dim=-1))
+        return grad_input, None
+
+
+class VocabParallelCrossEntropy(nn.Module):
+    def __init__(self, mpu):
+        super().__init__()
+        self.mpu = mpu
+
+    def forward(self, output, labels):
+        losses = VocabParallelCrossEntropyFunction.apply(
+            output.contiguous(),
+            labels,
+            self.mpu,
+        )
+
+        return torch.mean(losses.view(-1))
