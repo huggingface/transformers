@@ -23,7 +23,7 @@ from fairseq.models.roberta import RobertaModel as FairseqRobertaModel
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
-from transformers import XLMRobertaXLConfig, XLMRobertaXLForMaskedLM, XLMRobertaXLForSequenceClassification
+from transformers import XLMRobertaConfig, XLMRobertaXLForMaskedLM, XLMRobertaXLForSequenceClassification
 from transformers.models.bert.modeling_bert import (
     BertIntermediate,
     BertLayer,
@@ -52,7 +52,7 @@ def convert_xlm_roberta_xl_checkpoint_to_pytorch(
     roberta = FairseqRobertaModel.from_pretrained(roberta_checkpoint_path)
     roberta.eval()  # disable dropout
     roberta_sent_encoder = roberta.model.encoder.sentence_encoder
-    config = XLMRobertaXLConfig(
+    config = XLMRobertaConfig(
         vocab_size=roberta_sent_encoder.embed_tokens.num_embeddings,
         hidden_size=roberta.cfg.model.encoder_embed_dim,
         num_hidden_layers=roberta.cfg.model.encoder_layers,

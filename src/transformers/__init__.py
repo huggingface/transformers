@@ -1233,8 +1233,18 @@ if is_torch_available():
             "XLMRobertaForSequenceClassification",
             "XLMRobertaForTokenClassification",
             "XLMRobertaModel",
+            "XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XLMRobertaXLModel",
+            "XLMRobertaXLForCausalLM",
+            "XLMRobertaXLForMaskedLM",
+            "XLMRobertaXLForSequenceClassification",
+            "XLMRobertaXLForMultipleChoice",
+            "XLMRobertaXLForTokenClassification",
+            "XLMRobertaXLForQuestionAnswering",
+
         ]
     )
+
     _import_structure["models.xlnet"].extend(
         [
             "XLNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2894,6 +2904,14 @@ if TYPE_CHECKING:
             XLMRobertaForSequenceClassification,
             XLMRobertaForTokenClassification,
             XLMRobertaModel,
+            XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XLMRobertaXLModel,
+            XLMRobertaXLForCausalLM,
+            XLMRobertaXLForMaskedLM,
+            XLMRobertaXLForSequenceClassification,
+            XLMRobertaXLForMultipleChoice,
+            XLMRobertaXLForTokenClassification,
+            XLMRobertaXLForQuestionAnswering,
         )
         from .models.xlnet import (
             XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,

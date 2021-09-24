@@ -47,16 +47,16 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_xlm_roberta_xl import XLMRobertaXLConfig
+from .configuration_xlm_roberta import XLMRobertaConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "xlm-roberta-xlarge"
-_CONFIG_FOR_DOC = "XLMRobertaXLConfig"
+_CONFIG_FOR_DOC = "XLMRobertaConfig"
 _TOKENIZER_FOR_DOC = "XLMRobertaXLTokenizer"
 
-ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-roberta-xlarge",
     "xlm-roberta-xxlarge",
     # See all RoBERTa models at https://huggingface.co/models?filter=xlm-roberta-xl
@@ -579,7 +579,7 @@ class XLMRobertaXLPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = XLMRobertaXLConfig
+    config_class = XLMRobertaConfig
     base_model_prefix = "roberta"
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
@@ -609,7 +609,7 @@ class XLMRobertaXLPreTrainedModel(PreTrainedModel):
             ]
 
 
-ROBERTA_START_DOCSTRING = r"""
+XLM_ROBERTA_XL_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
@@ -617,13 +617,13 @@ ROBERTA_START_DOCSTRING = r"""
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
     general usage and behavior.
     Parameters:
-        config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the
+        config (:class:`~transformers.XLMRobertaConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
 """
 
-ROBERTA_INPUTS_DOCSTRING = r"""
+XLM_ROBERTA_XL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -666,8 +666,8 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
-    ROBERTA_START_DOCSTRING,
+    "The bare XLM-RoBERTa-xlarge Model transformer outputting raw hidden-states without any specific head on top.",
+    XLM_ROBERTA_XL_START_DOCSTRING,
 )
 class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
     """
@@ -710,7 +710,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_ROBERTA_XL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -848,9 +848,9 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
 
 
 @add_start_docstrings(
-    """RoBERTa Model with a `language modeling` head on top for CLM fine-tuning. """, ROBERTA_START_DOCSTRING
+    """XLM-RoBERTa-xlarge Model with a `language modeling` head on top for CLM fine-tuning. """, XLM_ROBERTA_XL_START_DOCSTRING
 )
-class RobertaForCausalLM(XLMRobertaXLPreTrainedModel):
+class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -875,7 +875,7 @@ class RobertaForCausalLM(XLMRobertaXLPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_ROBERTA_XL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -990,8 +990,8 @@ class RobertaForCausalLM(XLMRobertaXLPreTrainedModel):
         return reordered_past
 
 
-@add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
-class RobertaForMaskedLM(XLMRobertaXLPreTrainedModel):
+@add_start_docstrings("""XLM-RoBERTa-xlarge Model with a `language modeling` head on top. """, XLM_ROBERTA_XL_START_DOCSTRING)
+class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1019,7 +1019,7 @@ class RobertaForMaskedLM(XLMRobertaXLPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_ROBERTA_XL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1115,10 +1115,10 @@ class XLMRobertaXLLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    XLM-RoBERTa-xlarge Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """,
-    ROBERTA_START_DOCSTRING,
+    XLM_ROBERTA_XL_START_DOCSTRING,
 )
 class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1133,7 +1133,7 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_ROBERTA_XL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1212,10 +1212,10 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Roberta Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    XLM-Roberta-xlarge Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
-    ROBERTA_START_DOCSTRING,
+    XLM_ROBERTA_XL_START_DOCSTRING,
 )
 class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1229,7 +1229,7 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_ROBERTA_XL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1304,10 +1304,10 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Roberta Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    XLM-Roberta-xlarge Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
-    ROBERTA_START_DOCSTRING,
+    XLM_ROBERTA_XL_START_DOCSTRING,
 )
 class XLMRobertaXLForTokenClassification(XLMRobertaXLPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1326,7 +1326,7 @@ class XLMRobertaXLForTokenClassification(XLMRobertaXLPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_ROBERTA_XL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1420,10 +1420,10 @@ class XLMRobertaXLClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Roberta Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    XLM-Roberta-xlarge Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    ROBERTA_START_DOCSTRING,
+    XLM_ROBERTA_XL_START_DOCSTRING,
 )
 class XLMRobertaXLForQuestionAnswering(XLMRobertaXLPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1438,7 +1438,7 @@ class XLMRobertaXLForQuestionAnswering(XLMRobertaXLPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_ROBERTA_XL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
