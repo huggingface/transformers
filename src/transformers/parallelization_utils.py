@@ -868,7 +868,7 @@ class ParallelEngine(object):
         hidden_size = config.hidden_size
         original_vocab_size = config.vocab_size
 
-        if hasattr(config, "make_vocab_size_divisible_by"):
+        if self.vocab_parallel_embedding and hasattr(config, "make_vocab_size_divisible_by"):
             make_vocab_size_divisible_by = config.make_vocab_size_divisible_by
             efficient_vocab_size = vocab_size_with_padding(
                 original_vocab_size, make_vocab_size_divisible_by, world_size

@@ -124,6 +124,7 @@ class GPTNeoConfig(PretrainedConfig):
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
         vocab_parallel_embedding=False,
+        make_vocab_size_divisible_by=128,
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
@@ -148,6 +149,7 @@ class GPTNeoConfig(PretrainedConfig):
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
         self.vocab_parallel_embedding = vocab_parallel_embedding
+        self.make_vocab_size_divisible_by = make_vocab_size_divisible_by
         self.use_cache = use_cache
 
         self.bos_token_id = bos_token_id
