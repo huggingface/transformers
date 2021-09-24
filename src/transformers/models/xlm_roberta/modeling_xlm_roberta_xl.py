@@ -1085,9 +1085,8 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead.__init__
 class XLMRobertaXLLMHead(nn.Module):
-    """Roberta Head for masked language modeling."""
+    """XLM-Roberta-xlarge Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
