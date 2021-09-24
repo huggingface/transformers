@@ -44,7 +44,11 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 @is_pipeline_test
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-    model_mapping = {k: v for k, v in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()}
+    model_mapping = {
+        k: v
+        for k, v in (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
+        + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
+    }
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
         if tokenizer is None:
@@ -54,21 +58,17 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             return
             # return None, None
 
-        import datasets
-
         speech_recognizer = AutomaticSpeechRecognitionPipeline(
             model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
         )
 
         # test with a raw waveform
         audio = np.zeros((34000,))
-        dataset = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-        filename = dataset[0]["file"]
-        return speech_recognizer, [filename, audio]
+        audio2 = np.zeros((14000,))
+        return speech_recognizer, [audio, audio2]
 
-    @require_datasets
     def run_pipeline_test(self, speech_recognizer, examples):
-        filename, audio = examples
+        audio = np.zeros((34000,))
         outputs = speech_recognizer(audio)
         self.assertEqual(outputs, {"text": ANY(str)})
 
