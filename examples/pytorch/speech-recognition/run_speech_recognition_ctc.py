@@ -88,17 +88,17 @@ class ModelArguments:
     hidden_dropout: Optional[float] = field(
         default=0.0,
         metadata={
-            "help": "The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler."
+            "help": "The dropout probability for all fully connected layers in the embeddings, encoder, and pooler."
         },
     )
     final_dropout: Optional[float] = field(
         default=0.0,
-        metadata={"help": "The dropout probabilitiy for the final projection layer."},
+        metadata={"help": "The dropout probability for the final projection layer."},
     )
     mask_time_prob: Optional[float] = field(
         default=0.05,
         metadata={
-            "help": "Propability of each feature vector along the time axis to be chosen as the start of the vector"
+            "help": "Probability of each feature vector along the time axis to be chosen as the start of the vector"
             "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
             "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
         },
@@ -145,11 +145,11 @@ class DataTrainingArguments:
     )
     audio_column_name: Optional[str] = field(
         default="audio",
-        metadata={"help": "The name of the dataset colmun containing the audio data. Defaults to 'audio'"},
+        metadata={"help": "The name of the dataset column containing the audio data. Defaults to 'audio'"},
     )
     text_column_name: Optional[str] = field(
         default="text",
-        metadata={"help": "The name of the dataset colmun containing the text data. Defaults to 'text'"},
+        metadata={"help": "The name of the dataset column containing the text data. Defaults to 'text'"},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
@@ -471,11 +471,7 @@ def main():
         resampler = torchaudio.transforms.Resample(48_000, processor.feature_extractor.sampling_rate)
 
     # Preprocessing the datasets.
-    # We need to read the aduio files as arrays and tokenize the targets.
-    def speech_file_to_array_fn(batch):
-        speech_array, sampling_rate = torchaudio.load(batch["path"])
-        batch["speech"] = resampler(speech_array).squeeze().numpy()
-
+    # We need to read the audio files as arrays and tokenize the targets.
     def prepare_dataset(batch):
         # load audio
         speech_array, sampling_rate = torchaudio.load(batch[data_args.audio_column_name])
@@ -601,7 +597,7 @@ def main():
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "speech-recognition",
-        "tags": ["speech-recognition", data_args.dataset_name],
+        "tags": ["automatic-speech-recognition", data_args.dataset_name],
         "dataset_args": f"Config: {data_args.dataset_config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
         "dataset": f"{data_args.dataset_name.upper()} - {data_args.dataset_config_name.upper()}",
     }

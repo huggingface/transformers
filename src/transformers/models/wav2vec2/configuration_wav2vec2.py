@@ -55,11 +55,11 @@ class Wav2Vec2Config(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for the final projection layer of :class:`Wav2Vec2ForCTC`.
+            The dropout probability for the final projection layer of :class:`Wav2Vec2ForCTC`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -69,7 +69,7 @@ class Wav2Vec2Config(PretrainedConfig):
             normalization of only the first 1D convolutional layer or :obj:`"layer"` for layer normalization of all 1D
             convolutional layers.
         feat_proj_dropout (:obj:`float`, `optional`, defaults to 0.0):
-            The dropout probabilitiy for output of the feature extractor.
+            The dropout probability for output of the feature extractor.
         feat_extract_activation (:obj:`str, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
