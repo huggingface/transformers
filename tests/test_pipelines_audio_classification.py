@@ -36,21 +36,18 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        import datasets
-
         audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=feature_extractor)
 
         # test with a raw waveform
         audio = np.zeros((34000,))
-        dataset = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-        filename = dataset[0]["file"]
-        return audio_classifier, [filename, audio]
+        audio2 = np.zeros((14000,))
+        return audio_classifier, [audio2, audio]
 
     @require_datasets
     def run_pipeline_test(self, audio_classifier, examples):
         import datasets
 
-        audio, filename = examples
+        audio2, audio = examples
         output = audio_classifier(audio)
         # by default a model is initialized with num_labels=2
         self.assertEqual(
