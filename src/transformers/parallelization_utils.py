@@ -1112,6 +1112,6 @@ class ParallelizationMixin(object):
 
         setattr(model, "mpu", mpu)
         # This allows the Trainer to call the MPU for data + model parallelism
-        # example `ddp = DistributedDataParallel(..., process_group=model.mpu)`
+        # example `ddp = DistributedDataParallel(..., process_group=model.mpu.get_data_parallel_group())`
 
         return model
