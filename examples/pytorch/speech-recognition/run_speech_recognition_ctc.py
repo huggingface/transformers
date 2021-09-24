@@ -185,6 +185,12 @@ class DataTrainingArguments:
     min_duration_in_seconds: Optional[float] = field(
         default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
     )
+    only_data_preprocessing: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to only do data preprocessing and skip training. This is especially useful when data preprocessing errors out in distributed training due to timeout. In this case, one should run the preprocessing in a non-distributed setup with `only_data_preprocessing=True` so that the cached datasets can consequently be loaded in distributed training"
+        },
+    )
 
 
 @dataclass
@@ -500,8 +506,12 @@ def main():
             desc="preprocess datasets",
         )
 
-        # filter data that is shorter than min_input_length
-        vectorized_datasets = vectorized_datasets.filter(lambda data: len(data["input_values"]) > min_input_length)
+        if min_input_length > 0.0:
+            # filter data that is shorter than min_input_length
+            vectorized_datasets = vectorized_datasets.filter(
+                lambda data: len(data["input_values"]) > min_input_length,
+                num_proc=data_args.preprocessing_num_workers,
+            )
 
     # 6. Next, we can prepare the training.
     # Let's use word error rate (WER) as our evaluation metric,
@@ -509,6 +519,10 @@ def main():
 
     # Define Metric during training
     wer_metric = load_metric("wer")
+
+    if data_args.only_data_preprocessing:
+        logger.info("Data preprocessing finished.")
+        return
 
     def compute_metrics(pred):
         pred_logits = pred.predictions
