@@ -19,6 +19,7 @@
 import copy
 import json
 import os
+import warnings
 from typing import Any, Dict, Tuple, Union
 
 from . import __version__
@@ -330,6 +331,14 @@ class PretrainedConfig(PushToHubMixin):
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
 
+        # Deal with gradient checkpointing
+        if "gradient_checkpointing" in kwargs:
+            warnings.warn(
+                "Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 "
+                "Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the "
+                "`Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`."
+            )
+
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -560,7 +569,7 @@ class PretrainedConfig(PushToHubMixin):
 
             raise EnvironmentError(msg)
 
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             msg = (
                 f"Couldn't reach server at '{config_file}' to download configuration file or "
                 "configuration file is not a valid JSON file. "

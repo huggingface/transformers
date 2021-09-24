@@ -73,8 +73,6 @@ class TapasConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use gradient checkpointing to save memory at the expense of a slower backward pass.
         positive_label_weight (:obj:`float`, `optional`, defaults to 10.0):
             Weight for positive labels.
         num_aggregation_labels (:obj:`int`, `optional`, defaults to 0):
@@ -159,7 +157,6 @@ class TapasConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        gradient_checkpointing=False,
         positive_label_weight=10.0,
         num_aggregation_labels=0,
         aggregation_loss_weight=1.0,
@@ -202,7 +199,6 @@ class TapasConfig(PretrainedConfig):
         self.type_vocab_sizes = type_vocab_sizes
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.gradient_checkpointing = gradient_checkpointing
 
         # Fine-tuning task hyperparameters
         self.positive_label_weight = positive_label_weight

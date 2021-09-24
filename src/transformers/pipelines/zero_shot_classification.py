@@ -150,6 +150,7 @@ class ZeroShotClassificationPipeline(Pipeline):
     def __call__(
         self,
         sequences: Union[str, List[str]],
+        *args,
         **kwargs,
     ):
         """
@@ -182,6 +183,13 @@ class ZeroShotClassificationPipeline(Pipeline):
             - **labels** (:obj:`List[str]`) -- The labels sorted by order of likelihood.
             - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
         """
+
+        if len(args) == 0:
+            pass
+        elif len(args) == 1 and "candidate_labels" not in kwargs:
+            kwargs["candidate_labels"] = args[0]
+        else:
+            raise ValueError(f"Unable to understand extra arguments {args}")
 
         result = super().__call__(sequences, **kwargs)
         if len(result) == 1:
