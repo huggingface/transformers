@@ -106,7 +106,12 @@ def rename_keys(state_dict):
         name = name.replace("image_preprocessor/patches_linear/w", "input_preprocessor.conv_after_patches.weight")
 
         # rename multimodal preprocessor embeddings
-        
+        name = name.replace("multimodal_preprocessor/audio_mask_token/pos_embs", "input_preprocessor.audio_mask")
+        name = name.replace("multimodal_preprocessor/audio_padding/pos_embs", "input_preprocessor.audio_padding")
+        name = name.replace("multimodal_preprocessor/image_mask_token/pos_embs", "input_preprocessor.image_mask")
+        name = name.replace("multimodal_preprocessor/image_padding/pos_embs", "input_preprocessor.image_padding")
+        name = name.replace("multimodal_preprocessor/label_mask_token/pos_embs", "input_preprocessor.label_mask")
+        name = name.replace("multimodal_preprocessor/label_padding/pos_embs", "input_preprocessor.label_padding")
         
         ## DECODERS ##
 
@@ -140,6 +145,8 @@ def rename_keys(state_dict):
 
         # rename latent embeddings
         name = name.replace("perceiver_encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
+        # rename latent embeddings (for multimodal model)
+        name = name.replace("encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
 
         # rename prefixes
         if name.startswith("perceiver_encoder/~/"):
@@ -148,6 +155,12 @@ def rename_keys(state_dict):
             else:
                 suffix = ""
             name = name.replace("perceiver_encoder/~/", "encoder." + suffix)
+        if name.startswith("encoder/~/"):
+            if "self_attention" in name:
+                suffix = "self_attends."
+            else:
+                suffix = ""
+            name = name.replace("encoder/~/", "encoder." + suffix)
         # rename layernorm parameters
         if "offset" in name:
             name = name.replace("offset", "bias")
@@ -319,9 +332,6 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         audio = torch.randn((1,30720,1))
         inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
         outputs = model(inputs, attention_mask=None)
-    
-    for name, param in model.named_parameters():
-        print(name, param.shape)
     
     # load weights
     model.load_state_dict(state_dict)

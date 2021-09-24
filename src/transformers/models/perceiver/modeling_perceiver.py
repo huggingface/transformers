@@ -735,7 +735,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         embedding_output = self.embeddings(batch_size=batch_size)
 
-        #print("Shape of inputs before going into perceiver:", inputs.shape)
+        print("Shape of inputs before going into perceiver:", inputs.shape)
         #print("First elements of inputs:", inputs[0,:3,:3])
         
         encoder_outputs = self.encoder(
