@@ -125,7 +125,6 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
         pass
 
     @require_torch
-    @unittest.skip("Object detection not implemented in TF")
     def test_small_model_pt(self):
         model_id = "mishig/tiny-detr-mobilenetsv3"
 
