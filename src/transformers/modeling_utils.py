@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import torch
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
+from torch.nn import functional as F
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
