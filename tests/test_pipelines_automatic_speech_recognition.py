@@ -17,8 +17,14 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import AutoFeatureExtractor, AutoTokenizer, Speech2TextForConditionalGeneration, Wav2Vec2ForCTC
-from transformers.models.auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
+from transformers import (
+    MODEL_FOR_CTC_MAPPING,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+    AutoFeatureExtractor,
+    AutoTokenizer,
+    Speech2TextForConditionalGeneration,
+    Wav2Vec2ForCTC,
+)
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,

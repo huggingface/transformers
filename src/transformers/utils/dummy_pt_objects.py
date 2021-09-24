@@ -310,6 +310,12 @@ def load_tf_weights_in_albert(*args, **kwargs):
 MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_CTC_MAPPING = None
+
+
+MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = None
+
+
 MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
