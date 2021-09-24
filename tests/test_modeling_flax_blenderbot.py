@@ -70,7 +70,7 @@ def prepare_blenderbot_inputs_dict(
     }
 
 
-class FlaxBartModelTester:
+class FlaxBlenderbotModelTester:
     def __init__(
         self,
         parent,
@@ -308,7 +308,7 @@ class BlenderbotHeadTests(unittest.TestCase):
 
 
 @require_flax
-class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
+class FlaxBlenderbotModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
     is_encoder_decoder = True
     all_model_classes = (
         (
@@ -321,7 +321,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
     all_generative_model_classes = (FlaxBlenderbotForConditionalGeneration,) if is_flax_available() else ()
 
     def setUp(self):
-        self.model_tester = FlaxBartModelTester(self)
+        self.model_tester = FlaxBlenderbotModelTester(self)
 
     def test_use_cache_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -393,7 +393,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("facebook/blenderbot-400M-distill", from_pt=True)
-            # FlaxBartForSequenceClassification expects eos token in input_ids
+            # FlaxBlenderbotForSequenceClassification expects eos token in input_ids
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
