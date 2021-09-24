@@ -419,6 +419,6 @@ class GPTNeoParallelismPolicy(ParallelismPolicy):
 
     @staticmethod
     def original_layer_class():
-        from oslo.models.gpt_neo.modeling_gpt_neo import GPTNeoBlock
+        from transformers.models.gpt_neo.modeling_gpt_neo import GPTNeoBlock
 
         return GPTNeoBlock
