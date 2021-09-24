@@ -2438,7 +2438,6 @@ class VocabParallelEmbedding(nn.Module):
         self.norm_type = 2.0
         self.scale_grad_by_freq = False
         self.sparse = False
-        self._weight = None
 
         indices = VocabUtils.vocab_range_from_global_vocab_size(
             self.num_embeddings,
