@@ -393,6 +393,8 @@ class GPTNeoPreTrainedModel(PreTrainedModel, ParallelizationMixin):
         if isinstance(module, GPTNeoModel):
             module.gradient_checkpointing = value
 
+    def _get_parallelism_policy(self):
+        return GPTNeoParallelismPolicy
 
 GPT_NEO_START_DOCSTRING = r"""
 
@@ -504,9 +506,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
     def _get_default_model_object(self):
         return self
-
-    def _get_parallelism_policy(self):
-        return GPTNeoParallelismPolicy
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -713,9 +712,6 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     def _get_default_model_object(self):
         return self.transformer
 
-    def _get_parallelism_policy(self):
-        return GPTNeoParallelismPolicy
-
     def _get_head_layers(self):
         return [
             ParallelLayer(
@@ -869,9 +865,6 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
 
     def _get_default_model_object(self):
         return self.transformer
-
-    def _get_parallelism_policy(self):
-        return GPTNeoParallelismPolicy
 
     def _get_head_layers(self):
         return [
