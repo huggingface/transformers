@@ -1088,11 +1088,15 @@ class ParallelizationMixin(object):
         pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
         tensor_model_parallel_size: int = 1,
         pipeline_model_parallel_size: int = 1,
+        fp16: bool = False,
         vocab_parallel_embedding: bool = None,
         *model_args,
         **kwargs,
     ):
         model = cls.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+        if fp16 is True:
+            model = model.half()
 
         assert pipeline_model_parallel_size == 1, "Currently, We only support tensor model parallelism."
 
