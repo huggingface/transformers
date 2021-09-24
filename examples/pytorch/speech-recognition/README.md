@@ -81,7 +81,7 @@ of **0.35**.
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
 
 ```bash
-python -m torch.distributed.launch \
+OMP_NUM_THREADS=1 python -m torch.distributed.launch \
 	--nproc_per_node 8 run_speech_recognition_ctc.py \
 	--dataset_name="common_voice" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
