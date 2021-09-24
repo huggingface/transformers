@@ -37,6 +37,10 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
         outputs = classifier("Who are you voting for in 2020?", candidate_labels="politics")
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
 
+        # No kwarg
+        outputs = classifier("Who are you voting for in 2020?", ["politics"])
+        self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
+
         outputs = classifier("Who are you voting for in 2020?", candidate_labels=["politics"])
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
 
