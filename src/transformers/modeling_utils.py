@@ -2795,7 +2795,7 @@ class VocabParallelCrossEntropyFunction(torch.autograd.Function):
 
         grad_2d[arange_1d, masked_target_1d] -= 1.0 - target_mask.view(-1).float()
         grad_input.mul_(grad_output.unsqueeze(dim=-1))
-        return grad_input, None
+        return grad_input, None, None
 
 
 class VocabParallelCrossEntropy(nn.Module):
