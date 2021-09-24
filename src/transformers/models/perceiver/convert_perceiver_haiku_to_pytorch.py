@@ -34,6 +34,7 @@ from transformers import (
     PerceiverForImageClassificationConvProcessing,
     PerceiverForImageClassificationFourier,
     PerceiverForMaskedLM,
+    PerceiverForMultimodalAutoencoding,
     PerceiverForOpticalFlow,
     PerceiverTokenizer,
 )
@@ -55,7 +56,7 @@ def rename_keys(state_dict):
         param = state_dict.pop(name)
 
         ## PREPROCESSORS ##
-
+        
         # rename text preprocessor embeddings (for MLM model)
         name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
         if name.startswith("trainable_position_encoding/pos_embs"):
@@ -104,6 +105,9 @@ def rename_keys(state_dict):
         name = name.replace("image_preprocessor/patches_linear/b", "input_preprocessor.conv_after_patches.bias")
         name = name.replace("image_preprocessor/patches_linear/w", "input_preprocessor.conv_after_patches.weight")
 
+        # rename multimodal preprocessor embeddings
+        
+        
         ## DECODERS ##
 
         # rename prefix of decoders
@@ -251,6 +255,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
 
     # load HuggingFace model
     config = PerceiverConfig()
+    repo_id = "datasets/huggingface/label-files"
     if task == "MLM":
         config.qk_channels = 8 * 32
         config.v_channels = 1280
@@ -266,7 +271,6 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.qk_channels = None
         config.v_channels = None
         config.num_labels = 1000
-        repo_id = "datasets/huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
@@ -291,10 +295,34 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.num_self_attention_heads = 16
         config.num_cross_attention_heads = 1
         model = PerceiverForOpticalFlow(config)
+    elif task == "multimodal_autoencoding":
+        config.num_latents = 28*28*1
+        config.d_latents = 512
+        config.d_model = 704
+        config.num_blocks = 1
+        config.num_self_attends_per_block = 8
+        config.num_self_attention_heads = 8
+        config.num_cross_attention_heads = 1
+        config.num_labels = 700 
+        model = PerceiverForMultimodalAutoencoding(config)
+        filename = "kinetics700-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
     else:
         raise ValueError(f"Task {task} not supported")
     model.eval()
 
+    # multimodal autoencoding requires a dummy input first in order to create all parameters
+    # (as some parameters are defined in the forward pass)
+    if task == "multimodal_autoencoding":
+        images = torch.randn((1,16,3,224,224))
+        audio = torch.randn((1,30720,1))
+        inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
+        outputs = model(inputs, attention_mask=None)
+    
+    for name, param in model.named_parameters():
+        print(name, param.shape)
+    
     # load weights
     model.load_state_dict(state_dict)
 
@@ -315,6 +343,10 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         inputs = encoding.pixel_values
     elif task  == "optical_flow":
         inputs = torch.randn(1, 2, 27, 368, 496)
+    elif task == "multimodal_autoencoding":
+        images = torch.randn((1,16,3,224,224))
+        audio = torch.randn((1,30720,1))
+        inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
 
     # forward pass
     outputs = model(inputs=inputs, attention_mask=input_mask)
