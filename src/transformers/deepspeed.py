@@ -365,7 +365,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
         config_params=config,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
-        mpu=trainer._get_process_group(model, deepspeed=True)
+        mpu=trainer._get_process_group(model, deepspeed=True),
     )
 
     if resume_from_checkpoint is not None:

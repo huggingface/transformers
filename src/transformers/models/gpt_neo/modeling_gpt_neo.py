@@ -396,6 +396,7 @@ class GPTNeoPreTrainedModel(PreTrainedModel, ParallelizationMixin):
     def _get_parallelism_policy(self):
         return GPTNeoParallelismPolicy
 
+
 GPT_NEO_START_DOCSTRING = r"""
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic

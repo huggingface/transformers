@@ -999,7 +999,12 @@ class Trainer:
                 ).to(self.args.device)
 
         elif is_sagemaker_dp_enabled():
-            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False, process_group=self._get_process_group(model))
+            model = DDP(
+                model,
+                device_ids=[dist.get_local_rank()],
+                broadcast_buffers=False,
+                process_group=self._get_process_group(model),
+            )
         elif self.args.local_rank != -1:
             if self.args.ddp_find_unused_parameters is not None:
                 find_unused_parameters = self.args.ddp_find_unused_parameters
@@ -1014,7 +1019,7 @@ class Trainer:
                 device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
                 output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
                 find_unused_parameters=find_unused_parameters,
-                process_group=self._get_process_group(model)
+                process_group=self._get_process_group(model),
             )
 
         return model
