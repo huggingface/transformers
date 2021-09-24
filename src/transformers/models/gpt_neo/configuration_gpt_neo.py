@@ -123,7 +123,7 @@ class GPTNeoConfig(PretrainedConfig):
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
-        vocab_parallel_embedding=True,
+        vocab_parallel_embedding=False,
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
