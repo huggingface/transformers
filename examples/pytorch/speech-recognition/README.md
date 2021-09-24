@@ -30,8 +30,8 @@ In the script [`run_speech_recognition_ctc`], we first create a vocabulary from 
 ---
 **NOTE**
 
-If you wish to use multi-processing for data preprocessing by setting `--preprocessing_num_workers` > 1, 
-please make sure to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
+If you encounter problems with data preprocessing by setting `--preprocessing_num_workers` > 1, 
+you might want to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
 
 ```bash
 OMP_NUM_THREADS=1 python run_speech_recognition_ctc ...
@@ -81,7 +81,7 @@ of **0.35**.
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
 
 ```bash
-OMP_NUM_THREADS=1 python -m torch.distributed.launch \
+python -m torch.distributed.launch \
 	--nproc_per_node 8 run_speech_recognition_ctc.py \
 	--dataset_name="common_voice" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
