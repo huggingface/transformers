@@ -141,15 +141,10 @@ class LayoutLMv2ModelTester:
 
         config = self.get_config()
 
-        # use smaller resnet backbone to make tests faster
-        config.detectron2_config_args["MODEL.RESNETS.DEPTH"] = 18
-        config.detectron2_config_args["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 64
-        config.detectron2_config_args["MODEL.RESNETS.NUM_GROUPS"] = 1
-
         return config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
 
     def get_config(self):
-        return LayoutLMv2Config(
+        config = LayoutLMv2Config(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -166,6 +161,13 @@ class LayoutLMv2ModelTester:
             coordinate_size=self.coordinate_size,
             shape_size=self.shape_size,
         )
+
+        # use smaller resnet backbone to make tests faster
+        config.detectron2_config_args["MODEL.RESNETS.DEPTH"] = 18
+        config.detectron2_config_args["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 64
+        config.detectron2_config_args["MODEL.RESNETS.NUM_GROUPS"] = 1
+
+        return config
 
     def create_and_check_model(
         self, config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
