@@ -204,7 +204,6 @@ class MultiHeadSelfAttention(nn.Module):
         scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
         mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
         scores = scores.masked_fill(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
-        # scores.masked_fill_(mask, -float("inf"))
 
         weights = nn.Softmax(dim=-1)(scores)  # (bs, n_heads, q_length, k_length)
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
