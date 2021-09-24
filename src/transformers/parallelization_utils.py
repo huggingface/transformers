@@ -1071,17 +1071,6 @@ class ParallelizationMixin(object):
     def _get_head_layers(self):
         return []
 
-
-class ParallelizationMixin(object):
-    def _get_default_model_object(self):
-        raise NotImplementedError
-
-    def _get_parallelism_policy(self):
-        raise NotImplementedError
-
-    def _get_head_layers(self):
-        return []
-
     @classmethod
     def from_pretrained_with_parallel(
         cls,
