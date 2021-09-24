@@ -664,8 +664,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-        with tf.name_scope("keras_loss_tracker"):
-            self.loss_tracker = tf.keras.metrics.Mean(name="loss")
 
     @classmethod
     def _from_config(cls, config, **kwargs):
