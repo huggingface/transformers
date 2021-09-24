@@ -48,9 +48,11 @@ else:
             pass
 
 
+@require_detectron2
 @require_vision
 @require_timm
 @require_torch
+@require_pytesseract
 @is_pipeline_test
 class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
