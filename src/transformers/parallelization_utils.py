@@ -19,7 +19,7 @@ Integration with parallelformers https://github.com/tunib-ai/parallelformers
 import os
 from abc import ABC
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -1071,17 +1071,34 @@ class ParallelizationMixin(object):
     def _get_head_layers(self):
         return []
 
-    def parallelize(
-        self,
+
+class ParallelizationMixin(object):
+    def _get_default_model_object(self):
+        raise NotImplementedError
+
+    def _get_parallelism_policy(self):
+        raise NotImplementedError
+
+    def _get_head_layers(self):
+        return []
+
+    @classmethod
+    def from_pretrained_with_parallel(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
         tensor_model_parallel_size: int = 1,
         pipeline_model_parallel_size: int = 1,
         vocab_parallel_embedding: bool = None,
+        *model_args,
+        **kwargs,
     ):
+        model = cls.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
         assert pipeline_model_parallel_size == 1, "Currently, We only support tensor model parallelism."
 
         if vocab_parallel_embedding is None:
-            if hasattr(self.config, "vocab_parallel_embedding"):
-                vocab_parallel_embedding = self.config.vocab_parallel_embedding
+            if hasattr(model.config, "vocab_parallel_embedding"):
+                vocab_parallel_embedding = model.config.vocab_parallel_embedding
 
         mpu = MPU(
             tensor_model_parallel_size=tensor_model_parallel_size,
@@ -1091,11 +1108,13 @@ class ParallelizationMixin(object):
         engine = ParallelEngine(
             hold_params=False,
             skip_bias_add=False,
-            policy=self._get_parallelism_policy(),
+            policy=model._get_parallelism_policy(),
             vocab_parallel_embedding=vocab_parallel_embedding,
         )
 
         engine.parallelize(
-            model=self._get_default_model_object(),
+            model=model._get_default_model_object(),
             mpu=mpu,
         )
+
+        return model
