@@ -20,7 +20,7 @@ import math
 from dataclasses import dataclass
 from functools import reduce
 from operator import __add__
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Mapping
 
 import numpy as np
 import torch
@@ -736,8 +736,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
         embedding_output = self.embeddings(batch_size=batch_size)
 
         print("Shape of inputs before going into perceiver:", inputs.shape)
-        #print("First elements of inputs:", inputs[0,:3,:3])
-        
+        # print("First elements of inputs:", inputs[0,:3,:3])
+
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=None,
@@ -750,8 +750,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-        #print("Shape of encoder outputs:", sequence_output.shape)
-        #print("Encoder outputs:", sequence_output[0, :3, :3])
+        # print("Shape of encoder outputs:", sequence_output.shape)
+        # print("Encoder outputs:", sequence_output[0, :3, :3])
 
         logits = None
         if self.decoder:
@@ -1437,11 +1437,11 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         # key, value: B x N x K; query: B x M x K
         # Attention maps -> B x N x M
         # Output -> B x M x K
-        #print("Shape of query before decoder cross attention:", query.shape)
-        #print("First elements of query before decoder cross attention:", query[0,:3,:3])
+        # print("Shape of query before decoder cross attention:", query.shape)
+        # print("First elements of query before decoder cross attention:", query[0,:3,:3])
 
-        #print("Shape of z before decoder cross attention:", z.shape)
-        #print("First elements of z before decoder cross attention:", z[0,:3,:3])
+        # print("Shape of z before decoder cross attention:", z.shape)
+        # print("First elements of z before decoder cross attention:", z[0,:3,:3])
 
         layer_outputs = self.decoding_cross_attention(
             query,
@@ -1453,13 +1453,11 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         )
         output = layer_outputs[0]
 
-        #print("Shape of output after decoder cross attention:", output.shape)
-        #print("First elements of output after decoder cross attention:", output[0,:3,:3])
+        # print("Shape of output after decoder cross attention:", output.shape)
+        # print("First elements of output after decoder cross attention:", output[0,:3,:3])
 
         output = self.final_layer(output)
-        
-        
-        
+
         return output
 
 
@@ -1519,11 +1517,109 @@ class PerceiverFlowDecoder(PerceiverAbstractDecoder):
 
     def forward(self, query, z, query_mask=None):
         # Output flow and rescale.
-        
+
         preds = self.decoder(query, z)
         preds /= self.rescale_factor
 
         return preds.reshape([preds.shape[0]] + list(self.output_image_shape) + [preds.shape[-1]])
+
+
+def restructure(modality_sizes, inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
+    """
+    Partitions a [B, N, C] tensor into tensors for each modality.
+
+    Args:
+        modality_sizes: dict specifying the size of the modality
+        inputs: input tensor
+
+    Returns:
+        dict mapping name of modality to its associated tensor.
+    """
+    outputs = {}
+    index = 0
+    # Apply a predictable ordering to the modalities
+    for modality in sorted(modality_sizes.keys()):
+        size = modality_sizes[modality]
+        inp = inputs[:, index : index + size]
+        index += size
+        outputs[modality] = inp
+    return outputs
+
+
+class MultimodalDecoder(PerceiverAbstractDecoder):
+    """
+    Multimodal decoding by composing uni-modal decoders. The modalities argument of the constructor is a dictionary
+    mapping modality name to the decoder of that modality. That decoder will be used to construct queries for that
+    modality. However, there is a shared cross attention across all modalities, using the concatenated per-modality
+    query vectors.
+    """
+
+    def __init__(
+        self,
+        modalities,
+        num_outputs,
+        output_num_channels,
+        min_padding_size=2,
+        subsampled_index_dims=None,
+        **decoder_kwargs
+    ):
+        super().__init__()
+        self.modalities = modalities
+        self.subsampled_index_dims = subsampled_index_dims
+        self.min_padding_size = min_padding_size
+        self.output_num_channels = output_num_channels
+        self.num_outputs = num_outputs
+        self.decoder = PerceiverBasicDecoder(
+            output_index_dims=(num_outputs,),
+            output_num_channels=output_num_channels,
+            position_encoding_type="none",
+            **decoder_kwargs,
+        )
+
+    def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None, subsampled_points=None):
+        # Partition the flat inputs among the different modalities
+        inputs = restructure(modality_sizes, inputs)
+        # Obtain modality-specific decoders' queries
+        subsampled_points = subsampled_points or dict()
+        decoder_queries = dict()
+        for modality, decoder in self.modalities.items():
+            # Get input_without_pos for this modality if it exists.
+            input_without_pos = None
+            if inputs_without_pos is not None:
+                input_without_pos = inputs_without_pos.get(modality, None)
+            decoder_queries[modality] = decoder.decoder_query(
+                inputs=inputs[modality],
+                modality_sizes=None,
+                inputs_without_pos=input_without_pos,
+                subsampled_points=subsampled_points.get(modality, None),
+            )
+
+        # Pad all queries with trainable position encodings to make them have the same channels
+        num_channels = max(query.shape[2] for query in decoder_queries.values()) + self._min_padding_size
+
+        def embed(modality, x):
+            x = torch.reshape(x, [x.shape[0], np.prod(x.shape[1:-1]), x.shape[-1]])
+            pos = PerceiverTrainablePositionEncoding(
+                1, num_channels=num_channels - x.shape[2], init_scale=0.02, name=f"{modality}_padding"
+            )(x.shape[0])
+            pos = torch.broadcast_to(pos, [x.shape[0], x.shape[1], num_channels - x.shape[2]])
+            return torch.cat([x, pos], dim=2)
+
+        # Apply a predictable ordering to the modalities
+        return torch.cat(
+            [embed(modality, decoder_queries[modality]) for modality in sorted(self.modalities.keys())], dim=1
+        )
+
+    def output_shape(self, inputs):
+        if self.subsampled_index_dims is not None:
+            subsampled_index_dims = sum(self.subsampled_index_dims.values())
+        else:
+            subsampled_index_dims = self.num_outputs
+        return ((inputs.shape[0], subsampled_index_dims, self.output_num_channels), self.subsampled_index_dims)
+
+    def forward(self, query, z, query_mask=None):
+        # B x 1 x num_classes -> B x num_classes
+        return self.decoder(query, z, is_training=is_training)
 
 
 ## Below: IO pre- and post-processor classes for Perceiver.
@@ -1627,8 +1723,8 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
         frequency band.
 
     Returns:
-      embedding: A Torch tensor of shape [batch_size, n, n_channels]. If concat_pos is True and sine_only is False, output
-      dimensions are ordered as: [dim_1, dim_2, ..., dim_d, sin(pi*f_1*dim_1), ..., sin(pi*f_K*dim_1), ...,
+      embedding: A Torch tensor of shape [batch_size, n, n_channels]. If concat_pos is True and sine_only is False,
+      output dimensions are ordered as: [dim_1, dim_2, ..., dim_d, sin(pi*f_1*dim_1), ..., sin(pi*f_K*dim_1), ...,
       sin(pi*f_1*dim_d), ..., sin(pi*f_K*dim_d), cos(pi*f_1*dim_1), ..., cos(pi*f_K*dim_1), ..., cos(pi*f_1*dim_d),
       ..., cos(pi*f_K*dim_d)], where dim_i is pos[:, i] and f_k is the kth frequency band.
     """
@@ -1810,7 +1906,7 @@ class PerceiverImagePreprocessor(nn.Module):
         in_channels: int = 3,
         out_channels: int = 64,
         conv_after_patching: bool = False,
-        conv_after_patching_in_channels: int = 54, # only relevant when conv_after_patching = True
+        conv_after_patching_in_channels: int = 54,  # only relevant when conv_after_patching = True
         conv2d_use_batchnorm: bool = True,
         concat_or_add_pos: str = "concat",
         project_pos_dim: int = -1,
@@ -1867,22 +1963,25 @@ class PerceiverImagePreprocessor(nn.Module):
         )
 
         # Optional convolutional layer after patches.
-        self.conv_after_patches = nn.Linear(conv_after_patching_in_channels, self.out_channels) if conv_after_patching else nn.Identity()
+        self.conv_after_patches = (
+            nn.Linear(conv_after_patching_in_channels, self.out_channels) if conv_after_patching else nn.Identity()
+        )
 
     def _build_network_inputs(self, inputs: torch.Tensor, pos: torch.Tensor, network_input_is_1d: bool = True):
-        """Construct the final input, including position encoding.
-        
+        """
+        Construct the final input, including position encoding.
+
         This method expects the inputs to always have channels as last dimension.
-        
-        """        
+
+        """
         batch_size = inputs.shape[0]
         index_dims = inputs.shape[1:-1]
         indices = np.prod(index_dims)
-                
+
         # Reshape input features to a 1D index dimension if necessary.
         if len(inputs.shape) > 3 and network_input_is_1d:
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
-                    
+
         # Construct the position encoding.
         if self.position_encoding_type == "trainable":
             pos_enc = self.position_embeddings(batch_size)
@@ -1932,11 +2031,11 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = space_to_depth(
                 inputs, temporal_block_size=self.temporal_downsample, spatial_block_size=self.spatial_downsample
             )
-            
+
             if inputs.ndim == 5 and inputs.shape[1] == 1:
                 # for flow
                 inputs = inputs.squeeze(dim=1)
-            
+
             # Optionally apply conv layer.
             inputs = self.conv_after_patches(inputs)
 
@@ -1948,13 +2047,13 @@ class PerceiverImagePreprocessor(nn.Module):
                 inputs = torch.moveaxis(inputs, 2, -1)
             else:
                 raise ValueError("Unsupported data format for conv1x1.")
-        
-        #print("Shape of inputs before _build_network_inputs:", inputs.shape)
-        #print("First elements of inputs before _build_network_inputs:", inputs[0,:3,:3,:3])
-        
+
+        # print("Shape of inputs before _build_network_inputs:", inputs.shape)
+        # print("First elements of inputs before _build_network_inputs:", inputs[0,:3,:3,:3])
+
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
         modality_sizes = None  # Size for each modality, only needed for multimodal
-        
+
         return inputs, modality_sizes, inputs_without_pos
 
 
@@ -1986,7 +2085,7 @@ class PerceiverAudioPreprocessor(nn.Module):
         out_channels=64,
         index_dims=30720,  # only relevant when position_encoding_type = "trainable"
         project_pos_dim=-1,
-        **position_encoding_kwargs, 
+        **position_encoding_kwargs,
     ):
         super().__init__()
         self.config = config
@@ -2090,12 +2189,12 @@ class PerceiverMultimodalPreprocessor(nn.Module):
                 setattr(
                     self,
                     parameter_name,
-                    #PerceiverTrainablePositionEncoding(1, num_channels=common_channel_size - output.shape[2]),
-                    nn.Parameter(torch.randn(1, common_channel_size - output.shape[2]))
+                    # PerceiverTrainablePositionEncoding(1, num_channels=common_channel_size - output.shape[2]),
+                    nn.Parameter(torch.randn(1, common_channel_size - output.shape[2])),
                 )
             batch_size = output.shape[0]
             pos_enc = getattr(self, parameter_name).expand(batch_size, -1, -1)
-            #pos_enc = getattr(self, parameter_name)(batch_size=output.shape[0])
+            # pos_enc = getattr(self, parameter_name)(batch_size=output.shape[0])
             padding = torch.broadcast_to(
                 pos_enc,
                 [output.shape[0], output.shape[1], common_channel_size - output.shape[2]],
@@ -2109,12 +2208,12 @@ class PerceiverMultimodalPreprocessor(nn.Module):
                     setattr(
                         self,
                         parameter_name,
-                        #PerceiverTrainablePositionEncoding(1, num_channels=output_padded.shape[2]),
-                        nn.Parameter(torch.randn(1, output_padded.shape[2]))
+                        # PerceiverTrainablePositionEncoding(1, num_channels=output_padded.shape[2]),
+                        nn.Parameter(torch.randn(1, output_padded.shape[2])),
                     )
                 batch_size = output.shape[0]
                 mask_token = getattr(self, parameter_name).expand(batch_size, -1, -1)
-                #mask_token = getattr(self, parameter_name)(output.shape[0])
+                # mask_token = getattr(self, parameter_name)(output.shape[0])
                 mask_prob = self.mask_probs[modality]
                 mask = torch.bernoulli(torch.full([output.shape[0], output.shape[1]], mask_prob))
                 mask = torch.unsqueeze(mask, dim=2)

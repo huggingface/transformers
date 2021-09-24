@@ -56,7 +56,7 @@ def rename_keys(state_dict):
         param = state_dict.pop(name)
 
         ## PREPROCESSORS ##
-        
+
         # rename text preprocessor embeddings (for MLM model)
         name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
         if name.startswith("trainable_position_encoding/pos_embs"):
@@ -112,7 +112,7 @@ def rename_keys(state_dict):
         name = name.replace("multimodal_preprocessor/image_padding/pos_embs", "input_preprocessor.image_padding")
         name = name.replace("multimodal_preprocessor/label_mask_token/pos_embs", "input_preprocessor.label_mask")
         name = name.replace("multimodal_preprocessor/label_padding/pos_embs", "input_preprocessor.label_padding")
-        
+
         ## DECODERS ##
 
         # rename prefix of decoders
@@ -309,14 +309,14 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.num_cross_attention_heads = 1
         model = PerceiverForOpticalFlow(config)
     elif task == "multimodal_autoencoding":
-        config.num_latents = 28*28*1
+        config.num_latents = 28 * 28 * 1
         config.d_latents = 512
         config.d_model = 704
         config.num_blocks = 1
         config.num_self_attends_per_block = 8
         config.num_self_attention_heads = 8
         config.num_cross_attention_heads = 1
-        config.num_labels = 700 
+        config.num_labels = 700
         model = PerceiverForMultimodalAutoencoding(config)
         filename = "kinetics700-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
@@ -328,11 +328,11 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
     # multimodal autoencoding requires a dummy input first in order to create all parameters
     # (as some parameters are defined in the forward pass)
     if task == "multimodal_autoencoding":
-        images = torch.randn((1,16,3,224,224))
-        audio = torch.randn((1,30720,1))
+        images = torch.randn((1, 16, 3, 224, 224))
+        audio = torch.randn((1, 30720, 1))
         inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
         outputs = model(inputs, attention_mask=None)
-    
+
     # load weights
     model.load_state_dict(state_dict)
 
@@ -351,11 +351,11 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         image = prepare_img()
         encoding = feature_extractor(image, return_tensors="pt")
         inputs = encoding.pixel_values
-    elif task  == "optical_flow":
+    elif task == "optical_flow":
         inputs = torch.randn(1, 2, 27, 368, 496)
     elif task == "multimodal_autoencoding":
-        images = torch.randn((1,16,3,224,224))
-        audio = torch.randn((1,30720,1))
+        images = torch.randn((1, 16, 3, 224, 224))
+        audio = torch.randn((1, 30720, 1))
         inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
 
     # forward pass
