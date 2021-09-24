@@ -243,7 +243,7 @@ class ConversationalPipeline(Pipeline):
             return outputs[0]
         return outputs
 
-    def preprocess(self, conversation: Conversation) -> Dict[str, Any]:
+    def preprocess(self, conversation: Conversation, min_length_for_response=32) -> Dict[str, Any]:
         if not isinstance(conversation, Conversation):
             raise ValueError("ConversationalPipeline, expects Conversation as inputs")
         if conversation.new_user_input is None:
