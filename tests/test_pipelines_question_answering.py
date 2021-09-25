@@ -17,6 +17,7 @@ import unittest
 from transformers import (
     MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    LxmertConfig,
     QuestionAnsweringPipeline,
 )
 from transformers.data.processors.squad import SquadExample
@@ -35,6 +36,8 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         if feature_extractor is not None:
             # This is an bimodal model, we need to find a more consistent way
             # to switch on those models.
+            self.skipTest("We cannot handle multi modal question answering yet")
+        if isinstance(model.config, LxmertConfig):
             self.skipTest("We cannot handle multi modal question answering yet")
         question_answerer = QuestionAnsweringPipeline(model, tokenizer)
 

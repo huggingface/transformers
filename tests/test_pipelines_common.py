@@ -21,7 +21,7 @@ from functools import lru_cache
 from unittest import skipIf
 
 from transformers import FEATURE_EXTRACTOR_MAPPING, TOKENIZER_MAPPING, AutoFeatureExtractor, AutoTokenizer, pipeline
-from transformers.testing_utils import is_pipeline_test, require_torch
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
 
 
 logger = logging.getLogger(__name__)
@@ -104,6 +104,9 @@ class ANY:
 class PipelineTestCaseMeta(type):
     def __new__(mcs, name, bases, dct):
         def gen_test(ModelClass, checkpoint, tiny_config, tokenizer_class, feature_extractor_class):
+            require_framework = require_tf if "TF" in tiny_config.__class__.__name__ else require_torch
+
+            @require_framework
             @skipIf(tiny_config is None, "TinyConfig does not exist")
             @skipIf(checkpoint is None, "checkpoint does not exist")
             def test(self):
@@ -111,7 +114,14 @@ class PipelineTestCaseMeta(type):
                     tiny_config.is_encoder_decoder = False
                 if ModelClass.__name__.endswith("WithLMHead"):
                     tiny_config.is_decoder = True
-                model = ModelClass(tiny_config)
+                try:
+                    model = ModelClass(tiny_config)
+                except ImportError as e:
+                    # We need to ignore only detectron 2 import errors.
+                    if "detectron2" in str(e):
+                        self.skipTest(f"This model cannot be created: {e}")
+                    else:
+                        raise e
                 if hasattr(model, "eval"):
                     model = model.eval()
                 if tokenizer_class is not None:

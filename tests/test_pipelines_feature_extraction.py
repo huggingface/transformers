@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers import MODEL_MAPPING, TF_MODEL_MAPPING, FeatureExtractionPipeline, pipeline
+from transformers import MODEL_MAPPING, TF_MODEL_MAPPING, FeatureExtractionPipeline, LxmertConfig, pipeline
 from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
 from .test_pipelines_common import PipelineTestCaseMeta
@@ -68,6 +68,8 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         elif feature_extractor is not None:
             self.skipTest("This is a bimodal model, we need to find a more consistent way to switch on those models.")
             return
+        elif isinstance(model.config, LxmertConfig):
+            self.skipTest("This is a bimodal model, we need to find a more consistent way to switch on those models.")
         elif model.config.is_encoder_decoder:
             self.skipTest(
                 """encoder_decoder models are trickier for this pipeline.
