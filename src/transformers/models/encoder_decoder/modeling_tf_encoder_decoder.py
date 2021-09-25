@@ -238,6 +238,35 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         return self.decoder.set_output_embeddings(new_embeddings)
 
     @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        """Initializing `TFEncoderDecoderModel` from a pytorch checkpoint is not supported currently.
+
+        If there are only pytorch checkpoints for a particular encoder-decoder model, a workaround is:
+
+            # a workaround to load from pytorch checkpoint
+            _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+            _model.encoder.save_pretrained("./encoder")
+            _model.decoder.save_pretrained("./decoder")
+            model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+                "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
+            )
+            # This is only for copying some specific attributes of this particular model.
+            model.config = _model.config
+            
+        """
+
+        from_pt = kwargs.pop("from_pt", False)
+        if from_pt:
+            raise ValueError(
+                "Initializing `TFEncoderDecoderModel` from a pytorch checkpoint is not supported currently. "
+                "Use a tensorflow checkpoint instead. If only the pytorch checkpoints are available, "
+                "create the encoder and decoder models separately, and use them to initialize `TFEncoderDecoderModel`. "
+                "Check `TFEncoderDecoderModel.from_encoder_decoder_pretrained()` for more details."
+            )
+
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+    @classmethod
     def from_encoder_decoder_pretrained(
         cls,
         encoder_pretrained_model_name_or_path: str = None,
