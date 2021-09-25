@@ -1061,6 +1061,13 @@ class ParallelEngine(object):
                 self.param_dict[layer.name] = [layer]
 
 
+def solution(n):
+    if n & (n - 1):
+        return False
+    else:
+        return True
+
+
 class ParallelizationMixin(object):
     def _get_default_model_object(self):
         raise NotImplementedError
@@ -1078,7 +1085,9 @@ class ParallelizationMixin(object):
         vocab_parallel_embedding: bool = None,
     ):
         assert pipeline_model_parallel_size == 1, "Currently, We only support tensor model parallelism."
-
+        assert (
+            tensor_model_parallel_size & (tensor_model_parallel_size - 1) == 0
+        ), "param `tensor_model_parallel_size` must be power of 2."
         if vocab_parallel_embedding is None:
             if hasattr(self.config, "vocab_parallel_embedding"):
                 vocab_parallel_embedding = self.config.vocab_parallel_embedding

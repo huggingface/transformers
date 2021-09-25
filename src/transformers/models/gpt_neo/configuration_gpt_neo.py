@@ -79,8 +79,8 @@ class GPTNeoConfig(PretrainedConfig):
         layer_norm_epsilon (:obj:`float`, `optional`, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         vocab_parallel_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Use vocab parallel embedding for tensor model parallelism. see the paper for more detail:
-            https://arxiv.org/abs/1909.08053 (the end of section 3)
+            Use vocab parallel embedding to reduce the memory usage of tensor model parallelism.
+            see the paper for more detail: https://arxiv.org/abs/1909.08053 (the end of section 3)
         make_vocab_size_divisible_by (:obj:`int`, `optional`, defaults to 128):
             When using vocab parallel embedding, it is used to match the number of vocabs to an even number
             by adding pad to the word embedding layer. The size of the word embedding layer will be multiple of this number.
