@@ -322,9 +322,6 @@ def booleans_processing(config, **kwargs):
         if "use_cache" in kwargs:
             final_booleans["use_cache"] = getattr(config, "use_cache", None)
 
-    if "use_cache" in final_booleans and not (config.is_decoder or config.is_encoder_decoder):
-        final_booleans["use_cache"] = False
-
     return final_booleans
 
 
