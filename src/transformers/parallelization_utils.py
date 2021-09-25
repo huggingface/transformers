@@ -1061,13 +1061,6 @@ class ParallelEngine(object):
                 self.param_dict[layer.name] = [layer]
 
 
-def solution(n):
-    if n & (n - 1):
-        return False
-    else:
-        return True
-
-
 class ParallelizationMixin(object):
     def _get_default_model_object(self):
         raise NotImplementedError
