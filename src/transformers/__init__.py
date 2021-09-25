@@ -158,7 +158,7 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
-    "models.bartpho": ["BartphoTokenizer"],
+    "models.bartpho": [],
     "models.barthez": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
     "models.bert": [
@@ -341,6 +341,7 @@ _import_structure = {
 if is_sentencepiece_available():
     _import_structure["models.albert"].append("AlbertTokenizer")
     _import_structure["models.barthez"].append("BarthezTokenizer")
+    _import_structure["models.bartpho"].append("BartphoTokenizer")
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
@@ -1983,7 +1984,6 @@ if TYPE_CHECKING:
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
-    from .models.bartpho import BartphoTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2162,6 +2162,7 @@ if TYPE_CHECKING:
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
         from .models.barthez import BarthezTokenizer
+        from .models.bartpho import BartphoTokenizer
         from .models.bert_generation import BertGenerationTokenizer
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
