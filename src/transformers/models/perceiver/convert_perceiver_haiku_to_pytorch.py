@@ -117,6 +117,9 @@ def rename_keys(state_dict):
 
         # rename prefix of decoders
         name = name.replace(
+            "multimodal_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
+        )
+        name = name.replace(
             "flow_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
         )
         name = name.replace("flow_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
@@ -317,6 +320,14 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.num_self_attention_heads = 8
         config.num_cross_attention_heads = 1
         config.num_labels = 700
+        nchunks = 128
+        image_chunk_size = np.prod(images.shape[1:-1]) // nchunks
+        audio_chunk_size = audio.shape[1] // config.samples_per_patch // nchunks
+        subsampling = {
+            "image": torch.arange(image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
+            "audio": torch.arange(audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
+            "label": None,
+        }
         model = PerceiverForMultimodalAutoencoding(config)
         filename = "kinetics700-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
