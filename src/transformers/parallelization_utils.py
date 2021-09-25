@@ -26,6 +26,7 @@ import torch.distributed as dist
 from torch import Tensor
 from torch.autograd.function import Function
 
+from .configuration_utils import PretrainedConfig
 from .modeling_utils import vocab_size_with_padding
 
 
@@ -737,7 +738,7 @@ class MPU(object):
 
 
 @dataclass
-class ParallelLayer:
+class Layer:
     name: str = None
     weight: torch.Tensor = None
     bias: torch.Tensor = None
@@ -749,13 +750,13 @@ class ParallelLayer:
     optional: bool = False
 
 
-class ParallelismPolicy(ABC):
+class LayerPolicy(ABC):
     """
-    Parallelism policy for tensor model parallelism.
+    Layer policy for tensor model parallelism and kernel fusion.
     You can check more details here: https://github.com/tunib-ai/parallelformers/blob/main/POLICY.md
 
     References:
-        The design of the ParallelismPolicy class is inspired by Microsoft DeepSpeed.
+        The design of the Layer policy class is inspired by Microsoft DeepSpeed.
         https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/module_inject/replace_policy.py
     """
 
@@ -804,11 +805,11 @@ class ParallelEngine(object):
 
     def __init__(
         self,
-        policy: ParallelismPolicy,
+        policy: LayerPolicy,
         hold_params: bool,
         skip_bias_add: bool,
         vocab_parallel_embedding: bool,
-        additional_layers: List[ParallelLayer] = None,
+        additional_layers: List[Layer] = None,
     ):
         self.hold_params = hold_params
         self.skip_bias_add = skip_bias_add
@@ -964,12 +965,12 @@ class ParallelEngine(object):
 
     def _slice_layer(
         self,
-        layer: ParallelLayer,
+        layer: Layer,
         dim: int,
         world_size: int,
         gpu_index: int,
         slice_bias: bool,
-    ) -> ParallelLayer:
+    ) -> Layer:
         """
         Slice tensors into rows or columns as described in the Megatron-LM paper
         """
@@ -1065,7 +1066,7 @@ class ParallelizationMixin(object):
     def _get_default_model_object(self):
         raise NotImplementedError
 
-    def _get_parallelism_policy(self):
+    def _get_layer_policy(self):
         raise NotImplementedError
 
     def _get_head_layers(self):
@@ -1091,7 +1092,7 @@ class ParallelizationMixin(object):
         engine = ParallelEngine(
             hold_params=False,
             skip_bias_add=False,
-            policy=self._get_parallelism_policy(),
+            policy=self._get_layer_policy(),
             vocab_parallel_embedding=vocab_parallel_embedding,
             additional_layers=self._get_head_layers(),
         )

@@ -21,7 +21,7 @@ from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...modeling_utils import ColumnParallelLinear, RowParallelLinear, VocabParallelEmbedding
 from ...onnx import OnnxConfigWithPast
-from ...parallelization_utils import ParallelismPolicy, ParallelLayer
+from ...parallelization_utils import Layer, LayerPolicy
 from ...utils import logging
 
 
@@ -310,7 +310,7 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         return super().flatten_output_collection_property(name, field)
 
 
-class GPTNeoParallelismPolicy(ParallelismPolicy):
+class GPTNeoLayerPolicy(LayerPolicy):
     @staticmethod
     def replace_arguments(layer, world_size, config):
         layer.attn.attention.embed_dim = config.hidden_size // world_size
@@ -319,30 +319,33 @@ class GPTNeoParallelismPolicy(ParallelismPolicy):
     @staticmethod
     def attn_qkv(layer, config):
         return [
-            ParallelLayer(
+            Layer(
                 name="self_attention_q",
                 weight=layer.attn.attention.q_proj.weight,
                 replace={layer.attn.attention.q_proj: ColumnParallelLinear},
                 scale_attention=False,
+                local_attention=True,
             ),
-            ParallelLayer(
+            Layer(
                 name="self_attention_k",
                 weight=layer.attn.attention.k_proj.weight,
                 replace={layer.attn.attention.k_proj: ColumnParallelLinear},
                 scale_attention=False,
+                local_attention=True,
             ),
-            ParallelLayer(
+            Layer(
                 name="self_attention_v",
                 weight=layer.attn.attention.v_proj.weight,
                 replace={layer.attn.attention.v_proj: ColumnParallelLinear},
                 scale_attention=False,
+                local_attention=True,
             ),
         ]
 
     @staticmethod
     def attn_out(layer, config):
         return [
-            ParallelLayer(
+            Layer(
                 name="self_attention_out",
                 weight=layer.attn.attention.out_proj.weight,
                 bias=layer.attn.attention.out_proj.bias,
@@ -353,7 +356,7 @@ class GPTNeoParallelismPolicy(ParallelismPolicy):
     @staticmethod
     def mlp_in(layer, config):
         return [
-            ParallelLayer(
+            Layer(
                 name="mlp_in",
                 weight=layer.mlp.c_fc.weight,
                 bias=layer.mlp.c_fc.bias,
@@ -364,7 +367,7 @@ class GPTNeoParallelismPolicy(ParallelismPolicy):
     @staticmethod
     def mlp_out(layer, config):
         return [
-            ParallelLayer(
+            Layer(
                 name="mlp_out",
                 weight=layer.mlp.c_proj.weight,
                 bias=layer.mlp.c_proj.bias,
@@ -375,7 +378,7 @@ class GPTNeoParallelismPolicy(ParallelismPolicy):
     @staticmethod
     def word_embedding(model, config):
         return [
-            ParallelLayer(
+            Layer(
                 name="word_embedding",
                 weight=model.wte.weight,
                 replace={model.wte: VocabParallelEmbedding},
@@ -385,21 +388,21 @@ class GPTNeoParallelismPolicy(ParallelismPolicy):
     @staticmethod
     def layerwise_copy_to_all(layer, config):
         return [
-            ParallelLayer(
+            Layer(
                 name="ln_in",
                 weight=layer.ln_1.weight,
                 bias=layer.ln_1.bias,
             ),
-            ParallelLayer(
+            Layer(
                 name="ln_out",
                 weight=layer.ln_2.weight,
                 bias=layer.ln_2.bias,
             ),
-            ParallelLayer(
+            Layer(
                 name="self_attention_bias",
                 bias=layer.attn.attention.bias,
             ),
-            ParallelLayer(
+            Layer(
                 name="self_attention_masked_bias",
                 bias=layer.attn.attention.masked_bias,
             ),
@@ -408,11 +411,11 @@ class GPTNeoParallelismPolicy(ParallelismPolicy):
     @staticmethod
     def modelwise_copy_to_all(model, config):
         return [
-            ParallelLayer(
+            Layer(
                 name="positional_embedding",
                 weight=model.wpe.weight,
             ),
-            ParallelLayer(
+            Layer(
                 name="ln_final",
                 weight=model.ln_f.weight,
                 bias=model.ln_f.bias,

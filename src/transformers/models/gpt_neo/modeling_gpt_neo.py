@@ -33,9 +33,9 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel, VocabParallelCrossEntropy
-from ...parallelization_utils import ParallelizationMixin, ParallelLayer
+from ...parallelization_utils import Layer, ParallelizationMixin
 from ...utils import logging
-from .configuration_gpt_neo import GPTNeoConfig, GPTNeoParallelismPolicy
+from .configuration_gpt_neo import GPTNeoConfig, GPTNeoLayerPolicy
 
 
 logger = logging.get_logger(__name__)
@@ -393,8 +393,8 @@ class GPTNeoPreTrainedModel(PreTrainedModel, ParallelizationMixin):
         if isinstance(module, GPTNeoModel):
             module.gradient_checkpointing = value
 
-    def _get_parallelism_policy(self):
-        return GPTNeoParallelismPolicy
+    def _get_layer_policy(self):
+        return GPTNeoLayerPolicy
 
 
 GPT_NEO_START_DOCSTRING = r"""
@@ -715,7 +715,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
     def _get_head_layers(self):
         return [
-            ParallelLayer(
+            Layer(
                 name="lm_head",
                 weight=self.lm_head.weight,
                 bias=self.lm_head.bias,
@@ -874,7 +874,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
 
     def _get_head_layers(self):
         return [
-            ParallelLayer(
+            Layer(
                 name="score",
                 weight=self.score.weight,
                 bias=self.score.bias,
