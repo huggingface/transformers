@@ -290,6 +290,7 @@ def prepare_img():
 
 
 @require_vision
+@require_flax
 class FlaxBeitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
