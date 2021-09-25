@@ -1105,6 +1105,7 @@ class ParallelizationMixin(object):
             skip_bias_add=False,
             policy=model._get_parallelism_policy(),
             vocab_parallel_embedding=vocab_parallel_embedding,
+            additional_layers=model._get_head_layers(),
         )
 
         engine.parallelize(
