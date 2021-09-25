@@ -747,7 +747,6 @@ class Layer:
     reversed: bool = None
     scale_attention: bool = None
     local_attention: bool = None
-    optional: bool = False
 
 
 class LayerPolicy(ABC):
