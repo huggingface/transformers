@@ -553,6 +553,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/auto
     model_doc/bart
     model_doc/barthez
+    model_doc/bartpho
     model_doc/beit
     model_doc/bert
     model_doc/bertweet

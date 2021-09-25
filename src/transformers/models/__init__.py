@@ -20,6 +20,7 @@ from . import (
     albert,
     auto,
     bart,
+    bartpho,
     barthez,
     beit,
     bert,
