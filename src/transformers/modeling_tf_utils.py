@@ -733,7 +733,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         function themselves.
         """
         if loss == "passthrough":
-            logger.info(
+            logger.warning(
                 "No loss specified in compile() - the model's internal loss computation will be used as "
                 "the loss. To disable this behaviour, please explicitly pass loss=None."
             )
