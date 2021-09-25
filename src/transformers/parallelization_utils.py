@@ -1121,7 +1121,7 @@ class ParallelizationMixin(object):
         if fp16 is True:
             model = model.half()
 
-        model._parllelize(
+        model._parallelize(
             tensor_model_parallel_size=tensor_model_parallel_size,
             pipeline_model_parallel_size=pipeline_model_parallel_size,
             vocab_parallel_embedding=vocab_parallel_embedding,
@@ -1145,7 +1145,7 @@ class ParallelizationMixin(object):
         if fp16 is True:
             model = model.half()
 
-        model._parllelize(
+        model._parallelize(
             tensor_model_parallel_size=tensor_model_parallel_size,
             pipeline_model_parallel_size=pipeline_model_parallel_size,
             vocab_parallel_embedding=vocab_parallel_embedding,
