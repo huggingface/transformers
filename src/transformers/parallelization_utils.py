@@ -1071,29 +1071,17 @@ class ParallelizationMixin(object):
     def _get_head_layers(self):
         return []
 
-    @classmethod
-    def from_pretrained_with_parallel(
-        cls,
-        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+    def _parallelize(
+        self,
         tensor_model_parallel_size: int = 1,
         pipeline_model_parallel_size: int = 1,
-        fp16: bool = False,
         vocab_parallel_embedding: bool = None,
-        *model_args,
-        **kwargs,
     ):
-        model = cls.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
-        if fp16 is True:
-            model = model.half()
-
         assert pipeline_model_parallel_size == 1, "Currently, We only support tensor model parallelism."
 
         if vocab_parallel_embedding is None:
-            if hasattr(model.config, "vocab_parallel_embedding"):
-                vocab_parallel_embedding = model.config.vocab_parallel_embedding
-        else:
-            model.config.vocab_parallel_embedding = vocab_parallel_embedding
+            if hasattr(self.config, "vocab_parallel_embedding"):
+                vocab_parallel_embedding = self.config.vocab_parallel_embedding
 
         mpu = MPU(
             tensor_model_parallel_size=tensor_model_parallel_size,
@@ -1103,18 +1091,64 @@ class ParallelizationMixin(object):
         engine = ParallelEngine(
             hold_params=False,
             skip_bias_add=False,
-            policy=model._get_parallelism_policy(),
+            policy=self._get_parallelism_policy(),
             vocab_parallel_embedding=vocab_parallel_embedding,
-            additional_layers=model._get_head_layers(),
+            additional_layers=self._get_head_layers(),
         )
 
         engine.parallelize(
-            model=model._get_default_model_object(),
+            model=self._get_default_model_object(),
             mpu=mpu,
         )
 
-        setattr(model, "mpu", mpu)
+        setattr(self, "mpu", mpu)
         # This allows the Trainer to call the MPU for data + model parallelism
         # example `ddp = DistributedDataParallel(..., process_group=model.mpu.get_data_parallel_group())`
+
+    @classmethod
+    def from_pretrained_with_parallel(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        tensor_model_parallel_size: int = 1,
+        pipeline_model_parallel_size: int = 1,
+        vocab_parallel_embedding: bool = None,
+        fp16: bool = False,
+        *model_args,
+        **kwargs,
+    ):
+        model = cls.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+        if fp16 is True:
+            model = model.half()
+
+        model._parllelize(
+            tensor_model_parallel_size=tensor_model_parallel_size,
+            pipeline_model_parallel_size=pipeline_model_parallel_size,
+            vocab_parallel_embedding=vocab_parallel_embedding,
+        )
+
+        return model
+
+    @classmethod
+    def from_config_with_parallel(
+        cls,
+        config: PretrainedConfig,
+        tensor_model_parallel_size: int = 1,
+        pipeline_model_parallel_size: int = 1,
+        vocab_parallel_embedding: bool = None,
+        fp16: bool = False,
+        *model_args,
+        **kwargs,
+    ):
+        model = cls(config, *model_args, **kwargs)
+
+        if fp16 is True:
+            model = model.half()
+
+        model._parllelize(
+            tensor_model_parallel_size=tensor_model_parallel_size,
+            pipeline_model_parallel_size=pipeline_model_parallel_size,
+            vocab_parallel_embedding=vocab_parallel_embedding,
+        )
 
         return model
