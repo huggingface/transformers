@@ -2798,7 +2798,7 @@ class VocabParallelCrossEntropyFunction(torch.autograd.Function):
         return grad_input, None, None
 
 
-class VocabParallelCrossEntropy(nn.Module):
+class VocabParallelCrossEntropyLoss(nn.Module):
     def __init__(self, mpu):
         super().__init__()
         self.mpu = mpu

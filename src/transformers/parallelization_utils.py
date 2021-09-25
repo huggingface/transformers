@@ -1084,7 +1084,7 @@ class ParallelizationMixin(object):
                 vocab_parallel_embedding = self.config.vocab_parallel_embedding
         else:
             self.config.vocab_parallel_embedding = vocab_parallel_embedding
-            
+
         mpu = MPU(
             tensor_model_parallel_size=tensor_model_parallel_size,
             pipeline_model_parallel_size=pipeline_model_parallel_size,
