@@ -78,6 +78,12 @@ class GPTNeoConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_epsilon (:obj:`float`, `optional`, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
+        vocab_parallel_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Use vocab parallel embedding for tensor model parallelism. see the paper for more detail:
+            https://arxiv.org/abs/1909.08053 (the end of section 3)
+        make_vocab_size_divisible_by (:obj:`int`, `optional`, defaults to 128):
+            When using vocab parallel embedding, it is used to match the number of vocabs to an even number
+            by adding pad to the word embedding layer. The size of the word embedding layer will be multiple of this number.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
