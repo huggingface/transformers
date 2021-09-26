@@ -326,21 +326,21 @@ class GPTNeoLayerPolicy(LayerPolicy):
     def attn_qkv(layer, config):
         return [
             Layer(
-                name="self_attention_q",
+                name="self_attn_q",
                 weight=layer.attn.attention.q_proj.weight,
                 replace={layer.attn.attention.q_proj: ColumnParallelLinear},
                 scale_attention=False,
                 local_attention=True,
             ),
             Layer(
-                name="self_attention_k",
+                name="self_attn_k",
                 weight=layer.attn.attention.k_proj.weight,
                 replace={layer.attn.attention.k_proj: ColumnParallelLinear},
                 scale_attention=False,
                 local_attention=True,
             ),
             Layer(
-                name="self_attention_v",
+                name="self_attn_v",
                 weight=layer.attn.attention.v_proj.weight,
                 replace={layer.attn.attention.v_proj: ColumnParallelLinear},
                 scale_attention=False,
@@ -352,7 +352,7 @@ class GPTNeoLayerPolicy(LayerPolicy):
     def attn_out(layer, config):
         return [
             Layer(
-                name="self_attention_out",
+                name="self_attn_out",
                 weight=layer.attn.attention.out_proj.weight,
                 bias=layer.attn.attention.out_proj.bias,
                 replace={layer.attn.attention.out_proj: RowParallelLinear},
@@ -405,11 +405,11 @@ class GPTNeoLayerPolicy(LayerPolicy):
                 bias=layer.ln_2.bias,
             ),
             Layer(
-                name="self_attention_bias",
+                name="self_attn_bias",
                 bias=layer.attn.attention.bias,
             ),
             Layer(
-                name="self_attention_masked_bias",
+                name="self_attn_masked_bias",
                 bias=layer.attn.attention.masked_bias,
             ),
         ]
