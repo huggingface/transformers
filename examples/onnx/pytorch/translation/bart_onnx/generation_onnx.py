@@ -121,14 +121,8 @@ class MinLengthLogitsProcessorTS(torch.nn.Module):
 class BARTGenerator(torch.nn.Module, GenerationMixin):
     def __init__(self, model):
         super().__init__()
-        # print("===== model.config:")
-        # print(model.config)
-        self.config = BartConfigTS(model.config) #TODO: Check the 2 config have the same values for same keys.
-        # print("===== self.config constructor:")
-        # print(self.config)
+        self.config = BartConfigTS(model.config)
         self.config.init_module()
-        # print("===== self.config init:")
-        # print(self.config)
         self.config.force_bos_token_to_be_generated = False
         self._trace_modules(model)
         self.logits_processor = MinLengthLogitsProcessorTS(self.config.min_length, self.config.eos_token_id)
@@ -137,22 +131,19 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         self.decoder_layers = model.config.decoder_layers
 
     def _trace_modules(self, model):
-        # device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-        device = torch.device('cpu')
-
         # Be aware of the last one 2 should be kept.
         input_ids = torch.tensor([[  19,  669,   18,  420,    8,  664,   57,   42,    8,  664,   21, 3028,
             195, 4445,  331, 1293,   34,   21,   10, 6174, 1100,    6,   69,  104,
             42,   32, 2621, 1638,  144,    4, 6174,  558,  108, 4419, 1091,   28,
             4, 1668,    9, 1509, 1621,  279,   35,  867, 2734,   85,   11, 2216,
             2734,   85,  203, 2244,    7,    6,   15, 8102,    7,   57, 8629,    5,
-            2]], device=device, dtype=torch.long)
+            2]], device=model.device, dtype=torch.long)
         attention_mask = torch.tensor([[True, True, True, True, True, True, True, True, True, True, True, True,
             True, True, True, True, True, True, True, True, True, True, True, True,
             True, True, True, True, True, True, True, True, True, True, True, True,
             True, True, True, True, True, True, True, True, True, True, True, True,
             True, True, True, True, True, True, True, True, True, True, True, True,
-            True]], device=device, dtype=torch.bool)
+            True]], device=model.device, dtype=torch.bool)
         self.encoder = create_traced_encoder(model.get_encoder(), input_ids, attention_mask)
         encoder_outputs = model.get_encoder()(input_ids, attention_mask=attention_mask, return_dict=True)
         decoder = model.model.decoder
@@ -502,8 +493,7 @@ class BARTBeamSearchGenerator(BARTGenerator):
     def __init__(self, model):
         super().__init__(model)
         self.beam_scorer = BeamSearchScorerTS()
-        # self.device = torch.device('cuda')
-        self.device = torch.device('cpu')
+        self.device = model.device
 
     @staticmethod
     def _expand_inputs_for_generation(

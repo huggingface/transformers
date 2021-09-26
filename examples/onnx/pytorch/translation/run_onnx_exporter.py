@@ -112,14 +112,15 @@ def load_model_tokenizer(model_name, device='cpu'):
 
     return huggingface_model, tokenizer
 
-def export_and_validate_model(model, tokenizer, onnx_file_path, num_beams, max_length, device='cpu'):
+def export_and_validate_model(model, tokenizer, onnx_file_path, num_beams, max_length):
     model.eval()
+
     ort_sess = None
     onnx_bart = torch.jit.script(BARTBeamSearchGenerator(model))
 
     with torch.no_grad():
         ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt').to(device)
+        inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt').to(model.device)
 
         # Test export here.
         summary_ids = model.generate(
@@ -163,7 +164,7 @@ def export_and_validate_model(model, tokenizer, onnx_file_path, num_beams, max_l
 
 def main():
     args = parse_args()
-    local_device = 'cpu'
+    local_device = None
     local_max_length = 5
     local_num_beams = 4
 
@@ -177,9 +178,6 @@ def main():
     logger.setLevel(logging.ERROR)
     transformers.utils.logging.set_verbosity_error()
 
-    if args.device:
-        local_device = args.device
-
     if args.model_name_or_path:
         model, tokenizer = load_model_tokenizer(args.model_name_or_path, local_device)
     else:
@@ -187,6 +185,16 @@ def main():
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
+
+    if args.device:
+        if args.device == 'cuda' and not torch.cuda.is_available():
+            raise ValueError("CUDA is not available in this server.")
+
+        local_device = torch.device(args.device)
+    else:
+        local_device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+    model.to(local_device)
 
     if args.max_length:
         local_max_length = args.max_length
@@ -199,7 +207,7 @@ def main():
     else:
         output_name = 'onnx_model_{}.onnx'.format(datetime.now().utcnow().microsecond)
 
-    export_and_validate_model(model, tokenizer, output_name, local_num_beams, local_max_length, local_device)
+    export_and_validate_model(model, tokenizer, output_name, local_num_beams, local_max_length)
 
     logger.info("***** Running export *****")
 
