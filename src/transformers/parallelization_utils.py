@@ -1080,7 +1080,7 @@ class ParallelizationMixin(object):
         assert (
             pipeline_model_parallel_size == 1
         ), "Currently, We only support tensor model parallelism, please set param `pipeline_model_parallel_size` to 1"
-        assert tensor_model_parallel_size >= 1, "param `tensor_model_parallel_size` must be postive."
+        assert tensor_model_parallel_size >= 1, "param `tensor_model_parallel_size` must be positive."
         assert (
             tensor_model_parallel_size & (tensor_model_parallel_size - 1) == 0
         ), "param `tensor_model_parallel_size` must be power of 2."
