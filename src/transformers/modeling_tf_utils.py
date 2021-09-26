@@ -301,8 +301,7 @@ def booleans_processing(config, **kwargs):
         if (
             kwargs["output_attentions"] not in (None, config.output_attentions)
             or kwargs["output_hidden_states"] not in (None, config.output_hidden_states)
-            or "use_cache" in kwargs
-            and kwargs["use_cache"] not in (None, config.use_cache)
+            or ("use_cache" in kwargs and kwargs["use_cache"] not in (None, config.use_cache))
         ):
             tf_logger.warning(
                 "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
@@ -757,6 +756,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+        if y is None and "labels" in x:
+            y = x["labels"]  # Stops confusion with metric computations
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
@@ -782,6 +783,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+        if y is None and "labels" in x:
+            y = x["labels"]  # Stops confusion with metric computations
         y_pred = self(x, training=False)
         if not self.loss:
             self.loss_tracker.update_state(y_pred.loss)
