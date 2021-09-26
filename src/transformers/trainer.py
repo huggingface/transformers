@@ -1462,7 +1462,10 @@ class Trainer:
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log:
             logs: Dict[str, float] = {}
-            tr_loss_scalar = tr_loss.item()
+
+            # all_gather + mean() to get average loss over all processes
+            tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
+
             # reset tr_loss to zero
             tr_loss -= tr_loss
 
