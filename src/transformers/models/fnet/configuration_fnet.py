@@ -64,13 +64,13 @@ class FNetConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_tpu_fourier_optimizations (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Determines whether to use TPU optimized FFTs. If :obj:`True`, the model will favor axis-wise FFTs
-            transforms. Set to :obj:`False` for GPU/CPU hardware, in which case n-dimensional FFTs are used.
-        tpu_short_seq_length (:obj:`int`, `optional`, defaults to 512):
-            The sequence length that is expected by the model when using TPUs. This will be used to initialize the DFT
-            matrix only when `use_tpu_fourier_optimizations` is set to :obj:`True` and the input sequence is shorter
-            than or equal to 4096 tokens.
+        use_fft (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Determines whether to use n-dimensional FFTs. If :obj:`True`, the model will use n-dimensional FFT
+            transforms. Set to :obj:`False` for using DFT matrix multiplication for fourier transform.
+        actual_seq_length (:obj:`int`, `optional`, defaults to 512):
+            The sequence length that is expected by the model. This will be used to initialize the DFT matrix when
+            `use_fft` is set to :obj:`False`. Additionally, this is used for validation when using FFT. The recommended
+            values for lengths greater than 4096 is powers of 2.
 
     Example::
 
@@ -100,8 +100,8 @@ class FNetConfig(PretrainedConfig):
         type_vocab_size=4,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_tpu_fourier_optimizations=False,
-        tpu_short_seq_length=512,
+        use_fft=True,
+        actual_seq_length=512,
         pad_token_id=3,
         bos_token_id=1,
         eos_token_id=2,
@@ -119,5 +119,5 @@ class FNetConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.use_tpu_fourier_optimizations = use_tpu_fourier_optimizations
-        self.tpu_short_seq_length = tpu_short_seq_length
+        self.use_fft = use_fft
+        self.actual_seq_length = actual_seq_length

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch FNet model. """
 
+import math
 import warnings
 from dataclasses import dataclass
 from functools import partial
@@ -76,26 +77,9 @@ def _two_dim_matmul(x, matrix_dim_one, matrix_dim_two):
     return torch.einsum("bij,jk,ni->bnk", x, matrix_dim_two, matrix_dim_one)
 
 
-# # Adapted from https://github.com/google-research/google-research/blob/master/f_net/fourier.py
+# Adapted from https://github.com/google-research/google-research/blob/master/f_net/fourier.py
 def two_dim_matmul(x, matrix_dim_one, matrix_dim_two):
     return _two_dim_matmul(x, matrix_dim_one, matrix_dim_two)
-
-
-# Adapted from https://github.com/google-research/google-research/blob/master/f_net/fourier.py
-def fftn(x):
-    """
-    Applies n-dimensional Fast Fourier Transform (FFT) to input array.
-
-    Args:
-        x: Input n-dimensional array.
-
-    Returns:
-        n-dimensional Fourier transform of input n-dimensional array.
-    """
-    out = x
-    for axis in reversed(range(x.ndim)[1:]):  # We don't need to apply FFT to last axis
-        out = torch.fft.fft(out, axis=axis)
-    return out
 
 
 class FNetEmbeddings(nn.Module):
@@ -166,26 +150,28 @@ class FNetBasicFourierTransform(nn.Module):
         self._init_fourier_transform(config)
 
     def _init_fourier_transform(self, config):
-        if not config.use_tpu_fourier_optimizations:
+        if config.use_fft:
+            if self.config.actual_seq_length > 4096 and not math.log2(self.config.actual_seq_length).is_integer():
+                raise ValueError(
+                    f"For larger seuence lengths (>4096), the actual sequence length {self.config.actual_seq_length} must be a power of 2."
+                )
             self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
-        elif config.max_position_embeddings <= 4096:
+        else:
             if is_scipy_available():
                 self.register_buffer(
                     "dft_mat_hidden", torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64)
                 )
                 self.register_buffer(
-                    "dft_mat_seq", torch.tensor(linalg.dft(config.tpu_short_seq_length), dtype=torch.complex64)
+                    "dft_mat_seq", torch.tensor(linalg.dft(config.actual_seq_length), dtype=torch.complex64)
                 )
                 self.fourier_transform = partial(
                     two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
                 )
             else:
                 logging.warning(
-                    "SciPy is needed for DFT matrix calculation and is not found. Using TPU optimized fast fourier transform instead."
+                    "SciPy is needed for DFT matrix calculation and is not found. Using n-dimensional fast fourier transform instead."
                 )
-                self.fourier_transform = fftn
-        else:
-            self.fourier_transform = fftn
+                self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
 
     def forward(self, hidden_states):
 
@@ -575,13 +561,9 @@ class FNetModel(FNetPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if (
-            self.config.use_tpu_fourier_optimizations
-            and seq_length <= 4096
-            and self.config.tpu_short_seq_length != seq_length
-        ):
+        if self.config.use_fft and seq_length <= 4096 and self.config.actual_seq_length != seq_length:
             raise ValueError(
-                "The `tpu_short_seq_length` in FNetConfig should be set equal to the sequence length being passed to the model when using TPU optimizations."
+                "The `actual_seq_length` in FNetConfig should be set equal to the sequence length being passed to the model when using TPU optimizations."
             )
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
