@@ -99,10 +99,6 @@ def parse_args():
 
     args = parser.parse_args()
 
-    # if args.validation_file is not None:
-    #     extension = args.validation_file.split(".")[-1]
-    #     assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-
     return args
 
 def load_model_tokenizer(model_name, device='cpu'):

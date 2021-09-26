@@ -140,7 +140,6 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         # device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         device = torch.device('cpu')
 
-        # TODO: Try to update the content to a common one.
         # Be aware of the last one 2 should be kept.
         input_ids = torch.tensor([[  19,  669,   18,  420,    8,  664,   57,   42,    8,  664,   21, 3028,
             195, 4445,  331, 1293,   34,   21,   10, 6174, 1100,    6,   69,  104,
@@ -578,7 +577,6 @@ class BARTBeamSearchGenerator(BARTGenerator):
             next_token_logits = logits[:, -1, :]
 
             # adjust tokens for Bart, *e.g.*
-            # TODO: make script compatible
             next_token_logits = self.adjust_logits_during_generation(
                 next_token_logits, cur_len=cur_len, max_length=max_length
             )
@@ -649,7 +647,6 @@ class BARTBeamSearchGenerator(BARTGenerator):
         num_return_sequences = self.config.num_return_sequences
         early_stopping = True
 
-        # TODO: initialize BeamSearchScorer
         self.beam_scorer.init(
             batch_size=batch_size,
             max_length=max_length,
