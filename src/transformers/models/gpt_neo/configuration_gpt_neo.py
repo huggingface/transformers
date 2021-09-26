@@ -326,21 +326,21 @@ class GPTNeoLayerPolicy(LayerPolicy):
     def attn_qkv(layer, config):
         return [
             Layer(
-                name="self_attn_q",
+                name="attn.attention.q_proj",
                 weight=layer.attn.attention.q_proj.weight,
                 replace={layer.attn.attention.q_proj: ColumnParallelLinear},
                 scale_attention=False,
                 local_attention=True,
             ),
             Layer(
-                name="self_attn_k",
+                name="attn.attention.k_proj",
                 weight=layer.attn.attention.k_proj.weight,
                 replace={layer.attn.attention.k_proj: ColumnParallelLinear},
                 scale_attention=False,
                 local_attention=True,
             ),
             Layer(
-                name="self_attn_v",
+                name="attn.attention.v_proj",
                 weight=layer.attn.attention.v_proj.weight,
                 replace={layer.attn.attention.v_proj: ColumnParallelLinear},
                 scale_attention=False,
@@ -352,7 +352,7 @@ class GPTNeoLayerPolicy(LayerPolicy):
     def attn_out(layer, config):
         return [
             Layer(
-                name="self_attn_out",
+                name="attn.attention.out_proj",
                 weight=layer.attn.attention.out_proj.weight,
                 bias=layer.attn.attention.out_proj.bias,
                 replace={layer.attn.attention.out_proj: RowParallelLinear},
@@ -363,7 +363,7 @@ class GPTNeoLayerPolicy(LayerPolicy):
     def mlp_in(layer, config):
         return [
             Layer(
-                name="mlp_in",
+                name="mlp.c_fc",
                 weight=layer.mlp.c_fc.weight,
                 bias=layer.mlp.c_fc.bias,
                 replace={layer.mlp.c_fc: ColumnParallelLinear},
@@ -374,7 +374,7 @@ class GPTNeoLayerPolicy(LayerPolicy):
     def mlp_out(layer, config):
         return [
             Layer(
-                name="mlp_out",
+                name="mlp.c_proj",
                 weight=layer.mlp.c_proj.weight,
                 bias=layer.mlp.c_proj.bias,
                 replace={layer.mlp.c_proj: RowParallelLinear},
@@ -385,7 +385,7 @@ class GPTNeoLayerPolicy(LayerPolicy):
     def word_embedding(model, config):
         return [
             Layer(
-                name="word_embedding",
+                name="wte",
                 weight=model.wte.weight,
                 replace={model.wte: VocabParallelEmbedding},
             ),
@@ -395,21 +395,21 @@ class GPTNeoLayerPolicy(LayerPolicy):
     def layerwise_copy_to_all(layer, config):
         return [
             Layer(
-                name="ln_in",
+                name="ln_1",
                 weight=layer.ln_1.weight,
                 bias=layer.ln_1.bias,
             ),
             Layer(
-                name="ln_out",
+                name="ln_2",
                 weight=layer.ln_2.weight,
                 bias=layer.ln_2.bias,
             ),
             Layer(
-                name="self_attn_bias",
+                name="attn.attention.bias",
                 bias=layer.attn.attention.bias,
             ),
             Layer(
-                name="self_attn_masked_bias",
+                name="attn.attention.masked_bias",
                 bias=layer.attn.attention.masked_bias,
             ),
         ]
@@ -418,11 +418,11 @@ class GPTNeoLayerPolicy(LayerPolicy):
     def modelwise_copy_to_all(model, config):
         return [
             Layer(
-                name="positional_embedding",
+                name="wpe",
                 weight=model.wpe.weight,
             ),
             Layer(
-                name="ln_final",
+                name="ln_f",
                 weight=model.ln_f.weight,
                 bias=model.ln_f.bias,
             ),
