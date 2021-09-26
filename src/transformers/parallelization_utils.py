@@ -1062,7 +1062,7 @@ class ParallelizationEngine(object):
 
 
 class ParallelizationMixin(object):
-    def _get_default_model_object(self):
+    def _get_base_model(self):
         raise NotImplementedError
 
     def _get_layer_policy(self):
@@ -1105,7 +1105,7 @@ class ParallelizationMixin(object):
         )
 
         engine.parallelize(
-            model=self._get_default_model_object(),
+            model=self._get_base_model(),
             mpu=mpu,
         )
 

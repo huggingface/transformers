@@ -505,7 +505,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
-    def _get_default_model_object(self):
+    def _get_base_model(self):
         return self
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
@@ -710,7 +710,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def _get_default_model_object(self):
+    def _get_base_model(self):
         return self.transformer
 
     def _get_head_layers(self):
@@ -869,7 +869,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
 
         self.init_weights()
 
-    def _get_default_model_object(self):
+    def _get_base_model(self):
         return self.transformer
 
     def _get_head_layers(self):
