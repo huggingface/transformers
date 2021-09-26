@@ -796,7 +796,7 @@ class LayerPolicy(ABC):
         raise NotImplementedError
 
 
-class ParallelEngine(object):
+class ParallelizationEngine(object):
     """
     Integration with Parallelformers
     https://github.com/tunib-ai/parallelformers
@@ -1092,7 +1092,7 @@ class ParallelizationMixin(object):
             pipeline_model_parallel_size=pipeline_model_parallel_size,
         )
 
-        engine = ParallelEngine(
+        engine = ParallelizationEngine(
             hold_params=False,
             skip_bias_add=False,
             policy=self._get_layer_policy(),
