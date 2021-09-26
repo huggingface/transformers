@@ -1077,10 +1077,14 @@ class ParallelizationMixin(object):
         pipeline_model_parallel_size: int = 1,
         vocab_parallel_embedding: bool = None,
     ):
-        assert pipeline_model_parallel_size == 1, "Currently, We only support tensor model parallelism."
+        assert (
+            pipeline_model_parallel_size == 1
+        ), "Currently, We only support tensor model parallelism, please set param `pipeline_model_parallel_size` to 1"
+        assert tensor_model_parallel_size >= 1, "param `tensor_model_parallel_size` must be postive."
         assert (
             tensor_model_parallel_size & (tensor_model_parallel_size - 1) == 0
         ), "param `tensor_model_parallel_size` must be power of 2."
+
         if vocab_parallel_embedding is None:
             if hasattr(self.config, "vocab_parallel_embedding"):
                 vocab_parallel_embedding = self.config.vocab_parallel_embedding
