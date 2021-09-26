@@ -25,6 +25,8 @@ import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss
+import numpy as np
+
 
 from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -33,7 +35,6 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     ModelOutput,
-    QuestionAnsweringModelOutput
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -43,7 +44,7 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_realm import RealmConfig
-from .utils_realm import load_scann_searcher
+from .utils_realm import load_scann_searcher, convert_tfrecord_to_np
 
 logger = logging.get_logger(__name__)
 _BERT_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-bert"
@@ -825,6 +826,23 @@ class RealmRetrieverOutput(ModelOutput):
     candidate_score: torch.FloatTensor = None
 
 
+@dataclass
+class RealmSearcherOutput(ModelOutput):
+    retrieved_logits: torch.FloatTensor = None
+    retrieved_blocks: np.ndarray = None
+    retrieved_block_ids: torch.int64 = None
+
+
+@dataclass
+class RealmReaderOutput(ModelOutput):
+    loss: torch.FloatTensor = None
+    block_idx: torch.int64 = None
+    start_pos: torch.int32 = None
+    end_pos: torch.int32 = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 class RealmPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -936,10 +954,10 @@ class RealmReaderProjection(nn.Module):
         start_projection, end_projection = hidden_states.chunk(2, dim=-1)
         block_mask = token_type_ids.detach().clone()
         block_mask[:, -1] = 0
-        candidates_starts, candidates_ends, candidate_mask = span_candidates(block_mask)
+        candidate_starts, candidate_ends, candidate_mask = span_candidates(block_mask)
         
-        candidate_start_projections = torch.index_select(start_projection, dim=1, index=candidates_starts)
-        candidate_end_projections = torch.index_select(end_projection, dim=1, index=candidates_ends)
+        candidate_start_projections = torch.index_select(start_projection, dim=1, index=candidate_starts)
+        candidate_end_projections = torch.index_select(end_projection, dim=1, index=candidate_ends)
         candidate_hidden = candidate_start_projections + candidate_end_projections
 
         # [reader_beam_size, num_candidates, span_hidden_size]
@@ -951,7 +969,7 @@ class RealmReaderProjection(nn.Module):
         # [reader_beam_size, num_candidates]
         reader_logits += mask_to_score(candidate_mask)
         
-        return reader_logits
+        return reader_logits, candidate_starts, candidate_ends
 
 
 class RealmPreTrainedModel(PreTrainedModel):
@@ -1422,6 +1440,7 @@ class RealmSearcher(RealmPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        block_records_path=None,
         return_dict=None,
     ):
 
@@ -1454,17 +1473,35 @@ class RealmSearcher(RealmPreTrainedModel):
         searcher = load_scann_searcher(
             db = self.block_emb,
             num_neighbors=beam_size)
+
+        retrieved_blocks = convert_tfrecord_to_np(
+            block_records_path = block_records_path,
+            num_block_records = self.config.num_block_records,
+        )
+        
         
         retrieved_block_ids, _ = searcher.search_batched(question_projection)
+
         # [retriever_beam_size]
         retrieved_block_ids = torch.tensor(retrieved_block_ids.astype('int64').squeeze())
 
+        # [retriever_beam_size]
+        retrieved_blocks = np.take(retrieved_blocks, indices=retrieved_block_ids, axis=0)
+
         # [retriever_beam_size, projection_size]
         retrieved_block_emb = torch.index_select(self.block_emb, dim=0, index=retrieved_block_ids)
+        #retrieved_block_emb = np.take(self.block_emb, indices=retrieved_block_ids, axis=0)
 
         retrieved_logits = torch.einsum("D,BD->B", question_projection.squeeze(), retrieved_block_emb)
-
-        print(retrieved_logits)
+        
+        if not return_dict:
+            return (retrieved_logits, retrieved_blocks, retrieved_block_ids)
+        
+        return RealmSearcherOutput(
+            retrieved_logits=retrieved_logits,
+            retrieved_blocks=retrieved_blocks,
+            retrieved_block_ids=retrieved_block_ids,
+        )
 
 
 
@@ -1500,8 +1537,10 @@ class RealmReader(RealmPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         relevance_score=None,
+        retrieved_blocks=None,
         start_positions=None,
         end_positions=None,
+        has_answers=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1541,44 +1580,90 @@ class RealmReader(RealmPreTrainedModel):
         # [reader_beam_size, joint_seq_len, hidden_size]
         sequence_output = outputs[0]
     
-        # [reader_beam_size, num_candidates]
-        reader_logits = self.qa_outputs(sequence_output, token_type_ids)
+        # [reader_beam_size, num_candidates], [num_candidates], [num_candidates]
+        reader_logits, candidate_starts, candidate_ends = self.qa_outputs(sequence_output, token_type_ids)
         # [retriever_beam_size, 1]
-        retriever_logits = torch.unsequeeze(relevance_score, -1)
+        retriever_logits = torch.unsqueeze(relevance_score, -1)
         # [reader_beam_size, num_candidates]
         reader_logits += retriever_logits
+        # []
+        predicted_block_index = torch.argmax(torch.max(reader_logits, dim=1).values)
+        # []
+        predicted_candidate = torch.argmax(torch.max(reader_logits, dim=0).values)
 
-        predicted_block_index = tf.argmax(tf.reduce_max(reader_outputs.logits, 1))
-        predicted_candidate = tf.argmax(tf.reduce_max(reader_outputs.logits, 0))
+        #predicted_block = torch.index_select(retrieved_blocks, dim=0, index=predicted_block_index)
+
+        #predicted_token_ids = tf.gather(reader_outputs.token_ids,
+        #                                predicted_block_index)
+
+        predicted_start = torch.index_select(candidate_starts, dim=0, index=predicted_candidate)
+        predicted_end = torch.index_select(candidate_ends, dim=0, index=predicted_candidate)
 
         total_loss = None
-        if start_positions is not None and end_positions is not None:
+        if start_positions is not None and end_positions is not None and has_answers is not None:
+            def compute_correct_candidates(candidate_starts, candidate_ends, gold_starts,
+                               gold_ends):
+                """Compute correct span."""
+                # [reader_beam_size, num_answers, num_candidates]
+                is_gold_start = torch.eq(
+                    torch.unsqueeze(torch.unsqueeze(candidate_starts, 0), 0),
+                    torch.unsqueeze(gold_starts, -1))
+                is_gold_end = torch.eq(
+                    torch.unsqueeze(torch.unsqueeze(candidate_ends, 0), 0),
+                    torch.unsqueeze(gold_ends, -1))
+
+                # [reader_beam_size, num_candidates]
+                return torch.any(torch.logical_and(is_gold_start, is_gold_end), 1)
+
+            def marginal_log_loss(logits, is_correct):
+                """Loss based on the negative marginal log-likelihood."""
+                
+                def mask_to_score(mask):
+                    return (1.0 - mask.type(torch.float32)) * -10000.0
+                
+                # []
+                log_numerator = torch.logsumexp(logits + mask_to_score(is_correct), dim=-1)
+                log_denominator = torch.logsumexp(logits, -1)
+                return log_denominator - log_numerator
             
-            
-            
+
             # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
+            #if len(start_positions.size()) > 1:
+            #    start_positions = start_positions.squeeze(-1)
+            #if len(end_positions.size()) > 1:
+            #    end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
+            ignored_index = sequence_output.size(1)
             start_positions = start_positions.clamp(0, ignored_index)
             end_positions = end_positions.clamp(0, ignored_index)
 
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
+            retriever_correct = has_answers
+            any_retriever_correct = torch.any(retriever_correct)
+
+            reader_correct = compute_correct_candidates(
+                candidate_starts=candidate_starts,
+                candidate_ends=candidate_ends,
+                gold_starts=start_positions,
+                gold_ends=end_positions,
+            )
+            any_reader_correct = torch.any(reader_correct)
+
+            retriever_loss = marginal_log_loss(retriever_logits, retriever_correct)
+            reader_loss = marginal_log_loss(reader_logits, reader_correct)
+            retriever_loss *= any_retriever_correct.type(torch.float32)
+            reader_loss *= any_reader_correct.type(torch.float32)
+
+            total_loss = torch.mean(retriever_loss + reader_loss)
 
         if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
+            output = (predicted_block_index, predicted_start, predicted_end) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
-        return QuestionAnsweringModelOutput(
+        return RealmReaderOutput(
             loss=total_loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
+            block_idx=predicted_block_index,
+            start_pos=predicted_start,
+            end_pos=predicted_end,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

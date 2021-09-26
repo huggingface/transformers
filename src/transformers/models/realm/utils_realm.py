@@ -1,5 +1,4 @@
-import torch
-import numpy as np
+import tensorflow.compat.v1 as tf
 
 def load_scann_searcher(db,
                         num_neighbors,
@@ -24,3 +23,12 @@ def load_scann_searcher(db,
 
     searcher = builder.build()
     return searcher
+
+def convert_tfrecord_to_np(block_records_path, num_block_records):
+    blocks_dataset = tf.data.TFRecordDataset(
+        block_records_path, buffer_size=512 * 1024 * 1024)
+    blocks_dataset = blocks_dataset.batch(
+        num_block_records, drop_remainder=True)
+    np_record = [raw_record.numpy() for raw_record in blocks_dataset.take(1)][0]
+
+    return np_record
