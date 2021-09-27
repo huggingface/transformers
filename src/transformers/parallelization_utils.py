@@ -19,7 +19,7 @@ Integration with parallelformers https://github.com/tunib-ai/parallelformers
 import os
 from abc import ABC
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import Iterable, List, Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -735,6 +735,36 @@ class MPU(object):
                 rank=rank,
                 init_method=init_method,
             )
+
+    def synchronize_across_tensor_model_parallel_world(self, *inputs, **kwargs):
+        if not dist.is_initialized():
+            return
+
+        for _input in inputs:
+            if _input is None or isinstance(_input, str):
+                break
+            elif torch.is_tensor(_input):
+                if not _input.is_contiguous():
+                    _input = _input.contiguous()
+                dist.broadcast(
+                    tensor=_input,
+                    src=self.get_tensor_model_parallel_src_rank(),
+                )
+            elif isinstance(_input, Iterable):
+                self.synchronize_across_tensor_model_parallel_world(*_input)
+
+        for k in kwargs:
+            if kwargs[k] is None or isinstance(kwargs[k], str):
+                break
+            elif torch.is_tensor(kwargs[k]):
+                if not kwargs[k].is_contiguous():
+                    kwargs[k] = kwargs[k].contiguous()
+                dist.broadcast(
+                    tensor=kwargs[k],
+                    src=self.get_tensor_model_parallel_src_rank(),
+                )
+            elif isinstance(kwargs[k], Iterable):
+                self.synchronize_across_tensor_model_parallel_world(**kwargs[k])
 
 
 @dataclass

@@ -627,7 +627,12 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, use_cache, output_attentions)
+                        out = module(*inputs, use_cache, output_attentions)
+
+                        if hasattr(self, "mpu"):
+                            self.mpu.synchronize_across_tensor_model_parallel_world(out)
+
+                        return out
 
                     return custom_forward
 
@@ -661,6 +666,14 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if hasattr(self, "mpu"):
+            self.mpu.synchronize_across_tensor_model_parallel_world(
+                hidden_states,
+                presents,
+                all_hidden_states,
+                all_self_attentions,
+            )
 
         if not return_dict:
             return tuple(
@@ -797,6 +810,9 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
         lm_logits = self.lm_head(hidden_states)
 
+        if hasattr(self, "mpu"):
+            self.mpu.synchronize_across_tensor_model_parallel_world(lm_logits)
+
         loss = None
         if labels is not None:
             # Compute loss in fp32 to match with mesh-tf version
@@ -817,6 +833,9 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
             lm_logits = lm_logits.to(hidden_states.dtype)
             loss = loss.to(hidden_states.dtype)
+
+            if hasattr(self, "mpu"):
+                self.mpu.synchronize_across_tensor_model_parallel_world(loss)
 
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
@@ -949,6 +968,9 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
 
         pooled_logits = logits[torch.arange(batch_size), sequence_lengths]
 
+        if hasattr(self, "mpu"):
+            self.mpu.synchronize_across_tensor_model_parallel_world(pooled_logits)
+
         loss = None
         if labels is not None:
             if self.num_labels == 1:
@@ -958,6 +980,9 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
             else:
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+
+            if hasattr(self, "mpu"):
+                self.mpu.synchronize_across_tensor_model_parallel_world(loss)
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
