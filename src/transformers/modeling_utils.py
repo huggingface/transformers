@@ -2613,11 +2613,13 @@ class RowParallelLinear(nn.Module):
         bias=None,
         skip_bias_add=False,
         reversed=False,
+        parallel_output=True,
     ):
         super(RowParallelLinear, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
         self.reversed = reversed
+        self.parallel_output = parallel_output
         self.mpu = mpu
 
         world_size = mpu.get_tensor_model_parallel_world_size()
@@ -2674,7 +2676,8 @@ class RowParallelLinear(nn.Module):
         else:
             outputs = torch.matmul(inputs, self.weight.t())
 
-        outputs = self.mpu.reduce(outputs)
+        if self.parallel_output:
+            outputs = self.mpu.reduce(outputs)
 
         if not self.skip_bias_add:
             return outputs + self.bias if self.bias is not None else outputs
