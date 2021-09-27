@@ -469,7 +469,8 @@ class T5Attention(nn.Module):
                     # cross-attn
                     hidden_states = past_key_value
             return hidden_states
-
+        
+        #hidden_states = hidden_states.to(torch.bfloat16)
         # get query states
         query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
 

@@ -426,14 +426,13 @@ class Trainer:
             if args.half_precision_backend == "amp":
                 self.use_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
-                if args.fp16:  # bf16 does not scale gradients
-                    self.do_grad_scaling = True
-                    if is_sagemaker_mp_enabled():
-                        self.scaler = smp.amp.GradScaler()
-                    elif self.sharded_ddp is not None:
-                        self.scaler = ShardedGradScaler()
-                    else:
-                        self.scaler = torch.cuda.amp.GradScaler()
+                self.do_grad_scaling = True
+                if is_sagemaker_mp_enabled():
+                    self.scaler = smp.amp.GradScaler()
+                elif self.sharded_ddp is not None:
+                    self.scaler = ShardedGradScaler()
+                else:
+                    self.scaler = torch.cuda.amp.GradScaler()
             else:
                 if not is_apex_available():
                     raise ImportError(
@@ -1783,6 +1782,8 @@ class Trainer:
         if self.use_amp:
             with autocast(dtype=self.amp_dtype):
                 loss = self.compute_loss(model, inputs)
+                print (f"{self.amp_dtype}")
+                print (f"{loss=}")
         else:
             loss = self.compute_loss(model, inputs)
 
@@ -2419,8 +2420,14 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
-                    loss = loss.mean().detach()
+                    if self.use_amp:
+                        with autocast(dtype=self.amp_dtype):
+                            loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                            loss = loss.mean().detach()
+                    else:
+                        loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                        loss = loss.mean().detach()
+
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
                     else:
@@ -2428,7 +2435,7 @@ class Trainer:
                 else:
                     loss = None
                     if self.use_amp:
-                        with autocast(fast_dtype=self.amp_dtype):
+                        with autocast(dtype=self.amp_dtype):
                             outputs = model(**inputs)
                     else:
                         outputs = model(**inputs)
