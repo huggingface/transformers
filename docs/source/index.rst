@@ -185,9 +185,9 @@ Supported models
 28. :doc:`FlauBERT <model_doc/flaubert>` (from CNRS) released with the paper `FlauBERT: Unsupervised Language Model
     Pre-training for French <https://arxiv.org/abs/1912.05372>`__ by Hang Le, Loïc Vial, Jibril Frej, Vincent Segonne,
     Maximin Coavoux, Benjamin Lecouteux, Alexandre Allauzen, Benoît Crabbé, Laurent Besacier, Didier Schwab.
-29. `FNet <https://huggingface.co/transformers/master/model_doc/fnet.html>`__ (from Google Research) released with the
-    paper `FNet: Mixing Tokens with Fourier Transforms <https://arxiv.org/abs/2105.03824>`__ by James Lee-Thorp, Joshua
-    Ainslie, Ilya Eckstein, Santiago Ontanon.
+29. :doc:`FNet <model_doc/fnet>` (from Google Research) released with the paper `FNet: Mixing Tokens with Fourier
+    Transforms <https://arxiv.org/abs/2105.03824>`__ by James Lee-Thorp, Joshua Ainslie, Ilya Eckstein, Santiago
+    Ontanon.
 30. :doc:`Funnel Transformer <model_doc/funnel>` (from CMU/Google Brain) released with the paper `Funnel-Transformer:
     Filtering out Sequential Redundancy for Efficient Language Processing <https://arxiv.org/abs/2006.03236>`__ by
     Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
@@ -268,14 +268,13 @@ Supported models
 57. :doc:`RoFormer <model_doc/roformer>` (from ZhuiyiTechnology), released together with the paper a `RoFormer:
     Enhanced Transformer with Rotary Position Embedding <https://arxiv.org/pdf/2104.09864v1.pdf>`__ by Jianlin Su and
     Yu Lu and Shengfeng Pan and Bo Wen and Yunfeng Liu.
-58. `SpeechEncoderDecoder <https://huggingface.co/transformers/master/model_doc/speechencoderdecoder.html>`__
+58. :doc:`SpeechEncoderDecoder <model_doc/speechencoderdecoder>`
 59. :doc:`SpeechToTextTransformer <model_doc/speech_to_text>` (from Facebook), released together with the paper
     `fairseq S2T: Fast Speech-to-Text Modeling with fairseq <https://arxiv.org/abs/2010.05171>`__ by Changhan Wang, Yun
     Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino.
-60. `SpeechToTextTransformer2 <https://huggingface.co/transformers/master/model_doc/speech_to_text_2.html>`__ (from
-    Facebook), released together with the paper `Large-Scale Self- and Semi-Supervised Learning for Speech Translation
-    <https://arxiv.org/abs/2104.06678>`__ by Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli, Alexis
-    Conneau.
+60. :doc:`SpeechToTextTransformer2 <model_doc/speech_to_text_2>` (from Facebook), released together with the paper
+    `Large-Scale Self- and Semi-Supervised Learning for Speech Translation <https://arxiv.org/abs/2104.06678>`__ by
+    Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli, Alexis Conneau.
 61. :doc:`Splinter <model_doc/splinter>` (from Tel Aviv University), released together with the paper `Few-Shot
     Question Answering by Pretraining Span Selection <https://arxiv.org/abs/2101.00438>`__ by Ori Ram, Yuval Kirstain,
     Jonathan Berant, Amir Globerson, Omer Levy.
