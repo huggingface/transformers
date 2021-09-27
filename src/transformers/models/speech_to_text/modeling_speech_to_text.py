@@ -149,8 +149,8 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
     def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
         if hasattr(self, "weights"):
-            # in forward, put the weights on correct device
-            emb_weights = emb_weights.to(self.weights.device)
+            # in forward put the weights on the correct dtype and device of the param
+            emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
         self.weights = nn.Parameter(emb_weights)
         self.weights.requires_grad = False
@@ -531,6 +531,7 @@ class Speech2TextDecoderLayer(nn.Module):
 class Speech2TextPreTrainedModel(PreTrainedModel):
     config_class = Speech2TextConfig
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -543,26 +544,30 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _get_subsampled_output_lengths(self, input_lengths: torch.LongTensor):
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (Speech2TextDecoder, Speech2TextEncoder)):
+            module.gradient_checkpointing = value
+
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
         Computes the output length of the convolutional layers
         """
-
         for i in range(self.config.num_conv_layers):
             input_lengths = (input_lengths - 1) // 2 + 1
 
         return input_lengths
 
-    def _get_subsampled_encoder_attn_mask(self, attention_mask):
+    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 
-        subsampled_lengths = self._get_subsampled_output_lengths(attention_mask.sum(-1))
-        max_len = subsampled_lengths.max().item()
+        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
         bsz = attention_mask.size()[0]
-        attention_mask = torch.zeros((bsz, max_len), dtype=attention_mask.dtype, device=attention_mask.device)
+        attention_mask = torch.zeros(
+            (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
 
         # these two operations makes sure that all values
         # before the output lengths indices are attended to
@@ -711,6 +716,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -758,16 +764,16 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if attention_mask is not None:
-            attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
-
         inputs_embeds = self.conv(input_features)
         inputs_embeds = self.embed_scale * inputs_embeds
 
-        if attention_mask is None:
-            padding_mask = torch.zeros_like(inputs_embeds, dtype=torch.long)
-        else:
+        # subsample attention mask if necessary
+        if attention_mask is not None:
+            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
             padding_mask = attention_mask.ne(1).long()
+        else:
+            padding_mask = torch.zeros_like(inputs_embeds, dtype=torch.long)
+
         embed_pos = self.embed_positions(padding_mask)
 
         hidden_states = inputs_embeds + embed_pos
@@ -795,7 +801,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if self.gradient_checkpointing and self.training:
 
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -857,10 +863,13 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             config.d_model,
             self.padding_idx,
         )
+
         self.layers = nn.ModuleList([Speech2TextDecoderLayer(config) for _ in range(config.decoder_layers)])
+
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -999,7 +1008,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            encoder_attention_mask = self._get_subsampled_encoder_attn_mask(encoder_attention_mask)
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
@@ -1031,11 +1039,11 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`..."
+                        "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
                     )
                     use_cache = False
 
@@ -1176,12 +1184,20 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
+        # downsample encoder attention mask
+        if attention_mask is not None:
+            encoder_attention_mask = self._get_feature_vector_attention_mask(
+                encoder_outputs[0].shape[1], attention_mask
+            )
+        else:
+            encoder_attention_mask = None
+
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,

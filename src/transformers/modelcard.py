@@ -42,6 +42,7 @@ from .file_utils import (
     is_torch_available,
 )
 from .models.auto.modeling_auto import (
+    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
@@ -66,6 +67,7 @@ TASK_MAPPING = {
     "text-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     "table-question-answering": MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
 }
 
 logger = logging.get_logger(__name__)
@@ -313,6 +315,7 @@ def _insert_values_as_list(metadata, name, values):
         return metadata
     if isinstance(values, str):
         values = [values]
+    values = [v for v in values if v is not None]
     if len(values) == 0:
         return metadata
     metadata[name] = values
@@ -436,7 +439,11 @@ class TrainingSummary:
                         }
                     )
 
-            model_index["results"].append(result)
+            # Remove partial results to avoid the model card being rejected.
+            if "task" in result and "dataset" in result and "metrics" in result:
+                model_index["results"].append(result)
+            else:
+                logger.info(f"Dropping the following result as it does not have all the necessary field:\n{result}")
 
         return [model_index]
 

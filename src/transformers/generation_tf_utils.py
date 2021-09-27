@@ -1535,10 +1535,14 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
 
     Args:
         logits: logits distribution shape (batch size, vocabulary size)
-        if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
-        if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
-            Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-        Make sure we keep at least min_tokens_to_keep per batch example in the output
+        top_k (:obj:`int`, `optional`, defaults to 0):
+            If > 0, only keep the top k tokens with highest probability (top-k filtering)
+        top_p (:obj:`float`, `optional`, defaults to 1.0):
+            If < 1.0, only keep the top tokens with cumulative probability >= top_p (nucleus filtering). Nucleus
+            filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+            Minimumber of tokens we keep per batch example in the output.
+
     From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
     logits_shape = shape_list(logits)

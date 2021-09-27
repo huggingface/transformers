@@ -97,6 +97,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "FlaxBeitForMaskedImageModeling",
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
     "CLIPVisionModel",
@@ -122,8 +123,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFRagTokenForGeneration",
     "Wav2Vec2ForCTC",
     "HubertForCTC",
-    "Wav2Vec2ForSequenceClassification",
-    "HubertForSequenceClassification",
     "XLMForQuestionAnswering",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",

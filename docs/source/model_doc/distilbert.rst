@@ -46,7 +46,7 @@ Tips:
 
 This model was contributed by `victorsanh <https://huggingface.co/victorsanh>`__. This model jax version was
 contributed by `kamalkraj <https://huggingface.co/kamalkraj>`__. The original code can be found :prefix_link:`here
-<examples/research-projects/distillation>`.
+<examples/research_projects/distillation>`.
 
 
 DistilBertConfig

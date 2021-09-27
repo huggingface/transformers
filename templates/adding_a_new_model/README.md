@@ -17,7 +17,7 @@ limitations under the License.
 # Using `cookiecutter` to generate models
 
 This folder contains templates to generate new models that fit the current API and pass all tests. It generates
-models in both PyTorch and TensorFlow, completes the `__init__.py` and auto-modeling files, and creates the
+models in both PyTorch, TensorFlow, and Flax and completes the `__init__.py` and auto-modeling files, and creates the
 documentation.
 
 ## Usage
