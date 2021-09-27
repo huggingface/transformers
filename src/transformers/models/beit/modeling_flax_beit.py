@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import numpy as np
 
@@ -79,6 +79,8 @@ BEIT_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
+
+Array = Any
 
 
 def relative_position_index_init(window_size: Tuple[int, int]) -> jnp.ndarray:
@@ -260,7 +262,12 @@ class FlaxBeitSelfAttention(nn.Module):
         )
 
     def __call__(
-        self, hidden_states, relative_position_bias=None, deterministic: bool = True, output_attentions: bool = False
+        self,
+        hidden_states,
+        relative_position_bias=None,
+        attention_mask: Optional[Array] = None,
+        deterministic: bool = True,
+        output_attentions: bool = False,
     ):
         head_dim = self.config.hidden_size // self.config.num_attention_heads
 
@@ -292,6 +299,7 @@ class FlaxBeitSelfAttention(nn.Module):
             query_states,
             key_states,
             bias=attention_bias,
+            mask=attention_mask,
             dropout_rng=dropout_rng,
             dropout_rate=self.config.attention_probs_dropout_prob,
             broadcast_dropout=True,
@@ -335,10 +343,19 @@ class FlaxBeitAttention(nn.Module):
         self.output = FlaxBeitSelfOutput(self.config, dtype=self.dtype)
 
     def __call__(
-        self, hidden_states, relative_position_bias=None, deterministic=True, output_attentions: bool = False
+        self,
+        hidden_states,
+        relative_position_bias=None,
+        attention_mask=None,
+        deterministic=True,
+        output_attentions: bool = False,
     ):
         attn_outputs = self.attention(
-            hidden_states, relative_position_bias, deterministic=deterministic, output_attentions=output_attentions
+            hidden_states,
+            relative_position_bias,
+            attention_mask=attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
         )
         attn_output = attn_outputs[0]
         attn_output = self.output(attn_output, deterministic=deterministic)
@@ -412,11 +429,17 @@ class FlaxBeitLayer(nn.Module):
             self.lambda_2 = None
 
     def __call__(
-        self, hidden_states, relative_position_bias=None, deterministic: bool = True, output_attentions: bool = False
+        self,
+        hidden_states,
+        relative_position_bias=None,
+        attention_mask: Optional[Array] = None,
+        deterministic: bool = True,
+        output_attentions: bool = False,
     ):
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
             relative_position_bias,
+            attention_mask=attention_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
         )
@@ -472,6 +495,7 @@ class FlaxBeitLayerCollection(nn.Module):
     def __call__(
         self,
         hidden_states,
+        attention_mask: Optional[Array] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -486,7 +510,11 @@ class FlaxBeitLayerCollection(nn.Module):
                 all_hidden_states += (hidden_states,)
             relative_position_bias = self.relative_position_bias() if self.relative_position_bias is not None else None
             layer_outputs = layer(
-                hidden_states, relative_position_bias, deterministic=deterministic, output_attentions=output_attentions
+                hidden_states,
+                relative_position_bias,
+                attention_mask=attention_mask,
+                deterministic=deterministic,
+                output_attentions=output_attentions,
             )
 
             hidden_states = layer_outputs[0]
@@ -532,6 +560,7 @@ class FlaxBeitEncoder(nn.Module):
     def __call__(
         self,
         hidden_states,
+        attention_mask: Optional[Array] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -539,6 +568,7 @@ class FlaxBeitEncoder(nn.Module):
     ):
         return self.layer(
             hidden_states,
+            attention_mask=attention_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -577,6 +607,7 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
         self,
         pixel_values,
         bool_masked_pos=None,
+        attention_mask: Optional[Array] = None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
@@ -602,6 +633,7 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
             {"params": params or self.params},
             jnp.array(pixel_values, dtype=jnp.float32),
             bool_masked_pos,
+            attention_mask,
             not train,
             output_attentions,
             output_hidden_states,
@@ -648,6 +680,7 @@ class FlaxBeitModule(nn.Module):
         self,
         pixel_values,
         bool_masked_pos=None,
+        attention_mask: Optional[Array] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -658,6 +691,7 @@ class FlaxBeitModule(nn.Module):
 
         outputs = self.encoder(
             hidden_states,
+            attention_mask=attention_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -733,6 +767,7 @@ class FlaxBeitForMaskedImageModelingModule(nn.Module):
         self,
         pixel_values=None,
         bool_masked_pos=None,
+        attention_mask: Optional[Array] = None,
         deterministic: bool = True,
         output_attentions=None,
         output_hidden_states=None,
@@ -743,6 +778,7 @@ class FlaxBeitForMaskedImageModelingModule(nn.Module):
         outputs = self.beit(
             pixel_values,
             bool_masked_pos,
+            attention_mask=attention_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -817,6 +853,7 @@ class FlaxBeitForImageClassificationModule(nn.Module):
         self,
         pixel_values=None,
         bool_masked_pos=None,
+        attention_mask: Optional[Array] = None,
         deterministic: bool = True,
         output_attentions=None,
         output_hidden_states=None,
@@ -826,6 +863,8 @@ class FlaxBeitForImageClassificationModule(nn.Module):
 
         outputs = self.beit(
             pixel_values,
+            bool_masked_pos=bool_masked_pos,
+            attention_mask=attention_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

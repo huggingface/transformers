@@ -208,6 +208,7 @@ class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
+            self.assertTrue("attention_mask" in arg_names)
 
     # We neeed to override this test because Beit expects pixel_values instead of input_ids
     def test_jit_compilation(self):

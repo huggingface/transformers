@@ -195,7 +195,9 @@ class BeitSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None):
+    def forward(
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, relative_position_bias=None
+    ):
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -206,6 +208,9 @@ class BeitSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            # Apply the attention mask (precomputed for all layers in BeiTModel forward() function)
+            attention_scores = attention_scores + attention_mask
 
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
@@ -280,8 +285,12 @@ class BeitAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None):
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions, relative_position_bias)
+    def forward(
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, relative_position_bias=None
+    ):
+        self_outputs = self.attention(
+            hidden_states, attention_mask, head_mask, output_attentions, relative_position_bias
+        )
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -339,10 +348,13 @@ class BeitLayer(nn.Module):
         else:
             self.lambda_1, self.lambda_2 = None, None
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False, relative_position_bias=None):
+    def forward(
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, relative_position_bias=None
+    ):
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
-            head_mask,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             relative_position_bias=relative_position_bias,
         )
@@ -437,6 +449,7 @@ class BeitEncoder(nn.Module):
     def forward(
         self,
         hidden_states,
+        attention_mask=None,
         head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
@@ -462,13 +475,16 @@ class BeitEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
+                    attention_mask,
                     layer_head_mask,
                 )
             else:
                 relative_position_bias = (
                     self.relative_position_bias() if self.relative_position_bias is not None else None
                 )
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
+                layer_outputs = layer_module(
+                    hidden_states, attention_mask, layer_head_mask, output_attentions, relative_position_bias
+                )
 
             hidden_states = layer_outputs[0]
 
@@ -589,6 +605,7 @@ class BeitModel(BeitPreTrainedModel):
         self,
         pixel_values=None,
         bool_masked_pos=None,
+        attention_mask=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -631,8 +648,21 @@ class BeitModel(BeitPreTrainedModel):
 
         embedding_output = self.embeddings(pixel_values, bool_masked_pos)
 
+        batch_size, seq_length, _ = embedding_output.shape
+        device = embedding_output.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
+
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, (batch_size, seq_length), device
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
+            attention_mask=extended_attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -695,6 +725,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         self,
         pixel_values=None,
         bool_masked_pos=None,
+        attention_mask=None,
         head_mask=None,
         labels=None,
         output_attentions=None,
@@ -733,6 +764,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         outputs = self.beit(
             pixel_values,
             bool_masked_pos=bool_masked_pos,
+            attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -784,6 +816,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
+        attention_mask=None,
         head_mask=None,
         labels=None,
         output_attentions=None,
@@ -821,6 +854,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
 
         outputs = self.beit(
             pixel_values,
+            attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
