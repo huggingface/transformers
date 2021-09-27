@@ -23,17 +23,18 @@ from typing import Optional
 import datasets
 import numpy as np
 import torchaudio
-from datasets import load_dataset
+from datasets import DatasetDict, load_dataset
 
 import transformers
 from transformers import (
-    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
     AutoConfig,
     AutoModelForAudioClassification,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
     Wav2Vec2FeatureExtractor,
+    set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
@@ -47,7 +48,7 @@ check_min_version("4.11.0.dev0")
 
 require_version("datasets>=1.12.1", "To fix: pip install -r examples/pytorch/audio-classification/requirements.txt")
 
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING.keys())
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
@@ -83,10 +84,31 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_file: Optional[str] = field(default=None, metadata={"help": "A file containing the training audio paths and labels."})
-    validation_file: Optional[str] = field(default=None, metadata={"help": "A file containing the validation audio paths and labels."})
-    train_val_split: Optional[float] = field(
-        default=0.15, metadata={"help": "Percent to split off of train for validation."}
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "A file containing the training audio paths and labels."}
+    )
+    eval_file: Optional[str] = field(
+        default=None, metadata={"help": "A file containing the validation audio paths and labels."}
+    )
+    train_split_name: Optional[str] = field(
+        default="train",
+        metadata={
+            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
+        },
+    )
+    eval_split_name: Optional[str] = field(
+        default="validation",
+        metadata={
+            "help": "The name of the training data set split to use (via the datasets library). Defaults to "
+            "'validation'"
+        },
+    )
+    audio_column_name: Optional[str] = field(
+        default="file",
+        metadata={"help": "The name of the dataset column containing the audio data. Defaults to 'file'"},
+    )
+    label_column_name: Optional[str] = field(
+        default="label", metadata={"help": "The name of the dataset column containing the labels. Defaults to 'label'"}
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -111,8 +133,8 @@ class DataTrainingArguments:
         data_files = dict()
         if self.train_file is not None:
             data_files["train"] = self.train_file
-        if self.validation_file is not None:
-            data_files["validation"] = self.validation_file
+        if self.eval_file is not None:
+            data_files["eval"] = self.eval_file
         self.data_files = data_files if data_files else None
 
 
@@ -181,10 +203,13 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu} "
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
+
+    # Set seed before initializing model.
+    set_seed(training_args.seed)
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -201,13 +226,24 @@ def main():
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
 
-    # Initialize our dataset and prepare it for the 'audio-classification' task.
-    ds = load_dataset(
-        data_args.dataset_name,
-        data_args.dataset_config_name,
-        data_files=data_args.data_files,
-        cache_dir=model_args.cache_dir,
-    )
+    # Initialize our dataset and prepare it for the audio classification task.
+    ds = DatasetDict()
+    ds["train"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name)
+    ds["eval"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name)
+
+    if data_args.audio_column_name not in ds["train"].column_names:
+        raise ValueError(
+            f"--audio_column_name {data_args.audio_column_name} not found in dataset '{data_args.dataset_name}'. "
+            "Make sure to set `--audio_column_name` to the correct audio column - one of "
+            f"{', '.join(ds['train'].column_names)}."
+        )
+
+    if data_args.label_column_name not in ds["train"].column_names:
+        raise ValueError(
+            f"--label_column_name {data_args.label_column_name} not found in dataset '{data_args.dataset_name}'. "
+            "Make sure to set `--label_column_name` to the correct text column - one of "
+            f"{', '.join(ds['train'].column_names)}."
+        )
 
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
         model_args.feature_extractor_name or model_args.model_name_or_path,
@@ -220,36 +256,29 @@ def main():
     def train_transforms(batch):
         """Apply train_transforms across a batch."""
         output_batch = {"input_values": []}
-        for f in batch["file"]:
+        for f in batch[data_args.audio_column_name]:
             wav = load_audio(f, sample_rate=feature_extractor.sampling_rate)
             wav = random_subsample(
                 wav, max_length=data_args.max_length_seconds, sample_rate=feature_extractor.sampling_rate
             )
             output_batch["input_values"].append(wav)
-        output_batch["labels"] = [label for label in batch["label"]]
+        output_batch["labels"] = [label for label in batch[data_args.label_column_name]]
 
         return output_batch
 
     def val_transforms(batch):
         """Apply val_transforms across a batch."""
         output_batch = {"input_values": []}
-        for f in batch["file"]:
+        for f in batch[data_args.audio_column_name]:
             wav = load_audio(f, sample_rate=feature_extractor.sampling_rate)
             output_batch["input_values"].append(wav)
-        output_batch["labels"] = [label for label in batch["label"]]
+        output_batch["labels"] = [label for label in batch[data_args.label_column_name]]
 
         return output_batch
 
-    # If we don't have a validation split, split off a percentage of train as validation.
-    data_args.train_val_split = None if "validation" in ds.keys() else data_args.train_val_split
-    if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
-        split = ds["train"].train_test_split(data_args.train_val_split)
-        ds["train"] = split["train"]
-        ds["validation"] = split["test"]
-
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
-    labels = ds["train"].features["label"].names
+    labels = ds["train"].features[data_args.label_column_name].names
     label2id, id2label = dict(), dict()
     for i, label in enumerate(labels):
         label2id[label] = str(i)
@@ -296,21 +325,19 @@ def main():
         ds["train"].set_transform(train_transforms, output_all_columns=False)
 
     if training_args.do_eval:
-        if "validation" not in ds:
+        if "eval" not in ds:
             raise ValueError("--do_eval requires a validation dataset")
         if data_args.max_eval_samples is not None:
-            ds["validation"] = (
-                ds["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
-            )
+            ds["eval"] = ds["eval"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
         # Set the validation transforms
-        ds["validation"].set_transform(val_transforms, output_all_columns=False)
+        ds["eval"].set_transform(val_transforms, output_all_columns=False)
 
     # Initialize our trainer
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=ds["train"] if training_args.do_train else None,
-        eval_dataset=ds["validation"] if training_args.do_eval else None,
+        eval_dataset=ds["eval"] if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=feature_extractor,
     )
