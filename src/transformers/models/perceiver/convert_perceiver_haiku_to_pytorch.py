@@ -51,7 +51,7 @@ def prepare_img():
     return im
 
 
-def rename_keys(state_dict):
+def rename_keys(state_dict, task):
     for name in list(state_dict):
         param = state_dict.pop(name)
 
@@ -116,14 +116,27 @@ def rename_keys(state_dict):
         ## DECODERS ##
 
         # rename prefix of decoders
+        # multimodal autoencoding model
         name = name.replace(
             "multimodal_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
         )
+        name = name.replace("multimodal_decoder/~decoder_query/audio_padding/pos_embs", "decoder.audio_padding")
+        name = name.replace("multimodal_decoder/~decoder_query/image_padding/pos_embs", "decoder.image_padding")
+        name = name.replace("multimodal_decoder/~decoder_query/label_padding/pos_embs", "decoder.label_padding")
+        name = name.replace("multimodal_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
+        name = name.replace("multimodal_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
+        if task == "multimodal_autoencoding":
+            name = name.replace(
+                "classification_decoder/~/basic_decoder/~/trainable_position_encoding/pos_embs",
+                "decoder.modalities.label.decoder.output_position_encodings.position_embeddings",
+            )
+        # flow model
         name = name.replace(
             "flow_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
         )
         name = name.replace("flow_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
         name = name.replace("flow_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
+        # image models
         name = name.replace(
             "classification_decoder/~/basic_decoder/~/trainable_position_encoding/pos_embs",
             "decoder.decoder.output_position_encodings.position_embeddings",
@@ -267,10 +280,11 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
                 state_dict[scope_name + "/" + param_name] = param
 
     # rename keys
-    rename_keys(state_dict)
+    rename_keys(state_dict, task=task)
 
     # load HuggingFace model
     config = PerceiverConfig()
+    subsampling = None
     repo_id = "datasets/huggingface/label-files"
     if task == "MLM":
         config.qk_channels = 8 * 32
@@ -286,6 +300,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.num_self_attention_heads = 8
         config.qk_channels = None
         config.v_channels = None
+        # set labels
         config.num_labels = 1000
         filename = "imagenet-1k-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
@@ -320,15 +335,21 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.num_self_attention_heads = 8
         config.num_cross_attention_heads = 1
         config.num_labels = 700
+        # define dummy inputs + subsampling (as each forward pass is only on a chunk of size 128)
+        images = torch.randn((1, 16, 3, 224, 224))
+        audio = torch.randn((1, 30720, 1))
         nchunks = 128
-        image_chunk_size = np.prod(images.shape[1:-1]) // nchunks
+        image_chunk_size = np.prod((16, 224, 224)) // nchunks
         audio_chunk_size = audio.shape[1] // config.samples_per_patch // nchunks
+        # process the first chunk
+        chunk_idx = 0
         subsampling = {
             "image": torch.arange(image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
             "audio": torch.arange(audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
             "label": None,
         }
-        model = PerceiverForMultimodalAutoencoding(config)
+        model = PerceiverForMultimodalAutoencoding(config, subsampling=subsampling)
+        # set labels
         filename = "kinetics700-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
@@ -338,17 +359,15 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
 
     # multimodal autoencoding requires a dummy input first in order to create all parameters
     # (as some parameters are defined in the forward pass)
+    input_mask = None
     if task == "multimodal_autoencoding":
-        images = torch.randn((1, 16, 3, 224, 224))
-        audio = torch.randn((1, 30720, 1))
         inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
-        outputs = model(inputs, attention_mask=None)
+        outputs = model(inputs, attention_mask=input_mask, subsampled_output_points=subsampling)
 
     # load weights
     model.load_state_dict(state_dict)
 
     # prepare dummy input
-    input_mask = None
     if task == "MLM":
         tokenizer = PerceiverTokenizer.from_pretrained("/Users/NielsRogge/Documents/Perceiver/Tokenizer files")
         text = "This is an incomplete sentence where some words are missing."
@@ -370,7 +389,10 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
 
     # forward pass
-    outputs = model(inputs=inputs, attention_mask=input_mask)
+    if task == "multimodal_autoencoding":
+        outputs = model(inputs=inputs, attention_mask=input_mask, subsampled_output_points=subsampling)
+    else:
+        outputs = model(inputs=inputs, attention_mask=input_mask)
     logits = outputs.logits
 
     # verify logits

@@ -751,11 +751,12 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-        # print("Shape of encoder outputs:", sequence_output.shape)
+        print("Shape of encoder outputs:", sequence_output.shape)
         # print("Encoder outputs:", sequence_output[0, :3, :3])
 
         logits = None
         if self.decoder:
+            print("Subsampled output points:", subsampled_output_points)
             decoder_query = self.decoder.decoder_query(
                 inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_output_points
             )
@@ -1233,13 +1234,15 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         )
 
         image_decoder = PerceiverBasicVideoAutoencodingDecoder(
+            config,
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
             subsampled_index_dims=subsampling["image"],
-            output_shape=images.shape[:4],
+            output_shape=[1, 16, 224, 224],
             # num_z_channels=1024,
             output_num_channels=512,
             use_query_residual=False,
+            position_encoding_only=True,
             position_encoding_type="fourier",
             fourier_position_encoding_kwargs=dict(
                 num_bands=32,
@@ -1250,6 +1253,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         )
 
         decoder = PerceiverMultimodalDecoder(
+            config,
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
             subsampled_index_dims=subsampled_index_dims,
@@ -1257,6 +1261,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             # All modalties are decoded together using a unified decoder.
             modalities={
                 "audio": PerceiverBasicDecoder(
+                    config,
                     # Autoencoding, don't pass inputs to the queries.
                     concat_preprocessed_input=False,
                     subsampled_index_dims=subsampling["audio"],
@@ -1264,6 +1269,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     # num_z_channels=1024,
                     output_num_channels=512,
                     use_query_residual=False,
+                    position_encoding_only=True,
                     position_encoding_type="fourier",
                     fourier_position_encoding_kwargs=dict(
                         num_bands=192,
@@ -1274,15 +1280,15 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                 ),
                 "image": image_decoder,
                 "label": PerceiverClassificationDecoder(
+                    config,
                     # Autoencoding, don't pass inputs to the queries.
                     concat_preprocessed_input=False,
-                    num_classes=config.num_labels,
                     # num_z_channels=1024,
                     use_query_residual=False,
+                    position_encoding_only=True,
                     position_encoding_type="trainable",
                     trainable_position_encoding_kwargs=dict(
                         num_channels=1024,
-                        init_scale=0.02,
                     ),
                 ),
             },
@@ -1450,6 +1456,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         use_query_residual=False,
         concat_preprocessed_input=False,
         final_project=True,
+        position_encoding_only=False,
         **position_encoding_kwargs,
     ):
         super().__init__()
@@ -1463,22 +1470,27 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
                 position_encoding_type=position_encoding_type, index_dims=output_index_dims, **position_encoding_kwargs
             )
 
+        self.output_index_dims = output_index_dims
         if subsampled_index_dims is None:
             subsampled_index_dims = output_index_dims
         self.subsampled_index_dims = subsampled_index_dims
-        self.decoding_cross_attention = PerceiverLayer(
-            config,
-            is_cross_attention=True,
-            qk_channels=qk_channels,
-            v_channels=v_channels,
-            num_heads=num_heads,
-            q_dim=num_channels,
-            kv_dim=config.d_latents,
-            widening_factor=widening_factor,
-            use_query_residual=use_query_residual,
-        )
         self.concat_preprocessed_input = concat_preprocessed_input
-        self.final_layer = nn.Linear(num_channels, output_num_channels) if final_project else nn.Identity()
+
+        # for multimodal autoencoding, we don't need the decoder cross-attention and final layer
+        # so then we will set position_encoding_only to True
+        if not position_encoding_only:
+            self.decoding_cross_attention = PerceiverLayer(
+                config,
+                is_cross_attention=True,
+                qk_channels=qk_channels,
+                v_channels=v_channels,
+                num_heads=num_heads,
+                q_dim=num_channels,
+                kv_dim=config.d_latents,
+                widening_factor=widening_factor,
+                use_query_residual=use_query_residual,
+            )
+            self.final_layer = nn.Linear(num_channels, output_num_channels) if final_project else nn.Identity()
 
     def output_shape(self, inputs):
         return ((inputs[0], self.subsampled_index_dims, self.output_num_channels), None)
@@ -1487,25 +1499,27 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         if self.position_encoding_type == "none":  # Queries come from elsewhere
             raise ValueError("You cannot construct decoder queries when position_encoding_type is set to none")
         if subsampled_points is not None:
+            # subsampled_points are the indices if the inputs would be flattened
+            # however, the inputs aren't flattened, that's why we use unravel_index
+            # to get the indices for the unflattened array
             # unravel_index returns a tuple (x_idx, y_idx, ...)
             # stack to get the [n, d] tensor of coordinates
-            # pos = torch.stack(
-            #     jnp.unravel_index(subsampled_points, self.output_index_dim),
-            #     dim=1)
-            # # Map these coordinates to [-1, 1]
-            # pos = -1 + 2 * pos / torch.tensor(self.output_index_dim)[None, :]
-            # pos = torch.broadcast_to(pos[None],
-            #                         [inputs.shape[0], pos.shape[0], pos.shape[1]])
-            # # Construct the position encoding.
-            # if self.position_encoding_type == "trainable":
-            #     pos_emb = self.output_position_encodings(batch_size)
-            # elif self.position_encoding_type == "fourier":
-            #     pos_emb = self.output_position_encodings(index_dims, batch_size, device=inputs.device, pos)
+            indices = list(torch.from_numpy(x) for x in np.unravel_index(subsampled_points, self.output_index_dims))
+            pos = torch.stack(indices, dim=1)
+            # Map these coordinates to [-1, 1]
+            pos = -1 + 2 * pos / torch.tensor(self.output_index_dims)[None, :]
+            pos = torch.broadcast_to(pos[None], [inputs.shape[0], pos.shape[0], pos.shape[1]])
+            # Construct the position encoding.
+            if self.position_encoding_type == "trainable":
+                pos_emb = self.output_position_encodings(batch_size)
+            elif self.position_encoding_type == "fourier":
+                pos_emb = self.output_position_encodings(
+                    self.output_index_dims, batch_size=inputs.shape[0], device=inputs.device, pos=pos
+                )
 
-            # # Optionally project them to a target dimension.
-            # pos_emb = self.positions_projection(pos_emb)
-            # pos_emb = torch.reshape(pos_emb, [pos_emb.shape[0], -1, pos_emb.shape[-1]])
-            raise ValueErrort("")
+            # Optionally project them to a target dimension.
+            pos_emb = self.positions_projection(pos_emb)
+            pos_emb = torch.reshape(pos_emb, [pos_emb.shape[0], -1, pos_emb.shape[-1]])
         else:
             batch_size = inputs.shape[0]
             index_dims = inputs.shape[2:]
@@ -1624,7 +1638,7 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
     logic.
     """
 
-    def __init__(self, output_shape, position_encoding_type, **decoder_kwargs):
+    def __init__(self, config, output_shape, position_encoding_type, **decoder_kwargs):
         super().__init__()
         if len(output_shape) != 4:  # B, T, H, W
             raise ValueError(f"Expected rank 4 output_shape, got {output_shape}.")
@@ -1633,6 +1647,7 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
         self.output_num_channels = decoder_kwargs["output_num_channels"]
 
         self.decoder = PerceiverBasicDecoder(
+            config,
             output_index_dims=self.output_shape[1:4],  # T*H*W
             position_encoding_type=position_encoding_type,
             **decoder_kwargs,
@@ -1688,6 +1703,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
 
     def __init__(
         self,
+        config,
         modalities,
         num_outputs,
         output_num_channels,
@@ -1696,23 +1712,32 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         **decoder_kwargs
     ):
         super().__init__()
-        self.modalities = modalities
+        self.modalities = nn.ModuleDict(modalities)
         self.subsampled_index_dims = subsampled_index_dims
         self.min_padding_size = min_padding_size
         self.output_num_channels = output_num_channels
         self.num_outputs = num_outputs
         self.decoder = PerceiverBasicDecoder(
+            config,
             output_index_dims=(num_outputs,),
             output_num_channels=output_num_channels,
             position_encoding_type="none",
+            num_channels=1026,
             **decoder_kwargs,
         )
+
+        # we need to register one additionl parameter for each modality: padding
+        # see https://discuss.pytorch.org/t/dynamic-parameter-declaration-in-forward-function/427
+        for modality in self.modalities.keys():
+            self.register_parameter(modality + "_padding", None)
 
     def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None, subsampled_points=None):
         # Partition the flat inputs among the different modalities
         inputs = restructure(modality_sizes, inputs)
+
         # Obtain modality-specific decoders' queries
         subsampled_points = subsampled_points or dict()
+
         decoder_queries = dict()
         for modality, decoder in self.modalities.items():
             # Get input_without_pos for this modality if it exists.
@@ -1731,9 +1756,11 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
 
         def embed(modality, x):
             x = torch.reshape(x, [x.shape[0], np.prod(x.shape[1:-1]), x.shape[-1]])
-            pos = PerceiverTrainablePositionEncoding(
-                1, num_channels=num_channels - x.shape[2], init_scale=0.02, name=f"{modality}_padding"
-            )(x.shape[0])
+            parameter_name = modality + "_padding"
+            if hasattr(self, parameter_name) and getattr(self, parameter_name) is None:
+                setattr(self, parameter_name, nn.Parameter(torch.randn(1, num_channels - x.shape[2])))
+            batch_size = x.shape[0]
+            pos = getattr(self, parameter_name).expand(batch_size, -1, -1)
             pos = torch.broadcast_to(pos, [x.shape[0], x.shape[1], num_channels - x.shape[2]])
             return torch.cat([x, pos], dim=2)
 
@@ -1751,7 +1778,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
 
     def forward(self, query, z, query_mask=None):
         # B x 1 x num_classes -> B x num_classes
-        return self.decoder(query, z, is_training=is_training)
+        return self.decoder(query, z)
 
 
 ## Below: IO pre- and post-processor classes for Perceiver.
