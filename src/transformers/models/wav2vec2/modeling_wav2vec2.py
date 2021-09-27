@@ -945,7 +945,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         self.weight_proj = nn.Linear(config.conv_dim[-1], self.num_groups * self.num_vars)
 
         # can be decayed for training
-        self.temperature = 1
+        self.temperature = 2
 
     def set_temperature(self, temperature: int):
         self.temperature = temperature
