@@ -230,6 +230,7 @@ def _compute_mask_indices(
         no_overlap: if false, will switch to an alternative recursive algorithm that prevents spans from overlapping
         min_space: only used if no_overlap is True, this is how many elements to keep unmasked between spans
     """
+    np.random.seed(0)
 
     batch_size, sequence_length = shape
     mask = np.full((batch_size, sequence_length), False)
@@ -239,8 +240,6 @@ def _compute_mask_indices(
         mask_prob * sequence_length / float(mask_length)
         + np.random.rand()
     )
-
-#    all_num_mask = max(min_masks, all_num_mask)
 
     mask_indicess = []
     for i in range(batch_size):
@@ -1303,19 +1302,23 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         features = features.view(-1, hidden_size)  # BTC => (BxT)C
 
-        with torch.no_grad():
+#        with torch.no_grad():
             # get `num_negatives` random vector indices from the same utterance
-            sampled_negative_indices = []
-            for batch_idx in range(batch_size):
-                high = attention_mask[batch_idx].sum() - 1 if attention_mask is not None else sequence_length - 1
-                sampled_indices_slice = torch.randint(
-                    0, high, size=(num_negatives * sequence_length,), device=features.device
-                )
-                sampled_negative_indices.append(sampled_indices_slice)
-
-            sampled_negative_indices = torch.stack(sampled_negative_indices)
+#            sampled_negative_indices = []
+#            for batch_idx in range(batch_size):
+#                high = attention_mask[batch_idx].sum() - 1 if attention_mask is not None else sequence_length - 1
+#                sampled_indices_slice = torch.randint(
+#                    0, high, size=(num_negatives * sequence_length,), device=features.device
+#                )
+#                sampled_negative_indices.append(sampled_indices_slice)
+#
+#            sampled_negative_indices = torch.stack(sampled_negative_indices)
 
             # generate indices of the positive vectors themselves, repeat them `num_negatives` times
+
+        with torch.no_grad():
+            sampled_negative_indices = torch.randint(0, sequence_length - 1, size=(batch_size, num_negatives * sequence_length,))
+
             feature_indices = (
                 torch.arange(sequence_length, device=features.device)[:, None]
                 .expand(sequence_length, num_negatives)
@@ -1342,7 +1345,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
         predicted_features: torch.FloatTensor,
-        temperature: int = 1,
+        temperature: int = 0.1,
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
@@ -1447,11 +1450,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         # only use masked indices
         extract_features = extract_features[mask_time_indices].view(extract_features.size(0), -1, extract_features.size(-1))
         transformer_features = transformer_features[mask_time_indices].view(transformer_features.size(0), -1, transformer_features.size(-1))
-        attention_mask = attention_mask[mask_time_indices].view(attention_mask.size(0), -1)
 
-#        quantized_features, codevector_perplexity = self.quantizer(extract_features, mask_time_indices)
-#        quantized_features, codevector_perplexity = self.quantizer(extract_features)
-        quantized_features, codevector_perplexity = self.quantizer(extract_features, attention_mask)
+        quantized_features, codevector_perplexity = self.quantizer(extract_features)
         quantized_features = self.project_q(quantized_features)
 
         loss = None
@@ -1460,8 +1460,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # 3. sample K negatives (distractors) quantized states for contrastive loss
             # if attention_mask is passed, make sure that padded feature vectors cannot be sampled
             negative_quantized_features = self._sample_negatives(
-                quantized_features, self.config.num_negatives, attention_mask=attention_mask
-#                quantized_features, self.config.num_negatives
+                quantized_features, self.config.num_negatives
             )
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
@@ -1484,15 +1483,14 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))
             preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
 
-            target = ((1 - attention_mask.long()) * -100).transpose(0, 1).flatten()
+#            target = ((1 - attention_mask.long()) * -100).transpose(0, 1).flatten()
 #            target = ((1 - mask_time_indices.long()) * -100).transpose(0, 1).flatten()
-#            target = torch.zeros(preds.shape[0], device=preds.device, dtype=torch.long)
+            target = torch.zeros(preds.shape[0], device=preds.device, dtype=torch.long)
 
             contrastive_loss = nn.functional.cross_entropy(preds.float(), target, reduction="sum")
             # 7. compute diversity loss: \mathbf{L}_d
             num_codevectors = self.config.num_codevectors_per_group * self.config.num_codevector_groups
-#            diversity_loss = ((num_codevectors - codevector_perplexity) / num_codevectors) * mask_time_indices.sum()
-            diversity_loss = ((num_codevectors - codevector_perplexity) / num_codevectors) * attention_mask.sum()
+            diversity_loss = ((num_codevectors - codevector_perplexity) / num_codevectors) * mask_time_indices.sum()
 
             # 8. \mathbf{L} = \mathbf{L}_m + \alpha * \mathbf{L}_d
             loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
