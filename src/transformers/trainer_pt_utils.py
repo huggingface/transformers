@@ -25,7 +25,7 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import StreamHandler
-from typing import Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
@@ -157,7 +157,7 @@ def nested_xla_mesh_reduce(tensors, name):
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
 
 
-def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int] = None) -> torch.Tensor:
+def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) -> Any:
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
