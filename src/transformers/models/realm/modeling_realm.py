@@ -1420,13 +1420,17 @@ class RealmSearcher(RealmPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler", "cls"]
 
-    def __init__(self, config):
+    def __init__(self, config, block_records_path):
         super().__init__(config)
         self.embedder = RealmEmbedder(config)
         self.block_emb = torch.zeros(()).new_empty(
             size=(config.num_block_records, config.retriever_proj_size),
             dtype=torch.float32,
             device=torch.device('cpu')
+        )
+        self.block_records = convert_tfrecord_to_np(
+            block_records_path = block_records_path,
+            num_block_records = self.config.num_block_records,
         )
         self.init_weights()
     
@@ -1440,7 +1444,6 @@ class RealmSearcher(RealmPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        block_records_path=None,
         return_dict=None,
     ):
 
@@ -1474,19 +1477,13 @@ class RealmSearcher(RealmPreTrainedModel):
             db = self.block_emb,
             num_neighbors=beam_size)
 
-        retrieved_blocks = convert_tfrecord_to_np(
-            block_records_path = block_records_path,
-            num_block_records = self.config.num_block_records,
-        )
-        
-        
         retrieved_block_ids, _ = searcher.search_batched(question_projection)
 
         # [retriever_beam_size]
         retrieved_block_ids = torch.tensor(retrieved_block_ids.astype('int64').squeeze())
 
         # [retriever_beam_size]
-        retrieved_blocks = np.take(retrieved_blocks, indices=retrieved_block_ids, axis=0)
+        retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
 
         # [retriever_beam_size, projection_size]
         retrieved_block_emb = torch.index_select(self.block_emb, dim=0, index=retrieved_block_ids)
