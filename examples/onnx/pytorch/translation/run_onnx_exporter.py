@@ -49,13 +49,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-model_dic = {'facebook/bart-base' : BartForConditionalGeneration}
-tokenizer_dic = {'facebook/bart-base' : BartTokenizer}
+model_dict = {'facebook/bart-base' : BartForConditionalGeneration}
+tokenizer_dict = {'facebook/bart-base' : BartTokenizer}
 
-
-# You should update this to your particular problem to have better documentation of `model_type`
-MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
@@ -102,8 +98,8 @@ def parse_args():
     return args
 
 def load_model_tokenizer(model_name, device='cpu'):
-    huggingface_model = model_dic[model_name].from_pretrained(model_name).to(device)
-    tokenizer = tokenizer_dic[model_name].from_pretrained(model_name)
+    huggingface_model = model_dict[model_name].from_pretrained(model_name).to(device)
+    tokenizer = tokenizer_dict[model_name].from_pretrained(model_name)
 
     if model_name in ['facebook/bart-base']:
         huggingface_model.config.no_repeat_ngram_size = 0
