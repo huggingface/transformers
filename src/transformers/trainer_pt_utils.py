@@ -157,9 +157,7 @@ def nested_xla_mesh_reduce(tensors, name):
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
 
 
-def distributed_concat(
-    tensor: Union[torch.Tensor, Any], num_total_examples: Optional[int] = None
-) -> Union[torch.Tensor, Any]:
+def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) -> Any:
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
