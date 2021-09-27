@@ -756,6 +756,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+        # These next two lines differ from the base method - they avoid issues when the labels are in
+        # the input dict (and loss is computed internally)
         if y is None and "labels" in x:
             y = x["labels"]  # Stops confusion with metric computations
         # Run forward pass.
@@ -773,6 +775,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
+        # These next two lines are also not in the base method - they correct the displayed metrics
+        # when we're using a dummy loss, to avoid a bogus "loss_loss" value being shown.
         if "loss" in return_metrics and "loss_loss" in return_metrics:
             del return_metrics["loss_loss"]
         return return_metrics
@@ -783,6 +787,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+        # These next two lines differ from the base method - they avoid issues when the labels are in
+        # the input dict (and loss is computed internally)
         if y is None and "labels" in x:
             y = x["labels"]  # Stops confusion with metric computations
         y_pred = self(x, training=False)
@@ -803,6 +809,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
+        # These next two lines are also not in the base method - they correct the displayed metrics
+        # when we're using a dummy loss, to avoid a bogus "loss_loss" value being shown.
         if "loss" in return_metrics and "loss_loss" in return_metrics:
             del return_metrics["loss_loss"]
         return return_metrics
