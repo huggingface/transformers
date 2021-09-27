@@ -1,2 +1,1 @@
-protobuf
 torch >= 1.8
