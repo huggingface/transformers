@@ -811,7 +811,6 @@ class ParallelizationEngine(object):
         additional_layers: List[Layer] = None,
     ):
         self.hold_params = hold_params
-        self.skip_bias_add = skip_bias_add
         self.vocab_parallel_embedding = vocab_parallel_embedding
         self.device = torch.cuda.current_device()
         self.policy = policy
@@ -949,8 +948,9 @@ class ParallelizationEngine(object):
                             layer,
                             {
                                 "mpu": mpu,
-                                "skip_bias_add": self.skip_bias_add,
                                 "reversed": layer.reversed,
+                                "skip_bias_add": False,
+                                "parallel_output": True,
                             },
                         )
 
@@ -1098,7 +1098,6 @@ class ParallelizationMixin(object):
 
         engine = ParallelizationEngine(
             hold_params=False,
-            skip_bias_add=False,
             policy=self._get_layer_policy(),
             vocab_parallel_embedding=vocab_parallel_embedding,
             additional_layers=self._get_head_layers(),

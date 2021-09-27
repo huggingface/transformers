@@ -371,6 +371,18 @@ class GenerationMixin:
         Implement in subclasses of :class:`~transformers.PreTrainedModel` for custom behavior to prepare inputs in the
         generate method.
         """
+
+        if dist.is_initialized():
+            if not input_ids.is_contiguous():
+                input_ids = input_ids.contiguous()
+            dist.broadcast(input_ids, 0)
+
+            for k in kwargs:
+                if torch.is_tensor(kwargs[k]):
+                    if not kwargs[k].is_contiguous():
+                        kwargs[k] = kwargs[k].contiguous()
+                    dist.broadcast(kwargs[k], 0)
+
         return {"input_ids": input_ids}
 
     def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
