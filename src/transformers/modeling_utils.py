@@ -2572,6 +2572,9 @@ class ColumnParallelLinear(nn.Module):
             with torch.no_grad():
                 self.bias.zero_()
 
+        elif bias is False:
+            self.bias = None
+
         else:
             self.bias = nn.Parameter(bias)
 
@@ -2658,6 +2661,10 @@ class RowParallelLinear(nn.Module):
 
             with torch.no_grad():
                 self.bias.zero_()
+
+        elif bias is False:
+            self.bias = None
+
         else:
             self.bias = nn.Parameter(bias)
 
