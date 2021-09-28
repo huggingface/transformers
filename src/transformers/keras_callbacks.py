@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional, Union
+from time import sleep
 
 from tensorflow.keras.callbacks import Callback
 
@@ -61,7 +62,8 @@ class PushToHubCallback(Callback):
     def on_train_end(self, logs=None):
         if self.last_job is not None and not self.last_job.is_done():
             print("Waiting for existing upload to finish...")
-            self.last_job._process.join()  # Wait for existing upload to finish before we begin
+            while not self.last_job.is_done():
+                sleep(1)
         self.model.save_pretrained(self.output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(self.output_dir)
