@@ -62,5 +62,6 @@ class PushToHubCallback(Callback):
         if self.last_job is not None and not self.last_job.is_done():
             self.last_job.process.join()  # Wait for existing upload to finish to finish
         self.model.save_pretrained(self.output_dir)
-        self.tokenizer.save_pretrained(self.output_dir)
+            if self.tokenizer is not None:
+                self.tokenizer.save_pretrained(self.output_dir)
         self.repo.push_to_hub(commit_message=f"End of training", blocking=True)
