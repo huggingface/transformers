@@ -279,11 +279,11 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         encoder_input_shape, decoder_input_shape = input_shape
 
         # init input tensors
-        pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
+        pixel_values = jnp.zeros(encoder_input_shape, dtype=self.dtype)
         decoder_input_ids = jnp.zeros(decoder_input_shape, dtype="i4")
         decoder_attention_mask = jnp.ones_like(decoder_input_ids)
 
-        batch_size, _ = pixel_values.shape
+        batch_size, _, _, _ = pixel_values.shape
         decoder_batch_size, decoder_sequence_length = decoder_input_ids.shape
         if not decoder_batch_size == batch_size:
             raise ValueError(

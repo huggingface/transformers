@@ -166,7 +166,7 @@ class FlaxVisionEncoderDecoderMixin:
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
         self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
 
-        self.assertEqual(encoder_attentions[0].shape[-3:-1], (config.num_attention_heads,))
+        self.assertEqual(encoder_attentions[0].shape[-3:-2], (config.num_attention_heads,))
 
         decoder_attentions = outputs_encoder_decoder["decoder_attentions"]
         num_decoder_layers = (
@@ -245,10 +245,16 @@ class FlaxVisionEncoderDecoderMixin:
         config_inputs_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**config_inputs_dict)
 
-    @slow
     def test_real_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
-        pixel_values = floats_tensor([13, 3, 30, 30])
+        pixel_values = floats_tensor(
+            [
+                13,
+                model_2.config.encoder.num_channels,
+                model_2.config.encoder.image_size,
+                model_2.config.encoder.image_size,
+            ]
+        )
         decoder_input_ids = ids_tensor([13, 1], model_2.config.decoder.vocab_size)
 
         outputs = model_2(
