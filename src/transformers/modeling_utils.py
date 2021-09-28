@@ -2341,11 +2341,8 @@ def set_tensor_model_parallel_attributes(tensor, is_parallel, dim, stride):
 def initialize_affine_weight(weight, init_method, partition_dim, stride=1):
     """Initialize affine weight for model parallel."""
     set_tensor_model_parallel_attributes(tensor=weight, is_parallel=True, dim=partition_dim, stride=stride)
-    import deepspeed
 
-    # these code will be used for megatron-friendly model parallelism
-    with deepspeed.checkpointing.get_cuda_rng_tracker().fork():
-        init_method(weight)
+    init_method(weight)
 
 
 def vocab_size_with_padding(vocab_size, make_vocab_size_divisible_by, world_size):
