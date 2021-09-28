@@ -329,22 +329,16 @@ class GPTNeoLayerPolicy(LayerPolicy):
                 name="attn.attention.q_proj",
                 weight=layer.attn.attention.q_proj.weight,
                 replace={layer.attn.attention.q_proj: ColumnParallelLinear},
-                scale_attention=False,
-                local_attention=True,
             ),
             Layer(
                 name="attn.attention.k_proj",
                 weight=layer.attn.attention.k_proj.weight,
                 replace={layer.attn.attention.k_proj: ColumnParallelLinear},
-                scale_attention=False,
-                local_attention=True,
             ),
             Layer(
                 name="attn.attention.v_proj",
                 weight=layer.attn.attention.v_proj.weight,
                 replace={layer.attn.attention.v_proj: ColumnParallelLinear},
-                scale_attention=False,
-                local_attention=True,
             ),
         ]
 
