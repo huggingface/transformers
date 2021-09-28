@@ -225,10 +225,11 @@ class GPT2Attention(nn.Module):
 
     def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, head_mask=None):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
-        bsz, num_heads, seq_len, dk = query.size()
+        bsz, num_heads, q_seq_len, dk = query.size()
+        _, _, k_seq_len, _ = key.size()
 
         # Preallocate attn_weights for `baddbmm`
-        attn_weights = torch.empty(bsz * num_heads, seq_len, seq_len, dtype=torch.float32, device=query.device)
+        attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
 
         # Compute Scale Factor
         scale_factor = 1.0
@@ -241,13 +242,13 @@ class GPT2Attention(nn.Module):
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
         if is_amp_available:
             with autocast(enabled=False):
-                q, k = query.reshape(-1, seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, seq_len)
+                q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
                 attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
-                attn_weights = attn_weights.reshape(bsz, num_heads, seq_len, seq_len)
+                attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
         else:
-            q, k = query.reshape(-1, seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, seq_len)
+            q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
             attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
-            attn_weights = attn_weights.reshape(bsz, num_heads, seq_len, seq_len)
+            attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
