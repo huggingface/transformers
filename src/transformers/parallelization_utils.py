@@ -1181,7 +1181,7 @@ class ParallelizationMixin(object):
         for k, v in kwargs.items():
             setattr(config, k, v)
 
-        model = cls(config, *model_args, **kwargs)
+        model = cls(config)
 
         if fp16 is True:
             model = model.half()
