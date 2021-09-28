@@ -772,6 +772,13 @@ class IterableDatasetShard(IterableDataset):
             for i in process_slice:
                 yield current_batch[i]
 
+    def __len__(self):
+        # Will raise an error if the underlying dataset is not sized.
+        if self.drop_last:
+            return len(self.dataset) // self.num_processes
+        else:
+            return math.ceil(len(self.dataset) / self.num_processes)
+
 
 # In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
 # helper methods here
