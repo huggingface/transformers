@@ -114,6 +114,7 @@ class RealmConfig(PretrainedConfig):
         max_span_width=10,
         reader_layer_norm_eps=1e-3,
         reader_beam_size=5,
+        reader_seq_len=288+32,
         num_block_records=13353718,
         searcher_beam_size=5000,
         pad_token_id=1,
@@ -145,6 +146,7 @@ class RealmConfig(PretrainedConfig):
         self.max_span_width = max_span_width
         self.reader_layer_norm_eps = reader_layer_norm_eps
         self.reader_beam_size = reader_beam_size
+        self.reader_seq_len = reader_seq_len
 
         # Searcher config
         self.num_block_records = num_block_records
