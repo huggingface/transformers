@@ -154,9 +154,14 @@ def rename_keys(state_dict, task):
         name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
         name = name.replace("basic_decoder/~/", "decoder.")
 
-        # rename embedding decoder bias (for MLM model)
-        name = name.replace("embedding_decoder/bias", "output_postprocessor.bias")
-
+        ## POSTPROCESSORS
+        name = name.replace("projection_postprocessor/linear/b", "output_postprocessor.modalities.image.classifier.bias")
+        name = name.replace("projection_postprocessor/linear/w", "output_postprocessor.modalities.image.classifier.weight")
+        name = name.replace("classification_postprocessor/linear/b", "output_postprocessor.modalities.label.classifier.bias")
+        name = name.replace("classification_postprocessor/linear/w", "output_postprocessor.modalities.label.classifier.weight")
+        name = name.replace("audio_postprocessor/linear/b", "output_postprocessor.modalities.audio.classifier.bias")
+        name = name.replace("audio_postprocessor/linear/w", "output_postprocessor.modalities.audio.classifier.weight")
+        
         ## PERCEIVER MODEL ##
 
         # rename latent embeddings
@@ -242,7 +247,10 @@ def rename_keys(state_dict, task):
         if "batchnorm" in name:
             param = np.squeeze(param)
 
-        state_dict["perceiver." + name] = torch.from_numpy(param)
+        if "embedding_decoder" not in name:
+            state_dict["perceiver." + name] = torch.from_numpy(param)
+        else:
+            state_dict[name] = torch.from_numpy(param)
 
 
 @torch.no_grad()
@@ -396,7 +404,11 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
     logits = outputs.logits
 
     # verify logits
-    print("Shape of logits:", logits.shape)
+    if not isinstance(logits, dict):
+        print("Shape of logits:", logits.shape)
+    else:
+        for k,v in logits.items():
+            print(f"Shape of logits of modality {k}", v.shape)
 
     if task == "MLM":
         expected_slice = torch.tensor(

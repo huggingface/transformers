@@ -20,7 +20,7 @@ import math
 from dataclasses import dataclass
 from functools import reduce
 from operator import __add__
-from typing import Mapping, Optional, Tuple
+from typing import Any, Callable, Mapping, Optional, Tuple
 
 import numpy as np
 import torch
@@ -45,6 +45,11 @@ from ...modeling_utils import (
 from ...utils import logging
 from .configuration_perceiver import PerceiverConfig
 
+
+ModalitySizeT = Mapping[str, int]
+PreprocessorOutputT = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
+PreprocessorT = Callable[..., PreprocessorOutputT]
+PostprocessorT = Callable[..., Any]
 
 logger = logging.get_logger(__name__)
 
@@ -754,17 +759,22 @@ class PerceiverModel(PerceiverPreTrainedModel):
         print("Shape of encoder outputs:", sequence_output.shape)
         # print("Encoder outputs:", sequence_output[0, :3, :3])
 
+        print("Modality sizes before postprocessing:", modality_sizes)
+        
         logits = None
         if self.decoder:
-            print("Subsampled output points:", subsampled_output_points)
+            _, output_modality_sizes = self.decoder.output_shape(inputs)
+            output_modality_sizes = output_modality_sizes or modality_sizes
             decoder_query = self.decoder.decoder_query(
                 inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_output_points
             )
             logits = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
 
+            print("Shape of decoder outputs:", logits.shape)
+            
             if self.output_postprocessor:
-                logits = self.output_postprocessor(logits, embedding_layer=self.input_preprocessor.embeddings)
-
+                logits = self.output_postprocessor(logits, modality_sizes=output_modality_sizes)
+        
         if not return_dict:
             return (
                 logits,
@@ -800,8 +810,8 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
                 final_project=False,
                 trainable_position_encoding_kwargs=dict(num_channels=config.d_model),
             ),
-            output_postprocessor=PerceiverTextPostprocessor(config),
         )
+        self.embedding_decoder = PerceiverEmbeddingDecoder(config)
 
         self.init_weights()
 
@@ -839,7 +849,8 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        logits = outputs.logits
+
+        logits = self.embedding_decoder(outputs.logits, embedding_layer=self.perceiver.input_preprocessor.embeddings)
 
         masked_lm_loss = None
         if labels is not None:
@@ -1297,10 +1308,19 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             use_query_residual=False,
         )
 
+        output_postprocessor = PerceiverMultimodalPostprocessor(
+            modalities={
+                "audio": PerceiverAudioPostprocessor(config, in_channels=512),
+                "image": PerceiverProjectionPostprocessor(in_channels=512, out_channels=3),
+                "label": PerceiverClassificationPostprocessor(config, in_channels=512),
+            }
+        )
+
         self.perceiver = PerceiverModel(
             config,
             input_preprocessor=input_preprocessor,
             decoder=decoder,
+            output_postprocessor=output_postprocessor,
         )
 
         self.init_weights()
@@ -1461,6 +1481,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
     ):
         super().__init__()
 
+        self.output_num_channels = output_num_channels
         # If `none`, the decoder will not construct any position encodings.
         # You should construct your own when quering the decoder.
         self.output_position_encodings = None
@@ -1506,15 +1527,16 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             # stack to get the [n, d] tensor of coordinates
             indices = list(torch.from_numpy(x) for x in np.unravel_index(subsampled_points, self.output_index_dims))
             pos = torch.stack(indices, dim=1)
+            batch_size = inputs.shape[0]
             # Map these coordinates to [-1, 1]
             pos = -1 + 2 * pos / torch.tensor(self.output_index_dims)[None, :]
-            pos = torch.broadcast_to(pos[None], [inputs.shape[0], pos.shape[0], pos.shape[1]])
+            pos = torch.broadcast_to(pos[None], [batch_size, pos.shape[0], pos.shape[1]])
             # Construct the position encoding.
             if self.position_encoding_type == "trainable":
                 pos_emb = self.output_position_encodings(batch_size)
             elif self.position_encoding_type == "fourier":
                 pos_emb = self.output_position_encodings(
-                    self.output_index_dims, batch_size=inputs.shape[0], device=inputs.device, pos=pos
+                    self.output_index_dims, batch_size=batch_size, device=inputs.device, pos=pos
                 )
 
             # Optionally project them to a target dimension.
@@ -1722,7 +1744,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
             output_index_dims=(num_outputs,),
             output_num_channels=output_num_channels,
             position_encoding_type="none",
-            num_channels=1026,
+            num_channels=1026,  # TODO make this better
             **decoder_kwargs,
         )
 
@@ -2027,7 +2049,7 @@ class PerceiverTextPreprocessor(nn.Module):
         return embeddings, None, None
 
 
-class PerceiverTextPostprocessor(nn.Module):
+class PerceiverEmbeddingDecoder(nn.Module):
     """Module to decode embeddings."""
 
     def __init__(self, config):
@@ -2043,6 +2065,85 @@ class PerceiverTextPostprocessor(nn.Module):
         output = output + self.bias
 
         return output.reshape([batch_size, seq_len, self.vocab_size])
+
+
+class PerceiverMultimodalPostprocessor(nn.Module):
+    """Multimodal postprocessing for Perceiver."""
+
+    def __init__(self, modalities: Mapping[str, PostprocessorT], input_is_dict: bool = False):
+        """
+        Constructor.
+
+        Args:
+          modalities: dict mapping modality name to post processor for that modality
+          input_is_dict: If True, input is assumed to be dictionary structured,
+            and outputs keep the same dictionary shape. If False, input is a tensor which is sliced up during
+            postprocessing by `modality_sizes`.
+          name: name of the module
+        """
+        super().__init__()
+        self.modalities = nn.ModuleDict(modalities)
+        self.input_is_dict = input_is_dict
+
+    def forward(
+        self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None
+    ) -> Mapping[str, torch.Tensor]:
+        if not self.input_is_dict:
+            # Slice up modalities by their sizes.
+            assert modality_sizes is not None
+            print("Modality sizes:", modality_sizes)
+            inputs = restructure(modality_sizes=modality_sizes, inputs=inputs)
+        
+        print("Shape of inputs after restructure:")
+        for k,v in inputs.items():
+            print(k, v.shape)
+        
+        outputs = {
+            modality: postprocessor(inputs[modality], pos=pos, modality_sizes=None)
+            for modality, postprocessor in self.modalities.items()
+        }
+        return outputs
+
+
+class PerceiverClassificationPostprocessor(nn.Module):
+    """Classification postprocessing for Perceiver."""
+
+    def __init__(self, config, in_channels):
+        super().__init__()
+        self.classifier = nn.Linear(in_channels, config.num_labels)
+
+    def forward(self, inputs, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
+        logits = self.classifier(inputs)
+        return logits[:, 0, :]
+
+
+class PerceiverAudioPostprocessor(nn.Module):
+    """Audio postprocessing for Perceiver."""
+
+    def __init__(self, config, in_channels, postproc_type: str = "patches"):
+        super().__init__()
+
+        if postproc_type not in ("patches",):  # to be supported: 'conv', 'patches', 'pixels'
+            raise ValueError("Invalid postproc_type!")
+
+        # Architecture parameters:
+        self.classifier = nn.Linear(in_channels, config.samples_per_patch)
+
+    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
+        logits = self.classifier(inputs)
+        return torch.reshape(logits, [inputs.shape[0], -1])
+
+
+class PerceiverProjectionPostprocessor(nn.Module):
+    """Projection postprocessing for Perceiver."""
+
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.classifier = nn.Linear(in_channels, out_channels)
+
+    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
+        logits = self.classifier(inputs)
+        return logits
 
 
 class PerceiverImagePreprocessor(nn.Module):
@@ -2379,6 +2480,8 @@ class PerceiverMultimodalPreprocessor(nn.Module):
                 output_padded = (1 - mask) * output_padded + mask * mask_token
 
             padded[modality] = output_padded
+            print("Modality:", modality)
+            print("Shape of output_padded:", output_padded.shape)
             modality_sizes[modality] = output_padded.shape[1]
 
         # Apply a predictable ordering to the modalities
