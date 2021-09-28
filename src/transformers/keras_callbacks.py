@@ -28,7 +28,7 @@ class PushToHubCallback(Callback):
         self.save_steps = save_steps
         output_dir = Path(output_dir)
         if hub_model_id is None:
-            repo_name = get_full_repo_name(output_dir.name, token=hub_token)
+            repo_name = get_full_repo_name(output_dir.absolute().name, token=hub_token)
         else:
             repo_name = hub_model_id
         self.output_dir = output_dir
