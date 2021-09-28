@@ -1,12 +1,12 @@
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 from tensorflow.keras.callbacks import Callback
 
 from huggingface_hub import Repository
 from transformers.file_utils import get_full_repo_name
 
-from . import IntervalStrategy
+from . import IntervalStrategy, PreTrainedTokenizerBase
 
 
 class PushToHubCallback(Callback):
@@ -15,7 +15,7 @@ class PushToHubCallback(Callback):
         output_dir: Union[str, Path],
         save_strategy: Union[str, IntervalStrategy] = "epoch",
         save_steps: Optional[int] = None,
-        tokenizer: Optional[Any] = None,
+        tokenizer: Optional[PreTrainedTokenizerBase] = None,
         hub_model_id: Optional[str] = None,
         hub_token: Optional[str] = None,
     ):
