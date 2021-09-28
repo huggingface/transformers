@@ -91,4 +91,4 @@ class PushToHubCallback(Callback):
         self.model.save_pretrained(self.output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(self.output_dir)
-        self.repo.push_to_hub(commit_message=f"End of training", blocking=True)
+        self.repo.push_to_hub(commit_message="End of training", blocking=True)
