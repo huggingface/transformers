@@ -12,9 +12,11 @@
 
 Keras callbacks
 =======================================================================================================================
-When training a Transformers model with Keras, there are some library-specific
-callbacks available to automate common tasks:
+
+When training a Transformers model with Keras, there are some library-specific callbacks available to automate common
+tasks:
 
 PushToHubCallback
 -----------------------------------------------------------------------------------------------------------------------
+
 .. autoclass:: transformers.keras_callbacks.PushToHubCallback

@@ -22,8 +22,8 @@ class PushToHubCallback(Callback):
     ):
         """
         output_dir (:obj:`str`):
-            The output directory where the model predictions and checkpoints will be written.
-                    The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
+            The output directory where the model predictions and checkpoints will be written. The name of the
+            repository to keep in sync with the local `output_dir`. Should be the whole repository
         save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`,
         `optional`, defaults to :obj:`"epoch"`):
             The checkpoint save strategy to adopt during training. Possible values are:
@@ -38,9 +38,8 @@ class PushToHubCallback(Callback):
         hub_model_id (:obj:`str`, `optional`):
             The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
             name, for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member
-            of with :obj:`"organization_name/model"`.
-            Will default to :obj:`user_name/output_dir_name` with `output_dir_name` being the name of
-            :obj:`output_dir`.
+            of with :obj:`"organization_name/model"`. Will default to :obj:`user_name/output_dir_name` with
+            `output_dir_name` being the name of :obj:`output_dir`.
         hub_token (:obj:`str`, `optional`):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             :obj:`huggingface-cli login`.
