@@ -152,8 +152,6 @@ def nested_xla_mesh_reduce(tensors, name):
 
         if isinstance(tensors, (list, tuple)):
             return type(tensors)(nested_xla_mesh_reduce(t, f"{name}_{i}") for i, t in enumerate(tensors))
-        if tensors.ndim == 0:
-            tensors = tensors[None]
         return xm.mesh_reduce(name, tensors, torch.cat)
     else:
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
@@ -777,9 +775,9 @@ class IterableDatasetShard(IterableDataset):
     def __len__(self):
         # Will raise an error if the underlying dataset is not sized.
         if self.drop_last:
-            return (len(self.dataset) // (self.batch_size * self.num_processes)) * self.batch_size
+            return len(self.dataset) // self.num_processes
         else:
-            return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
+            return math.ceil(len(self.dataset) / self.num_processes)
 
 
 # In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
