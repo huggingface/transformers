@@ -266,7 +266,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         **kwargs
     ):
         if input_shape is None:
-            num_channels = config.encoder.getattr("num_channels", 3)
+            num_channels = getattr(config.encoder, "num_channels", 3)
             input_shape = (
                 (1, config.encoder.image_size, config.encoder.image_size, num_channels),
                 (1, 1),
