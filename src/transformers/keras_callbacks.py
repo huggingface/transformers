@@ -52,7 +52,8 @@ class PushToHubCallback(Callback):
             if self.last_job is not None and not self.last_job.is_done():
                 return  # The last upload is still running, don't start another
             self.model.save_pretrained(self.output_dir)
-            self.tokenizer.save_pretrained(self.output_dir)
+            if self.tokenizer is not None:
+                self.tokenizer.save_pretrained(self.output_dir)
             _, self.last_job = self.repo.push_to_hub(
                 commit_message=f"Training in progress epoch {epoch}", blocking=False
             )
