@@ -1177,6 +1177,10 @@ class ParallelizationMixin(object):
         *model_args,
         **kwargs,
     ):
+
+        for k, v in kwargs.items():
+            setattr(config, k, v)
+
         model = cls(config, *model_args, **kwargs)
 
         if fp16 is True:
