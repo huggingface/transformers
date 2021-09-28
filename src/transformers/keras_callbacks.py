@@ -4,21 +4,24 @@ from pathlib import Path
 from tensorflow.keras.callbacks import Callback
 from transformers.file_utils import get_full_repo_name
 from huggingface_hub import Repository
+from . import IntervalStrategy
 
 
 class PushToHubCallback(Callback):
     def __init__(
         self,
         output_dir: Union[str, Path],
-        save_strategy="epoch",
+        save_strategy: Union[str, IntervalStrategy] = "epoch",
         save_steps: Optional[int] = None,
         tokenizer: Optional[Any] = None,
         hub_model_id: Optional[str] = None,
         hub_token: Optional[str] = None,
     ):
         super().__init__()
+        if isinstance(save_strategy, str):
+            save_strategy = IntervalStrategy(save_strategy.lower())
         self.save_strategy = save_strategy
-        if self.save_strategy == "steps" and (not isinstance(save_steps, int) or save_steps <= 0):
+        if self.save_strategy == IntervalStrategy.STEPS and (not isinstance(save_steps, int) or save_steps <= 0):
             raise ValueError("Please supply a positive integer argument for save_steps when save_strategy == 'steps'!")
         self.save_steps = save_steps
         if isinstance(output_dir, str):
@@ -33,7 +36,7 @@ class PushToHubCallback(Callback):
         self.last_job = None
 
     def on_train_batch_end(self, batch, logs=None):
-        if self.save_strategy == "steps" and batch + 1 % self.save_steps == 0:
+        if self.save_strategy == IntervalStrategy.STEPS and batch + 1 % self.save_steps == 0:
             if self.last_job is not None and not self.last_job.is_done():
                 return  # The last upload is still running, don't start another
             self.model.save_pretrained(self.output_dir)
@@ -42,7 +45,7 @@ class PushToHubCallback(Callback):
                 commit_message=f"Training in progress steps {batch}", blocking=False)
 
     def on_epoch_end(self, epoch, logs=None):
-        if self.save_strategy == "epoch":
+        if self.save_strategy == IntervalStrategy.EPOCH:
             if self.last_job is not None and not self.last_job.is_done():
                 return  # The last upload is still running, don't start another
             self.model.save_pretrained(self.output_dir)
