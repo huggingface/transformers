@@ -1,9 +1,11 @@
-from typing import Optional, Union, Any
 from pathlib import Path
+from typing import Any, Optional, Union
 
 from tensorflow.keras.callbacks import Callback
-from transformers.file_utils import get_full_repo_name
+
 from huggingface_hub import Repository
+from transformers.file_utils import get_full_repo_name
+
 from . import IntervalStrategy
 
 
@@ -42,7 +44,8 @@ class PushToHubCallback(Callback):
             self.model.save_pretrained(self.output_dir)
             self.tokenizer.save_pretrained(self.output_dir)
             _, self.last_job = self.repo.push_to_hub(
-                commit_message=f"Training in progress steps {batch}", blocking=False)
+                commit_message=f"Training in progress steps {batch}", blocking=False
+            )
 
     def on_epoch_end(self, epoch, logs=None):
         if self.save_strategy == IntervalStrategy.EPOCH:
@@ -51,7 +54,8 @@ class PushToHubCallback(Callback):
             self.model.save_pretrained(self.output_dir)
             self.tokenizer.save_pretrained(self.output_dir)
             _, self.last_job = self.repo.push_to_hub(
-                commit_message=f"Training in progress epoch {epoch}", blocking=False)
+                commit_message=f"Training in progress epoch {epoch}", blocking=False
+            )
 
     def on_train_end(self, logs=None):
         if self.last_job is not None and not self.last_job.is_done():
