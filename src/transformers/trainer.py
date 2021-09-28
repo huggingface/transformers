@@ -319,10 +319,10 @@ class Trainer:
                 )
             self.model_init = model_init
 
-        if hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel:
-            self.is_model_parallel = True
+        if hasattr(model, "is_naive_parallelizable") and model.is_naive_parallelizable and model.model_parallel:
+            self.is_naive_model_parallel = True
         else:
-            self.is_model_parallel = False
+            self.is_naive_model_parallel = False
 
         # Setup Sharded DDP training
         self.sharded_ddp = None
@@ -357,7 +357,7 @@ class Trainer:
         # 4. Sharded DDP - same as MP
         self.place_model_on_device = args.place_model_on_device
         if (
-            self.is_model_parallel
+            self.is_naive_model_parallel
             or args.deepspeed
             or (args.fp16_full_eval and not args.do_train)
             or (self.sharded_ddp in [ShardedDDPOption.ZERO_DP_2, ShardedDDPOption.ZERO_DP_3])
@@ -374,7 +374,7 @@ class Trainer:
             self._move_model_to_device(model, args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
-        if self.is_model_parallel:
+        if self.is_naive_model_parallel:
             self.args._n_gpu = 1
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not

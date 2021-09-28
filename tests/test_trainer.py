@@ -593,7 +593,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         args = TrainingArguments("./regression", per_device_train_batch_size=16, per_device_eval_batch_size=16)
         trainer = Trainer(model, args, train_dataset=RegressionDataset(), eval_dataset=RegressionDataset())
         # Check the Trainer was fooled
-        self.assertTrue(trainer.is_model_parallel)
+        self.assertTrue(trainer.is_naive_model_parallel)
         self.assertEqual(trainer.args.n_gpu, 1)
 
         # The batch size of the training and evaluation dataloaders should be 16, not 16 * n_gpu

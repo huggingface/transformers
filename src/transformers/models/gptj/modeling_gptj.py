@@ -302,7 +302,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
 
     config_class = GPTJConfig
     base_model_prefix = "transformer"
-    is_parallelizable = True
+    is_naive_parallelizable = True
     supports_gradient_checkpointing = True
 
     def __init__(self, *inputs, **kwargs):

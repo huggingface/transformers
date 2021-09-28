@@ -359,7 +359,7 @@ class GPTNeoBlock(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
-class GPTNeoPreTrainedModel(PreTrainedModel, ParallelizationMixin):
+class GPTNeoPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -369,6 +369,8 @@ class GPTNeoPreTrainedModel(PreTrainedModel, ParallelizationMixin):
     load_tf_weights = load_tf_weights_in_gpt_neo
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
+    is_naive_parallelizable = False
+    is_tensor_parallelizable = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)

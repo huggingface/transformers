@@ -27,7 +27,6 @@ from torch import Tensor
 from torch.autograd.function import Function
 
 from .configuration_utils import PretrainedConfig
-from .modeling_utils import vocab_size_with_padding
 
 
 class MPU(object):
@@ -834,6 +833,19 @@ class LayerPolicy(ABC):
         raise NotImplementedError
 
 
+def vocab_size_with_padding(vocab_size, make_vocab_size_divisible_by, world_size):
+    """Pad vocab size so it is divisible by model parallel size and
+    still having GPU friendly size."""
+
+    after = vocab_size
+    multiple = make_vocab_size_divisible_by * world_size
+
+    while (after % multiple) != 0:
+        after += 1
+
+    return after
+
+
 class ParallelizationEngine(object):
     """
     Integration with Parallelformers
@@ -1121,6 +1133,9 @@ class ParallelizationMixin(object):
         pipeline_model_parallel_size: int = 1,
         vocab_parallel_embedding: bool = None,
     ):
+        assert (
+            self.is_tensor_parallelizable is True
+        ), f"{self.__class__.__name__} does not support tensor model parallelism."
         assert (
             pipeline_model_parallel_size == 1
         ), "Currently, We only support tensor model parallelism, please set param `pipeline_model_parallel_size` to 1"

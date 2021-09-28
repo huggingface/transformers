@@ -48,6 +48,7 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
+from .parallelization_utils import ParallelizationMixin
 from .utils import logging
 from .utils.versions import require_version_core
 
@@ -414,7 +415,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, ParallelizationMixin):
     r"""
     Base class for all models.
 
@@ -439,7 +440,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
-        - **is_parallelizable** (:obj:`bool`) -- A flag indicating whether this model supports model parallelization.
+        - **is_naive_parallelizable** (:obj:`bool`) -- A flag indicating whether this model supports model naive parallelization.
+        - **is_tensor_parallelizable** (:obj:`bool`) -- A flag indicating whether this model supports model tensor parallelization.
     """
     config_class = None
     base_model_prefix = ""
@@ -453,7 +455,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # trained, but which are deterministic, or tied variables)
     _keys_to_ignore_on_save = None
 
-    is_parallelizable = False
+    is_naive_parallelizable = False
+    is_tensor_parallelizable = False
     supports_gradient_checkpointing = False
 
     @property
@@ -2343,19 +2346,6 @@ def initialize_affine_weight(weight, init_method, partition_dim, stride=1):
     set_tensor_model_parallel_attributes(tensor=weight, is_parallel=True, dim=partition_dim, stride=stride)
 
     init_method(weight)
-
-
-def vocab_size_with_padding(vocab_size, make_vocab_size_divisible_by, world_size):
-    """Pad vocab size so it is divisible by model parallel size and
-    still having GPU friendly size."""
-
-    after = vocab_size
-    multiple = make_vocab_size_divisible_by * world_size
-
-    while (after % multiple) != 0:
-        after += 1
-
-    return after
 
 
 class VocabUtils(object):
