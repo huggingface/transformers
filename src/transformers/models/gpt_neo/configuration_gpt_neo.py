@@ -360,6 +360,16 @@ class GPTNeoLayerPolicy(LayerPolicy):
         ]
 
     @staticmethod
+    def attn_norm(layer, config):
+        return [
+            Layer(
+                name="ln_1",
+                weight=layer.ln_1.weight,
+                bias=layer.ln_1.bias,
+            ),
+        ]
+
+    @staticmethod
     def mlp_in(layer, config):
         return [
             Layer(
@@ -382,6 +392,16 @@ class GPTNeoLayerPolicy(LayerPolicy):
         ]
 
     @staticmethod
+    def mlp_norm(layer, config):
+        return [
+            Layer(
+                name="ln_2",
+                weight=layer.ln_2.weight,
+                bias=layer.ln_2.bias,
+            ),
+        ]
+
+    @staticmethod
     def word_embedding(model, config):
         return [
             Layer(
@@ -394,16 +414,6 @@ class GPTNeoLayerPolicy(LayerPolicy):
     @staticmethod
     def layerwise_copy_to_all(layer, config):
         return [
-            Layer(
-                name="ln_1",
-                weight=layer.ln_1.weight,
-                bias=layer.ln_1.bias,
-            ),
-            Layer(
-                name="ln_2",
-                weight=layer.ln_2.weight,
-                bias=layer.ln_2.bias,
-            ),
             Layer(
                 name="attn.attention.bias",
                 bias=layer.attn.attention.bias,

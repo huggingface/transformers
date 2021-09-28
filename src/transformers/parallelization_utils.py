@@ -802,11 +802,19 @@ class LayerPolicy(ABC):
         return []
 
     @staticmethod
+    def attn_norm(layer, config):
+        return []
+
+    @staticmethod
     def mlp_in(layer, config):
         return []
 
     @staticmethod
     def mlp_out(layer, config):
+        return []
+
+    @staticmethod
+    def mlp_norm(layer, config):
         return []
 
     @staticmethod
@@ -965,11 +973,18 @@ class ParallelizationEngine(object):
                     ),
                 ]
 
-                for layer in self.policy.layerwise_copy_to_all(child, config):
+                copy_to_all = (
+                    self.policy.attn_norm(child, config)
+                    + self.policy.mlp_norm(child, config)
+                    + self.policy.layerwise_copy_to_all(child, config)
+                )
+
+                for layer in copy_to_all:
                     if layer.weight is not None:
                         layer.weight.data = layer.weight.to(self.device)
                     if layer.bias is not None:
                         layer.bias.data = layer.bias.to(self.device)
+
                     parameters.append([layer])
 
                 for layers in parameters:
