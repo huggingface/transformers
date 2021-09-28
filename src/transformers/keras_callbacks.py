@@ -4,7 +4,7 @@ from typing import Optional, Union
 from tensorflow.keras.callbacks import Callback
 
 from huggingface_hub import Repository
-from transformers.file_utils import get_full_repo_name
+from .file_utils import get_full_repo_name
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
 
