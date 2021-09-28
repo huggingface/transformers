@@ -837,7 +837,10 @@ class RealmReaderOutput(ModelOutput):
     loss: torch.FloatTensor = None
     retriever_loss: torch.FloatTensor = None
     reader_loss:torch.FloatTensor = None
+    retriever_correct: torch.BoolTensor = None
+    reader_correct: torch.BoolTensor = None
     block_idx: torch.int64 = None
+    candidate: torch.int32 = None
     start_pos: torch.int32 = None
     end_pos: torch.int32 = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -1651,14 +1654,17 @@ class RealmReader(RealmPreTrainedModel):
             total_loss = (retriever_loss + reader_loss).mean()
 
         if not return_dict:
-            output = (predicted_block_index, predicted_start, predicted_end) + outputs[2:]
-            return ((total_loss, retriever_loss, reader_loss) + output) if total_loss is not None else output
+            output = (predicted_block_index, predicted_candidate, predicted_start, predicted_end) + outputs[2:]
+            return ((total_loss, retriever_loss, reader_loss, retriever_correct, reader_correct) + output) if total_loss is not None else output
 
         return RealmReaderOutput(
             loss=total_loss,
             retriever_loss=retriever_loss,
             reader_loss=reader_loss,
+            retriever_correct=retriever_correct,
+            reader_correct=reader_correct,
             block_idx=predicted_block_index,
+            candidate=predicted_candidate,
             start_pos=predicted_start,
             end_pos=predicted_end,
             hidden_states=outputs.hidden_states,
