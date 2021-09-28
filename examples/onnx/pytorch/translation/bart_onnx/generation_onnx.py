@@ -10,6 +10,7 @@ from transformers.generation_utils import GenerationMixin
 
 from typing import Optional, List, Tuple
 
+
 def flatten_list(past):
     values = []
     if past is not None:
@@ -19,16 +20,18 @@ def flatten_list(past):
 
     return values
 
+
 def list_to_tuple(past):
     results = ()
     temp_result = ()
     count_n = len(past) // 4
     for idx in range(count_n):
         real_idx = idx * 4
-        temp_result = tuple(past[real_idx:real_idx + 4])
-        results += ((temp_result), )
+        temp_result = tuple(past[real_idx : real_idx + 4])
+        results += ((temp_result),)
 
     return results
+
 
 class EncoderForONNX(torch.nn.Module):
     def __init__(self, encoder):
@@ -48,7 +51,7 @@ class DecoderForONNX(torch.nn.Module):
         super().__init__()
         self.decoder = decoder
 
-    def forward(self, input_ids, encoder_state, attention_mask, past = None):
+    def forward(self, input_ids, encoder_state, attention_mask, past=None):
         all_results = None
         if past is not None:
             all_results = list_to_tuple(past)
@@ -67,6 +70,7 @@ class DecoderForONNX(torch.nn.Module):
             past_values = past_values + list(past)
         return last_hidden_state, past_values
 
+
 def create_traced_encoder(encoder, input_ids, attention_mask):
     encoder_c = copy.deepcopy(encoder)
     encoder_for_onnx = EncoderForONNX(encoder_c)
@@ -74,7 +78,8 @@ def create_traced_encoder(encoder, input_ids, attention_mask):
     # return torch.jit.trace(encoder, (input_ids, attention_mask))
     return torch.jit.trace(encoder_for_onnx, (input_ids, attention_mask))
 
-def create_traced_decoder(decoder, input_ids, encoder_state, attention_mask, past = None):
+
+def create_traced_decoder(decoder, input_ids, encoder_state, attention_mask, past=None):
     decoder_c = copy.deepcopy(decoder)
     decoder_for_onnx = DecoderForONNX(decoder_c)
     past_values = flatten_list(past)
@@ -85,9 +90,11 @@ def create_traced_decoder(decoder, input_ids, encoder_state, attention_mask, pas
     else:
         return torch.jit.trace(decoder_for_onnx, (input_ids, encoder_state, attention_mask, past_values))
 
+
 class BartConfigTS(BartConfig, torch.nn.Module):
     def init_module(self):
         torch.nn.Module.__init__(self)
+
 
 class MinLengthLogitsProcessorTS(torch.nn.Module):
     r"""
@@ -118,6 +125,7 @@ class MinLengthLogitsProcessorTS(torch.nn.Module):
             scores[:, self.eos_token_id] = -float("inf")
         return scores
 
+
 class BARTGenerator(torch.nn.Module, GenerationMixin):
     def __init__(self, model):
         super().__init__()
@@ -132,24 +140,154 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
 
     def _trace_modules(self, model):
         # Be aware of the last one 2 should be kept.
-        input_ids = torch.tensor([[  19,  669,   18,  420,    8,  664,   57,   42,    8,  664,   21, 3028,
-            195, 4445,  331, 1293,   34,   21,   10, 6174, 1100,    6,   69,  104,
-            42,   32, 2621, 1638,  144,    4, 6174,  558,  108, 4419, 1091,   28,
-            4, 1668,    9, 1509, 1621,  279,   35,  867, 2734,   85,   11, 2216,
-            2734,   85,  203, 2244,    7,    6,   15, 8102,    7,   57, 8629,    5,
-            2]], device=model.device, dtype=torch.long)
-        attention_mask = torch.tensor([[True, True, True, True, True, True, True, True, True, True, True, True,
-            True, True, True, True, True, True, True, True, True, True, True, True,
-            True, True, True, True, True, True, True, True, True, True, True, True,
-            True, True, True, True, True, True, True, True, True, True, True, True,
-            True, True, True, True, True, True, True, True, True, True, True, True,
-            True]], device=model.device, dtype=torch.bool)
+        input_ids = torch.tensor(
+            [
+                [
+                    19,
+                    669,
+                    18,
+                    420,
+                    8,
+                    664,
+                    57,
+                    42,
+                    8,
+                    664,
+                    21,
+                    3028,
+                    195,
+                    4445,
+                    331,
+                    1293,
+                    34,
+                    21,
+                    10,
+                    6174,
+                    1100,
+                    6,
+                    69,
+                    104,
+                    42,
+                    32,
+                    2621,
+                    1638,
+                    144,
+                    4,
+                    6174,
+                    558,
+                    108,
+                    4419,
+                    1091,
+                    28,
+                    4,
+                    1668,
+                    9,
+                    1509,
+                    1621,
+                    279,
+                    35,
+                    867,
+                    2734,
+                    85,
+                    11,
+                    2216,
+                    2734,
+                    85,
+                    203,
+                    2244,
+                    7,
+                    6,
+                    15,
+                    8102,
+                    7,
+                    57,
+                    8629,
+                    5,
+                    2,
+                ]
+            ],
+            device=model.device,
+            dtype=torch.long,
+        )
+        attention_mask = torch.tensor(
+            [
+                [
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                ]
+            ],
+            device=model.device,
+            dtype=torch.bool,
+        )
         self.encoder = create_traced_encoder(model.get_encoder(), input_ids, attention_mask)
         encoder_outputs = model.get_encoder()(input_ids, attention_mask=attention_mask, return_dict=True)
         decoder = model.model.decoder
-        decoder_outputs = decoder(input_ids, attention_mask, encoder_outputs['last_hidden_state'], None, None, None)
-        self.decoder_no_past = create_traced_decoder(model.model.decoder, input_ids, encoder_outputs['last_hidden_state'], attention_mask)
-        self.decoder_with_past = create_traced_decoder(model.model.decoder, input_ids, encoder_outputs['last_hidden_state'], attention_mask, decoder_outputs[1])
+        decoder_outputs = decoder(input_ids, attention_mask, encoder_outputs["last_hidden_state"], None, None, None)
+        self.decoder_no_past = create_traced_decoder(
+            model.model.decoder, input_ids, encoder_outputs["last_hidden_state"], attention_mask
+        )
+        self.decoder_with_past = create_traced_decoder(
+            model.model.decoder, input_ids, encoder_outputs["last_hidden_state"], attention_mask, decoder_outputs[1]
+        )
 
     def _encoder_forward(self, input_ids, attention_mask):
         return self.encoder(input_ids, attention_mask)[0]
@@ -168,21 +306,20 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         # Update here to use different decoder for different values of past.
         if past is None or len(past) == 0:
             decoder_output, past = self.decoder_no_past(
-                            input_ids=input_ids,
-                            encoder_state=encoder_output,
-                            attention_mask=attention_mask)
+                input_ids=input_ids, encoder_state=encoder_output, attention_mask=attention_mask
+            )
         else:
             decoder_output, past = self.decoder_with_past(
-                            input_ids=input_ids,
-                            encoder_state=encoder_output,
-                            attention_mask=attention_mask,
-                            past=past)
+                input_ids=input_ids, encoder_state=encoder_output, attention_mask=attention_mask, past=past
+            )
 
         lm_logits = F.linear(decoder_output, self.final_logits_weight, bias=self.final_logits_bias)
 
         return lm_logits, past
 
-    def greedy_search(self, input_ids, encoder_output, attention_mask, max_length, pad_token_id: int, eos_token_id: int):
+    def greedy_search(
+        self, input_ids, encoder_output, attention_mask, max_length, pad_token_id: int, eos_token_id: int
+    ):
         # init sequence length tensors
         sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
             input_ids, max_length
@@ -224,7 +361,10 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         return input_ids
 
     def _prepare_decoder_input_ids_for_generation(
-        self, input_ids: torch.LongTensor, decoder_start_token_id, bos_token_id: Optional[int] = None,
+        self,
+        input_ids: torch.LongTensor,
+        decoder_start_token_id,
+        bos_token_id: Optional[int] = None,
     ) -> torch.LongTensor:
 
         decoder_input_ids = (
@@ -246,10 +386,20 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         encoder_output = self._encoder_forward(input_ids, attention_mask)
 
         input_ids = self._prepare_decoder_input_ids_for_generation(
-            input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id,
+            input_ids,
+            decoder_start_token_id=decoder_start_token_id,
+            bos_token_id=bos_token_id,
         )
 
-        return self.greedy_search(input_ids, encoder_output, attention_mask, max_length=max_length, pad_token_id=pad_token_id, eos_token_id=eos_token_id)
+        return self.greedy_search(
+            input_ids,
+            encoder_output,
+            attention_mask,
+            max_length=max_length,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+        )
+
 
 # TorchScript compatible BeamSearchScorer
 class BeamSearchScorerTS(torch.nn.Module):
@@ -267,8 +417,8 @@ class BeamSearchScorerTS(torch.nn.Module):
         self._beam_hyps_count = torch.zeros(self.batch_size, dtype=torch.long)
         self._beam_hyps_worst_scores = torch.zeros(self.batch_size) + 1e9
         self._beam_hyps_max_length: int = self.max_length - 1
-        self._beam_hyps : List[torch.Tensor] = [torch.zeros(2)]  # placeholder for TorchScript compatible
-        self._beam_scores : List[torch.Tensor] = [torch.zeros(2)]  # placeholder for TorchScript compatible
+        self._beam_hyps: List[torch.Tensor] = [torch.zeros(2)]  # placeholder for TorchScript compatible
+        self._beam_scores: List[torch.Tensor] = [torch.zeros(2)]  # placeholder for TorchScript compatible
 
     def is_done(self) -> torch.Tensor:
         return self._done.all()
@@ -292,7 +442,6 @@ class BeamSearchScorerTS(torch.nn.Module):
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
         self.num_beam_groups = num_beam_groups
         self.group_size = self.num_beams // self.num_beam_groups
-
 
         # NOTE: TorchScript does not support List of Modules
         #       Rewritten BeamHypotheses with tensors and list of tensors.
@@ -329,12 +478,16 @@ class BeamSearchScorerTS(torch.nn.Module):
         hyps_count = self.hypo_len(hypo_idx)
         if hyps_count < self.num_beams or score > self._beam_hyps_worst_scores[hypo_idx]:
             # NOTE: work around difference of torch.sum(empty_tensor) = 0, while error in onnx.
-            beam_idx = torch.sum(self._beam_hyps_count[:hypo_idx]) if hypo_idx != 0 else torch.tensor(0, dtype=torch.long)
+            beam_idx = (
+                torch.sum(self._beam_hyps_count[:hypo_idx]) if hypo_idx != 0 else torch.tensor(0, dtype=torch.long)
+            )
             # beam_idx = torch.sum(_beam_hyps_count[:hypo_idx])
             self._beam_scores.insert(beam_idx, torch.tensor([score]))
             self._beam_hyps.insert(beam_idx, hyp)
             if hyps_count + 1 > self.num_beams:
-                sorted_next_scores, sorted_indices = torch.topk(torch.cat(self._beam_scores)[beam_idx:beam_idx+hyps_count+1], hyps_count+1, largest=False)
+                sorted_next_scores, sorted_indices = torch.topk(
+                    torch.cat(self._beam_scores)[beam_idx : beam_idx + hyps_count + 1], hyps_count + 1, largest=False
+                )
                 del self._beam_hyps[int((sorted_indices[0] + beam_idx))]
                 del self._beam_scores[int((sorted_indices[0] + beam_idx))]
                 self._beam_hyps_worst_scores[hypo_idx] = sorted_next_scores[1]
@@ -342,7 +495,7 @@ class BeamSearchScorerTS(torch.nn.Module):
                 self._beam_hyps_worst_scores[hypo_idx] = min(score, self._beam_hyps_worst_scores[hypo_idx])
                 self._beam_hyps_count[hypo_idx] = hyps_count + 1
 
-    def hypo_is_done(self, hypo_idx:int, best_sum_logprobs: float, cur_len: int) -> bool:
+    def hypo_is_done(self, hypo_idx: int, best_sum_logprobs: float, cur_len: int) -> bool:
         """
         If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
         one in the heap, then we are done with this sentence.
@@ -423,7 +576,9 @@ class BeamSearchScorerTS(torch.nn.Module):
 
             # Check if we are done so that we can save a pad step if all(done)
             self._done[batch_idx] = self._done[batch_idx] or self.hypo_is_done(
-                batch_idx, next_scores[batch_idx].max().item(), cur_len,
+                batch_idx,
+                next_scores[batch_idx].max().item(),
+                cur_len,
             )
 
         return next_beam_scores.view(-1), next_beam_tokens.view(-1), next_beam_indices.view(-1)
@@ -456,12 +611,14 @@ class BeamSearchScorerTS(torch.nn.Module):
         # NOTE: new is not scriptable
         sent_lengths = torch.zeros(batch_size * self.num_beam_hyps_to_keep, dtype=torch.long)
         best = []
-        best_scores = torch.zeros(batch_size * self.num_beam_hyps_to_keep, device=input_ids.device, dtype=torch.float32)
+        best_scores = torch.zeros(
+            batch_size * self.num_beam_hyps_to_keep, device=input_ids.device, dtype=torch.float32
+        )
         # retrieve best hypotheses
         for i in range(batch_size):
             # NOTE: lambda is not scriptable
             batch_hypo_start = torch.sum(self._beam_hyps_count[:i]) if i > 0 else torch.tensor(0, dtype=torch.long)
-            batch_hypo_end = torch.sum(self._beam_hyps_count[:i+1])
+            batch_hypo_end = torch.sum(self._beam_hyps_count[: i + 1])
             beam_scores = torch.cat(self._beam_scores)[batch_hypo_start:batch_hypo_end]
             sorted_next_scores, sorted_indices = torch.topk(beam_scores, len(beam_scores), largest=True)
             for j in range(self.num_beam_hyps_to_keep):
@@ -509,9 +666,7 @@ class BARTBeamSearchGenerator(BARTGenerator):
 
         attention_mask = attention_mask.index_select(0, expanded_return_idx)
 
-        last_hidden_state = last_hidden_state.index_select(
-            0, expanded_return_idx.to(last_hidden_state.device)
-        )
+        last_hidden_state = last_hidden_state.index_select(0, expanded_return_idx.to(last_hidden_state.device))
         return input_ids, attention_mask, last_hidden_state
 
     def adjust_logits_during_generation(self, logits, cur_len: int, max_length: int):
@@ -526,9 +681,9 @@ class BARTBeamSearchGenerator(BARTGenerator):
         """force one of token_ids to be generated by setting prob of all other tokens to 0 (logprob=-float("inf"))"""
         mask = torch.full_like(scores, 1, dtype=torch.bool)
         mask[:, token_id] = False
-        return scores.masked_fill(mask, -float('inf'))
+        return scores.masked_fill(mask, -float("inf"))
 
-    def _reorder_cache(self, past:List[torch.Tensor], beam_idx):
+    def _reorder_cache(self, past: List[torch.Tensor], beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
         reordered_decoder_past = []
@@ -537,14 +692,8 @@ class BARTBeamSearchGenerator(BARTGenerator):
         return reordered_decoder_past
 
     def beam_search(
-        self,
-        input_ids,
-        encoder_output,
-        attention_mask,
-        num_beams,
-        max_length,
-        pad_token_id: int,
-        eos_token_id: int):
+        self, input_ids, encoder_output, attention_mask, num_beams, max_length, pad_token_id: int, eos_token_id: int
+    ):
 
         batch_size = self.beam_scorer.batch_size
 
@@ -608,8 +757,12 @@ class BARTBeamSearchGenerator(BARTGenerator):
                 break
 
         sequences, sequence_scores = self.beam_scorer.finalize(
-            input_ids, beam_scores, next_tokens, next_indices,
-            pad_token_id=pad_token_id, eos_token_id=eos_token_id,
+            input_ids,
+            beam_scores,
+            next_tokens,
+            next_indices,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
         )
 
         return sequences
@@ -627,7 +780,9 @@ class BARTBeamSearchGenerator(BARTGenerator):
         encoder_output = self._encoder_forward(input_ids, attention_mask)
 
         input_ids = self._prepare_decoder_input_ids_for_generation(
-            input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id,
+            input_ids,
+            decoder_start_token_id=decoder_start_token_id,
+            bos_token_id=bos_token_id,
         )
 
         # from generation_utils.py
@@ -648,7 +803,10 @@ class BARTBeamSearchGenerator(BARTGenerator):
         )
 
         input_ids, attention_mask, encoder_output = self._expand_inputs_for_generation(
-            input_ids, attention_mask, encoder_output, expand_size=num_beams,
+            input_ids,
+            attention_mask,
+            encoder_output,
+            expand_size=num_beams,
         )
 
         return self.beam_search(
@@ -658,5 +816,5 @@ class BARTBeamSearchGenerator(BARTGenerator):
             num_beams=num_beams,
             max_length=max_length,
             pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id)
-
+            eos_token_id=eos_token_id,
+        )

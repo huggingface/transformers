@@ -1,8 +1,8 @@
-
 import io
 import numpy
 import onnx
 import os
+
 
 def is_equal_tensor_proto(a, b):
     name_a = a.name
@@ -11,7 +11,7 @@ def is_equal_tensor_proto(a, b):
     a.name = ""
     b.name = ""
 
-    res = (a == b)
+    res = a == b
 
     a.name = name_a
     b.name = name_b
@@ -72,7 +72,7 @@ def remove_dup_initializers(onnx_file_path):
         if i in dup_set:
             continue
 
-        for j in range(i+1, len(inits)):
+        for j in range(i + 1, len(inits)):
             if j in dup_set:
                 continue
             if is_equal_tensor_proto(inits[i], inits[j]):
@@ -88,7 +88,7 @@ def remove_dup_initializers(onnx_file_path):
                 elif dtype == 7 or dtype == 11:
                     mem_size *= 8
                 else:
-                    print('unexpected data type: ', dtype)
+                    print("unexpected data type: ", dtype)
                 total_reduced_size += mem_size
 
                 name_i = inits[i].name
@@ -100,12 +100,12 @@ def remove_dup_initializers(onnx_file_path):
                     dup_map[name_i] = [name_j]
                 ind_to_replace.append((j, i))
 
-    print('total reduced size: ', total_reduced_size / 1024 / 1024 / 1024, 'GB')
+    print("total reduced size: ", total_reduced_size / 1024 / 1024 / 1024, "GB")
 
-    ind_to_replace = sorted(ind_to_replace, key=lambda x : x[0])
+    ind_to_replace = sorted(ind_to_replace, key=lambda x: x[0])
     remove_dup_initializers_from_model(model, model, ind_to_replace)
 
-    optimized_model_file_name = 'optimized_' + model_file_name
+    optimized_model_file_name = "optimized_" + model_file_name
     new_model = os.path.join(model_file_folder, optimized_model_file_name)
     onnx.save(model, new_model)
 

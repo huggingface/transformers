@@ -49,8 +49,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-model_dict = {'facebook/bart-base' : BartForConditionalGeneration}
-tokenizer_dict = {'facebook/bart-base' : BartTokenizer}
+model_dict = {"facebook/bart-base": BartForConditionalGeneration}
+tokenizer_dict = {"facebook/bart-base": BartTokenizer}
 
 
 def parse_args():
@@ -62,9 +62,7 @@ def parse_args():
         "--max_length",
         type=int,
         default=5,
-        help=(
-            "The maximum total input sequence length after tokenization."
-        ),
+        help=("The maximum total input sequence length after tokenization."),
     )
     parser.add_argument(
         "--num_beams",
@@ -88,7 +86,7 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default='cpu',
+        default="cpu",
         help="Device where the model will be run",
     )
     parser.add_argument("--output_file_path", type=str, default=None, help="Where to store the final ONNX file.")
@@ -97,16 +95,18 @@ def parse_args():
 
     return args
 
-def load_model_tokenizer(model_name, device='cpu'):
+
+def load_model_tokenizer(model_name, device="cpu"):
     huggingface_model = model_dict[model_name].from_pretrained(model_name).to(device)
     tokenizer = tokenizer_dict[model_name].from_pretrained(model_name)
 
-    if model_name in ['facebook/bart-base']:
+    if model_name in ["facebook/bart-base"]:
         huggingface_model.config.no_repeat_ngram_size = 0
         huggingface_model.config.forced_bos_token_id = None
         huggingface_model.config.min_length = 0
 
     return huggingface_model, tokenizer
+
 
 def export_and_validate_model(model, tokenizer, onnx_file_path, num_beams, max_length):
     model.eval()
@@ -116,42 +116,54 @@ def export_and_validate_model(model, tokenizer, onnx_file_path, num_beams, max_l
 
     with torch.no_grad():
         ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt').to(model.device)
+        inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="pt").to(model.device)
 
         # Test export here.
         summary_ids = model.generate(
-                        inputs['input_ids'],
-                        attention_mask=inputs['attention_mask'],
-                        num_beams=num_beams,
-                        max_length=max_length,
-                        early_stopping=True,
-                        decoder_start_token_id=model.config.decoder_start_token_id)
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            num_beams=num_beams,
+            max_length=max_length,
+            early_stopping=True,
+            decoder_start_token_id=model.config.decoder_start_token_id,
+        )
 
         if not ort_sess:
-            torch.onnx.export(onnx_bart,
-                (inputs['input_ids'], inputs['attention_mask'], num_beams, max_length, model.config.decoder_start_token_id),
+            torch.onnx.export(
+                onnx_bart,
+                (
+                    inputs["input_ids"],
+                    inputs["attention_mask"],
+                    num_beams,
+                    max_length,
+                    model.config.decoder_start_token_id,
+                ),
                 onnx_file_path,
                 opset_version=14,
-                input_names=['input_ids', 'attention_mask', 'num_beams', 'max_length', 'decoder_start_token_id'],
-                output_names = ['output_ids'],
+                input_names=["input_ids", "attention_mask", "num_beams", "max_length", "decoder_start_token_id"],
+                output_names=["output_ids"],
                 dynamic_axes={
-                    'input_ids': {0: 'batch', 1: 'seq'},
-                    'output_ids': {0: 'batch', 1: 'seq_out'},
+                    "input_ids": {0: "batch", 1: "seq"},
+                    "output_ids": {0: "batch", 1: "seq_out"},
                 },
                 verbose=False,
                 strip_doc_string=False,
-                example_outputs=summary_ids)
+                example_outputs=summary_ids,
+            )
 
             new_onnx_file_path = remove_dup_initializers(os.path.abspath(onnx_file_path))
 
             ort_sess = onnxruntime.InferenceSession(new_onnx_file_path)
-            ort_out = ort_sess.run(None, {
-                'input_ids': inputs['input_ids'].cpu().numpy(),
-                'attention_mask': inputs['attention_mask'].cpu().numpy(),
-                'num_beams': np.array(num_beams),
-                'max_length': np.array(max_length),
-                'decoder_start_token_id': np.array(model.config.decoder_start_token_id)
-            })
+            ort_out = ort_sess.run(
+                None,
+                {
+                    "input_ids": inputs["input_ids"].cpu().numpy(),
+                    "attention_mask": inputs["attention_mask"].cpu().numpy(),
+                    "num_beams": np.array(num_beams),
+                    "max_length": np.array(max_length),
+                    "decoder_start_token_id": np.array(model.config.decoder_start_token_id),
+                },
+            )
 
             np.testing.assert_allclose(summary_ids.cpu().numpy(), ort_out[0], rtol=1e-3, atol=1e-3)
 
@@ -183,12 +195,12 @@ def main():
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
     if args.device:
-        if args.device == 'cuda' and not torch.cuda.is_available():
+        if args.device == "cuda" and not torch.cuda.is_available():
             raise ValueError("CUDA is not available in this server.")
 
         local_device = torch.device(args.device)
     else:
-        local_device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        local_device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     model.to(local_device)
 
@@ -201,7 +213,7 @@ def main():
     if args.output_file_path:
         output_name = args.output_file_path
     else:
-        output_name = 'onnx_model_{}.onnx'.format(datetime.now().utcnow().microsecond)
+        output_name = "onnx_model_{}.onnx".format(datetime.now().utcnow().microsecond)
 
     export_and_validate_model(model, tokenizer, output_name, local_num_beams, local_max_length)
 
