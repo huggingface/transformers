@@ -393,8 +393,8 @@ class GPTNeoPreTrainedModel(PreTrainedModel, ParallelizationMixin):
         if isinstance(module, GPTNeoModel):
             module.gradient_checkpointing = value
 
-    def _get_layer_policy(self):
-        return GPTNeoLayerPolicy
+    def _get_layer_policies(self):
+        return [GPTNeoLayerPolicy]
 
 
 GPT_NEO_START_DOCSTRING = r"""

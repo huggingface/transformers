@@ -844,7 +844,6 @@ class ParallelizationEngine(object):
         self,
         policy: LayerPolicy,
         hold_params: bool,
-        skip_bias_add: bool,
         vocab_parallel_embedding: bool,
         additional_layers: List[Layer] = None,
     ):
@@ -1110,7 +1109,7 @@ class ParallelizationMixin(object):
     def _get_base_model(self):
         raise NotImplementedError
 
-    def _get_layer_policy(self):
+    def _get_layer_policies(self):
         raise NotImplementedError
 
     def _get_head_layers(self):
@@ -1141,17 +1140,18 @@ class ParallelizationMixin(object):
             pipeline_model_parallel_size=pipeline_model_parallel_size,
         )
 
-        engine = ParallelizationEngine(
-            hold_params=False,
-            policy=self._get_layer_policy(),
-            vocab_parallel_embedding=vocab_parallel_embedding,
-            additional_layers=self._get_head_layers(),
-        )
+        for policy in self._get_layer_policies():
+            engine = ParallelizationEngine(
+                hold_params=False,
+                policy=policy,
+                vocab_parallel_embedding=vocab_parallel_embedding,
+                additional_layers=self._get_head_layers(),
+            )
 
-        engine.parallelize(
-            model=self._get_base_model(),
-            mpu=mpu,
-        )
+            engine.parallelize(
+                model=self._get_base_model(),
+                mpu=mpu,
+            )
 
         setattr(self, "mpu", mpu)
         # This allows the Trainer to call the MPU for data + model parallelism
