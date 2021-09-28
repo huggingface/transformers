@@ -26,8 +26,7 @@ class PushToHubCallback(Callback):
         if self.save_strategy == IntervalStrategy.STEPS and (not isinstance(save_steps, int) or save_steps <= 0):
             raise ValueError("Please supply a positive integer argument for save_steps when save_strategy == 'steps'!")
         self.save_steps = save_steps
-        if isinstance(output_dir, str):
-            output_dir = Path(output_dir)
+        output_dir = Path(output_dir)
         if hub_model_id is None:
             repo_name = get_full_repo_name(output_dir.name, token=hub_token)
         else:
