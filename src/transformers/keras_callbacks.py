@@ -39,7 +39,7 @@ class PushToHubCallback(Callback):
 
     def on_train_batch_end(self, batch, logs=None):
         if self.save_strategy == IntervalStrategy.STEPS and batch + 1 % self.save_steps == 0:
-            if self.last_job is not None and not self.last_job.is_done():
+            if self.last_job is not None and not self.last_job.is_done:
                 return  # The last upload is still running, don't start another
             self.model.save_pretrained(self.output_dir)
             if self.tokenizer is not None:
@@ -50,7 +50,7 @@ class PushToHubCallback(Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         if self.save_strategy == IntervalStrategy.EPOCH:
-            if self.last_job is not None and not self.last_job.is_done():
+            if self.last_job is not None and not self.last_job.is_done:
                 return  # The last upload is still running, don't start another
             self.model.save_pretrained(self.output_dir)
             if self.tokenizer is not None:
@@ -60,9 +60,9 @@ class PushToHubCallback(Callback):
             )
 
     def on_train_end(self, logs=None):
-        if self.last_job is not None and not self.last_job.is_done():
+        if self.last_job is not None and not self.last_job.is_done:
             print("Waiting for existing upload to finish...")
-            while not self.last_job.is_done():
+            while not self.last_job.is_done:
                 sleep(1)
         self.model.save_pretrained(self.output_dir)
         if self.tokenizer is not None:
