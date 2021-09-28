@@ -1,13 +1,13 @@
 from pathlib import Path
-from typing import Optional, Union
 from time import sleep
+from typing import Optional, Union
 
 from tensorflow.keras.callbacks import Callback
 
 from huggingface_hub import Repository
-from .file_utils import get_full_repo_name
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
+from .file_utils import get_full_repo_name
 
 
 class PushToHubCallback(Callback):
@@ -20,6 +20,31 @@ class PushToHubCallback(Callback):
         hub_model_id: Optional[str] = None,
         hub_token: Optional[str] = None,
     ):
+        """
+        output_dir (:obj:`str`):
+            The output directory where the model predictions and checkpoints will be written.
+                    The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
+        save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`,
+        `optional`, defaults to :obj:`"epoch"`):
+            The checkpoint save strategy to adopt during training. Possible values are:
+
+                * :obj:`"no"`: No save is done during training.
+                * :obj:`"epoch"`: Save is done at the end of each epoch.
+                * :obj:`"steps"`: Save is done every :obj:`save_steps`
+        save_steps (:obj:`int`, `optional`):
+            The number of steps between saves when using the "steps" save_strategy.
+        tokenizer: (:obj:`PreTrainedTokenizerBase`, `optional`):
+            The tokenizer used by the model. If supplied, will be uploaded to the repo alongside the weights.
+        hub_model_id (:obj:`str`, `optional`):
+            The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
+            name, for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member
+            of with :obj:`"organization_name/model"`.
+            Will default to :obj:`user_name/output_dir_name` with `output_dir_name` being the name of
+            :obj:`output_dir`.
+        hub_token (:obj:`str`, `optional`):
+            The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
+            :obj:`huggingface-cli login`.
+        """
         super().__init__()
         if isinstance(save_strategy, str):
             save_strategy = IntervalStrategy(save_strategy.lower())
