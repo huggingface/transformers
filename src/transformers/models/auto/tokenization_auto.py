@@ -37,6 +37,7 @@ from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     config_class_to_model_type,
+    model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
 
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
 else:
     TOKENIZER_MAPPING_NAMES = OrderedDict(
         [
+            ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -120,6 +122,7 @@ else:
             ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
+            ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "dpr",
                 (
@@ -152,6 +155,7 @@ else:
             ("rag", ("RagTokenizer", None)),
             ("xlm-prophetnet", ("XLMProphetNetTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
+            ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
             ("m2m_100", ("M2M100Tokenizer" if is_sentencepiece_available() else None, None)),
             ("prophetnet", ("ProphetNetTokenizer", None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
@@ -199,6 +203,20 @@ else:
                     "MBart50TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "rembert",
+                (
+                    "RemBertTokenizer" if is_sentencepiece_available() else None,
+                    "RemBertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "clip",
+                (
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
         ]
     )
 
@@ -213,10 +231,12 @@ def tokenizer_class_from_name(class_name: str):
 
     for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
         if class_name in tokenizers:
-            break
+            module_name = model_type_to_module_name(module_name)
 
-    module = importlib.import_module(f".{module_name}", "transformers.models")
-    return getattr(module, class_name)
+            module = importlib.import_module(f".{module_name}", "transformers.models")
+            return getattr(module, class_name)
+
+    return None
 
 
 def get_tokenizer_config(
@@ -382,6 +402,8 @@ class AutoTokenizer:
                 facebook/rag-token-base), specify it here.
             use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to try to load the fast version of the tokenizer.
+            tokenizer_type (:obj:`str`, `optional`):
+                Tokenizer type to be loaded.
             kwargs (additional keyword arguments, `optional`):
                 Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like
                 ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
@@ -405,8 +427,33 @@ class AutoTokenizer:
         kwargs["_from_auto"] = True
 
         use_fast = kwargs.pop("use_fast", True)
+        tokenizer_type = kwargs.pop("tokenizer_type", None)
 
-        # First, let's try to use the tokenizer_config file to get the tokenizer class.
+        # First, let's see whether the tokenizer_type is passed so that we can leverage it
+        if tokenizer_type is not None:
+            tokenizer_class = None
+            tokenizer_class_tuple = TOKENIZER_MAPPING_NAMES.get(tokenizer_type, None)
+
+            if tokenizer_class_tuple is None:
+                raise ValueError(
+                    f"Passed `tokenizer_type` {tokenizer_type} does not exist. `tokenizer_type` should be one of "
+                    f"{', '.join(c for c in TOKENIZER_MAPPING_NAMES.keys())}."
+                )
+
+            tokenizer_class_name, tokenizer_fast_class_name = tokenizer_class_tuple
+
+            if use_fast and tokenizer_fast_class_name is not None:
+                tokenizer_class = tokenizer_class_from_name(tokenizer_fast_class_name)
+
+            if tokenizer_class is None:
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_name)
+
+            if tokenizer_class is None:
+                raise ValueError(f"Tokenizer class {tokenizer_class_name} is not currently imported.")
+
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         config_tokenizer_class = tokenizer_config.get("tokenizer_class")
 

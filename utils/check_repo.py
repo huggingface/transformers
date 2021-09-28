@@ -97,6 +97,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "FlaxBeitForMaskedImageModeling",
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
     "CLIPVisionModel",
@@ -155,6 +156,7 @@ def get_model_modules():
         "modeling_retribert",
         "modeling_utils",
         "modeling_flax_auto",
+        "modeling_flax_encoder_decoder",
         "modeling_flax_utils",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
@@ -226,6 +228,7 @@ def get_model_test_files():
     _ignore_files = [
         "test_modeling_common",
         "test_modeling_encoder_decoder",
+        "test_modeling_flax_encoder_decoder",
         "test_modeling_marian",
         "test_modeling_tf_common",
     ]

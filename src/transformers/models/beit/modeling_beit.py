@@ -432,6 +432,7 @@ class BeitEncoder(nn.Module):
                 for i in range(config.num_hidden_layers)
             ]
         )
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -450,7 +451,7 @@ class BeitEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -494,6 +495,7 @@ class BeitPreTrainedModel(PreTrainedModel):
 
     config_class = BeitConfig
     base_model_prefix = "beit"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -510,6 +512,10 @@ class BeitPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, BeitEncoder):
+            module.gradient_checkpointing = value
 
 
 BEIT_START_DOCSTRING = r"""
@@ -667,7 +673,8 @@ class BeitPooler(nn.Module):
 
 
 @add_start_docstrings(
-    "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).", BEIT_START_DOCSTRING
+    "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).",
+    BEIT_START_DOCSTRING,
 )
 class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def __init__(self, config):
@@ -695,6 +702,9 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         return_dict=None,
     ):
         r"""
+        bool_masked_pos (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, num_patches)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
@@ -722,6 +732,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
 
         outputs = self.beit(
             pixel_values,
+            bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
