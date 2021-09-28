@@ -26,8 +26,6 @@ import torch.distributed as dist
 from torch import Tensor
 from torch.autograd.function import Function
 
-from .configuration_utils import PretrainedConfig
-
 
 class MPU(object):
     """
@@ -1199,7 +1197,7 @@ class ParallelizationMixin(object):
     @classmethod
     def from_config_with_parallel(
         cls,
-        config: PretrainedConfig,
+        config,
         tensor_model_parallel_size: int = 1,
         pipeline_model_parallel_size: int = 1,
         vocab_parallel_embedding: bool = None,
