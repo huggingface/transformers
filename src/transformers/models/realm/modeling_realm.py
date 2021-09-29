@@ -89,29 +89,32 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         arrays.append(array)
     
     for name, array in zip(names, arrays):
-        if "reader" in name:
-            is_reader_checkpoint=True
-
-    for name, array in zip(names, arrays):
-        # For embedder and retriever
-        embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
-        name = name.replace("module/module/module/bert/", f"{embedder_prefix}bert/")
-        name = name.replace("module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
-        name = name.replace("module/module/dense/", f"{embedder_prefix}cls/dense/")
-        name = name.replace("module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
-
         # For reader
-        if is_reader_checkpoint and isinstance(model, RealmReader) and "reader" not in name:
-            logger.info(f"Skipping {name} as the it is not reader's parameter")
+        if isinstance(model, RealmReader) and "reader" not in name:
+            logger.info(f"Skipping {name} as it is not {model.__class__.__name__}'s parameter")
+            continue
+        elif not isinstance(model, RealmReader) and "reader" in name:
+            logger.info(f"Skipping {name} as it is not {model.__class__.__name__}'s parameter")
             continue
         name = name.replace("reader/module/bert/", "bert/")
         name = name.replace("reader/module/cls/", "cls/")
         name = name.replace("reader/dense/", "qa_outputs/dense_intermediate/")
         name = name.replace("reader/dense_1/", "qa_outputs/dense_output/")
         name = name.replace("reader/layer_normalization", "qa_outputs/layer_normalization")
-
-        ## For block_emb
-        #name = name.replace("block_emb", "block_emb")
+        
+        
+        # For embedder and retriever
+        embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
+        name = name.replace("module/module/module/bert/", f"{embedder_prefix}bert/")
+        name = name.replace("module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
+        name = name.replace("module/module/dense/", f"{embedder_prefix}cls/dense/")
+        name = name.replace("module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
+        
+        # Fine-tuned checkpoints
+        name = name.replace("module/module/module/module/bert/", f"{embedder_prefix}bert/")
+        name = name.replace("module/module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
+        name = name.replace("module/module/module/dense/", f"{embedder_prefix}cls/dense/")
+        name = name.replace("module/module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
 
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
