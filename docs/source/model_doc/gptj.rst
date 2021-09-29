@@ -28,7 +28,7 @@ Tips:
   RAM: 1x for initial weights and another 1x to load the checkpoint. So for GPT-J it would take at least 48GB of CPU
   RAM to just load the model. To reduce the CPU RAM usage there are a few options. The ``torch_dtype`` argument can be
   used to initialize the model in half-precision. And the ``low_cpu_mem_usage`` argument can be used to keep the RAM
-  usage to 1x. There is also a `fp16 branch<https://huggingface.co/EleutherAI/gpt-j-6B/tree/float16>__` which stores
+  usage to 1x. There is also a `fp16 branch<https://huggingface.co/EleutherAI/gpt-j-6B/tree/float16>`__ which stores
   the fp16 weights, which could be used to further minimize the RAM usage. Combining all this it should take roughly
   12.1GB of CPU RAM to load the model.
 
