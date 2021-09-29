@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization class for Blenderbot."""
+"""Fast tokenization class for Blenderbot."""
 
 from typing import TYPE_CHECKING, List, Optional
 
@@ -94,19 +94,3 @@ class BlenderbotTokenizerFast(RobertaTokenizerFast):
             input_ids = input_ids[-self.model_max_length :]
             logger.warning(f"Trimmed input from conversation as it was longer than {self.model_max_length} tokens.")
         return input_ids
-
-
-def get_pairs(word):
-    """
-    Return set of symbol pairs in a word.
-
-    Word is represented as tuple of symbols (symbols being variable-length strings).
-    """
-    pairs = set()
-    prev_char = word[0]
-    for char in word[1:]:
-        pairs.add((prev_char, char))
-        prev_char = char
-
-    pairs = set(pairs)
-    return pairs
