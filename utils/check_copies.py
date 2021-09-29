@@ -338,9 +338,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
         r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
     # This regex is used to synchronize link.
-    _re_sync_link = re.compile(
-        r"\*\*\[[^\]]*\]\([^\)]*\)\*\*"
-    )
+    _re_sync_link = re.compile(r"\*\*\[[^\]]*\]\([^\)]*\)\*\*")
 
     num_models_equal = True
 
@@ -364,7 +362,9 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
             localized_model_index[title] = re.sub(_re_capture_meta, _rep, model + " ")
         else:
             # Synchronize link
-            localized_model_index[title] = re.sub(_re_sync_link, f"**[{title}]({model_link})**", localized_model_index[title], count=1)
+            localized_model_index[title] = re.sub(
+                _re_sync_link, f"**[{title}]({model_link})**", localized_model_index[title], count=1
+            )
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
