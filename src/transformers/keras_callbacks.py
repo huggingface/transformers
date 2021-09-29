@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from time import sleep
 from typing import Optional, Union
@@ -8,6 +9,9 @@ from huggingface_hub import Repository
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
 from .file_utils import get_full_repo_name
+
+
+logger = logging.getLogger(__name__)
 
 
 class PushToHubCallback(Callback):
@@ -84,7 +88,7 @@ class PushToHubCallback(Callback):
 
     def on_train_end(self, logs=None):
         if self.last_job is not None and not self.last_job.is_done:
-            print("Waiting for existing upload to finish...")
+            logger.info("Waiting for existing upload to finish...")
             while not self.last_job.is_done:
                 sleep(1)
         self.model.save_pretrained(self.output_dir)
