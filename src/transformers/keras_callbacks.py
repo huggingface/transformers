@@ -22,8 +22,8 @@ class PushToHubCallback(Callback):
     ):
         """
         output_dir (:obj:`str`):
-            The output directory where the model predictions and checkpoints will be written. The name of the
-            repository to keep in sync with the local `output_dir`. Should be the whole repository
+            The output directory where the model predictions and checkpoints will be written and synced with the
+            repository on the Hub.
         save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"epoch"`):
             The checkpoint save strategy to adopt during training. Possible values are:
 
