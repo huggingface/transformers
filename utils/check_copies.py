@@ -354,7 +354,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
             raise AttributeError("A model name in localized READMEs cannot be recognized.")
 
     for model in model_list.strip().split("\n"):
-        title, model_link = re.search(_re_capture_title_link, model).groups()
+        title, model_link = _re_capture_title_link.search(model).groups()
         if title not in localized_model_index:
             num_models_equal = False
             # Add an anchor white space behind a model description string for regex.
@@ -362,8 +362,8 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
             localized_model_index[title] = re.sub(_re_capture_meta, _rep, model + " ")
         else:
             # Synchronize link
-            localized_model_index[title] = re.sub(
-                _re_capture_title_link, f"**[{title}]({model_link})**", localized_model_index[title], count=1
+            localized_model_index[title] = _re_capture_title_link.sub(
+                f"**[{title}]({model_link})**", localized_model_index[title], count=1
             )
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
@@ -446,12 +446,11 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
             )
             with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n") as f:
                 f.writelines(lines[:start_index] + [converted_md] + lines[end_index:])
-        else:
-            if not num_models_equal:
-                raise ValueError(
-                    f"The model list in the README changed and the list in `{filename}` has not been updated. Run "
-                    "`make fix-copies` to fix this."
-                )
+        elif not num_models_equal:
+            raise ValueError(
+                f"The model list in the README changed and the list in `{filename}` has not been updated. Run "
+                "`make fix-copies` to fix this."
+            )
 
 
 if __name__ == "__main__":
