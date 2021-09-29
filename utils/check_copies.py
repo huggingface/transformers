@@ -359,7 +359,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
             num_models_equal = False
             # Add an anchor white space behind a model description string for regex.
             # If metadata cannot be captured, the English version will be directly copied.
-            localized_model_index[title] = re.sub(_re_capture_meta, _rep, model + " ")
+            localized_model_index[title] = _re_capture_meta.sub(_rep, model + " ")
         else:
             # Synchronize link
             localized_model_index[title] = _re_capture_title_link.sub(
