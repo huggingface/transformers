@@ -40,7 +40,7 @@ SRC_DIRS = [
         "translation",
         "image-classification",
         "speech-recognition",
-        "audio-classification"
+        "audio-classification",
     ]
 ]
 sys.path.extend(SRC_DIRS)
