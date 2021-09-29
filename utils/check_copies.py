@@ -338,7 +338,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
         r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
     # This regex is used to synchronize link.
-    _re_sync_link = re.compile(r"\*\*\[[^\]]*\]\([^\)]*\)\*\*")
+    _re_capture_title_link = re.compile(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*")
 
     num_models_equal = True
 
@@ -354,7 +354,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
             raise AttributeError("A model name in localized READMEs cannot be recognized.")
 
     for model in model_list.strip().split("\n"):
-        title, model_link = re.search(r"\*\*\[([^\]]*)\]\(([^\)]*)\)", model).groups()
+        title, model_link = re.search(_re_capture_title_link, model).groups()
         if title not in localized_model_index:
             num_models_equal = False
             # Add an anchor white space behind a model description string for regex.
@@ -363,7 +363,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
         else:
             # Synchronize link
             localized_model_index[title] = re.sub(
-                _re_sync_link, f"**[{title}]({model_link})**", localized_model_index[title], count=1
+                _re_capture_title_link, f"**[{title}]({model_link})**", localized_model_index[title], count=1
             )
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
