@@ -964,6 +964,14 @@ class HubertForCTC(HubertPreTrainedModel):
 
         self.hubert = HubertModel(config)
         self.dropout = nn.Dropout(config.final_dropout)
+
+        if config.vocab_size is None:
+            raise ValueError(
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `HubertForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
+            )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()
