@@ -136,6 +136,9 @@ class FNetModelTester:
 
     @require_torch
     def create_and_check_fourier_transform(self, config):
+        # Current implementation test the older version of implementation
+        # Verifies all kinds of Fourier Transformers match
+        config.use_latest = False
         hidden_states = floats_tensor([self.batch_size, self.seq_length, config.hidden_size])
         transform = FNetBasicFourierTransform(config)
         fftn_output = transform(hidden_states)
@@ -145,8 +148,14 @@ class FNetModelTester:
             transform = FNetBasicFourierTransform(config)
             dft_output = transform(hidden_states)
 
+        config.max_position_embeddings = 4097
+        transform = FNetBasicFourierTransform(config)
+        fft_output = transform(hidden_states)
+
         if is_scipy_available():
             self.parent.assertTrue(torch.allclose(fftn_output[0][0], dft_output[0][0], atol=1e-4))
+            self.parent.assertTrue(torch.allclose(fft_output[0][0], dft_output[0][0], atol=1e-4))
+        self.parent.assertTrue(torch.allclose(fftn_output[0][0], fft_output[0][0], atol=1e-4))
 
     def create_and_check_model(self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels):
         model = FNetModel(config=config)

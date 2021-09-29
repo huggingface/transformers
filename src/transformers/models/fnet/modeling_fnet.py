@@ -82,6 +82,22 @@ def two_dim_matmul(x, matrix_dim_one, matrix_dim_two):
     return _two_dim_matmul(x, matrix_dim_one, matrix_dim_two)
 
 
+def fftn(x):
+    """
+    Applies n-dimensional Fast Fourier Transform (FFT) to input array.
+
+    Args:
+        x: Input n-dimensional array.
+
+    Returns:
+        n-dimensional Fourier transform of input n-dimensional array.
+    """
+    out = x
+    for axis in reversed(range(x.ndim)[1:]):  # We don't need to apply FFT to last axis
+        out = torch.fft.fft(out, axis=axis)
+    return out
+
+
 class FNetEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -150,28 +166,54 @@ class FNetBasicFourierTransform(nn.Module):
         self._init_fourier_transform(config)
 
     def _init_fourier_transform(self, config):
-        if config.use_fft:
-            if self.config.actual_seq_length > 4096 and not math.log2(self.config.actual_seq_length).is_integer():
-                raise ValueError(
-                    f"For larger seuence lengths (>4096), the actual sequence length {self.config.actual_seq_length} must be a power of 2."
-                )
-            self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
-        else:
-            if is_scipy_available():
-                self.register_buffer(
-                    "dft_mat_hidden", torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64)
-                )
-                self.register_buffer(
-                    "dft_mat_seq", torch.tensor(linalg.dft(config.actual_seq_length), dtype=torch.complex64)
-                )
-                self.fourier_transform = partial(
-                    two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
-                )
-            else:
-                logging.warning(
-                    "SciPy is needed for DFT matrix calculation and is not found. Using n-dimensional fast fourier transform instead."
-                )
+        if config.use_latest:
+            if config.use_fft:
+                if self.config.actual_seq_length > 4096 and not math.log2(self.config.actual_seq_length).is_integer():
+                    raise ValueError(
+                        f"For larger seuence lengths (>4096), the actual sequence length {self.config.actual_seq_length} must be a power of 2."
+                    )
                 self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
+            else:
+                if is_scipy_available():
+                    self.register_buffer(
+                        "dft_mat_hidden", torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64)
+                    )
+                    self.register_buffer(
+                        "dft_mat_seq", torch.tensor(linalg.dft(config.actual_seq_length), dtype=torch.complex64)
+                    )
+                    self.fourier_transform = partial(
+                        two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
+                    )
+                else:
+                    logging.warning(
+                        "SciPy is needed for DFT matrix calculation and is not found. Using n-dimensional fast fourier transform instead."
+                    )
+                    self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
+        else:
+            logging.warning(
+                "`config.use_latest` is set to False. The older version of Fourier Transform initialization will be used. To use the latest version, please set `config.use_latest` to True."
+            )
+
+            if not config.use_tpu_fourier_optimizations:
+                self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
+            elif config.max_position_embeddings <= 4096:
+                if is_scipy_available():
+                    self.register_buffer(
+                        "dft_mat_hidden", torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64)
+                    )
+                    self.register_buffer(
+                        "dft_mat_seq", torch.tensor(linalg.dft(config.tpu_short_seq_length), dtype=torch.complex64)
+                    )
+                    self.fourier_transform = partial(
+                        two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
+                    )
+                else:
+                    logging.warning(
+                        "SciPy is needed for DFT matrix calculation and is not found. Using TPU optimized fast fourier transform instead."
+                    )
+                    self.fourier_transform = fftn
+            else:
+                self.fourier_transform = fftn
 
     def forward(self, hidden_states):
 
