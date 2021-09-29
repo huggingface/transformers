@@ -337,6 +337,8 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
     _re_capture_meta = re.compile(
         r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
+    # This regex is used to synchronize link.
+    _re_capture_title_link = re.compile(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*")
 
     num_models_equal = True
 
@@ -352,12 +354,17 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
             raise AttributeError("A model name in localized READMEs cannot be recognized.")
 
     for model in model_list.strip().split("\n"):
-        title = re.search(r"\*\*\[([^\]]*)", model).groups()[0]
+        title, model_link = _re_capture_title_link.search(model).groups()
         if title not in localized_model_index:
             num_models_equal = False
             # Add an anchor white space behind a model description string for regex.
             # If metadata cannot be captured, the English version will be directly copied.
-            localized_model_index[title] = re.sub(_re_capture_meta, _rep, model + " ")
+            localized_model_index[title] = _re_capture_meta.sub(_rep, model + " ")
+        else:
+            # Synchronize link
+            localized_model_index[title] = _re_capture_title_link.sub(
+                f"**[{title}]({model_link})**", localized_model_index[title], count=1
+            )
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
@@ -430,19 +437,20 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
 
     for converted_md_list in converted_md_lists:
         filename, num_models_equal, converted_md, _start_prompt, _end_prompt = converted_md_list
-        if not num_models_equal:
-            if overwrite:
-                _, start_index, end_index, lines = _find_text_in_file(
-                    filename=os.path.join(REPO_PATH, filename), start_prompt=_start_prompt, end_prompt=_end_prompt
-                )
-                with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n") as f:
-                    f.writelines(lines[:start_index] + [converted_md] + lines[end_index:])
 
-            else:
-                raise ValueError(
-                    f"The model list in the README changed and the list in `{filename}` has not been updated. Run "
-                    "`make fix-copies` to fix this."
-                )
+        if filename == "README.md":
+            continue
+        if overwrite:
+            _, start_index, end_index, lines = _find_text_in_file(
+                filename=os.path.join(REPO_PATH, filename), start_prompt=_start_prompt, end_prompt=_end_prompt
+            )
+            with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n") as f:
+                f.writelines(lines[:start_index] + [converted_md] + lines[end_index:])
+        elif not num_models_equal:
+            raise ValueError(
+                f"The model list in the README changed and the list in `{filename}` has not been updated. Run "
+                "`make fix-copies` to fix this."
+            )
 
 
 if __name__ == "__main__":
