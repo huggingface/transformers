@@ -24,8 +24,7 @@ class PushToHubCallback(Callback):
         output_dir (:obj:`str`):
             The output directory where the model predictions and checkpoints will be written. The name of the
             repository to keep in sync with the local `output_dir`. Should be the whole repository
-        save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`,
-        `optional`, defaults to :obj:`"epoch"`):
+        save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"epoch"`):
             The checkpoint save strategy to adopt during training. Possible values are:
 
                 * :obj:`"no"`: No save is done during training.
@@ -33,7 +32,7 @@ class PushToHubCallback(Callback):
                 * :obj:`"steps"`: Save is done every :obj:`save_steps`
         save_steps (:obj:`int`, `optional`):
             The number of steps between saves when using the "steps" save_strategy.
-        tokenizer: (:obj:`PreTrainedTokenizerBase`, `optional`):
+        tokenizer (:obj:`PreTrainedTokenizerBase`, `optional`):
             The tokenizer used by the model. If supplied, will be uploaded to the repo alongside the weights.
         hub_model_id (:obj:`str`, `optional`):
             The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
