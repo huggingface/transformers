@@ -42,6 +42,7 @@ Ready-made configurations include the following models:
 - BERT
 - DistilBERT
 - GPT-2
+- LayoutLM
 - RoBERTa
 - T5
 - XLM-RoBERTa
