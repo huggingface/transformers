@@ -230,8 +230,6 @@ def _compute_mask_indices(
         no_overlap: if false, will switch to an alternative recursive algorithm that prevents spans from overlapping
         min_space: only used if no_overlap is True, this is how many elements to keep unmasked between spans
     """
-    np.random.seed(0)
-
     batch_size, sequence_length = shape
     mask = np.full((batch_size, sequence_length), False)
 
@@ -434,12 +432,6 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
             padding=config.num_conv_pos_embeddings // 2,
             groups=config.num_conv_pos_embedding_groups,
         )
-
-        # special init before magnitude and direction is decoupled
-        nn.init.normal_(
-            self.conv.weight, mean=0, std=2 * math.sqrt(1 / (config.num_conv_pos_embeddings * config.hidden_size))
-        )
-        nn.init.constant_(self.conv.bias, 0)
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -1021,9 +1013,12 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
         elif isinstance(module, Wav2Vec2PositionalConvEmbedding):
-            # layer needs special initialization in class `Wav2Vec2PositionalConvEmbedding`
-            pass
-
+            nn.init.normal_(module.conv.weight, mean=0, std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)))
+            nn.init.constant_(module.conv.bias, 0)
+        elif isinstance(module, Wav2Vec2FeatureProjection):
+            k = math.sqrt(1 / module.projection.in_features)
+            nn.init.uniform_(module.projection.weight, a=-k, b=k)
+            nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
@@ -1270,9 +1265,11 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         self.quantizer = Wav2Vec2GumbelVectorQuantizer(config)
         self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
-        self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
 
         self.init_weights()
+
+        # make sure that project_hid is not included in `init_weights`
+        self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
 
     def set_gumbel_temperature(self, temperature: int):
         """
@@ -1317,7 +1314,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # generate indices of the positive vectors themselves, repeat them `num_negatives` times
 
         with torch.no_grad():
-            sampled_negative_indices = torch.randint(0, sequence_length - 1, size=(batch_size, num_negatives * sequence_length,))
+            sampled_negative_indices = torch.randint(0, sequence_length - 1, size=(batch_size, num_negatives * sequence_length), device=features.device)
 
             feature_indices = (
                 torch.arange(sequence_length, device=features.device)[:, None]
