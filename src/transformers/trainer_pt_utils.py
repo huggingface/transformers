@@ -775,9 +775,9 @@ class IterableDatasetShard(IterableDataset):
     def __len__(self):
         # Will raise an error if the underlying dataset is not sized.
         if self.drop_last:
-            return len(self.dataset) // self.num_processes
+            return (len(self.dataset) // (self.batch_size * self.num_processes)) * self.batch_size
         else:
-            return math.ceil(len(self.dataset) / self.num_processes)
+            return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
 
 
 # In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
