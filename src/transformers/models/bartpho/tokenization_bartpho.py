@@ -45,8 +45,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"vinai/bartpho-syllable": 1024}
 
 class BartphoTokenizer(PreTrainedTokenizer):
     """
-    Adapted from :class:`~transformers.XLMRobertaTokenizer`. Based on
-    `SentencePiece <https://github.com/google/sentencepiece>`__.
+    Adapted from :class:`~transformers.XLMRobertaTokenizer`. Based on `SentencePiece
+    <https://github.com/google/sentencepiece>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
