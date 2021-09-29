@@ -95,6 +95,7 @@ from .trainer_pt_utils import (
     LengthGroupedSampler,
     SequentialDistributedSampler,
     ShardSampler,
+    _get_learning_rate,
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
@@ -266,8 +267,6 @@ class Trainer:
           while in ``train``)
 
     """
-
-    from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics, save_state
 
     def __init__(
         self,
@@ -1470,7 +1469,7 @@ class Trainer:
             tr_loss -= tr_loss
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
-            logs["learning_rate"] = self._get_learning_rate()
+            logs["learning_rate"] = _get_learning_rate(self)
 
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
