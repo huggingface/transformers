@@ -39,7 +39,7 @@ You can open any page of the documentation as a notebook in colab (there is a bu
 | [Multilingual models](https://github.com/huggingface/notebooks/blob/master/transformers_doc/multilingual.ipynb)  | How to use the multilingual models of the library | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/transformers_doc/multilingual.ipynb) |
 | [Fine-tuning with custom datasets](https://github.com/huggingface/notebooks/blob/master/transformers_doc/custom_datasets.ipynb)  | How to fine-tune a pretrained model on various tasks | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/transformers_doc/custom_datasets.ipynb) |
 
-### Examples
+### PyTorch Examples
 
 | Notebook     |      Description      |   |
 |:----------|:-------------|------:|
@@ -57,6 +57,20 @@ You can open any page of the documentation as a notebook in colab (there is a bu
 | [How to export model to ONNX](https://github.com/huggingface/notebooks/blob/master/examples/onnx-export.ipynb) | Highlight how to export and run inference workloads through ONNX |
 | [How to use Benchmarks](https://github.com/huggingface/transformers/notebooks/blob/master/examples/benchmark.ipynb) | How to benchmark models with transformers | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/benchmark.ipynb)|
 | [Reformer](https://github.com/huggingface/blog/blob/master/notebooks/03_reformer.ipynb) | How Reformer pushes the limits of language modeling | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/patrickvonplaten/blog/blob/master/notebooks/03_reformer.ipynb)|
+
+### TensorFlow Examples
+
+| Notebook     |      Description      |   |
+|:----------|:-------------|------:|
+| [Train your tokenizer](https://github.com/huggingface/notebooks/blob/master/examples/tokenizer_training.ipynb)  | How to train and use your very own tokenizer  |[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/tokenizer_training.ipynb) |
+| [Train your language model](https://github.com/huggingface/notebooks/blob/master/examples/language_modeling_from_scratch-tf.ipynb)   | How to easily start using transformers  | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/language_modeling_from_scratch-tf.ipynb) |
+| [How to fine-tune a model on text classification](https://github.com/huggingface/notebooks/blob/master/examples/text_classification-tf.ipynb) | Show how to preprocess the data and fine-tune a pretrained model on any GLUE task. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification-tf.ipynb)|
+| [How to fine-tune a model on language modeling](https://github.com/huggingface/notebooks/blob/master/examples/language_modeling-tf.ipynb) | Show how to preprocess the data and fine-tune a pretrained model on a causal or masked LM task. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/language_modeling-tf.ipynb)|
+| [How to fine-tune a model on token classification](https://github.com/huggingface/notebooks/blob/master/examples/token_classification-tf.ipynb) | Show how to preprocess the data and fine-tune a pretrained model on a token classification task (NER, PoS). | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification-tf.ipynb)|
+| [How to fine-tune a model on question answering](https://github.com/huggingface/notebooks/blob/master/examples/question_answering-tf.ipynb) | Show how to preprocess the data and fine-tune a pretrained model on SQUAD. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering-tf.ipynb)|
+| [How to fine-tune a model on multiple choice](https://github.com/huggingface/notebooks/blob/master/examples/multiple_choice-tf.ipynb) | Show how to preprocess the data and fine-tune a pretrained model on SWAG. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/multiple_choice-tf.ipynb)|
+| [How to fine-tune a model on translation](https://github.com/huggingface/notebooks/blob/master/examples/translation-tf.ipynb) | Show how to preprocess the data and fine-tune a pretrained model on WMT. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/translation-tf.ipynb)|
+| [How to fine-tune a model on summarization](https://github.com/huggingface/notebooks/blob/master/examples/summarization-tf.ipynb) | Show how to preprocess the data and fine-tune a pretrained model on XSUM. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/summarization-tf.ipynb)|
 
 
 ## Community notebooks:
