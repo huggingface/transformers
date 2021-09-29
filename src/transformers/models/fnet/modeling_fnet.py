@@ -185,12 +185,12 @@ class FNetBasicFourierTransform(nn.Module):
                         two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
                     )
                 else:
-                    logging.warning(
+                    logger.warning(
                         "SciPy is needed for DFT matrix calculation and is not found. Using n-dimensional fast fourier transform instead."
                     )
                     self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
         else:
-            logging.warning(
+            logger.warning(
                 "`config.use_latest` is set to False. The older version of Fourier Transform initialization will be used. To use the latest version, please set `config.use_latest` to True."
             )
 
@@ -208,7 +208,7 @@ class FNetBasicFourierTransform(nn.Module):
                         two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
                     )
                 else:
-                    logging.warning(
+                    logger.warning(
                         "SciPy is needed for DFT matrix calculation and is not found. Using TPU optimized fast fourier transform instead."
                     )
                     self.fourier_transform = fftn
