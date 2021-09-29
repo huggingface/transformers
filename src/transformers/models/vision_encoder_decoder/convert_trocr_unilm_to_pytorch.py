@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config):
+def create_rename_keys(encoder_config, decoder_config):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
@@ -64,7 +64,7 @@ def create_rename_keys(config):
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config):
+def read_in_q_k_v(state_dict, encoder_config, decoder_config):
     for i in range(config.num_hidden_layers):
         prefix = "deit."
         # queries, keys and values
@@ -112,11 +112,11 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     """
     # define encoder and decoder configs based on checkpoint_url
     encoder_config = ViTConfig()
-    decoder_config = RobertaConfig.from_pretrained("roberta-large")
+    decoder_config = RobertaConfig.from_pretrained("roberta-large", is_decoder=True)
 
     # size of the architecture
     if "base" in checkpoint_url:
-        pass
+        decoder_config.encoder_hidden_size = 768
     elif "large" in checkpoint_url:
         encoder_config.hidden_size = 1024
         encoder_config.intermediate_size = 4096
@@ -133,10 +133,10 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["model"]
-    rename_keys = create_rename_keys(config)
+    rename_keys = create_rename_keys(encoder_config, decoder_config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
-    read_in_q_k_v(state_dict, config)
+    read_in_q_k_v(state_dict, encoder_config, decoder_config)
 
     # load state dict
     model.load_state_dict(state_dict)
