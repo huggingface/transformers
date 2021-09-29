@@ -183,11 +183,6 @@ class LayoutLMOnnxConfig(OnnxConfig):
             raise ValueError("Cannot generate dummy inputs without PyTorch installed.")
         import torch
 
-        input_dict["bbox"] = torch.tensor(
-            [
-                [0] * 4,
-                *[box] * seq_length,
-                [self.max_2d_positions] * 4,
-            ]
-        ).tile(batch_size, 1, 1)
+        batch_size, seq_length = input_dict["input_ids"].shape
+        input_dict["bbox"] = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
         return input_dict
