@@ -79,9 +79,10 @@ class FNetConfig(PretrainedConfig):
             `use_fft` is set to :obj:`False`. Additionally, this is used for validation when using FFT. The recommended
             values for lengths greater than 4096 is powers of 2.
         use_latest (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Determines whether to use the latest version of the FNet model according to the original code.
-            `use_tpu_fourier_optimizations` and `tpu_short_seq_length` will be ignored if this is set to :obj:`True`,
-            and `use_fft` and `actual_seq_length` will be used.
+            Determines whether to use the latest version of the FNet model according to the latest original code. If
+            set to :obj:`False`, the model will use the previous version of the FNet model, with custom fftn
+            implementation for TPU optimization. `use_tpu_fourier_optimizations` and `tpu_short_seq_length` will be
+            ignored if this is set to :obj:`True`, and `use_fft` and `actual_seq_length` will be used.
 
     Example::
 
