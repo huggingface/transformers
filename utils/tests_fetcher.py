@@ -281,6 +281,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "test_trainer_distributed.py",
         "test_trainer_tpu.py",
     ],
+    "train_pt_utils.py": "test_trainer_utils.py",
     "utils/versions.py": "test_versions_utils.py",
 }
 
