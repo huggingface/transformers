@@ -147,7 +147,7 @@ class DPRReaderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class DPRPretrainedModel(PreTrainedModel):
+class DPRPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -169,7 +169,7 @@ class DPRPretrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-class DPREncoder(DPRPretrainedModel):
+class DPREncoder(DPRPreTrainedModel):
 
     base_model_prefix = "bert_model"
 
@@ -223,7 +223,7 @@ class DPREncoder(DPRPretrainedModel):
         return self.bert_model.config.hidden_size
 
 
-class DPRSpanPredictor(DPRPretrainedModel):
+class DPRSpanPredictor(DPRPreTrainedModel):
 
     base_model_prefix = "encoder"
 
@@ -285,7 +285,7 @@ class DPRSpanPredictor(DPRPretrainedModel):
 ##################
 
 
-class DPRPretrainedContextEncoder(DPRPretrainedModel):
+class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -297,7 +297,7 @@ class DPRPretrainedContextEncoder(DPRPretrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
 
-class DPRPretrainedQuestionEncoder(DPRPretrainedModel):
+class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -309,7 +309,7 @@ class DPRPretrainedQuestionEncoder(DPRPretrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
 
-class DPRPretrainedReader(DPRPretrainedModel):
+class DPRPretrainedReader(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
