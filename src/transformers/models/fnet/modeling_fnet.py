@@ -170,7 +170,7 @@ class FNetBasicFourierTransform(nn.Module):
             if config.use_fft:
                 if self.config.actual_seq_length > 4096 and not math.log2(self.config.actual_seq_length).is_integer():
                     raise ValueError(
-                        f"For larger seuence lengths (>4096), the actual sequence length {self.config.actual_seq_length} must be a power of 2."
+                        f"For larger sequence lengths (>4096), the actual sequence length {self.config.actual_seq_length} must be a power of 2."
                     )
                 self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
             else:
@@ -603,11 +603,20 @@ class FNetModel(FNetPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if self.config.use_fft and seq_length <= 4096 and self.config.actual_seq_length != seq_length:
-            raise ValueError(
-                "The `actual_seq_length` in FNetConfig should be set equal to the sequence length being passed to the model when using TPU optimizations."
-            )
-
+        if self.config.use_latest:
+            if self.config.use_fft and seq_length <= 4096 and self.config.actual_seq_length != seq_length:
+                raise ValueError(
+                    "The `actual_seq_length` in FNetConfig should be set equal to the sequence length being passed to the model when using TPU optimizations."
+                )
+        else:
+            if (
+                self.config.use_tpu_fourier_optimizations
+                and seq_length <= 4096
+                and self.config.tpu_short_seq_length != seq_length
+            ):
+                raise ValueError(
+                    "The `tpu_short_seq_length` in FNetConfig should be set equal to the sequence length being passed to the model when using TPU optimizations."
+                )
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if token_type_ids is None:
