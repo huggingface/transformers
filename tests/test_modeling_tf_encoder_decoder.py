@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import copy
 import os
 import tempfile
 import unittest
@@ -673,9 +672,6 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         encoder_decoder_pt = EncoderDecoderModel(encoder=encoder_pt, decoder=decoder_pt).to(torch_device).eval()
 
-        # HACK to make PT => TF work; there is currently no easy way of converting a PT to a TF model
-        encoder_decoder_pt.encoder.bert = copy.deepcopy(encoder_decoder_pt.encoder)
-
         input_ids = ids_tensor([13, 5], encoder_pt.config.vocab_size)
         decoder_input_ids = ids_tensor([13, 1], decoder_pt.config.vocab_size)
 
@@ -685,9 +681,12 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         logits_pt = encoder_decoder_pt(input_ids=pt_input_ids, decoder_input_ids=pt_decoder_input_ids).logits
 
         # PyTorch => TensorFlow
-        with tempfile.TemporaryDirectory() as tmp_dirname:
-            encoder_decoder_pt.save_pretrained(tmp_dirname)
-            encoder_decoder_tf = TFEncoderDecoderModel.from_pretrained(tmp_dirname, from_pt=True)
+        with tempfile.TemporaryDirectory() as tmp_dirname_1, tempfile.TemporaryDirectory() as tmp_dirname_2:
+            encoder_decoder_pt.encoder.save_pretrained(tmp_dirname_1)
+            encoder_decoder_pt.decoder.save_pretrained(tmp_dirname_2)
+            encoder_decoder_tf = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+                tmp_dirname_1, tmp_dirname_2, encoder_from_pt=True, decoder_from_pt=True
+            )
 
         logits_tf = encoder_decoder_tf(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
 
