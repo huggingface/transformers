@@ -1606,6 +1606,8 @@ class RealmReader(RealmPreTrainedModel):
         total_loss = None
         retriever_loss = None
         reader_loss = None
+        retriever_correct = None
+        reader_correct = None
         if start_positions is not None and end_positions is not None and has_answers is not None:
             def compute_correct_candidates(candidate_starts, candidate_ends, gold_starts,
                                gold_ends):
