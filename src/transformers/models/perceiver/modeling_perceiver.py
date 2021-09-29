@@ -1249,7 +1249,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
             subsampled_index_dims=subsampling["image"],
-            output_shape=[1, 16, 224, 224],
+            output_shape=config.output_shape,
             # num_z_channels=1024,
             output_num_channels=512,
             use_query_residual=False,
@@ -1748,7 +1748,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
             **decoder_kwargs,
         )
 
-        # we need to register one additionl parameter for each modality: padding
+        # we need to register one additional parameter for each modality: padding
         # see https://discuss.pytorch.org/t/dynamic-parameter-declaration-in-forward-function/427
         for modality in self.modalities.keys():
             self.register_parameter(modality + "_padding", None)
@@ -1898,10 +1898,9 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
         A Torch tensor of shape [batch_size, n, d].
       num_bands: The number of bands (K) to use.
       max_resolution: The maximum resolution (i.e. the number of pixels per dim).
-        A tuple representing resolution for each dimension
-      concat_pos: Concatenate the input position encoding to the Fourier features?
-      sine_only: Whether to use a single phase (sin) or two (sin/cos) for each
-        frequency band.
+        A tuple representing resolution for each dimension.
+      concat_pos: Whether to concatenate the input position encoding to the Fourier features.
+      sine_only: Whether to use a single phase (sin) or two (sin/cos) for each frequency band.
 
     Returns:
       embedding: A Torch tensor of shape [batch_size, n, n_channels]. If concat_pos is True and sine_only is False,
@@ -1913,6 +1912,8 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
     min_freq = 1.0
     # Nyquist frequency at the target resolution:
 
+    print("Shape of pos:", pos.shape)
+    
     freq_bands = torch.stack(
         [torch.linspace(start=min_freq, end=res / 2, steps=num_bands) for res in max_resolution], dim=0
     )
@@ -1920,8 +1921,11 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
     # Get frequency bands for each spatial dimension.
     # Output is size [n, d * num_bands]
     per_pos_features = pos[0, :, :][:, :, None] * freq_bands[None, :, :]
+    print("Shape of per_pos_features:", per_pos_features.shape)
     per_pos_features = torch.reshape(per_pos_features, [-1, np.prod(per_pos_features.shape[1:])])
 
+    print("Shape of per_pos_features:", per_pos_features.shape)
+    
     if sine_only:
         # Output is size [n, d * num_bands]
         per_pos_features = torch.sin(np.pi * (per_pos_features))
@@ -2091,12 +2095,12 @@ class PerceiverMultimodalPostprocessor(nn.Module):
         if not self.input_is_dict:
             # Slice up modalities by their sizes.
             assert modality_sizes is not None
-            print("Modality sizes:", modality_sizes)
+            #print("Modality sizes:", modality_sizes)
             inputs = restructure(modality_sizes=modality_sizes, inputs=inputs)
         
-        print("Shape of inputs after restructure:")
-        for k,v in inputs.items():
-            print(k, v.shape)
+        #print("Shape of inputs after restructure:")
+        #for k,v in inputs.items():
+            #print(k, v.shape)
         
         outputs = {
             modality: postprocessor(inputs[modality], pos=pos, modality_sizes=None)
@@ -2238,7 +2242,7 @@ class PerceiverImagePreprocessor(nn.Module):
         index_dims = inputs.shape[1:-1]
         indices = np.prod(index_dims)
 
-        # Reshape input features to a 1D index dimension if necessary.
+        # Flatten input features to a 1D index dimension if necessary.
         if len(inputs.shape) > 3 and network_input_is_1d:
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
 
@@ -2248,6 +2252,8 @@ class PerceiverImagePreprocessor(nn.Module):
         elif self.position_encoding_type == "fourier":
             pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device)
 
+        print("Shape of pos encodings in image preprocessor:", pos_enc.shape)
+        
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
 
@@ -2271,8 +2277,12 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = self.convnet(inputs)
 
         elif self.prep_type == "conv1x1":
+            print("Shape of inputs:", inputs.shape)
+            
             # map inputs to self.out_channels
             inputs = self.convnet_1x1(inputs)
+
+            print("Shape of inputs after conv1x1:", inputs.shape)
 
         elif self.prep_type == "pixels":
             # if requested, downsamples in the crudest way
@@ -2287,11 +2297,11 @@ class PerceiverImagePreprocessor(nn.Module):
 
         elif self.prep_type == "patches":
             # Space2depth featurization.
-            # Video: B x T x H x W x C
+            # Video: B x T x C x H x W
             inputs = space_to_depth(
                 inputs, temporal_block_size=self.temporal_downsample, spatial_block_size=self.spatial_downsample
             )
-
+            
             if inputs.ndim == 5 and inputs.shape[1] == 1:
                 # for flow
                 inputs = inputs.squeeze(dim=1)
@@ -2383,6 +2393,8 @@ class PerceiverAudioPreprocessor(nn.Module):
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
 
+        print("Shape of pos enc in audio preprocessor:", pos_enc.shape)
+        
         if self.concat_or_add_pos == "concat":
             inputs_with_pos = torch.cat([inputs, pos_enc], dim=-1)
         elif self.concat_or_add_pos == "add":
@@ -2395,6 +2407,9 @@ class PerceiverAudioPreprocessor(nn.Module):
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)
         modality_sizes = None  # Size for each modality, only needed for multimodal
+        
+        print("Output of audio preprocessor:", inputs.shape)
+        
         return inputs, modality_sizes, inputs_without_pos
 
 
@@ -2434,12 +2449,16 @@ class PerceiverMultimodalPreprocessor(nn.Module):
         outputs = {}
         inputs_without_pos = {}
         for modality, preprocessor in self.modalities.items():
+            print(f"Preprocessing modality {modality}:")
             outputs[modality], _, inputs_without_pos[modality] = preprocessor(
                 inputs[modality], pos=pos, network_input_is_1d=network_input_is_1d
             )
 
         common_channel_size = max(o.shape[2] for o in outputs.values()) + self.min_padding_size
 
+        #for k,v in outputs.items():
+            #print(f"Shape of modality {k} before padding:", v.shape)
+        
         # pad to the same common_channel_size.
         padded = {}
         modality_sizes = {}
@@ -2480,8 +2499,8 @@ class PerceiverMultimodalPreprocessor(nn.Module):
                 output_padded = (1 - mask) * output_padded + mask * mask_token
 
             padded[modality] = output_padded
-            print("Modality:", modality)
-            print("Shape of output_padded:", output_padded.shape)
+            #print("Modality:", modality)
+            #print("Shape of output_padded:", output_padded.shape)
             modality_sizes[modality] = output_padded.shape[1]
 
         # Apply a predictable ordering to the modalities
