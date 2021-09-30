@@ -16,7 +16,7 @@ Next we can run the example script to train the model:
 
 ```bash
 python run_summarization_flax.py \
-	--output_dir /tmp/bart-base-xsum \
+	--output_dir ./bart-base-xsum \
 	--model_name_or_path facebook/bart-base \
 	--tokenizer_name facebook/bart-base \
 	--dataset_name="xsum" \

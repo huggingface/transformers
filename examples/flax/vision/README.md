@@ -55,7 +55,7 @@ Next we can run the example script to fine-tune the model:
 
 ```bash
 python run_image_classification.py \
-    --output_dir /tmp/vit-base-patch16-imagenette \
+    --output_dir ./vit-base-patch16-imagenette \
     --model_name_or_path google/vit-base-patch16-224-in21k \
     --train_dir="imagenette2/train" \
     --validation_dir="imagenette2/val" \

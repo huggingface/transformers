@@ -33,10 +33,10 @@ in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-To setup all relevant files for training, .
+To setup all relevant files for training, let's create a directory.
 
 ```bash
-mkdir /tmp/norwegian-roberta-base
+mkdir ./norwegian-roberta-base
 ```
 
 ### Train tokenizer
@@ -70,7 +70,7 @@ tokenizer.train_from_iterator(batch_iterator(), vocab_size=50265, min_frequency=
 ])
 
 # Save files to disk
-tokenizer.save("/tmp/norwegian-roberta-base/tokenizer.json")
+tokenizer.save("./norwegian-roberta-base/tokenizer.json")
 ```
 
 ### Create configuration
@@ -83,7 +83,7 @@ in the local model folder:
 from transformers import RobertaConfig
 
 config = RobertaConfig.from_pretrained("roberta-base", vocab_size=50265)
-config.save_pretrained("/tmp/norwegian-roberta-base")
+config.save_pretrained("./norwegian-roberta-base")
 ```
 
 Great, we have set up our model repository. During training, we will automatically
@@ -95,10 +95,10 @@ Next we can run the example script to pretrain the model:
 
 ```bash
 python run_mlm_flax.py \
-    --output_dir="/tmp/norwegian-roberta-base" \
+    --output_dir="./norwegian-roberta-base" \
     --model_type="roberta" \
-    --config_name="/tmp/norwegian-roberta-base" \
-    --tokenizer_name="/tmp/norwegian-roberta-base" \
+    --config_name="./norwegian-roberta-base" \
+    --tokenizer_name="./norwegian-roberta-base" \
     --dataset_name="oscar" \
     --dataset_config_name="unshuffled_deduplicated_no" \
     --max_seq_length="128" \
@@ -139,7 +139,7 @@ The example script uses the 🤗 Datasets library. You can easily customize them
 To setup all relevant files for training, let's create a directory.
 
 ```bash
-mkdir /tmp/norwegian-gpt2
+mkdir ./norwegian-gpt2
 ```
 
 ### Train tokenizer
@@ -173,7 +173,7 @@ tokenizer.train_from_iterator(batch_iterator(), vocab_size=50257, min_frequency=
 ])
 
 # Save files to disk
-tokenizer.save("/tmp/norwegian-gpt2/tokenizer.json")
+tokenizer.save("./norwegian-gpt2/tokenizer.json")
 ```
 
 ### Create configuration
@@ -186,7 +186,7 @@ in the local model folder:
 from transformers import GPT2Config
 
 config = GPT2Config.from_pretrained("gpt2", resid_pdrop=0.0, embd_pdrop=0.0, attn_pdrop=0.0, vocab_size=50257)
-config.save_pretrained("/tmp/norwegian-gpt2")
+config.save_pretrained("./norwegian-gpt2")
 ```
 
 Great, we have set up our model repository. During training, we will now automatically
@@ -198,10 +198,10 @@ Finally, we can run the example script to pretrain the model:
 
 ```bash
 python run_clm_flax.py \
-    --output_dir="/tmp/norwegian-gpt2" \
+    --output_dir="./norwegian-gpt2" \
     --model_type="gpt2" \
-    --config_name="/tmp/norwegian-gpt2" \
-    --tokenizer_name="/tmp/norwegian-gpt2" \
+    --config_name="./norwegian-gpt2" \
+    --tokenizer_name="./norwegian-gpt2" \
     --dataset_name="oscar" \
     --dataset_config_name="unshuffled_deduplicated_no" \
     --do_train --do_eval \
@@ -242,7 +242,7 @@ Here we call the model `"norwegian-t5-base"`, but you can change the model name 
 To setup all relevant files for trairing, let's create a directory.
 
 ```bash
-cd /tmp/norwegian-t5-base
+cd ./norwegian-t5-base
 ```
 
 ### Train tokenizer
@@ -288,7 +288,7 @@ tokenizer.train_from_iterator(
 )
 
 # Save files to disk
-tokenizer.save("/tmp/norwegian-t5-base/tokenizer.json")
+tokenizer.save("./norwegian-t5-base/tokenizer.json")
 ```
 
 ### Create configuration
@@ -301,7 +301,7 @@ in the local model folder:
 from transformers import T5Config
 
 config = T5Config.from_pretrained("google/t5-v1_1-base", vocab_size=tokenizer.get_vocab_size())
-config.save_pretrained("/tmp/norwegian-t5-base")
+config.save_pretrained("./norwegian-t5-base")
 ```
 
 Great, we have set up our model repository. During training, we will automatically
@@ -313,10 +313,10 @@ Next we can run the example script to pretrain the model:
 
 ```bash
 python run_t5_mlm_flax.py \
-	--output_dir="/tmp/norwegian-t5-base" \
+	--output_dir="./norwegian-t5-base" \
 	--model_type="t5" \
-	--config_name="/tmp/norwegian-t5-base" \
-	--tokenizer_name="/tmp/norwegian-t5-base" \
+	--config_name="./norwegian-t5-base" \
+	--tokenizer_name="./norwegian-t5-base" \
 	--dataset_name="oscar" \
 	--dataset_config_name="unshuffled_deduplicated_no" \
 	--max_seq_length="512" \

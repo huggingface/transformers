@@ -31,7 +31,7 @@ python run_flax_ner.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --per_device_train_batch_size 4 \
-  --output_dir /tmp/bert-ner-conll2003 \
+  --output_dir ./bert-ner-conll2003 \
   --eval_steps 300 \
   --push_to_hub
 ```

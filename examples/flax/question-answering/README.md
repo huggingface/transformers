@@ -38,7 +38,7 @@ python run_qa.py \
   --learning_rate 3e-5 \
   --num_train_epochs 2 \
   --per_device_train_batch_size 12 \
-  --output_dir /tmp/bert-qa-squad \
+  --output_dir ./bert-qa-squad \
   --eval_steps 1000 \
   --push_to_hub
 ```
@@ -76,7 +76,7 @@ python run_qa.py   \
 --num_train_epochs 2   \
 --max_seq_length 384   \
 --doc_stride 128   \
---output_dir /tmp/wwm_uncased_finetuned_squad/ \
+--output_dir ./wwm_uncased_finetuned_squad/ \
 --eval_steps 1000 \
 --push_to_hub
 ```

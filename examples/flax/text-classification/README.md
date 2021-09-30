@@ -37,7 +37,7 @@ python run_flax_glue.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --per_device_train_batch_size 4 \
-  --output_dir /tmp/$TASK_NAME/ \
+  --output_dir ./$TASK_NAME/ \
   --push_to_hub
 ```
 
