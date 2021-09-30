@@ -88,7 +88,7 @@ def create_rename_keys(encoder_config, decoder_config):
             (f"decoder.layers.{j}.self_attn.k_proj.bias", f"decoder.encoder.layer.{j}.attention.self.key.bias")
         )
         rename_keys.append(
-            (f"decoder.layers.{j}.self_attn.q_proj.weight", f"decoder.encoder.layer.{j}.attention.self.query.bias")
+            (f"decoder.layers.{j}.self_attn.q_proj.weight", f"decoder.encoder.layer.{j}.attention.self.query.weight")
         )
         rename_keys.append(
             (f"decoder.layers.{j}.self_attn.q_proj.bias", f"decoder.encoder.layer.{j}.attention.self.query.bias")
@@ -238,7 +238,7 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     Copy/paste/tweak model's weights to our VisionEncoderDecoderModel structure.
     """
     # define encoder and decoder configs based on checkpoint_url
-    encoder_config = ViTConfig(image_size=384)
+    encoder_config = ViTConfig(image_size=384, qkv_bias=False)
     decoder_config = RobertaConfig.from_pretrained("roberta-large", num_hidden_layers=12, is_decoder=True, add_cross_attention=True)
 
     # size of the architecture
