@@ -573,6 +573,7 @@ class Trainer:
             if self.args.world_size <= 1:
                 return LengthGroupedSampler(
                     self.args.train_batch_size,
+                    dataset=self.train_dataset,
                     lengths=lengths,
                     model_input_name=model_input_name,
                     generator=generator,
@@ -580,6 +581,7 @@ class Trainer:
             else:
                 return DistributedLengthGroupedSampler(
                     self.args.train_batch_size,
+                    dataset=self.train_dataset,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     lengths=lengths,
