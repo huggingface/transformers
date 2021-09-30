@@ -381,9 +381,10 @@ def main():
         tokenized_inputs["labels"] = labels
         return tokenized_inputs
 
-    processed_datasets = raw_datasets.map(
-        preprocess_function, batched=True, remove_columns=raw_datasets["train"].column_names
-    )
+    with accelerator.main_process_first():
+        processed_datasets = raw_datasets.map(
+            preprocess_function, batched=True, remove_columns=raw_datasets["train"].column_names
+        )
 
     train_dataset = processed_datasets["train"]
     eval_dataset = processed_datasets["validation"]

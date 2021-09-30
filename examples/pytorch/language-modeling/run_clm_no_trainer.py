@@ -337,14 +337,15 @@ def main():
     def tokenize_function(examples):
         return tokenizer(examples[text_column_name])
 
-    tokenized_datasets = raw_datasets.map(
-        tokenize_function,
-        batched=True,
-        num_proc=args.preprocessing_num_workers,
-        remove_columns=column_names,
-        load_from_cache_file=not args.overwrite_cache,
-        desc="Running tokenizer on dataset",
-    )
+    with accelerator.main_process_first():
+        tokenized_datasets = raw_datasets.map(
+            tokenize_function,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on dataset",
+        )
 
     if args.block_size is None:
         block_size = tokenizer.model_max_length
@@ -386,13 +387,14 @@ def main():
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
     # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
-    lm_datasets = tokenized_datasets.map(
-        group_texts,
-        batched=True,
-        num_proc=args.preprocessing_num_workers,
-        load_from_cache_file=not args.overwrite_cache,
-        desc=f"Grouping texts in chunks of {block_size}",
-    )
+    with accelerator.main_process_first():
+        lm_datasets = tokenized_datasets.map(
+            group_texts,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            load_from_cache_file=not args.overwrite_cache,
+            desc=f"Grouping texts in chunks of {block_size}",
+        )
 
     train_dataset = lm_datasets["train"]
     eval_dataset = lm_datasets["validation"]

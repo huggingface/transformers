@@ -403,12 +403,13 @@ def main():
         tokenized_inputs["labels"] = labels
         return tokenized_inputs
 
-    processed_raw_datasets = raw_datasets.map(
-        tokenize_and_align_labels,
-        batched=True,
-        remove_columns=raw_datasets["train"].column_names,
-        desc="Running tokenizer on dataset",
-    )
+    with accelerator.main_process_first():
+        processed_raw_datasets = raw_datasets.map(
+            tokenize_and_align_labels,
+            batched=True,
+            remove_columns=raw_datasets["train"].column_names,
+            desc="Running tokenizer on dataset",
+        )
 
     train_dataset = processed_raw_datasets["train"]
     eval_dataset = processed_raw_datasets["validation"]
