@@ -162,8 +162,8 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
         output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
-        dist.all_gather(output_tensors, tensor)
         output_tensors = [t if len(t.shape) > 0 else t[None] for t in output_tensors]
+        dist.all_gather(output_tensors, tensor)
         concat = torch.cat(output_tensors, dim=0)
 
         # truncate the dummy elements added by SequentialDistributedSampler
@@ -772,6 +772,13 @@ class IterableDatasetShard(IterableDataset):
             for i in process_slice:
                 yield current_batch[i]
 
+    def __len__(self):
+        # Will raise an error if the underlying dataset is not sized.
+        if self.drop_last:
+            return (len(self.dataset) // (self.batch_size * self.num_processes)) * self.batch_size
+        else:
+            return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
+
 
 # In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
 # helper methods here
@@ -1021,6 +1028,7 @@ if is_sagemaker_mp_enabled():
                 f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors."
             )
         all_tensors = smp.allgather(tensor, smp.CommGroup.DP_GROUP)
+        all_tensors = [t if len(t.shape) > 0 else t[None] for t in all_tensors]
         return torch.cat([t.cpu() for t in all_tensors], dim=0)
 
     def smp_nested_concat(tensor):
