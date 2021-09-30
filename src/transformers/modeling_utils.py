@@ -442,7 +442,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     """
     config_class = None
     base_model_prefix = ""
-    framework = ""
+    framework = "pytorch"
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_missing = None
@@ -1480,7 +1480,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         expected_keys = list(model_state_dict.keys())
         loaded_keys = list(state_dict.keys())
         prefix = model.base_model_prefix
-        framework = model.framework
 
         has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
         expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
