@@ -921,7 +921,6 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.WANDB:
             import wandb
 
-            logger.info("ID ==" , wandb.run.id)
             metrics['objective'] = self.objective
             wandb.log(metrics)
 
