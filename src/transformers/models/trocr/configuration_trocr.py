@@ -66,9 +66,12 @@ class TrOCRConfig(PretrainedConfig):
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             https://arxiv.org/abs/1909.11556>`__ for more details.
+        decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the `LayerDrop paper <see
+            https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to scale the word embeddings by sqrt(d_model).
 
         Example::
@@ -103,8 +106,9 @@ class TrOCRConfig(PretrainedConfig):
         decoder_start_token_id=2,
         classifier_dropout=0.0,
         init_std=0.02,
+        decoder_layerdrop=0.0,
         use_cache=False,
-        scale_embedding=True,
+        scale_embedding=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -122,6 +126,7 @@ class TrOCRConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.classifier_dropout = classifier_dropout
         self.init_std = init_std
+        self.decoder_layerdrop = decoder_layerdrop
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding
 

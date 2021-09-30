@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch TrOCR model. """
+""" PyTorch TrOCR decoder model (based on RoBERTa). """
 
 
 import copy
@@ -97,9 +97,12 @@ class TrOCRLearnedPositionalEmbedding(nn.Embedding):
         return super().forward(positions + self.offset)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->TrOCR
 class TrOCRAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Multi-headed attention from 'Attention Is All You Need' paper.
+    
+    Adds one thing compared to BartAttention: is_cross_attention.
+    
+    """
 
     def __init__(
         self,
@@ -587,8 +590,12 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
                         f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
                     )
         for idx, decoder_layer in enumerate(self.layers):
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
+            dropout_probability = random.uniform(0, 1)
+            if self.training and (dropout_probability < self.layerdrop):
+                continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
