@@ -152,6 +152,8 @@ def nested_xla_mesh_reduce(tensors, name):
 
         if isinstance(tensors, (list, tuple)):
             return type(tensors)(nested_xla_mesh_reduce(t, f"{name}_{i}") for i, t in enumerate(tensors))
+        if tensors.ndim == 0:
+            tensors = tensors[None]
         return xm.mesh_reduce(name, tensors, torch.cat)
     else:
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
