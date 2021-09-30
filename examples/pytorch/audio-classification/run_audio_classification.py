@@ -29,11 +29,11 @@ import transformers
 from transformers import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
     AutoConfig,
+    AutoFeatureExtractor,
     AutoModelForAudioClassification,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
-    Wav2Vec2FeatureExtractor,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
@@ -129,14 +129,6 @@ class DataTrainingArguments:
         metadata={"help": "Audio clips will be randomly cut to this length during training if the value is set."},
     )
 
-    def __post_init__(self):
-        data_files = dict()
-        if self.train_file is not None:
-            data_files["train"] = self.train_file
-        if self.eval_file is not None:
-            data_files["eval"] = self.eval_file
-        self.data_files = data_files if data_files else None
-
 
 @dataclass
 class ModelArguments:
@@ -227,25 +219,29 @@ def main():
             )
 
     # Initialize our dataset and prepare it for the audio classification task.
-    ds = DatasetDict()
-    ds["train"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name)
-    ds["eval"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name)
+    raw_datasets = DatasetDict()
+    raw_datasets["train"] = load_dataset(
+        data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
+    )
+    raw_datasets["eval"] = load_dataset(
+        data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
+    )
 
-    if data_args.audio_column_name not in ds["train"].column_names:
+    if data_args.audio_column_name not in raw_datasets["train"].column_names:
         raise ValueError(
             f"--audio_column_name {data_args.audio_column_name} not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--audio_column_name` to the correct audio column - one of "
-            f"{', '.join(ds['train'].column_names)}."
+            f"{', '.join(raw_datasets['train'].column_names)}."
         )
 
-    if data_args.label_column_name not in ds["train"].column_names:
+    if data_args.label_column_name not in raw_datasets["train"].column_names:
         raise ValueError(
             f"--label_column_name {data_args.label_column_name} not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--label_column_name` to the correct text column - one of "
-            f"{', '.join(ds['train'].column_names)}."
+            f"{', '.join(raw_datasets['train'].column_names)}."
         )
 
-    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name or model_args.model_name_or_path,
         return_attention_mask=True,
         cache_dir=model_args.cache_dir,
@@ -278,7 +274,7 @@ def main():
 
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
-    labels = ds["train"].features[data_args.label_column_name].names
+    labels = raw_datasets["train"].features[data_args.label_column_name].names
     label2id, id2label = dict(), dict()
     for i, label in enumerate(labels):
         label2id[label] = str(i)
@@ -317,27 +313,31 @@ def main():
         model.freeze_feature_extractor()
 
     if training_args.do_train:
-        if "train" not in ds:
+        if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
         if data_args.max_train_samples is not None:
-            ds["train"] = ds["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+            raw_datasets["train"] = (
+                raw_datasets["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+            )
         # Set the training transforms
-        ds["train"].set_transform(train_transforms, output_all_columns=False)
+        raw_datasets["train"].set_transform(train_transforms, output_all_columns=False)
 
     if training_args.do_eval:
-        if "eval" not in ds:
+        if "eval" not in raw_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         if data_args.max_eval_samples is not None:
-            ds["eval"] = ds["eval"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+            raw_datasets["eval"] = (
+                raw_datasets["eval"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+            )
         # Set the validation transforms
-        ds["eval"].set_transform(val_transforms, output_all_columns=False)
+        raw_datasets["eval"].set_transform(val_transforms, output_all_columns=False)
 
     # Initialize our trainer
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=ds["train"] if training_args.do_train else None,
-        eval_dataset=ds["eval"] if training_args.do_eval else None,
+        train_dataset=raw_datasets["train"] if training_args.do_train else None,
+        eval_dataset=raw_datasets["eval"] if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=feature_extractor,
     )

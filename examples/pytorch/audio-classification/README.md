@@ -32,7 +32,7 @@ python run_audio_classification.py \
     --model_name_or_path facebook/wav2vec2-base \
     --dataset_name superb \
     --dataset_config_name ks \
-    --output_dir ./wav2vec2-base-keyword-spotting \
+    --output_dir wav2vec2-base-keyword-spotting \
     --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
@@ -53,8 +53,7 @@ python run_audio_classification.py \
     --load_best_model_at_end True \
     --save_total_limit 3 \
     --seed 0 \
-    --push_to_hub \
-    --push_to_hub_model_id wav2vec2-base-keyword-spotting
+    --push_to_hub
 ```
 
 On a single V100 GPU (16GB), this script should run in ~10 minutes and yield accuracy of **98.4%**.
@@ -71,7 +70,7 @@ python run_audio_classification.py \
     --dataset_name anton-l/common_language \
     --audio_column_name path \
     --label_column_name language \
-    --output_dir ./wav2vec2-base-langid \
+    --output_dir wav2vec2-base-langid \
     --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
@@ -92,36 +91,10 @@ python run_audio_classification.py \
     --load_best_model_at_end True \
     --save_total_limit 3 \
     --seed 0 \
-    --push_to_hub \
-    --push_to_hub_model_id wav2vec2-base-langid
+    --push_to_hub
 ```
 
 On 4 V100 GPUs (16GB), this script should run in ~1 hour and yield accuracy of **77.51%**.
-
-## Using your own data
-
-To use your own dataset, convert your data into a `csv` or `json` format with the 
-fields `file` and `label` like so:
-
-```json lines
-{"file": "/absolute/path/to/sample0.wav", "label": "cat"}
-{"file": "/absolute/path/to/sample1.wav", "label": "dog"}
-{"file": "/absolute/path/to/sample2.wav", "label": "bird"}
-```
-
-Once you've prepared your dataset, you can run the script like this:
-
-```bash
-python run_audio_classification.py \
-    --dataset_name my-own-dataset \
-    --train_file <path-to-train-file> \
-    --validation_file <path-to-validation-file> \
-    --output_dir ./outputs/ \
-    --remove_unused_columns False \
-    --do_train \
-    --do_eval
-```
-
 
 ## Sharing your model on 🤗 Hub
 
@@ -131,8 +104,6 @@ python run_audio_classification.py \
 
 ```bash
 $ apt install git-lfs
-$ git config --global user.email "you@example.com"
-$ git config --global user.name "Your Name"
 ```
 
 2. Log in with your HuggingFace account credentials using `huggingface-cli`
@@ -147,6 +118,6 @@ $ huggingface-cli login
 ```bash
 python run_audio_classification.py \
     --push_to_hub \
-    --push_to_hub_model_id <name-your-model> \
+    --hub_model_id <username/model_id> \
     ...
 ```
