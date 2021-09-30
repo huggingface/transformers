@@ -220,7 +220,7 @@ def default_hp_space_wandb(trial) -> Dict[str, float]:
     return {
         "method": "random",
         "metric":  {
-        'name': 'eval/loss',
+        'name': 'objective',
         'goal': 'minimize'   
     },
     "parameters": {
