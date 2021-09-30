@@ -88,13 +88,13 @@ def create_rename_keys(encoder_config, decoder_config):
             (f"decoder.layers.{j}.self_attn.k_proj.bias", f"decoder.encoder.layer.{j}.attention.self.key.bias")
         )
         rename_keys.append(
-            (f"decoder.layers.{j}.self_attn.q_proj.bias", f"decoder.encoder.layer.{j}.attention.self.query.bias")
+            (f"decoder.layers.{j}.self_attn.q_proj.weight", f"decoder.encoder.layer.{j}.attention.self.query.bias")
         )
         rename_keys.append(
             (f"decoder.layers.{j}.self_attn.q_proj.bias", f"decoder.encoder.layer.{j}.attention.self.query.bias")
         )
         rename_keys.append(
-            (f"decoder.layers.{j}.self_attn.v_proj.bias", f"decoder.encoder.layer.{j}.attention.self.value.bias")
+            (f"decoder.layers.{j}.self_attn.v_proj.weight", f"decoder.encoder.layer.{j}.attention.self.value.weight")
         )
         rename_keys.append(
             (f"decoder.layers.{j}.self_attn.v_proj.bias", f"decoder.encoder.layer.{j}.attention.self.value.bias")
@@ -163,7 +163,7 @@ def create_rename_keys(encoder_config, decoder_config):
         rename_keys.append(
             (
                 f"decoder.layers.{j}.encoder_attn.out_proj.bias",
-                f"decoder.encoder.layer.{j}.crossattention.output.dense.weight",
+                f"decoder.encoder.layer.{j}.crossattention.output.dense.bias",
             )
         )
         rename_keys.append(
@@ -186,7 +186,7 @@ def create_rename_keys(encoder_config, decoder_config):
             (f"decoder.layers.{j}.final_layer_norm.weight", f"decoder.encoder.layer.{j}.output.LayerNorm.weight")
         )
         rename_keys.append(
-            (f"decoder.layers.{j}.final_layer_norm.bias", f"decoder.encoder.layer.{j}.output.LayerNorm.weight")
+            (f"decoder.layers.{j}.final_layer_norm.bias", f"decoder.encoder.layer.{j}.output.LayerNorm.bias")
         )
 
     # decoder embedding layer + position embeddings + layernorm + output projection
@@ -200,6 +200,8 @@ def create_rename_keys(encoder_config, decoder_config):
         ]
     )
 
+    return rename_keys
+
 
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v(state_dict, encoder_config):
@@ -207,13 +209,13 @@ def read_in_q_k_v(state_dict, encoder_config):
         # queries, keys and values (only weights, no biases)
         in_proj_weight = state_dict.pop(f"encoder.deit.blocks.{i}.attn.qkv.weight")
 
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
+        state_dict[f"encoder.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
             : encoder_config.hidden_size, :
         ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
+        state_dict[f"encoder.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             encoder_config.hidden_size : encoder_config.hidden_size * 2, :
         ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
+        state_dict[f"encoder.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
             -encoder_config.hidden_size :, :
         ]
 
@@ -237,7 +239,7 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     """
     # define encoder and decoder configs based on checkpoint_url
     encoder_config = ViTConfig(image_size=384)
-    decoder_config = RobertaConfig.from_pretrained("roberta-large", is_decoder=True, add_cross_attention=True)
+    decoder_config = RobertaConfig.from_pretrained("roberta-large", num_hidden_layers=12, is_decoder=True, add_cross_attention=True)
 
     # size of the architecture
     if "base" in checkpoint_url:
@@ -251,7 +253,7 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         decoder_config.encoder_hidden_size = 1024
     else:
         raise ValueError("Should either find 'base' or 'large' in checkpoint URL")
-
+    
     # load HuggingFace model
     encoder = ViTModel(encoder_config, add_pooling_layer=False)
     decoder = RobertaModel(decoder_config)
@@ -259,7 +261,10 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     model.eval()
 
     # load state_dict of original model, remove and rename some keys
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["model"]
+    for k,v in state_dict.items():
+        print(k, v.shape)
+    
     rename_keys = create_rename_keys(encoder_config, decoder_config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
