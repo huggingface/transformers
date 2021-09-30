@@ -1462,6 +1462,15 @@ class DPRPretrainedContextEncoder:
         requires_backends(self, ["torch"])
 
 
+class DPRPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class DPRPretrainedQuestionEncoder:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
