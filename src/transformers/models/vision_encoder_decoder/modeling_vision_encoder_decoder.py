@@ -377,7 +377,6 @@ class VisionEncoderDecoderModel(PreTrainedModel):
     def forward(
         self,
         pixel_values=None,
-        attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
@@ -428,7 +427,6 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
             encoder_outputs = self.encoder(
                 pixel_values,
-                attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -437,17 +435,17 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
         encoder_hidden_states = encoder_outputs[0]
 
-        # project encoder_hidden_states
-        if self.encoder.config.hidden_size != self.decoder.config.hidden_size and decoder.encoder_hidden_size is None:
+        # optionally project encoder_hidden_states
+        if self.encoder.config.hidden_size != self.decoder.config.hidden_size and self.decoder.config.encoder_hidden_size is None:
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
         # compute correct encoder attention mask
-        if attention_mask is not None:
-            encoder_attention_mask = self.encoder._get_feature_vector_attention_mask(
-                encoder_hidden_states.shape[1], attention_mask
-            )
-        else:
-            encoder_attention_mask = None
+        # if attention_mask is not None:
+        #     encoder_attention_mask = self.encoder._get_feature_vector_attention_mask(
+        #         encoder_hidden_states.shape[1], attention_mask
+        #     )
+        # else:
+        encoder_attention_mask = None
 
         # Decode
         decoder_outputs = self.decoder(

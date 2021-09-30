@@ -271,6 +271,10 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.trocr": [
+        "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TrOCRConfig",
+    ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
@@ -1171,6 +1175,7 @@ if is_torch_available():
             "load_tf_weights_in_transfo_xl",
         ]
     )
+    _import_structure["models.trocr"].extend(["TrOCRForCausalLM", "TrOCRPreTrainedModel"])
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
     _import_structure["models.visual_bert"].extend(
         [
@@ -2090,6 +2095,10 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.trocr import (
+        TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TrOCRConfig,
+    )
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
@@ -2846,6 +2855,11 @@ if TYPE_CHECKING:
             TransfoXLModel,
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
+        )
+        from .models.trocr import (
+            TROCR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TrOCRModel,
+            TrOCRPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.visual_bert import (
