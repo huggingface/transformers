@@ -703,7 +703,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 The output returned by the model.
         """
         raise NotImplementedError
-    
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
         Returns the model's input embeddings layer.
