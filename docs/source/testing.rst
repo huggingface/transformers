@@ -1080,6 +1080,8 @@ If you need to capture both streams at once, use the parent :obj:`CaptureStd` cl
         function_that_writes_to_stdout_and_stderr()
     print(cs.err, cs.out)
 
+Also, to aid debugging test issues, by default these context managers automatically replay the captured streams on exit
+from the context.
 
 
 Capturing logger stream
