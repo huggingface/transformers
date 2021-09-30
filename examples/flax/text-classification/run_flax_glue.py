@@ -26,7 +26,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 import datasets
 import numpy as np
-from datasets import ClassLabel, load_dataset, load_metric
+from datasets import load_dataset, load_metric
 from tqdm import tqdm
 
 import jax
@@ -346,7 +346,7 @@ def main():
         # Loading the dataset from local csv or json file.
         data_files = {}
         if data_args.train_file is not None:
-            data_files["train"] = args.train_file
+            data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
         extension = (data_args.train_file if data_args.train_file is not None else data_args.valid_file).split(".")[-1]
