@@ -629,9 +629,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
           :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
+        - **framework** (:obj:`str`) -- A string indicating the framework of the model.
     """
     config_class = None
     base_model_prefix = ""
+    framework = "tf"
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_missing = None
