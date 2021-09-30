@@ -913,9 +913,9 @@ class BlenderbotConverter(Converter):
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"$A:0 {ot.sep_token}:0",
+            single=f"$A:0 {ot.eos_token}:0",
             special_tokens=[
-                (ot.sep_token, ot.sep_token_id),
+                (ot.eos_token, ot.eos_token_id),
             ],
         )
 
