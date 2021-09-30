@@ -47,7 +47,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.11.0.dev0")
+check_min_version("4.12.0.dev0")
 
 # TODO(Patrick) Bump up as soon as audio features are merged
 require_version("datasets>=1.12.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
@@ -101,12 +101,6 @@ class ModelArguments:
             "help": "Probability of each feature vector along the time axis to be chosen as the start of the vector"
             "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
             "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
-        },
-    )
-    gradient_checkpointing: Optional[bool] = field(
-        default=False,
-        metadata={
-            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
     )
     layerdrop: Optional[float] = field(default=0.0, metadata={"help": "The LayerDrop probability."})
@@ -438,7 +432,7 @@ def main():
             "hidden_dropout": model_args.hidden_dropout,
             "final_dropout": model_args.final_dropout,
             "mask_time_prob": model_args.mask_time_prob,
-            "gradient_checkpointing": model_args.gradient_checkpointing,
+            "gradient_checkpointing": training_args.gradient_checkpointing,
             "layerdrop": model_args.layerdrop,
             "ctc_loss_reduction": model_args.ctc_loss_reduction,
             "pad_token_id": processor.tokenizer.pad_token_id,
