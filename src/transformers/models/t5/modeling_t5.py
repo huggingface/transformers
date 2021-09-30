@@ -621,7 +621,7 @@ class T5Block(nn.Module):
     ):
 
         if past_key_value is not None:
-            # assert self.is_decoder, "Only decoder can use `past_key_values`"
+            #assert self.is_decoder, "Only decoder can use `past_key_values`"
             expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
 
             if len(past_key_value) != expected_num_past_key_values:
