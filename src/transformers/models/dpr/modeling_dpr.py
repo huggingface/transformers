@@ -147,7 +147,29 @@ class DPRReaderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class DPREncoder(PreTrainedModel):
+class DPRPreTrainedModel(PreTrainedModel):
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, BertEncoder):
+            module.gradient_checkpointing = value
+
+
+class DPREncoder(DPRPreTrainedModel):
 
     base_model_prefix = "bert_model"
 
@@ -200,13 +222,8 @@ class DPREncoder(PreTrainedModel):
             return self.encode_proj.out_features
         return self.bert_model.config.hidden_size
 
-    def init_weights(self):
-        self.bert_model.init_weights()
-        if self.projection_dim > 0:
-            self.encode_proj.apply(self.bert_model._init_weights)
 
-
-class DPRSpanPredictor(PreTrainedModel):
+class DPRSpanPredictor(DPRPreTrainedModel):
 
     base_model_prefix = "encoder"
 
@@ -262,16 +279,13 @@ class DPRSpanPredictor(PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def init_weights(self):
-        self.encoder.init_weights()
-
 
 ##################
 # PreTrainedModel
 ##################
 
 
-class DPRPretrainedContextEncoder(PreTrainedModel):
+class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -282,11 +296,8 @@ class DPRPretrainedContextEncoder(PreTrainedModel):
     base_model_prefix = "ctx_encoder"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def init_weights(self):
-        self.ctx_encoder.init_weights()
 
-
-class DPRPretrainedQuestionEncoder(PreTrainedModel):
+class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -297,15 +308,8 @@ class DPRPretrainedQuestionEncoder(PreTrainedModel):
     base_model_prefix = "question_encoder"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def init_weights(self):
-        self.question_encoder.init_weights()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BertEncoder):
-            module.gradient_checkpointing = value
-
-
-class DPRPretrainedReader(PreTrainedModel):
+class DPRPretrainedReader(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -315,15 +319,6 @@ class DPRPretrainedReader(PreTrainedModel):
     load_tf_weights = None
     base_model_prefix = "span_predictor"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
-
-    def init_weights(self):
-        self.span_predictor.encoder.init_weights()
-        self.span_predictor.qa_classifier.apply(self.span_predictor.encoder.bert_model._init_weights)
-        self.span_predictor.qa_outputs.apply(self.span_predictor.encoder.bert_model._init_weights)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BertEncoder):
-            module.gradient_checkpointing = value
 
 
 ###############
