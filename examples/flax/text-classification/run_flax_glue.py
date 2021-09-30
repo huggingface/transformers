@@ -280,7 +280,7 @@ def main():
     # Handle the repository creation
     if args.push_to_hub:
         if args.hub_model_id is None:
-            repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
+            repo_name = get_full_repo_name(Path(args.output_dir).absolute().name, token=args.hub_token)
         else:
             repo_name = args.hub_model_id
         repo = Repository(args.output_dir, clone_from=repo_name)
