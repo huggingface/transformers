@@ -124,6 +124,10 @@ def hp_params(trial):
     if is_sigopt_available():
         if isinstance(trial, dict):
             return trial
+    
+    if is_wandb_available():
+        if isinstance(trial, dict):
+            return trial
 
     raise RuntimeError(f"Unknown type for trial {trial.__class__}")
 
@@ -335,6 +339,36 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
     best_run = BestRun(best.id, best.value, best.assignments)
 
     return best_run
+
+
+def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+    import wandb
+
+    def _objective():
+        run = wandb.init()
+        config = wandb.config
+        trainer.objective = None
+        trainer.train(resume_from_checkpoint=None, trial=config)
+        # If there hasn't been any evaluation during the training loop.
+        if getattr(trainer, "objective", None) is None:
+            metrics = trainer.evaluate()
+            trainer.objective = trainer.compute_objective(metrics)
+        return trainer.objective
+
+    sweep_id = kwargs.pop("sweep_id", None)
+    project = kwargs.pop("project", None)
+    name = kwargs.pop("name", None)
+    entity = kwargs.pop("entity", None)
+
+    sweep_config = trainer.hp_space(None)
+    sweep_config['metric']['goal'] = direction
+    sweep_config['name'] = name
+
+    sweep_id = wandb.sweep(sweep_config, project=project, entity=entity) if not sweep_id else sweep_id
+    wandb.agent(sweep_id, function=_objective, count=n_trials)
+
+    #best_trial = study.best_trial
+    #return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
 
 
 def get_available_reporting_integrations():
