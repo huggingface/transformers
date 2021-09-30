@@ -204,9 +204,9 @@ class TokenClassificationPipeline(Pipeline):
         offset_mapping = model_inputs.pop("offset_mapping", None)
         sentence = model_inputs.pop("sentence")
         if self.framework == "tf":
-            outputs = self.model(model_inputs.data)[0][0].numpy()
+            outputs = self.model(model_inputs.data)[0][0].cpu().numpy()
         else:
-            outputs = self.model(**model_inputs)[0][0].numpy()
+            outputs = self.model(**model_inputs)[0][0].cpu().numpy()
         return {
             "outputs": outputs,
             "special_tokens_mask": special_tokens_mask,
