@@ -436,7 +436,10 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         encoder_hidden_states = encoder_outputs[0]
 
         # optionally project encoder_hidden_states
-        if self.encoder.config.hidden_size != self.decoder.config.hidden_size and self.decoder.config.encoder_hidden_size is None:
+        if (
+            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.encoder_hidden_size is None
+        ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
         # compute correct encoder attention mask

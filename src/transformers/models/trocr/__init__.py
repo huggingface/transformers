@@ -40,11 +40,7 @@ if TYPE_CHECKING:
     from .configuration_trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig
 
     if is_torch_available():
-        from .modeling_trocr import (
-            TROCR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TrOCRForCausalLM,
-            TrOCRPreTrainedModel,
-        )
+        from .modeling_trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
 
 else:
     import sys

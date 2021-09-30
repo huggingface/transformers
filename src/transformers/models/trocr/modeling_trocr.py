@@ -76,6 +76,27 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->TrOCR
+class TrOCRLearnedPositionalEmbedding(nn.Embedding):
+    """
+    This module learns positional embeddings up to a fixed maximum size.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int):
+        # TrOCR is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately (same as BART)
+        self.offset = 2
+        super().__init__(num_embeddings + self.offset, embedding_dim)
+
+    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
+        bsz, seq_len = input_ids_shape[:2]
+        positions = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+        )
+        return super().forward(positions + self.offset)
+
+
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->TrOCR
 class TrOCRAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -109,7 +130,7 @@ class TrOCRAttention(nn.Module):
             self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
             self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
             self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        
+
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
@@ -225,7 +246,7 @@ class TrOCRAttention(nn.Module):
 class TrOCRDecoderLayer(nn.Module):
     def __init__(self, config: TrOCRConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.embed_dim = config.hidden_size
 
         self.self_attn = TrOCRAttention(
             config,
@@ -395,9 +416,10 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.padding_idx = config.pad_token_id
+        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
-        self.embed_positions = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_positions = TrOCRLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
         self.layernorm_embedding = nn.LayerNorm(config.hidden_size)
 
         self.layers = nn.ModuleList([TrOCRDecoderLayer(config) for _ in range(config.decoder_layers)])
@@ -534,7 +556,13 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+
+        embed_pos = self.embed_positions(input_shape)
+
+        hidden_states = inputs_embeds + embed_pos
+        hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -545,15 +573,6 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
-        # embed positions
-        positions = self.embed_positions(input_ids)
-
-        hidden_states = inputs_embeds + positions
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        # layernorm
-        hidden_states = self.layernorm_embedding(hidden_states)
-        
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None

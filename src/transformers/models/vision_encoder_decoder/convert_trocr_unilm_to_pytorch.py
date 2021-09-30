@@ -78,7 +78,7 @@ def create_rename_keys(encoder_config, decoder_config):
             ("encoder.deit.norm.bias", "encoder.layernorm.bias"),
         ]
     )
-    
+
     return rename_keys
 
 
@@ -99,7 +99,7 @@ def read_in_q_k_v(state_dict, encoder_config):
         ]
 
 
-def rename_key(dct, old, new):    
+def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
 
@@ -132,7 +132,7 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         decoder_config.encoder_hidden_size = 1024
     else:
         raise ValueError("Should either find 'base' or 'large' in checkpoint URL")
-    
+
     # load HuggingFace model
     encoder = ViTModel(encoder_config, add_pooling_layer=False)
     decoder = TrOCRForCausalLM(decoder_config)
@@ -141,7 +141,7 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["model"]
-    
+
     rename_keys = create_rename_keys(encoder_config, decoder_config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
@@ -150,14 +150,6 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     del state_dict["encoder.deit.head.weight"]
     del state_dict["encoder.deit.head.bias"]
     del state_dict["decoder.version"]
-    
-    # # add prefix to decoder keys
-    # test = dict()
-    # for key, val in state_dict.copy().items():
-    #     if key.startswith("decoder") and "output_projection" not in key:
-    #         test["decoder.model." + key] = val 
-    #     else:
-    #         test[key] = val
 
     # add prefix to decoder keys (v2)
     for key, val in state_dict.copy().items():
@@ -166,7 +158,7 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
             state_dict["decoder.model." + key] = val
         else:
             state_dict[key] = val
-    
+
     # load state dict
     model.load_state_dict(state_dict)
 

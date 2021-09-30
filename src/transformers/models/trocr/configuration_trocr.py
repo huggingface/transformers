@@ -28,10 +28,10 @@ TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TrOCRConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.TrOCRForCausalLM`. It
-    is used to instantiate an TrOCR model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the TrOCR
-    `microsoft/trocr-base <https://huggingface.co/microsoft/trocr-base>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.TrOCRForCausalLM`. It is used
+    to instantiate an TrOCR model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the TrOCR `microsoft/trocr-base
+    <https://huggingface.co/microsoft/trocr-base>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -39,8 +39,8 @@ class TrOCRConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
-            Vocabulary size of the TrOCR model. Defines the number of different tokens that can be represented by
-            the :obj:`inputs_ids` passed when calling :class:`~transformers.TrOCRForCausalLM`.
+            Vocabulary size of the TrOCR model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.TrOCRForCausalLM`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         decoder_layers (:obj:`int`, `optional`, defaults to 12):
@@ -52,7 +52,7 @@ class TrOCRConfig(PretrainedConfig):
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the pooler. If string, :obj:`"gelu"`,
             :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 514):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         dropout (:obj:`float`, `optional`, defaults to 0.1):
@@ -68,6 +68,8 @@ class TrOCRConfig(PretrainedConfig):
             https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to scale the word embeddings by sqrt(d_model).
 
         Example::
 
@@ -94,7 +96,7 @@ class TrOCRConfig(PretrainedConfig):
         decoder_attention_heads=4,
         decoder_ffn_dim=4096,
         activation_function="gelu",
-        max_position_embeddings=514,
+        max_position_embeddings=512,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -102,6 +104,7 @@ class TrOCRConfig(PretrainedConfig):
         classifier_dropout=0.0,
         init_std=0.02,
         use_cache=False,
+        scale_embedding=True,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -120,6 +123,7 @@ class TrOCRConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.init_std = init_std
         self.use_cache = use_cache
+        self.scale_embedding = scale_embedding
 
         super().__init__(
             pad_token_id=pad_token_id,
