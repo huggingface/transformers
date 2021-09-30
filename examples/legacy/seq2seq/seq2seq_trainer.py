@@ -226,10 +226,11 @@ class Seq2SeqTrainer(Trainer):
             if generated_tokens.shape[-1] < gen_kwargs["max_length"]:
                 generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
 
-        labels = inputs.pop("labels")
-        with torch.no_grad():
-            # compute loss on predict data
-            loss, logits = self._compute_loss(model, inputs, labels)
+#         labels = inputs.pop("labels")
+#         with torch.no_grad():
+#             # compute loss on predict data
+#             loss, logits = self._compute_loss(model, inputs, labels)
+        loss, logits = self.compute_loss(model, inputs)
 
         loss = loss.mean().detach()
         if self.args.prediction_loss_only:
