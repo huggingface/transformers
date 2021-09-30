@@ -740,7 +740,7 @@ class QDQBertPreTrainedModel(PreTrainedModel):
 
     config_class = QDQBertConfig
     load_tf_weights = load_tf_weights_in_qdqbert
-    base_model_prefix = "qdqbert"
+    base_model_prefix = "bert"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
