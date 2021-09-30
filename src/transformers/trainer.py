@@ -920,7 +920,8 @@ class Trainer:
             tune.report(objective=self.objective, **metrics)
         elif self.hp_search_backend == HPSearchBackend.WANDB:
             import wandb
-            
+
+            logger.info("ID ==" , wandb.run.id)
             metrics['objective'] = self.objective
             wandb.log(metrics)
 
@@ -1757,7 +1758,7 @@ class Trainer:
         if backend == HPSearchBackend.SIGOPT and not is_sigopt_available():
             raise RuntimeError("You picked the sigopt backend, but it is not installed. Use `pip install sigopt`.")
         if backend == HPSearchBackend.WANDB and not is_wandb_available():
-            raise RuntimeError("You picked the sigopt backend, but it is not installed. Use `pip install sigopt`.")
+            raise RuntimeError("You picked the sigopt backend, but it is not installed. Use `pip install wandb`.")
         self.hp_search_backend = backend
         if self.model_init is None:
             raise RuntimeError(
