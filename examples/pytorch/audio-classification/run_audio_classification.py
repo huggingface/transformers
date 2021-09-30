@@ -287,7 +287,8 @@ def main():
     # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p):
         """Computes accuracy on a batch of predictions"""
-        return metric.compute(predictions=np.argmax(p.predictions, axis=1), references=p.label_ids)
+        predictions = np.argmax(p.predictions, axis=1)
+        return metric.compute(predictions=predictions, references=p.label_ids)
 
     config = AutoConfig.from_pretrained(
         model_args.config_name or model_args.model_name_or_path,
