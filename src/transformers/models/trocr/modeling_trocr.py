@@ -84,7 +84,7 @@ class TrOCRLearnedPositionalEmbedding(nn.Embedding):
 
     def __init__(self, num_embeddings: int, embedding_dim: int):
         # TrOCR is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately (same as BART)
+        # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 

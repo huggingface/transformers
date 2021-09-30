@@ -3575,6 +3575,27 @@ def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
 
 
+TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TrOCRModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class TrOCRPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class VisionEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

@@ -159,7 +159,7 @@ class RobertaEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Roberta
 class RobertaSelfAttention(nn.Module):
-    def __init__(self, config, is_cross_attention=False):
+    def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -171,14 +171,9 @@ class RobertaSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        if is_cross_attention and config.is_decoder and config.encoder_hidden_size is not None:
-            self.query = nn.Linear(config.hidden_size, self.all_head_size)
-            self.key = nn.Linear(config.encoder_hidden_size, self.all_head_size)
-            self.value = nn.Linear(config.encoder_hidden_size, self.all_head_size)
-        else:
-            self.query = nn.Linear(config.hidden_size, self.all_head_size)
-            self.key = nn.Linear(config.hidden_size, self.all_head_size)
-            self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -305,9 +300,9 @@ class RobertaSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Roberta
 class RobertaAttention(nn.Module):
-    def __init__(self, config, is_cross_attention=False):
+    def __init__(self, config):
         super().__init__()
-        self.self = RobertaSelfAttention(config, is_cross_attention=is_cross_attention)
+        self.self = RobertaSelfAttention(config)
         self.output = RobertaSelfOutput(config)
         self.pruned_heads = set()
 
@@ -395,7 +390,7 @@ class RobertaLayer(nn.Module):
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = RobertaAttention(config, is_cross_attention=True)
+            self.crossattention = RobertaAttention(config)
         self.intermediate = RobertaIntermediate(config)
         self.output = RobertaOutput(config)
 
