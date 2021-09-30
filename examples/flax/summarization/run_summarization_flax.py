@@ -42,6 +42,7 @@ from flax import jax_utils, traverse_util
 from flax.jax_utils import unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
+from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -52,7 +53,7 @@ from transformers import (
     TrainingArguments,
     is_tensorboard_available,
 )
-from transformers.file_utils import is_offline_mode
+from transformers.file_utils import get_full_repo_name, is_offline_mode
 
 
 logger = logging.getLogger(__name__)
@@ -332,6 +333,16 @@ def main():
 
     # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info(f"Training/evaluation parameters {training_args}")
+
+    # Handle the repository creation
+    if training_args.push_to_hub:
+        if training_args.hub_model_id is None:
+            repo_name = get_full_repo_name(
+                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
+            )
+        else:
+            repo_name = training_args.hub_model_id
+        repo = Repository(training_args.output_dir, clone_from=repo_name)
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -800,12 +811,10 @@ def main():
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
             params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
-            model.save_pretrained(
-                training_args.output_dir,
-                params=params,
-                push_to_hub=training_args.push_to_hub,
-                commit_message=f"Saving weights and logs of epoch {epoch+1}",
-            )
+            model.save_pretrained(training_args.output_dir, params=params)
+            tokenizer.save_pretrained(training_args.output_dir)
+            if training_args.push_to_hub:
+                repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
 
 
 if __name__ == "__main__":

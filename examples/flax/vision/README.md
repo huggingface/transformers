@@ -25,37 +25,6 @@ way which enables simple and efficient model parallelism.
 
 In this example we will train/fine-tune the model on the [imagenette](https://github.com/fastai/imagenette) dataset.
 
-Let's start by creating a model repository to save the trained model and logs.
-Here we call the model `"vit-base-patch16-imagenette"`, but you can change the model name as you like.
-
-You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
-you are logged in) or via the command line:
-
-```
-huggingface-cli repo create vit-base-patch16-imagenette
-```
-Next we clone the model repository to add the tokenizer and model files.
-```
-git clone https://huggingface.co/<your-username>/vit-base-patch16-imagenette
-```
-To ensure that all tensorboard traces will be uploaded correctly, we need to 
-track them. You can run the following command inside your model repo to do so.
-
-```
-cd vit-base-patch16-imagenette
-git lfs track "*tfevents*"
-```
-
-Great, we have set up our model repository. During training, we will automatically
-push the training logs and model weights to the repo.
-
-Next, let's add a symbolic link to the `run_image_classification_flax.py`.
-
-```bash
-export MODEL_DIR="./vit-base-patch16-imagenette
-ln -s ~/transformers/examples/flax/summarization/run_image_classification_flax.py run_image_classification_flax.py
-```
-
 ## Prepare the dataset
 
 We will use the [imagenette](https://github.com/fastai/imagenette) dataset to train/fine-tune our model. Imagenette is a subset of 10 easily classified classes from Imagenet (tench, English springer, cassette player, chain saw, church, French horn, garbage truck, gas pump, golf ball, parachute).
@@ -86,7 +55,7 @@ Next we can run the example script to fine-tune the model:
 
 ```bash
 python run_image_classification.py \
-    --output_dir ${MODEL_DIR} \
+    --output_dir ./vit-base-patch16-imagenette \
     --model_name_or_path google/vit-base-patch16-224-in21k \
     --train_dir="imagenette2/train" \
     --validation_dir="imagenette2/val" \
