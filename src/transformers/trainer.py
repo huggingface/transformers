@@ -921,7 +921,7 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.WANDB:
             import wandb
 
-            metrics["objective"] = self.objective
+            metrics[wandb.run.config.metric] = self.objective
             wandb.log(metrics)
 
     def _tune_save_checkpoint(self):
