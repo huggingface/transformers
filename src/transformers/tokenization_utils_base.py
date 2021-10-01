@@ -2225,7 +2225,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if verbose:
                     if max_length is not None and (truncation is False or truncation == "do_not_truncate"):
                         warnings.warn(
-                            "`max_length` is ignored when `padding`=`True` and `truncation` is False or `do_not_truncate`."
+                            "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
+                            "To pad to max length, use `padding='max_length'`."
                         )
                     if old_pad_to_max_length is not False:
                         warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
