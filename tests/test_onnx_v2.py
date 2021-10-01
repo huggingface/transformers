@@ -13,7 +13,16 @@ from transformers import (  # LongformerConfig,; T5Config,
     LayoutLMConfig,
     MBartConfig,
     RobertaConfig,
+    TFAlbertModel,
+    TFBartModel,
+    TFBertModel,
+    TFDistilBertModel,
+    TFGPT2Model,
+    TFMBartModel,
+    TFRobertaModel,
+    TFXLMRobertaModel,
     XLMRobertaConfig,
+    is_tf_available,
     is_torch_available,
 )
 from transformers.models.albert import AlbertOnnxConfig
@@ -39,7 +48,7 @@ from transformers.onnx import (
 )
 from transformers.onnx.config import DEFAULT_ONNX_OPSET, OnnxConfigWithPast
 from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
-from transformers.testing_utils import require_onnx, require_torch, slow
+from transformers.testing_utils import require_onnx, require_tf, require_torch, slow
 
 
 @require_onnx
@@ -223,6 +232,42 @@ if is_torch_available():
     }
 
 
+if is_tf_available():
+    from transformers import (  # T5Model,
+        AlbertModel,
+        BartModel,
+        BertModel,
+        DistilBertModel,
+        GPT2Model,
+        GPTNeoModel,
+        LayoutLMModel,
+        MBartModel,
+        RobertaModel,
+        XLMRobertaModel,
+    )
+
+    TENSORFLOW_EXPORT_DEFAULT_MODELS = {
+        ("ALBERT", "hf-internal-testing/tiny-albert", TFAlbertModel, AlbertConfig, AlbertOnnxConfig),
+        ("BART", "facebook/bart-base", TFBartModel, BartConfig, BartOnnxConfig),
+        ("BERT", "bert-base-cased", TFBertModel, BertConfig, BertOnnxConfig),
+        ("DistilBERT", "distilbert-base-cased", TFDistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
+        ("GPT2", "gpt2", TFGPT2Model, GPT2Config, GPT2OnnxConfig),
+        # ("GPT-Neo", "EleutherAI/gpt-neo-125M", TFGPTNeoModel, GPTNeoConfig, GPTNeoOnnxConfig),
+        # ("LongFormer", "longformer-base-4096", LongformerModel, LongformerConfig, LongformerOnnxConfig),
+        ("Roberta", "roberta-base", TFRobertaModel, RobertaConfig, RobertaOnnxConfig),
+        ("XLM-Roberta", "roberta-base", TFXLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
+        # ("LayoutLM", "microsoft/layoutlm-base-uncased", TFLayoutLMModel, LayoutLMConfig, LayoutLMOnnxConfig),
+        ("MBart", "sshleifer/tiny-mbart", TFMBartModel, MBartConfig, MBartOnnxConfig),
+        # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig),
+    }
+
+    TENSORFLOW_EXPORT_WITH_PAST_MODELS = {
+        # ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
+        # ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
+        # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig)
+    }
+
+
 class OnnxExportTestCaseV2(TestCase):
     """
     Integration tests ensuring supported models are correctly exported
@@ -252,11 +297,61 @@ class OnnxExportTestCaseV2(TestCase):
                         self.fail(f"{name} -> {ve}")
 
     @slow
+    @require_tf
+    def test_tensorflow_export_default(self):
+        from transformers.onnx import export
+
+        for name, model, model_class, config_class, onnx_config_class in TENSORFLOW_EXPORT_DEFAULT_MODELS:
+            with self.subTest(name):
+                self.assertTrue(hasattr(onnx_config_class, "from_model_config"))
+
+                tokenizer = AutoTokenizer.from_pretrained(model)
+                model = model_class(config_class.from_pretrained(model))
+                onnx_config = onnx_config_class.from_model_config(model.config)
+
+                with NamedTemporaryFile("w") as output:
+                    onnx_inputs, onnx_outputs = export(
+                        tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, Path(output.name)
+                    )
+
+                    try:
+                        validate_model_outputs(onnx_config, tokenizer, model, Path(output.name), onnx_outputs, 1e-5)
+                    except ValueError as ve:
+                        self.fail(f"{name} -> {ve}")
+
+    @slow
     @require_torch
     def test_pytorch_export_with_past(self):
         from transformers.onnx import export
 
         for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_WITH_PAST_MODELS:
+            with self.subTest(name):
+                self.assertTrue(hasattr(onnx_config_class, "with_past"), "OnnxConfigWithPast should have with_past()")
+
+                tokenizer = AutoTokenizer.from_pretrained(model)
+                model = model_class(config_class())
+                onnx_config = onnx_config_class.with_past(model.config)
+
+                self.assertTrue(hasattr(onnx_config, "use_past"), "OnnxConfigWithPast should have use_past attribute.")
+                self.assertTrue(
+                    onnx_config.use_past, "OnnxConfigWithPast.use_past should be if called with with_past()"
+                )
+
+                with NamedTemporaryFile("w") as output:
+                    output = Path(output.name)
+                    onnx_inputs, onnx_outputs = export(tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, output)
+
+                    try:
+                        validate_model_outputs(onnx_config, tokenizer, model, output, onnx_outputs, 1e-5)
+                    except ValueError as ve:
+                        self.fail(f"{name} -> {ve}")
+
+    @slow
+    @require_tf
+    def test_tensorflow_export_with_past(self):
+        from transformers.onnx import export
+
+        for name, model, model_class, config_class, onnx_config_class in TENSORFLOW_EXPORT_WITH_PAST_MODELS:
             with self.subTest(name):
                 self.assertTrue(hasattr(onnx_config_class, "with_past"), "OnnxConfigWithPast should have with_past()")
 
