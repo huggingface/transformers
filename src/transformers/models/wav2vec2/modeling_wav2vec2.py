@@ -1353,7 +1353,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         quantized_features = self.project_q(quantized_features)
 
         loss = None
-        if self.training:
+        if sampled_negative_indices is not None:
             batch_size, sequence_length, hidden_size = quantized_features.shape
 
             # for training, we sample negatives
