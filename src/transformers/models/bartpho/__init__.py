@@ -18,16 +18,17 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule
+from ...file_utils import _LazyModule, is_sentencepiece_available
 
 
-_import_structure = {
-    "tokenization_bartpho": ["BartphoTokenizer"],
-}
+_import_structure = {}
 
+if is_sentencepiece_available():
+    _import_structure["tokenization_bartpho"] = ["BartphoTokenizer"]
 
 if TYPE_CHECKING:
-    from .tokenization_bartpho import BartphoTokenizer
+    if is_sentencepiece_available():
+        from .tokenization_bartpho import BartphoTokenizer
 
 else:
     import sys
