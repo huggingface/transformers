@@ -348,6 +348,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
 
     def _objective():
         run = wandb.init()
+        run.config.update({"assignments": {}})
         config = wandb.config
         trainer.objective = None
         trainer.train(resume_from_checkpoint=None, trial=config)
