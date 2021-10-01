@@ -41,7 +41,7 @@ Example of use:
 
     >>> line = "Chúng tôi là những nghiên cứu viên."
 
-    >>> input_ids = torch.tensor([tokenizer.encode(line)])
+    >>> input_ids = tokenizer(line, return_tensors="pt)["input_ids"]
 
     >>> with torch.no_grad():
     ...     features = bartpho(input_ids)  # Models outputs are now tuples
