@@ -109,6 +109,7 @@ class RealmConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        use_scann=True,
         use_cache=True,
         span_hidden_size=256,
         max_span_width=10,
@@ -117,6 +118,7 @@ class RealmConfig(PretrainedConfig):
         reader_seq_len=288+32,
         num_block_records=13353718,
         searcher_beam_size=5000,
+        searcher_seq_len=64,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -139,6 +141,7 @@ class RealmConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
+        self.use_scann = use_scann
         self.use_cache = use_cache
 
         # Reader config
@@ -151,3 +154,4 @@ class RealmConfig(PretrainedConfig):
         # Searcher config
         self.num_block_records = num_block_records
         self.searcher_beam_size = searcher_beam_size
+        self.searcher_seq_len = searcher_seq_len
