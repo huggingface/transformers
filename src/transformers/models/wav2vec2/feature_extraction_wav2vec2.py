@@ -90,13 +90,13 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             normed_input_values = []
 
             for vector, length in zip(input_values, attention_mask.sum(-1)):
-                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var(ddof=1) + 1e-5)
+                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var())
                 if length > normed_slice.shape[0]:
                     normed_slice[length:] = padding_value
 
                 normed_input_values.append(normed_slice)
         else:
-            normed_input_values = [(x - x.mean()) / np.sqrt(x.var(ddof=1) + 1e-5) for x in input_values]
+            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
 
         return normed_input_values
 
