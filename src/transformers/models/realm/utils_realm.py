@@ -1,5 +1,3 @@
-import tensorflow.compat.v1 as tf
-
 def load_scann_searcher(db,
                         num_neighbors,
                         dimensions_per_block=2,
@@ -25,6 +23,9 @@ def load_scann_searcher(db,
     return searcher
 
 def convert_tfrecord_to_np(block_records_path, num_block_records):
+
+    import tensorflow.compat.v1 as tf
+
     blocks_dataset = tf.data.TFRecordDataset(
         block_records_path, buffer_size=512 * 1024 * 1024)
     blocks_dataset = blocks_dataset.batch(

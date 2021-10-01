@@ -26,6 +26,7 @@ from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss
 import numpy as np
+from transformers.models.realm.tokenization_realm import RealmTokenizer
 
 
 from ...activations import ACT2FN
@@ -929,7 +930,7 @@ class RealmReaderProjection(nn.Module):
                 Returns:
                 starts: <int32> [num_spans]
                 ends: <int32> [num_spans]
-                span_masks: <int32> [num_retrievals, num_spans]
+                span_masks: <int32> [num_retrievals, num_spans] whether spans locate in evidence block.
             """
             _, max_sequence_len = masks.shape
             def _spans_given_width(width):
@@ -1430,17 +1431,30 @@ class RealmSearcher(RealmPreTrainedModel):
     def __init__(self, config, block_records_path):
         super().__init__(config)
         self.embedder = RealmEmbedder(config)
-        self.block_emb = torch.zeros(()).new_empty(
-            size=(config.num_block_records, config.retriever_proj_size),
-            dtype=torch.float32,
-            device=torch.device('cpu')
-        )
         self.searcher = None
         self.block_records = convert_tfrecord_to_np(
             block_records_path = block_records_path,
-            num_block_records = self.config.num_block_records,
+            num_block_records = config.num_block_records,
+        )
+        self.register_buffer("block_emb", 
+            torch.zeros(()).new_empty(
+                size=(config.num_block_records, config.retriever_proj_size),
+                dtype=torch.float32,
+                device=torch.device('cpu')
+            )
         )
         self.init_weights()
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        try:
+            import scann
+        except ImportError:
+            raise ImportError(
+                "RealmSearcher requires ScaNN to retrieve documents from the corpus."
+                "Please install it through `pip install scann`."
+            )
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
     
     def forward(
         self,
@@ -1510,7 +1524,6 @@ class RealmSearcher(RealmPreTrainedModel):
             retrieved_blocks=retrieved_blocks,
             retrieved_block_ids=retrieved_block_ids,
         )
-
 
 
 class RealmReader(RealmPreTrainedModel):
@@ -1675,3 +1688,124 @@ class RealmReader(RealmPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+class RealmForOpenQA(RealmPreTrainedModel):
+    def __init__(self, config, searcher, reader, tokenizer):
+        super().__init__(config)
+        self.searcher = searcher
+        self.reader = reader
+        self.tokenizer = tokenizer
+
+    @classmethod
+    def from_pretrained(cls, searcher_pretrained_name_or_path, reader_pretrained_name_or_path, *args, **kwargs):
+        config = kwargs.pop("config", None) or RealmConfig.from_pretrained(searcher_pretrained_name_or_path, **kwargs)
+        searcher = RealmSearcher.from_pretrained(searcher_pretrained_name_or_path, *args, **kwargs)
+        reader = RealmReader.from_pretrained(reader_pretrained_name_or_path, *args, **kwargs)
+        tokenizer = RealmTokenizer.from_pretrained(searcher_pretrained_name_or_path, **kwargs)
+        return cls(config, searcher, reader, tokenizer)
+    
+    def save_pretrained(self, save_directory):
+        self.searcher.save_pretrained(save_directory)
+        self.reader.save_pretrained(save_directory)
+
+    def retrieve(self, input_ids, **kwargs):
+        output = self.searcher(
+            input_ids,
+            return_dict=True, 
+            **kwargs)
+        return output
+
+    def read(self, searcher_output, question, answers):
+        def block_has_answer(concat_inputs, answers):
+            """check if retrieved_blocks has answers."""
+            has_answers = []
+            start_pos = []
+            end_pos = []
+            max_answers = 0
+
+            for input_id in concat_inputs.input_ids:
+                pass_sep = False
+                answer_pos = 0
+                start=-1
+                start_pos.append([])
+                end_pos.append([])
+                for answer in answers:
+                    for idx, id in enumerate(input_id):
+                        if id == self.tokenizer.sep_token_id:
+                            pass_sep = True
+                        if not pass_sep:
+                            continue
+                        if answer[answer_pos] == id:
+                            if start == -1:
+                                start = idx
+                            if answer_pos == len(answer) - 1:
+                                start_pos[-1].append(start)
+                                end_pos[-1].append(idx)
+                                answer_pos = 0
+                                start = -1
+                                break
+                            else:
+                                answer_pos += 1
+                        else:
+                            answer_pos = 0
+                            start = -1
+                
+                if len(start_pos[-1]) == 0:
+                    has_answers.append(False)
+                else:
+                    has_answers.append(True)
+                    if len(start_pos[-1]) > max_answers:
+                        max_answers = len(start_pos[-1])
+
+            # Pad -1 to max_answers
+            for start_pos_, end_pos_ in zip(start_pos, end_pos):
+                while len(start_pos_) < max_answers:
+                    start_pos_.append(-1)
+                while len(end_pos_) < max_answers:
+                    end_pos_.append(-1)
+
+            assert len(has_answers) == len(start_pos) == len(end_pos)
+
+            return (
+                torch.tensor(has_answers, dtype=torch.bool, device=concat_inputs.input_ids.device),
+                torch.tensor(start_pos, dtype=torch.int64, device=concat_inputs.input_ids.device),
+                torch.tensor(end_pos, dtype=torch.int64, device=concat_inputs.input_ids.device),
+            )
+
+        text = []
+        text_pair = []
+        for retrieved_block in searcher_output.retrieved_blocks:
+            text.append(question)
+            text_pair.append(retrieved_block.decode())
+
+        concat_inputs = self.tokenizer(text, text_pair, return_tensors='pt', padding=True, truncation=True, max_length=self.config.reader_seq_len)
+
+        if answers is not None:
+            has_answers, start_positions, end_positions = block_has_answer(concat_inputs.to(searcher_output.retrieved_logits.device), answers)
+        else:
+            has_answers, start_positions, end_positions = (None, None, None)
+
+        output = self.reader(
+            input_ids=concat_inputs.input_ids[0: self.config.reader_beam_size],
+            attention_mask=concat_inputs.attention_mask[0: self.config.reader_beam_size],
+            token_type_ids=concat_inputs.token_type_ids[0: self.config.reader_beam_size],
+            relevance_score=searcher_output.retrieved_logits,
+            has_answers=has_answers,
+            start_positions=start_positions,
+            end_positions=end_positions,
+            return_dict=True,
+        )
+
+        answer = self.tokenizer.decode(concat_inputs.input_ids[output.block_idx][output.start_pos: output.end_pos + 1])
+
+        return output, answer
+
+    def forward(self, question, answers=None):
+        question_ids = self.tokenizer([question], max_length=self.config.searcher_seq_len)
+        
+        searcher_output = self.retrieve(**question_ids)
+
+        reader_output, predicted_answer = self.read(searcher_output, question, answers)
+
+        return searcher_output, reader_output, predicted_answer
