@@ -118,7 +118,6 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     contrastive_loss: Optional[torch.FloatTensor] = None
     diversity_loss: Optional[torch.FloatTensor] = None
-    neg_is_pos: Optional[torch.FloatTensor] = None
 
 
 def _random_spans_noise_mask(length, noise_density, mean_noise_span_length):
@@ -209,79 +208,6 @@ def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
     mask_length: int,
-    attention_mask: Optional[torch.tensor] = None,
-) -> np.ndarray:
-    """
-    Computes random mask spans for a given shape
-
-    Args:
-        shape: the the shape for which to compute masks.
-            should be of size 2 where first element is batch size and 2nd is timesteps
-        attention_mask: optional padding mask of the same size as shape, which will prevent masking padded elements
-        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
-            number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
-            however due to overlaps, the actual number will be smaller (unless no_overlap is True)
-        mask_type: how to compute mask lengths
-            static = fixed size
-            uniform = sample from uniform distribution [mask_other, mask_length*2]
-            normal = sample from normal distribution with mean mask_length and stdev mask_other. mask is min 1 element
-            poisson = sample from possion distribution with lambda = mask length
-        min_masks: minimum number of masked spans
-        no_overlap: if false, will switch to an alternative recursive algorithm that prevents spans from overlapping
-        min_space: only used if no_overlap is True, this is how many elements to keep unmasked between spans
-    """
-    batch_size, sequence_length = shape
-    mask = np.full((batch_size, sequence_length), False)
-
-    all_num_mask = int(
-        # add a random number for probabilistic rounding
-        mask_prob * sequence_length / float(mask_length)
-        + np.random.rand()
-    )
-
-    mask_indicess = []
-    for i in range(batch_size):
-        if attention_mask is not None:
-            sequence_length = int(attention_mask[i].sum().item())
-            num_mask = int(
-                # add a random number for probabilistic rounding
-                mask_prob * sequence_length / float(mask_length)
-                + np.random.rand()
-            )
-#            num_mask = max(min_masks, num_mask)
-        else:
-            num_mask = all_num_mask
-
-        lengths = np.full(num_mask, mask_length)
-
-        if sequence_length - mask_length <= num_mask:
-            raise ValueError("...")
-
-        mask_indices = np.random.choice(sequence_length - mask_length, num_mask, replace=False)
-
-        mask_indices = np.asarray(
-            [
-                mask_indices[j] + offset
-                for j in range(len(mask_indices))
-                for offset in range(lengths[j])
-            ]
-        )
-
-        mask_indicess.append(np.unique(mask_indices[mask_indices < sequence_length]))
-
-    min_len = min([len(m) for m in mask_indicess])
-    for i, mask_indices in enumerate(mask_indicess):
-        if len(mask_indices) > min_len:
-            mask_indices = np.random.choice(mask_indices, min_len, replace=False)
-        mask[i, mask_indices] = True
-
-    return mask
-
-
-def old_compute_mask_indices(
-    shape: Tuple[int, int],
-    mask_prob: float,
-    mask_length: int,
     device: torch.device,
     attention_mask: Optional[torch.tensor] = None,
     min_masks: int = 0,
@@ -298,7 +224,6 @@ def old_compute_mask_indices(
             however due to overlaps, the actual number will be smaller (unless no_overlap is True)
         mask_length: size of the mask
         min_masks: minimum number of masked spans
-
     """
     batch_size, sequence_length = shape
 
@@ -348,6 +273,38 @@ def old_compute_mask_indices(
         spec_aug_mask = torch.where(attention_mask.bool(), spec_aug_mask, False)
 
     return spec_aug_mask
+
+
+def _sample_negative_indices(
+    features_shape: Tuple, num_negatives: int, mask_time_indices: Optional[np.ndarray] = None
+):
+    """
+    Sample `num_negatives` vectors from feature vectors.
+    """
+    batch_size, sequence_length = features_shape
+
+    # generate indices of the positive vectors themselves, repeat them `num_negatives` times
+    sequence_length_range = np.arange(sequence_length)
+
+    # get `num_negatives` random vector indices from the same utterance
+    sampled_negative_indices = np.zeros(shape=(batch_size, sequence_length, num_negatives), dtype=np.int32)
+
+    for batch_idx in range(batch_size):
+        high = mask_time_indices[batch_idx].sum() - 1 if mask_time_indices is not None else sequence_length - 1
+        mapped_masked_indices = sequence_length_range[mask_time_indices[batch_idx]]
+
+        feature_indices = np.broadcast_to(np.arange(high + 1)[:, None], (high + 1, num_negatives))
+        sampled_indices = np.random.randint(0, high, size=(high + 1, num_negatives))
+        # avoid sampling the same positive vector, but keep the distribution uniform
+        sampled_indices[sampled_indices >= feature_indices] += 1
+
+        # remap to actual indices
+        sampled_negative_indices[batch_idx][mask_time_indices[batch_idx]] = mapped_masked_indices[sampled_indices]
+
+        # correct for batch size
+        sampled_negative_indices[batch_idx] += batch_idx * sequence_length
+
+    return sampled_negative_indices
 
 
 class Wav2Vec2NoLayerNormConvLayer(nn.Module):
@@ -1164,9 +1121,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 (batch_size, sequence_length),
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
+                device=self.device,
                 attention_mask=attention_mask,
             )
-            mask_time_indices = torch.tensor(mask_time_indices, device=self.device)
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
 
         if self.config.mask_feature_prob > 0 and self.training:
@@ -1175,9 +1132,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 (batch_size, hidden_size),
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
+                device=self.device,
                 attention_mask=attention_mask,
             )
-            mask_time_indices = torch.tensor(mask_time_indices, device=self.device)
             hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
 
         return hidden_states
@@ -1285,59 +1242,6 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         self.wav2vec2.feature_extractor._freeze_parameters()
 
     @staticmethod
-    def _sample_negatives(
-        features: torch.FloatTensor, num_negatives: int, attention_mask: Optional[torch.LongTensor] = None
-    ):
-        """
-        Sample `num_negatives` vectors from feature vectors.
-        """
-        batch_size, sequence_length, hidden_size = features.shape
-        if sequence_length <= 1:
-            raise ValueError(
-                f"`features should have `sequence_length` > 1, but are of shape (batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
-            )
-
-        features = features.view(-1, hidden_size)  # BTC => (BxT)C
-
-#        with torch.no_grad():
-            # get `num_negatives` random vector indices from the same utterance
-#            sampled_negative_indices = []
-#            for batch_idx in range(batch_size):
-#                high = attention_mask[batch_idx].sum() - 1 if attention_mask is not None else sequence_length - 1
-#                sampled_indices_slice = torch.randint(
-#                    0, high, size=(num_negatives * sequence_length,), device=features.device
-#                )
-#                sampled_negative_indices.append(sampled_indices_slice)
-#
-#            sampled_negative_indices = torch.stack(sampled_negative_indices)
-
-            # generate indices of the positive vectors themselves, repeat them `num_negatives` times
-
-        with torch.no_grad():
-            sampled_negative_indices = torch.randint(0, sequence_length - 1, size=(batch_size, num_negatives * sequence_length), device=features.device)
-
-            feature_indices = (
-                torch.arange(sequence_length, device=features.device)[:, None]
-                .expand(sequence_length, num_negatives)
-                .flatten()
-            )
-
-            # avoid sampling the same positive vector, but keep the distribution uniform
-            sampled_negative_indices[sampled_negative_indices >= feature_indices] += 1
-
-        # correct for batch size
-        for batch_idx in range(1, batch_size):
-            sampled_negative_indices[batch_idx] += batch_idx * sequence_length
-
-        # take negative vectors from sampled indices
-        sampled_negatives = features[sampled_negative_indices.view(-1)]
-        sampled_negatives = sampled_negatives.view(batch_size, sequence_length, num_negatives, hidden_size).permute(
-            2, 0, 1, 3
-        )
-
-        return sampled_negatives
-
-    @staticmethod
     def compute_contrastive_logits(
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
@@ -1365,6 +1269,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         input_values,
         attention_mask=None,
         mask_time_indices=None,
+        sampled_negative_indices=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1444,21 +1349,19 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # compute reduced attention_mask correponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
-        # only use masked indices
-        extract_features = extract_features[mask_time_indices].view(extract_features.size(0), -1, extract_features.size(-1))
-        transformer_features = transformer_features[mask_time_indices].view(transformer_features.size(0), -1, transformer_features.size(-1))
-
-        quantized_features, codevector_perplexity = self.quantizer(extract_features)
+        quantized_features, codevector_perplexity = self.quantizer(extract_features, mask_time_indices=mask_time_indices)
         quantized_features = self.project_q(quantized_features)
 
         loss = None
         if self.training:
+            batch_size, sequence_length, hidden_size = quantized_features.shape
+
             # for training, we sample negatives
             # 3. sample K negatives (distractors) quantized states for contrastive loss
             # if attention_mask is passed, make sure that padded feature vectors cannot be sampled
-            negative_quantized_features = self._sample_negatives(
-                quantized_features, self.config.num_negatives
-            )
+            # sample negative quantized vectors BTC => (BxT)C
+            negative_quantized_features = quantized_features.view(-1, hidden_size)[sampled_negative_indices.view(-1)]
+            negative_quantized_features = negative_quantized_features.view(batch_size, sequence_length, self.config.num_negatives, hidden_size).permute(2, 0, 1, 3)
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
             # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
@@ -1478,13 +1381,10 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
             # 6. compute contrastive loss \mathbf{L}_m = cross_entropy(logs) =
             # -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))
-            preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
+            logits = logits.transpose(0, 2).reshape(-1, logits.size(0))
+            target = ((1 - mask_time_indices.long()) * -100).transpose(0, 1).flatten()
 
-#            target = ((1 - attention_mask.long()) * -100).transpose(0, 1).flatten()
-#            target = ((1 - mask_time_indices.long()) * -100).transpose(0, 1).flatten()
-            target = torch.zeros(preds.shape[0], device=preds.device, dtype=torch.long)
-
-            contrastive_loss = nn.functional.cross_entropy(preds.float(), target, reduction="sum")
+            contrastive_loss = nn.functional.cross_entropy(logits.float(), target, reduction="sum")
             # 7. compute diversity loss: \mathbf{L}_d
             num_codevectors = self.config.num_codevectors_per_group * self.config.num_codevector_groups
             diversity_loss = ((num_codevectors - codevector_perplexity) / num_codevectors) * mask_time_indices.sum()
@@ -1506,7 +1406,6 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             attentions=outputs.attentions,
             contrastive_loss=contrastive_loss,
             diversity_loss=diversity_loss,
-            neg_is_pos=neg_is_pos,
         )
 
 
