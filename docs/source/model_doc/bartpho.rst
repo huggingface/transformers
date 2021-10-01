@@ -37,18 +37,20 @@ Example of use:
 
     >>> bartpho = AutoModel.from_pretrained("vinai/bartpho-syllable")
 
-    >>> # tokenizer = AutoTokenizer.from_pretrained("vinai/bartpho-syllable")
+    >>> tokenizer = AutoTokenizer.from_pretrained("vinai/bartpho-syllable")
 
     >>> line = "Chúng tôi là những nghiên cứu viên."
 
-    >>> input_ids = tokenizer(line, return_tensors="pt)["input_ids"]
+    >>> input_ids = tokenizer(line, return_tensors="pt")
 
     >>> with torch.no_grad():
-    ...     features = bartpho(input_ids)  # Models outputs are now tuples
+    ...     features = bartpho(**input_ids)  # Models outputs are now tuples
 
     >>> # With TensorFlow 2.0+:
-    >>> # from transformers import TFAutoModel
-    >>> # bartpho = TFAutoModel.from_pretrained("vinai/bartpho-syllable")
+    >>> from transformers import TFAutoModel
+    >>> bartpho = TFAutoModel.from_pretrained("vinai/bartpho-syllable")
+    >>> input_ids = tokenizer(line, return_tensors="tf")
+    >>> features = bartpho(**input_ids)
 
 This model was contributed by `dqnguyen <https://huggingface.co/dqnguyen>`__. The original code can be found `here
 <https://github.com/VinAIResearch/BARTpho>`__.
