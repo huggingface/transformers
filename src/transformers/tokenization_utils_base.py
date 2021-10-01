@@ -2224,7 +2224,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if padding is True:
                 if verbose:
                     if max_length is not None and (truncation is False or truncation == "do_not_truncate"):
-                        warnings.warn("`max_length` is ignored when `padding`=`True`.")
+                        warnings.warn(
+                            "`max_length` is ignored when `padding`=`True` and `truncation` is False or `do_not_truncate`."
+                        )
                     if old_pad_to_max_length is not False:
                         warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
