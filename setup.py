@@ -110,6 +110,7 @@ _deps = [
     "keras2onnx",
     "nltk",
     "numpy>=1.17",
+    "onnx",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
@@ -146,6 +147,7 @@ _deps = [
     "starlette",
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
+    "tf2onnx",
     "timeout-decorator",
     "timm",
     "tokenizers>=0.10.1,<0.11",
@@ -241,7 +243,7 @@ else:
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
-extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx") + extras["onnxruntime"]
+extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx", "onnx", "tf2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
