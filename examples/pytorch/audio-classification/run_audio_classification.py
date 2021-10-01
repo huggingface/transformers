@@ -27,7 +27,6 @@ from datasets import DatasetDict, load_dataset
 
 import transformers
 from transformers import (
-    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
     AutoModelForAudioClassification,
@@ -47,9 +46,6 @@ logger = logging.getLogger(__name__)
 check_min_version("4.11.0.dev0")
 
 require_version("datasets>=1.12.1", "To fix: pip install -r examples/pytorch/audio-classification/requirements.txt")
-
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 def load_audio(path: str, sample_rate: int = 16000):
@@ -140,10 +136,6 @@ class ModelArguments:
         default="facebook/wav2vec2-base",
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
-    model_type: Optional[str] = field(
-        default=None,
-        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
-    )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
@@ -157,6 +149,9 @@ class ModelArguments:
     feature_extractor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
     freeze_feature_extractor: Optional[bool] = field(
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+    )
+    attention_mask: Optional[bool] = field(
+        default=True, metadata={"help": "Whether to generate an attention mask in the feature extractor."}
     )
     use_auth_token: bool = field(
         default=False,
@@ -241,9 +236,11 @@ def main():
             f"{', '.join(raw_datasets['train'].column_names)}."
         )
 
+    # Setting `return_attention_mask=True` is the way to get a correctly masked mean-pooling over
+    # transformer outputs in the classifier, but it doesn't always lead to better accuracy
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name or model_args.model_name_or_path,
-        return_attention_mask=True,
+        return_attention_mask=model_args.attention_mask,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
@@ -283,12 +280,12 @@ def main():
     # Load the accuracy metric from the datasets package
     metric = datasets.load_metric("accuracy")
 
-    # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
-    # predictions and label_ids field) and has to return a dictionary string to float.
-    def compute_metrics(p):
+    # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with
+    # `predictions` and `label_ids` fields) and has to return a dictionary string to float.
+    def compute_metrics(eval_pred):
         """Computes accuracy on a batch of predictions"""
-        predictions = np.argmax(p.predictions, axis=1)
-        return metric.compute(predictions=predictions, references=p.label_ids)
+        predictions = np.argmax(eval_pred.predictions, axis=1)
+        return metric.compute(predictions=predictions, references=eval_pred.label_ids)
 
     config = AutoConfig.from_pretrained(
         model_args.config_name or model_args.model_name_or_path,

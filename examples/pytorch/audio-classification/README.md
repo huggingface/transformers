@@ -18,14 +18,15 @@ limitations under the License.
 
 The following examples showcase how to fine-tune `Wav2Vec2` for audio classification using PyTorch.
 
-Speech recognition models that have been pretrained in unsupervised fashion on audio data alone, *e.g.* [Wav2Vec2](https://huggingface.co/transformers/master/model_doc/wav2vec2.html), [HuBERT](https://huggingface.co/transformers/master/model_doc/hubert.html), [XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html), have shown to require only 
+Speech recognition models that have been pretrained in unsupervised fashion on audio data alone, 
+*e.g.* [Wav2Vec2](https://huggingface.co/transformers/master/model_doc/wav2vec2.html), 
+[HuBERT](https://huggingface.co/transformers/master/model_doc/hubert.html), 
+[XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html), have shown to require only 
 very little annotated data to yield good performance on speech classification datasets.
 
 ## Single-GPU 
 
-Here we show how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) on the 🗣️ [Keyword Spotting subset](https://huggingface.co/datasets/superb#ks) of the SUPERB dataset.
-
-👀 See the results here: [anton-l/wav2vec2-base-keyword-spotting](https://huggingface.co/anton-l/wav2vec2-base-keyword-spotting)
+The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) on the 🗣️ [Keyword Spotting subset](https://huggingface.co/datasets/superb#ks) of the SUPERB dataset.
 
 ```bash
 python run_audio_classification.py \
@@ -58,11 +59,11 @@ python run_audio_classification.py \
 
 On a single V100 GPU (16GB), this script should run in ~10 minutes and yield accuracy of **98.4%**.
 
+👀 See the results here: [anton-l/wav2vec2-base-keyword-spotting](https://huggingface.co/anton-l/wav2vec2-base-keyword-spotting)
+
 ## Multi-GPU 
 
-Here we show how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) for 🌎 **Language Identification** on the [CommonLanguage dataset](https://huggingface.co/datasets/beans).
-
-👀 See the results here: [anton-l/wav2vec2-base-langid](https://huggingface.co/anton-l/wav2vec2-base-langid)
+The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) for 🌎 **Language Identification** on the [CommonLanguage dataset](https://huggingface.co/datasets/anton-l/common_language).
 
 ```bash
 python run_audio_classification.py \
@@ -70,7 +71,7 @@ python run_audio_classification.py \
     --dataset_name anton-l/common_language \
     --audio_column_name path \
     --label_column_name language \
-    --output_dir wav2vec2-base-langid \
+    --output_dir wav2vec2-base-lang-id \
     --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
@@ -78,6 +79,7 @@ python run_audio_classification.py \
     --fp16 \
     --learning_rate 3e-5 \
     --max_length_seconds 16 \
+    --attention_mask False \
     --warmup_ratio 0.1 \
     --num_train_epochs 10 \
     --per_device_train_batch_size 8 \
@@ -94,7 +96,9 @@ python run_audio_classification.py \
     --push_to_hub
 ```
 
-On 4 V100 GPUs (16GB), this script should run in ~1 hour and yield accuracy of **77.51%**.
+On 4 V100 GPUs (16GB), this script should run in ~1 hour and yield accuracy of **79.45%**.
+
+👀 See the results here: [anton-l/wav2vec2-base-lang-id](https://huggingface.co/anton-l/wav2vec2-base-lang-id)
 
 ## Sharing your model on 🤗 Hub
 
