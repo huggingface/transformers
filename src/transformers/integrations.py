@@ -124,7 +124,7 @@ def hp_params(trial):
     if is_sigopt_available():
         if isinstance(trial, dict):
             return trial
-    
+
     if is_wandb_available():
         if isinstance(trial, dict):
             return trial
@@ -344,11 +344,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import wandb
 
-    best_trial = {
-        "run_id": None,
-        "objective": None,
-        "hyperparameters": None
-    }
+    best_trial = {"run_id": None, "objective": None, "hyperparameters": None}
 
     def _objective():
         run = wandb.init()
@@ -361,19 +357,18 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             trainer.objective = trainer.compute_objective(metrics)
 
         best_score = False
-        if best_trial["run_id"] is not None: 
+        if best_trial["run_id"] is not None:
             if direction == "minimize":
                 best_score = trainer.objective < best_trial["objective"]
             elif direction == "maximize":
                 best_score = trainer.objective > best_trial["objective"]
-        
+
         if best_score or best_trial["run_id"] is None:
             best_trial["run_id"] = run.id
             best_trial["objective"] = trainer.objective
             best_trial["hyperparameters"] = dict(config)
-        
-        return trainer.objective
 
+        return trainer.objective
 
     sweep_id = kwargs.pop("sweep_id", None)
     project = kwargs.pop("project", None)
@@ -381,8 +376,8 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
     entity = kwargs.pop("entity", None)
 
     sweep_config = trainer.hp_space(None)
-    sweep_config['metric']['goal'] = direction
-    sweep_config['name'] = name
+    sweep_config["metric"]["goal"] = direction
+    sweep_config["name"] = name
 
     sweep_id = wandb.sweep(sweep_config, project=project, entity=entity) if not sweep_id else sweep_id
     wandb.agent(sweep_id, function=_objective, count=n_trials)

@@ -45,7 +45,7 @@ from .integrations import (  # isort: split
     run_hp_search_optuna,
     run_hp_search_ray,
     run_hp_search_sigopt,
-    run_hp_search_wandb
+    run_hp_search_wandb,
 )
 
 import numpy as np
@@ -924,7 +924,6 @@ class Trainer:
             metrics["objective"] = self.objective
             wandb.log(metrics)
 
-
     def _tune_save_checkpoint(self):
         from ray import tune
 
@@ -1552,6 +1551,7 @@ class Trainer:
                 run_id = trial.id
             elif self.hp_search_backend == HPSearchBackend.WANDB:
                 import wandb
+
                 run_id = wandb.run.id
             run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
             run_dir = os.path.join(self.args.output_dir, run_name)
@@ -1772,7 +1772,7 @@ class Trainer:
             HPSearchBackend.OPTUNA: run_hp_search_optuna,
             HPSearchBackend.RAY: run_hp_search_ray,
             HPSearchBackend.SIGOPT: run_hp_search_sigopt,
-            HPSearchBackend.WANDB: run_hp_search_wandb
+            HPSearchBackend.WANDB: run_hp_search_wandb,
         }
         best_run = backend_dict[backend](self, n_trials, direction, **kwargs)
 

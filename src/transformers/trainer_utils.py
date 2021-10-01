@@ -219,32 +219,15 @@ def default_hp_space_wandb(trial) -> Dict[str, float]:
 
     return {
         "method": "random",
-        "metric":  {
-        'name': 'objective',
-        'goal': 'minimize'   
-    },
-    "parameters": {
-       'learning_rate': {
-        'distribution': 'uniform',
-        'min': 1e-6,
-        'max': 1e-4
-      },
-        "num_train_epochs": {
-        'distribution': 'int_uniform',
-        'min': 1,
-        'max': 6
-      },
-        "seed": {
-        'distribution': 'int_uniform',
-        'min': 1,
-        'max': 40
-      },
-      "per_device_train_batch_size": {
-          'values': [4, 8, 16, 32, 64]
-        }
+        "metric": {"name": "objective", "goal": "minimize"},
+        "parameters": {
+            "learning_rate": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+            "num_train_epochs": {"distribution": "int_uniform", "min": 1, "max": 6},
+            "seed": {"distribution": "int_uniform", "min": 1, "max": 40},
+            "per_device_train_batch_size": {"values": [4, 8, 16, 32, 64]},
+        },
     }
-    }
-    
+
 
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
@@ -257,7 +240,7 @@ default_hp_space = {
     HPSearchBackend.OPTUNA: default_hp_space_optuna,
     HPSearchBackend.RAY: default_hp_space_ray,
     HPSearchBackend.SIGOPT: default_hp_space_sigopt,
-    HPSearchBackend.WANDB: default_hp_space_wandb
+    HPSearchBackend.WANDB: default_hp_space_wandb,
 }
 
 
