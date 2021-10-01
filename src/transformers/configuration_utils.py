@@ -332,7 +332,7 @@ class PretrainedConfig(PushToHubMixin):
         self.transformers_version = kwargs.pop("transformers_version", None)
 
         # Deal with gradient checkpointing
-        if "gradient_checkpointing" in kwargs:
+        if kwargs.get("gradient_checkpointing", False):
             warnings.warn(
                 "Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 "
                 "Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the "
@@ -569,7 +569,7 @@ class PretrainedConfig(PushToHubMixin):
 
             raise EnvironmentError(msg)
 
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             msg = (
                 f"Couldn't reach server at '{config_file}' to download configuration file or "
                 "configuration file is not a valid JSON file. "

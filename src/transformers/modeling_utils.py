@@ -2294,10 +2294,6 @@ def apply_chunking_to_forward(
     """
 
     assert len(input_tensors) > 0, f"{input_tensors} has to be a tuple/list of tensors"
-    tensor_shape = input_tensors[0].shape[chunk_dim]
-    assert all(
-        input_tensor.shape[chunk_dim] == tensor_shape for input_tensor in input_tensors
-    ), "All input tenors have to be of the same shape"
 
     # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compatibility
     num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
@@ -2308,6 +2304,14 @@ def apply_chunking_to_forward(
         )
 
     if chunk_size > 0:
+        tensor_shape = input_tensors[0].shape[chunk_dim]
+        for input_tensor in input_tensors:
+            if input_tensor.shape[chunk_dim] != tensor_shape:
+                raise ValueError(
+                    f"All input tenors have to be of the same shape: {tensor_shape}, "
+                    f"found shape {input_tensor.shape[chunk_dim]}"
+                )
+
         if input_tensors[0].shape[chunk_dim] % chunk_size != 0:
             raise ValueError(
                 f"The dimension to be chunked {input_tensors[0].shape[chunk_dim]} has to be a multiple of the chunk "
