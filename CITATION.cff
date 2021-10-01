@@ -37,7 +37,7 @@ authors:
   - family-names: Rush
     given-names: "Alexander M."
 preferred-citation:
-  type: inproceedings
+  type: conference-paper
   authors:
   - family-names: Wolf
     given-names: Thomas
