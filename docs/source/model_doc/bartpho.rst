@@ -37,10 +37,6 @@ Example of use:
 
     >>> bartpho = AutoModel.from_pretrained("vinai/bartpho-syllable")
 
-    >>> # For transformers v4.x+:
-    >>> tokenizer = AutoTokenizer.from_pretrained("vinai/bartpho-syllable", use_fast=False)
-
-    >>> # For transformers v3.x:
     >>> # tokenizer = AutoTokenizer.from_pretrained("vinai/bartpho-syllable")
 
     >>> line = "Chúng tôi là những nghiên cứu viên."
