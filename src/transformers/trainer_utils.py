@@ -250,7 +250,7 @@ class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
     SIGOPT = "sigopt"
-    WANDB = 'wandb'
+    WANDB = "wandb"
 
 
 default_hp_space = {
