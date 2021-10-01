@@ -30,8 +30,8 @@ In the script [`run_speech_recognition_ctc`], we first create a vocabulary from 
 ---
 **NOTE**
 
-If you wish to use multi-processing for data preprocessing by setting `--preprocessing_num_workers` > 1, 
-please make sure to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
+If you encounter problems with data preprocessing by setting `--preprocessing_num_workers` > 1, 
+you might want to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
 
 ```bash
 OMP_NUM_THREADS=1 python run_speech_recognition_ctc ...

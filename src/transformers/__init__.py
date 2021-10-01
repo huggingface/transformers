@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.11.0.dev0"
+__version__ = "4.12.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -773,6 +773,7 @@ if is_torch_available():
             "DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DPRContextEncoder",
             "DPRPretrainedContextEncoder",
+            "DPRPreTrainedModel",
             "DPRPretrainedQuestionEncoder",
             "DPRPretrainedReader",
             "DPRQuestionEncoder",
@@ -2512,6 +2513,7 @@ if TYPE_CHECKING:
             DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPRContextEncoder,
             DPRPretrainedContextEncoder,
+            DPRPreTrainedModel,
             DPRPretrainedQuestionEncoder,
             DPRPretrainedReader,
             DPRQuestionEncoder,
