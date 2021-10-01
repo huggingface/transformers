@@ -345,10 +345,20 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
     import wandb
 
     best_trial = {"run_id": None, "objective": None, "hyperparameters": None}
+    sweep_id = kwargs.pop("sweep_id", None)
+    project = kwargs.pop("project", None)
+    name = kwargs.pop("name", None)
+    entity = kwargs.pop("entity", None)
+    metric = kwargs.pop("metric", None) or "objective"
+
+    sweep_config = trainer.hp_space(None)
+    sweep_config["metric"]["goal"] = direction
+    sweep_config["metric"]["name"] = metric
+    sweep_config["name"] = name
 
     def _objective():
         run = wandb.init()
-        run.config.update({"assignments": {}})
+        run.config.update({"assignments": {}, "metric": metric})
         config = wandb.config
         trainer.objective = None
         trainer.train(resume_from_checkpoint=None, trial=config)
@@ -370,15 +380,6 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             best_trial["hyperparameters"] = dict(config)
 
         return trainer.objective
-
-    sweep_id = kwargs.pop("sweep_id", None)
-    project = kwargs.pop("project", None)
-    name = kwargs.pop("name", None)
-    entity = kwargs.pop("entity", None)
-
-    sweep_config = trainer.hp_space(None)
-    sweep_config["metric"]["goal"] = direction
-    sweep_config["name"] = name
 
     sweep_id = wandb.sweep(sweep_config, project=project, entity=entity) if not sweep_id else sweep_id
     wandb.agent(sweep_id, function=_objective, count=n_trials)
