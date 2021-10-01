@@ -28,6 +28,7 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BartphoTokenizer
     test_rust_tokenizer = False
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
