@@ -220,7 +220,7 @@ class TokenClassificationPipeline(Pipeline):
         sentence = model_outputs["sentence"]
         input_ids = model_outputs["input_ids"][0]
         offset_mapping = model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
-        special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
+        special_tokens_mask = model_outputs["special_tokens_mask"][0].cpu().numpy()
 
         scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
         pre_entities = self.gather_pre_entities(
