@@ -164,7 +164,7 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEmbeddings
-class BertEmbeddings(nn.Module):
+class RealmEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -225,7 +225,7 @@ class BertEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention
-class BertSelfAttention(nn.Module):
+class RealmSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -351,7 +351,7 @@ class BertSelfAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class BertSelfOutput(nn.Module):
+class RealmSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -366,11 +366,11 @@ class BertSelfOutput(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention
-class BertAttention(nn.Module):
+class RealmAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = BertSelfAttention(config)
-        self.output = BertSelfOutput(config)
+        self.self = RealmSelfAttention(config)
+        self.output = RealmSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -416,7 +416,7 @@ class BertAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
-class BertIntermediate(nn.Module):
+class RealmIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -432,7 +432,7 @@ class BertIntermediate(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput
-class BertOutput(nn.Module):
+class RealmOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -447,19 +447,19 @@ class BertOutput(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer
-class BertLayer(nn.Module):
+class RealmLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = BertAttention(config)
+        self.attention = RealmAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = BertAttention(config)
-        self.intermediate = BertIntermediate(config)
-        self.output = BertOutput(config)
+            self.crossattention = RealmAttention(config)
+        self.intermediate = RealmIntermediate(config)
+        self.output = RealmOutput(config)
 
     def forward(
         self,
@@ -531,11 +531,11 @@ class BertLayer(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder
-class BertEncoder(nn.Module):
+class RealmEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([RealmLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -629,7 +629,7 @@ class BertEncoder(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler
-class BertPooler(nn.Module):
+class RealmPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -653,10 +653,10 @@ class RealmBertModel(PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = BertEmbeddings(config)
-        self.encoder = BertEncoder(config)
+        self.embeddings = RealmEmbeddings(config)
+        self.encoder = RealmEncoder(config)
 
-        self.pooler = BertPooler(config) if add_pooling_layer else None
+        self.pooler = RealmPooler(config) if add_pooling_layer else None
 
         # Weight initialization is managed by Realm models.
         # self.init_weights()
@@ -1343,10 +1343,10 @@ class RealmRetriever(RealmPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The encoder of REALM outputting masked language model logits and marginal log-likelihood loss.",
+    "The knowledge-augmented encoder of REALM outputting masked language model logits and marginal log-likelihood loss.",
     REALM_START_DOCSTRING,
 )
-class RealmEncoder(RealmPreTrainedModel):
+class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.bert = RealmBertModel(self.config)
@@ -1406,10 +1406,10 @@ class RealmEncoder(RealmPreTrainedModel):
         Example::
 
             >>> import torch
-            >>> from transformers import RealmTokenizer, RealmEncoder
+            >>> from transformers import RealmTokenizer, RealmKnowledgeAugEncoder
 
             >>> tokenizer = RealmTokenizer.from_pretrained('qqaatw/realm-cc-news-pretrained-bert')
-            >>> model = RealmEncoder.from_pretrained('qqaatw/realm-cc-news-pretrained-bert', num_candidates=2)
+            >>> model = RealmKnowledgeAugEncoder.from_pretrained('qqaatw/realm-cc-news-pretrained-bert', num_candidates=2)
 
             >>> # batch_size = 2, num_candidates = 2
             >>> text = [

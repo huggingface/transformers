@@ -35,13 +35,13 @@ class RealmConfig(PretrainedConfig):
     This is the configuration class to store the configuration of 
     1. :class:`~transformers.RealmEmbedder`
     2. :class:`~transformers.RealmRetriever` 
-    3. :class:`~transformers.RealmEncoder` 
+    3. :class:`~transformers.RealmKnowledgeAugEncoder` 
     4. :class:`~transformers.RealmSearcher`
     5. :class:`~transformers.RealmReader`
     6. :class:`~transformers.RealmForOpenQA` 
     It is used to instantiate an REALM model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the REALM `realm-cc-news-pretrained
-    <https://huggingface.co/realm-cc-news-pretrained>`__ architecture.
+    <https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -51,7 +51,7 @@ class RealmConfig(PretrainedConfig):
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the REALM model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.RealmEmbedder`,
-            :class:`~transformers.RealmRetriever`, :class:`~transformers.RealmEncoder`, :class:`~transformers.RealmSearcher`, or :class:`~transformers.RealmReader`.
+            :class:`~transformers.RealmRetriever`, :class:`~transformers.RealmKnowledgeAugEncoder`, :class:`~transformers.RealmSearcher`, or :class:`~transformers.RealmReader`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         retriever_proj_size (:obj:`int`, `optional`, defaults to 128):
@@ -61,7 +61,7 @@ class RealmConfig(PretrainedConfig):
         num_attention_heads (:obj:`int`, `optional`, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_candidates (:obj:`int`, `optional`, defaults to 8):
-            Number of candidates inputted to the RealmRetriever or RealmEncoder.
+            Number of candidates inputted to the RealmRetriever or RealmKnowledgeAugEncoder.
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_new"`):
@@ -76,7 +76,7 @@ class RealmConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.RealmEmbedder`,
-            :class:`~transformers.RealmRetriever`, :class:`~transformers.RealmEncoder`, :class:`~transformers.RealmSearcher`, or :class:`~transformers.RealmReader`.
+            :class:`~transformers.RealmRetriever`, :class:`~transformers.RealmKnowledgeAugEncoder`, :class:`~transformers.RealmSearcher`, or :class:`~transformers.RealmReader`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):

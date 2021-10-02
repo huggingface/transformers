@@ -30,8 +30,8 @@ if is_torch_available():
     _import_structure["modeling_realm"] = [
         "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RealmEmbedder",
-        "RealmEncoder",
         "RealmForOpenQA",
+        "RealmKnowledgeAugEncoder",
         "RealmPreTrainedModel",
         "RealmReader",
         "RealmRetriever",
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
         from .modeling_realm import (
             REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
             RealmEmbedder,
-            RealmEncoder,
+            RealmKnowledgeAugEncoder,
             RealmForOpenQA,
             RealmPreTrainedModel,
             RealmReader,

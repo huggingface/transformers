@@ -68,10 +68,10 @@ RealmRetriever
     :members: forward
 
 
-RealmEncoder
+RealmKnowledgeAugEncoder
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.RealmEncoder
+.. autoclass:: transformers.RealmKnowledgeAugEncoder
     :members: forward
 
 
