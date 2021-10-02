@@ -1031,8 +1031,11 @@ if is_torch_available():
             "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "RealmEmbedder",
             "RealmEncoder",
+            "RealmForOpenQA",
             "RealmPreTrainedModel",
+            "RealmReader",
             "RealmRetriever",
+            "RealmSearcher",
             "load_tf_weights_in_realm",
         ]
     )
@@ -2704,6 +2707,9 @@ if TYPE_CHECKING:
             RealmEncoder,
             RealmPreTrainedModel,
             RealmRetriever,
+            RealmSearcher,
+            RealmReader,
+            RealmForOpenQA,
             load_tf_weights_in_realm,
         )
         from .models.reformer import (

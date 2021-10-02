@@ -30,9 +30,14 @@ REALM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class RealmConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of :class:`~transformers.RealmEmbedder`,
-    :class:`~transformers.RealmRetriever`, and :class:`~transformers.RealmEncoder`. It is used to instantiate an REALM
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    This is the configuration class to store the configuration of 
+    1. :class:`~transformers.RealmEmbedder`
+    2. :class:`~transformers.RealmRetriever` 
+    3. :class:`~transformers.RealmEncoder` 
+    4. :class:`~transformers.RealmSearcher`
+    5. :class:`~transformers.RealmReader`
+    6. :class:`~transformers.RealmForOpenQA` 
+    It is used to instantiate an REALM model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the REALM `realm-cc-news-pretrained
     <https://huggingface.co/realm-cc-news-pretrained>`__ architecture.
 
@@ -44,7 +49,7 @@ class RealmConfig(PretrainedConfig):
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the REALM model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.RealmEmbedder`,
-            :class:`~transformers.RealmRetriever`, or :class:`~transformers.RealmEncoder`.
+            :class:`~transformers.RealmRetriever`, :class:`~transformers.RealmEncoder`, :class:`~transformers.RealmSearcher`, or :class:`~transformers.RealmReader`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         retriever_proj_size (:obj:`int`, `optional`, defaults to 128):
@@ -69,7 +74,7 @@ class RealmConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.RealmEmbedder`,
-            :class:`~transformers.RealmRetriever`, or :class:`~transformers.RealmEncoder`.
+            :class:`~transformers.RealmRetriever`, :class:`~transformers.RealmEncoder`, :class:`~transformers.RealmSearcher`, or :class:`~transformers.RealmReader`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -77,6 +82,25 @@ class RealmConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
+        use_scann (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not :class:`~transformers.RealmSearcher` uses `ScaNN` as the vector similarity searcher.
+            This option has no effect and is reserved for future development.
+        span_hidden_size (:obj:`int`, `optional`, defaults to 256):
+            Dimension of the reader's spans.
+        max_span_width (:obj:`int`, `optional`, defaults to 10):
+            Max span width of the reader.
+        reader_layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-3):
+            The epsilon used by the reader's layer normalization layers.
+        reader_beam_size (:obj:`int`, `optional`, defaults to 5):
+            Beam size of the reader.
+        reader_seq_len (:obj:`int`, `optional`, defaults to 288+32):
+            Maximum sequence length of the reader.
+        num_block_records (:obj:`int`, `optional`, defaults to 13353718):
+            Number of block records.
+        searcher_beam_size (:obj:`int`, `optional`, defaults to 5000):
+            Beam size of the searcher. Note that when eval mode is enabled, `searcher_beam_size` will be the same as `reader_beam_size`.
+        searcher_seq_len (:obj:`int`, `optional`, defaults to 64):
+            Maximum sequence length of the searcher.
 
     Example::
 
@@ -109,8 +133,8 @@ class RealmConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_scann=True,
         use_cache=True,
+        use_scann=True,
         span_hidden_size=256,
         max_span_width=10,
         reader_layer_norm_eps=1e-3,
@@ -141,8 +165,8 @@ class RealmConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.use_scann = use_scann
         self.use_cache = use_cache
+        self.use_scann = use_scann
 
         # Reader config
         self.span_hidden_size = span_hidden_size
