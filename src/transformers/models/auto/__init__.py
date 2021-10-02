@@ -117,6 +117,7 @@ if is_flax_available():
         "FlaxAutoModelForSeq2SeqLM",
         "FlaxAutoModelForSequenceClassification",
         "FlaxAutoModelForTokenClassification",
+        "FlaxAutoModelForVision2Seq",
     ]
 
 
@@ -215,6 +216,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
+            FlaxAutoModelForVision2Seq,
         )
 
 else:

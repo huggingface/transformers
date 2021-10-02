@@ -286,3 +286,10 @@ class FlaxAutoModelForImageClassification(_BaseAutoModelClass):
 FlaxAutoModelForImageClassification = auto_class_update(
     FlaxAutoModelForImageClassification, head_doc="image classification"
 )
+
+
+class FlaxAutoModelForVision2Seq(_BaseAutoModelClass):
+    _model_mapping = FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING
+
+
+FlaxAutoModelForVision2Seq = auto_class_update(FlaxAutoModelForVision2Seq, head_doc="vision-to-text modeling")

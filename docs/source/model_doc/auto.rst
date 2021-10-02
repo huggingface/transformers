@@ -333,3 +333,10 @@ FlaxAutoModelForImageClassification
 
 .. autoclass:: transformers.FlaxAutoModelForImageClassification
     :members:
+
+
+FlaxAutoModelForVision2Seq
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxAutoModelForVision2Seq
+    :members:

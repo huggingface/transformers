@@ -276,6 +276,15 @@ class FlaxAutoModelForTokenClassification:
         requires_backends(cls, ["flax"])
 
 
+class FlaxAutoModelForVision2Seq:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
 class FlaxBartForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
