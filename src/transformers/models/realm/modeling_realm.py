@@ -1436,7 +1436,7 @@ class RealmSearcher(RealmPreTrainedModel):
             block_records_path = block_records_path,
             num_block_records = config.num_block_records,
         )
-        self.register_buffer("block_emb", 
+        self.register_buffer("block_emb",
             torch.zeros(()).new_empty(
                 size=(config.num_block_records, config.retriever_proj_size),
                 dtype=torch.float32,
@@ -1481,6 +1481,8 @@ class RealmSearcher(RealmPreTrainedModel):
         else:
             beam_size = self.config.reader_beam_size
        
+        if self.block_emb.device != torch.device("cpu"):
+            self.block_emb = self.block_emb.cpu()
         if self.searcher is None:
             self.searcher = load_scann_searcher(
                 db = self.block_emb,
@@ -1501,7 +1503,7 @@ class RealmSearcher(RealmPreTrainedModel):
         # [1, projection_size]
         question_projection = question_outputs[0]
 
-
+        # [1, retriever_beam_size]
         retrieved_block_ids, _ = self.searcher.search_batched(question_projection.detach().cpu())
 
         # [retriever_beam_size]
@@ -1665,7 +1667,7 @@ class RealmReader(RealmPreTrainedModel):
             any_reader_correct = torch.any(reader_correct)
 
             retriever_loss = marginal_log_loss(relevance_score, retriever_correct)
-            reader_loss = marginal_log_loss(reader_logits, reader_correct)
+            reader_loss = marginal_log_loss(reader_logits.view(-1), reader_correct.view(-1))
             retriever_loss *= any_retriever_correct.type(torch.float32)
             reader_loss *= any_reader_correct.type(torch.float32)
 
@@ -1698,11 +1700,11 @@ class RealmForOpenQA(RealmPreTrainedModel):
         self.tokenizer = tokenizer
 
     @classmethod
-    def from_pretrained(cls, searcher_pretrained_name_or_path, reader_pretrained_name_or_path, *args, **kwargs):
+    def from_pretrained(cls, searcher_pretrained_name_or_path, reader_pretrained_name_or_path, block_records_path, **kwargs):
         config = kwargs.pop("config", None) or RealmConfig.from_pretrained(searcher_pretrained_name_or_path, **kwargs)
-        searcher = RealmSearcher.from_pretrained(searcher_pretrained_name_or_path, *args, **kwargs)
-        reader = RealmReader.from_pretrained(reader_pretrained_name_or_path, *args, **kwargs)
-        tokenizer = RealmTokenizer.from_pretrained(searcher_pretrained_name_or_path, **kwargs)
+        searcher = RealmSearcher.from_pretrained(searcher_pretrained_name_or_path, block_records_path, config=config, **kwargs)
+        reader = RealmReader.from_pretrained(reader_pretrained_name_or_path, config=config, **kwargs)
+        tokenizer = RealmTokenizer.from_pretrained(searcher_pretrained_name_or_path)
         return cls(config, searcher, reader, tokenizer)
     
     def save_pretrained(self, save_directory):
@@ -1779,7 +1781,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
             text.append(question)
             text_pair.append(retrieved_block.decode())
 
-        concat_inputs = self.tokenizer(text, text_pair, return_tensors='pt', padding=True, truncation=True, max_length=self.config.reader_seq_len)
+        concat_inputs = self.tokenizer(text, text_pair, padding=True, truncation=True, max_length=self.config.reader_seq_len, return_tensors='pt')
 
         if answers is not None:
             has_answers, start_positions, end_positions = block_has_answer(concat_inputs.to(searcher_output.retrieved_logits.device), answers)
@@ -1801,11 +1803,11 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         return output, answer
 
-    def forward(self, question, answers=None):
-        question_ids = self.tokenizer([question], max_length=self.config.searcher_seq_len)
-        
+    def forward(self, question, answer_ids=None):
+        question_ids = self.tokenizer([question], padding=True, truncation=True, max_length=self.config.searcher_seq_len, return_tensors='pt')
+
         searcher_output = self.retrieve(**question_ids)
 
-        reader_output, predicted_answer = self.read(searcher_output, question, answers)
+        reader_output, predicted_answer = self.read(searcher_output, question, answer_ids)
 
         return searcher_output, reader_output, predicted_answer
