@@ -621,7 +621,7 @@ class T5Block(nn.Module):
     ):
 
         if past_key_value is not None:
-            #assert self.is_decoder, "Only decoder can use `past_key_values`"
+            assert self.is_decoder, "Only decoder can use `past_key_values`"
             expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
 
             if len(past_key_value) != expected_num_past_key_values:
@@ -632,7 +632,7 @@ class T5Block(nn.Module):
                 )
 
             self_attn_past_key_value = past_key_value[:2]
-            cross_attn_past_key_value = past_key_value[-2:]
+            cross_attn_past_key_value = past_key_value[2:]
         else:
             self_attn_past_key_value, cross_attn_past_key_value = None, None
 
@@ -1595,12 +1595,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         # If decoding with past key value states, only the last tokens
         # should be given as an input
-        if past_key_values is not None and use_cache:
-            # assert labels is None, "Decoder should not use cached key value states when training."
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids[:, -1:]
-            if decoder_inputs_embeds is not None:
-                decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
+        # if past_key_values is not None and use_cache:
+        #      assert labels is None, "Decoder should not use cached key value states when training."
+        #     if decoder_input_ids is not None:
+        #         decoder_input_ids = decoder_input_ids[:, -1:]
+        #     if decoder_inputs_embeds is not None:
+        #         decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
 
         # Set device for model parallelism
         if self.model_parallel:
