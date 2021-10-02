@@ -30,6 +30,6 @@ def convert_tfrecord_to_np(block_records_path, num_block_records):
         block_records_path, buffer_size=512 * 1024 * 1024)
     blocks_dataset = blocks_dataset.batch(
         num_block_records, drop_remainder=True)
-    np_record = [raw_record.numpy() for raw_record in blocks_dataset.take(1)][0]
+    np_record = next(blocks_dataset.take(1).as_numpy_iterator())
 
     return np_record
