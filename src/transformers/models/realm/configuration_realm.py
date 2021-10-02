@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The REALM authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ REALM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "realm-cc-news-pretrained-bert": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-bert/resolve/main/config.json",
     "realm-cc-news-pretrained-embedder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder/resolve/main/config.json",
     "realm-cc-news-pretrained-retriever": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-retriever/resolve/main/config.json",
+    "realm-orqa-nq-searcher": "https://huggingface.co/qqaatw/realm-orqa-nq-searcher/resolve/main/config.json",
+    "realm-orqa-nq-reader": "https://huggingface.co/qqaatw/realm-orqa-nq-searcher/resolve/main/config.json",
     # See all REALM models at https://huggingface.co/models?filter=realm
 }
 

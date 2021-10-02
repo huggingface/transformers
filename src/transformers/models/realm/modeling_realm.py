@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Team The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The REALM authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -58,6 +58,8 @@ REALM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "qqaatw/realm-cc-news-pretrained-bert",
     "qqaatw/realm-cc-news-pretrained-embedder",
     "qqaatw/realm-cc-news-pretrained-retriever",
+    "qqaatw/realm-orqa-nq-searcher",
+    "qqaatw/realm-orqa-nq-reader",
     # See all REALM models at https://huggingface.co/models?filter=realm
 ]
 
@@ -831,24 +833,91 @@ class RealmRetrieverOutput(ModelOutput):
 
 @dataclass
 class RealmSearcherOutput(ModelOutput):
+    """
+    Outputs of RealmSearcher models.
+
+    Args:
+        retrieved_logits (:obj:`torch.FloatTensor` of shape :obj:`(config.searcher_beam_size,)`):
+            The relevance score of document candidates (before softmax).
+        retrieved_blocks (:obj:`np.ndarray` of shape :obj:`(config.searcher_beam_size,)`):
+            Retrieved document blocks.
+        retrieved_block_ids (:obj:`torch.LongTensor` of shape :obj:`(config.searcher_beam_size,)`):
+            IDs of retrieved blocks.
+    """
+
     retrieved_logits: torch.FloatTensor = None
     retrieved_blocks: np.ndarray = None
-    retrieved_block_ids: torch.int64 = None
+    retrieved_block_ids: torch.LongTensor = None
 
 
 @dataclass
 class RealmReaderOutput(ModelOutput):
+    """
+    Outputs of RealmReader models.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`start_positions`, :obj:`end_positions`, :obj:`has_answers` are provided):
+            Total loss.
+        retriever_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`start_positions`, :obj:`end_positions`, :obj:`has_answers` are provided):
+            Retriever loss.
+        reader_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`start_positions`, :obj:`end_positions`, :obj:`has_answers` are provided):
+            Reader loss.
+        retriever_correct (:obj:`torch.BoolTensor` of shape :obj:`(config.searcher_beam_size,)`, `optional`):
+            Whether or not a evidence block derived from `RealmSearcher` contains answer.
+        reader_correct (:obj:`torch.BoolTensor` of shape :obj:`(config.reader_beam_size, num_candidates)`, `optional`):
+            Whether or not a span candidate contains answer.
+        block_idx (:obj:`torch.LongTensor` of shape :obj:`()`):
+            The index of retrieved evidence blocks in which the predicted answer in most likely
+        candidate (:obj:`torch.LongTensor` of shape :obj:`()`):
+            .
+        start_pos (:obj:`torch.IntTensor` of shape :obj:`()`):
+            Predicted answer starting position in `RealmReader`'s inputs.
+        end_pos: (:obj:`torch.IntTensor` of shape :obj:`()`):
+            Predicted answer ending position in `RealmReader`'s inputs.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
     loss: torch.FloatTensor = None
     retriever_loss: torch.FloatTensor = None
     reader_loss:torch.FloatTensor = None
     retriever_correct: torch.BoolTensor = None
     reader_correct: torch.BoolTensor = None
-    block_idx: torch.int64 = None
-    candidate: torch.int32 = None
+    block_idx: torch.LongTensor = None
+    candidate: torch.LongTensor = None
     start_pos: torch.int32 = None
     end_pos: torch.int32 = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class RealmForOpenQAOutput(ModelOutput):
+    """
+
+    Outputs of RealmReader models.
+
+    Args:
+        searcher_output (:obj:`dict`):
+            Searcher output.
+        reader_output (:obj:`dict`):
+            Reader output.
+        predicted_answer (:obj:`str`):
+            Predicted answer.
+    """
+
+    searcher_output: dict = None
+    reader_output: dict = None
+    predicted_answer: str = None
 
 
 class RealmPredictionHeadTransform(nn.Module):
@@ -1155,7 +1224,7 @@ class RealmEmbedder(RealmPreTrainedModel):
 )
 class RealmRetriever(RealmPreTrainedModel):
     r"""
-    Parameters:
+    Args:
         query_embedder (:class:`~transformers.RealmEmbedder`):
             Embedder for input sequences. If not specified, it will use the same embedder as candidate sequences.
     """
@@ -1423,11 +1492,16 @@ class RealmEncoder(RealmPreTrainedModel):
             attentions=joint_outputs.attentions,
         )
 
-
+@add_start_docstrings(
+    "The searcher of REALM outputting relevance score (before softmax) and corresponding document blocks.",
+    REALM_START_DOCSTRING,
+)
 class RealmSearcher(RealmPreTrainedModel):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler", "cls"]
-
+    r"""
+    Args:
+        block_records_path (:obj:`str`):
+            Block records path.
+    """
     def __init__(self, config, block_records_path):
         super().__init__(config)
         self.embedder = RealmEmbedder(config)
@@ -1456,6 +1530,10 @@ class RealmSearcher(RealmPreTrainedModel):
             )
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
     
+    @add_start_docstrings_to_model_forward(
+        REALM_INPUTS_DOCSTRING.format("1, searcher_seq_len")
+    )
+    @replace_return_docstrings(output_type=RealmSearcherOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1468,12 +1546,14 @@ class RealmSearcher(RealmPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-
+        r"""
+        Returns:
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is not None and input_ids.shape[0] != 1) or (inputs_embeds is not None and inputs_embeds.shape[0] != 1):
             raise ValueError(
-                "The batch_size of inputs should be 1."
+                "The batch_size of the inputs must be 1."
             )
 
         if self.training:
@@ -1503,19 +1583,19 @@ class RealmSearcher(RealmPreTrainedModel):
         # [1, projection_size]
         question_projection = question_outputs[0]
 
-        # [1, retriever_beam_size]
+        # [1, searcher_beam_size]
         retrieved_block_ids, _ = self.searcher.search_batched(question_projection.detach().cpu())
 
-        # [retriever_beam_size]
+        # [searcher_beam_size]
         retrieved_block_ids = torch.tensor(retrieved_block_ids.astype('int64').squeeze())
 
-        # [retriever_beam_size]
+        # [searcher_beam_size]
         retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
 
-        # [retriever_beam_size, projection_size]
+        # [searcher_beam_size, projection_size]
         retrieved_block_emb = torch.index_select(self.block_emb, dim=0, index=retrieved_block_ids)
 
-        # [retriever_beam_size]
+        # [searcher_beam_size]
         retrieved_logits = torch.einsum("D,BD->B", question_projection.squeeze(), retrieved_block_emb.to(question_projection.device))
         
         if not return_dict:
@@ -1528,6 +1608,10 @@ class RealmSearcher(RealmPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "The reader of REALM.",
+    REALM_START_DOCSTRING,
+)
 class RealmReader(RealmPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler", "cls"]
@@ -1542,15 +1626,11 @@ class RealmReader(RealmPreTrainedModel):
 
         self.init_weights()
 
-    """
-    @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_BERT_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
+    
+    @add_start_docstrings_to_model_forward(
+        REALM_INPUTS_DOCSTRING.format("reader_beam_size, sequence_length")
     )
-    """
+    @replace_return_docstrings(output_type=RealmReaderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1569,6 +1649,8 @@ class RealmReader(RealmPreTrainedModel):
         return_dict=None,
     ):
         r"""
+        relevance_score (:obj:`torch.FloatTensor` of shape :obj:`(searcher_beam_size,)`, `optional`):
+            Relevance score derived from `RealmSearcher`, must be specified if you want to compute the marginal log loss.
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
@@ -1577,9 +1659,10 @@ class RealmReader(RealmPreTrainedModel):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
-
+        has_answers (:obj:`torch.BoolTensor` of shape :obj:`(searcher_beam_size,)`, `optional`):
+            Whether or not the evidence blocks derived from `RealmSearcher` have answer(s).
+        
         Returns:
-
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1605,7 +1688,7 @@ class RealmReader(RealmPreTrainedModel):
     
         # [reader_beam_size, num_candidates], [num_candidates], [num_candidates]
         reader_logits, candidate_starts, candidate_ends = self.qa_outputs(sequence_output, token_type_ids)
-        # [retriever_beam_size, 1]
+        # [searcher_beam_size, 1]
         retriever_logits = torch.unsqueeze(relevance_score[0: self.config.reader_beam_size], -1)
         # [reader_beam_size, num_candidates]
         reader_logits += retriever_logits
@@ -1692,6 +1775,21 @@ class RealmReader(RealmPreTrainedModel):
         )
 
 
+REALM_FOR_OPEN_QA_DOCSTRING = r"""
+    Args:
+        question (:obj:`str`):
+            OpenQA Question.
+        answer_ids (:obj:`torch.LongTensor` of shape :obj:`(num_answers, answer_length)`, `optional`):
+            Answer ids for computing the marginal log-likelihood loss. Indices should be in ``[-1, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-1`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+"""
+@add_start_docstrings(
+    "A wrapper of `RealmSearcher` and `RealmReader` providing end-to-end open domain question answering.",
+    REALM_START_DOCSTRING,
+)
 class RealmForOpenQA(RealmPreTrainedModel):
     def __init__(self, config, searcher, reader, tokenizer):
         super().__init__(config)
@@ -1701,6 +1799,16 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, searcher_pretrained_name_or_path, reader_pretrained_name_or_path, block_records_path, **kwargs):
+        """
+        Args:
+            searcher_pretrained_name_or_path (:obj:`str`):
+                Searcher pretrained name or path.
+            reader_pretrained_name_or_path (:obj:`str`):
+                Reader pretrained name or path.
+            block_records_path (:obj:`str`):
+                Block records path.
+
+        """
         config = kwargs.pop("config", None) or RealmConfig.from_pretrained(searcher_pretrained_name_or_path, **kwargs)
         searcher = RealmSearcher.from_pretrained(searcher_pretrained_name_or_path, block_records_path, config=config, **kwargs)
         reader = RealmReader.from_pretrained(reader_pretrained_name_or_path, config=config, **kwargs)
@@ -1803,11 +1911,40 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         return output, answer
 
-    def forward(self, question, answer_ids=None):
+    @add_start_docstrings_to_model_forward(REALM_FOR_OPEN_QA_DOCSTRING)
+    @replace_return_docstrings(output_type=RealmForOpenQAOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(self, question, answer_ids=None, return_dict=None):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> import torch
+            >>> from transformers import RealmForOpenQA, RealmTokenizer
+
+            >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader", blocks.tfr)
+
+            >>> question = "Who is the pioneer in modern computer science?"
+            >>> answer_ids = tokenizer(["alan mathison turing"], add_special_tokens=False, return_token_type_ids=False, return_attention_mask=False).input_ids
+
+            >>> searcher_output, reader_output, predicted_answer = model(question, answer_ids)
+            >>> loss = reader_output.loss
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         question_ids = self.tokenizer([question], padding=True, truncation=True, max_length=self.config.searcher_seq_len, return_tensors='pt')
 
         searcher_output = self.retrieve(**question_ids)
 
         reader_output, predicted_answer = self.read(searcher_output, question, answer_ids)
 
-        return searcher_output, reader_output, predicted_answer
+        if return_dict:
+            return searcher_output, reader_output, predicted_answer
+        
+        return RealmForOpenQAOutput(
+            searcher_output=searcher_output,
+            reader_output=reader_output,
+            predicted_answer=predicted_answer,
+        )
+        

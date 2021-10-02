@@ -28,7 +28,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     import torch
 
-    from transformers import RealmEmbedder, RealmEncoder, RealmRetriever
+    from transformers import RealmEmbedder, RealmEncoder, RealmRetriever, RealmSearcher, RealmReader, RealmForOpenQA
 
 
 class RealmModelTester:
@@ -343,6 +343,39 @@ class RealmModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(output[1, :2, :2], expected_slice, atol=1e-4))
 
     @slow
+    def test_inference_open_qa(self):
+        model = RealmForOpenQA.from_pretrained(
+            r"/mnt/sda1/testing/pytorch-realm-orqa/export/searcher",
+            r"/mnt/sda1/testing/pytorch-realm-orqa/export/reader",
+            r"/mnt/sda1/REALM/language/language/data/enwiki-20181220/blocks.tfr"
+        )
+        
+        question = "Who is the pioneer in modern computer science?"
+        searcher_output, reader_output, predicted_answer = model(question)
+
+        self.assertEqual(predicted_answer, "alan mathison turing")
+
+    @slow
+    def test_inference_reader(self):
+        config = RealmConfig(searcher_beam_size=5)
+        model = RealmReader.from_pretrained("qqaatw/realm-orqa-nq-reader", config)
+
+        concat_inputs = torch.arange(25).view((5, 5))
+        output = model(
+            concat_inputs,
+            return_dict=True)
+
+        block_idx_expected_shape = torch.Size(())
+        start_pos_expected_shape = torch.Size((1))
+        end_pos_expected_shape = torch.Size((1))
+        self.assertEqual(output.block_idx.shape, block_idx_expected_shape)
+        self.assertEqual(output.start_pos.shape, start_pos_expected_shape)
+        self.assertEqual(output.end_pos.shape, end_pos_expected_shape)
+
+        expected_slice = torch.tensor([[0.7410, 0.7170]])
+        self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
+
+    @slow
     def test_inference_retriever(self):
         num_candidates = 2
 
@@ -359,3 +392,18 @@ class RealmModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[0.7410, 0.7170]])
         self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
+    
+    @slow
+    def test_inference_searcher(self):
+        config = RealmConfig(searcher_beam_size=5)
+        model = RealmSearcher.from_pretrained("qqaatw/realm-orqa-nq-searcher", config=config)
+
+        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        expected_shape = torch.Size((5))
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor([[0.7410, 0.7170]])
+        self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
+    
