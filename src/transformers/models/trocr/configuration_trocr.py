@@ -96,7 +96,7 @@ class TrOCRConfig(PretrainedConfig):
         vocab_size=50265,
         d_model=1024,
         decoder_layers=12,
-        decoder_attention_heads=4,
+        decoder_attention_heads=16,
         decoder_ffn_dim=4096,
         activation_function="gelu",
         max_position_embeddings=512,

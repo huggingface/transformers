@@ -435,6 +435,9 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
         encoder_hidden_states = encoder_outputs[0]
 
+        print("Shape of encoder hidden states:", encoder_hidden_states.shape)
+        print("First elements of encoder hidden states:", encoder_hidden_states[0,:3,:3])
+
         # optionally project encoder_hidden_states
         if (
             self.encoder.config.hidden_size != self.decoder.config.hidden_size

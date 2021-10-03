@@ -109,6 +109,8 @@ class TrOCRAttention(nn.Module):
         config,
         embed_dim: int,
         num_heads: int,
+        kdim: int = None,
+        vdim: int = None,
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
@@ -116,6 +118,8 @@ class TrOCRAttention(nn.Module):
     ):
         super().__init__()
         self.embed_dim = embed_dim
+        self.kdim = kdim if kdim is not None else embed_dim
+        self.vdim = vdim if vdim is not None else embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
@@ -125,14 +129,9 @@ class TrOCRAttention(nn.Module):
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
-        if is_cross_attention and config.encoder_hidden_size is not None:
-            self.k_proj = nn.Linear(config.encoder_hidden_size, embed_dim, bias=bias)
-            self.v_proj = nn.Linear(config.encoder_hidden_size, embed_dim, bias=bias)
-            self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        else:
-            self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-            self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-            self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.kdim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(self.vdim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
@@ -192,6 +191,12 @@ class TrOCRAttention(nn.Module):
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
+        # queries have shape (num_heads, seq_len, head_dim)
+        # keys and values have shape (num_heads, 577, head_dim)
+        #print("First elements of queries:", query_states[:3,0,:3])
+        #print("First elements of keys:", key_states[:3,0,:3])
+        #print("First elements of values:", value_states[:3,0,:3])
+        
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
@@ -269,6 +274,8 @@ class TrOCRDecoderLayer(nn.Module):
                 config,
                 embed_dim=self.embed_dim,
                 num_heads=config.decoder_attention_heads,
+                kdim=config.encoder_hidden_size,
+                vdim=config.encoder_hidden_size,
                 dropout=config.attention_dropout,
                 is_decoder=True,
                 is_cross_attention=True,
@@ -321,16 +328,25 @@ class TrOCRDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
+
+        print("Hidden states after self-attention:", hidden_states[0,:3,:3])
+
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+
+        print("Hidden states after first residual connection:", hidden_states[0,:3,:3])
+
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         cross_attn_weights = None
+                
         if encoder_hidden_states is not None:
             residual = hidden_states
 
+            print("Hidden states before cross-attention:", hidden_states[0,:3,:3])
+            
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
@@ -341,6 +357,9 @@ class TrOCRDecoderLayer(nn.Module):
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
+
+            print("Hidden states after cross-attention:", hidden_states[0,:3,:3])
+
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
@@ -348,14 +367,32 @@ class TrOCRDecoderLayer(nn.Module):
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
+            print("Hidden states after cross-attention + second residual:", hidden_states[0,:3,:3])
+
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        #hidden_states = self.activation_fn(self.fc1(hidden_states))
+
+        hidden_states = self.fc1(hidden_states)
+
+        print("Hidden states after fc1:", hidden_states[0,:3,:3])
+
+        print("Activation function:", self.activation_fn)
+
+        hidden_states = self.activation_fn(hidden_states)
+
+        print("Hidden states after fc1 + activation fn:", hidden_states[0,:3,:3])
+
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
+        
+        print("Hidden states after fc2:", hidden_states[0,:3,:3])
+        
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
+
+        print("Hidden states after final layer norm:", hidden_states[0,:3,:3])
 
         outputs = (hidden_states,)
 
@@ -543,7 +580,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -564,7 +601,12 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         embed_pos = self.embed_positions(input_shape)
 
         hidden_states = inputs_embeds + embed_pos
+        
         hidden_states = self.layernorm_embedding(hidden_states)
+
+        print("Shape of embeddings after position embeddings:", hidden_states.shape)
+        print("First elements of embeddings after position embeddings:", hidden_states[0,:3,:3])
+
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         attention_mask = self._prepare_decoder_attention_mask(
@@ -626,6 +668,8 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
                 )
             else:
 
+                print(f"Hidden states before layer {idx}:", hidden_states[0,:3,:3])
+                
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
