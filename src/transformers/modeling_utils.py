@@ -437,12 +437,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.  
-        - **framework** (:obj:`str`) -- A string indicating the framework of the model.
         - **is_parallelizable** (:obj:`bool`) -- A flag indicating whether this model supports model parallelization.
     """
     config_class = None
     base_model_prefix = ""
-    framework = "pytorch"
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_missing = None
@@ -462,7 +460,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         :obj:`Dict[str, torch.Tensor]`: Dummy inputs to do a forward pass in the network.
         """
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
-
+    
+    @property
+    def framework(self) -> string:
+        return "pt"
+    
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
@@ -545,13 +547,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         :obj:`torch.nn.Module`: The main body of the model.
         """
         return getattr(self, self.base_model_prefix, self)
-    
-        @property
-    def get_framework(self) -> string:
-        """
-        :obj:`str`: A string indicating the attribute associated to the base model in.
-        """
-        return getattr(self, self.framework, self)
 
     def get_input_embeddings(self) -> nn.Module:
         """
