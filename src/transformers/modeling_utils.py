@@ -462,9 +462,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
 
     @property
-    def framework(self) -> string:
+    def framework(self) -> str:
         """
-        :str: Identifies that this is a pytorch model.
+        :str: Identifies that this is a PyTorch model.
         """
         return "pt"
 
