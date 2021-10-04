@@ -53,11 +53,6 @@ Tips:
   size, the tokenizer for `GPT-J <https://huggingface.co/EleutherAI/gpt-j-6B>`__ contains 143 extra tokens
   ``<|extratoken_1|>... <|extratoken_143|>``, so the ``vocab_size`` of tokenizer also becomes 50400.
 
-- Although the embedding matrix has a size of 50400, only 50257 entries are used by the GPT-2 tokenizer. These extra
-  tokens are added for the sake of efficiency on TPUs. To avoid the mis-match between embedding matrix size and vocab
-  size, the tokenizer for [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B) contains 143 extra tokens
-  ``<|extratoken_1|>... <|extratoken_143|>``, so the ``vocab_size`` of tokenizer also becomes 50400.
-
 Generation
 _______________________________________________________________________________________________________________________
 
