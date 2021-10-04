@@ -1291,7 +1291,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            if decoder_input_ids is None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
@@ -1457,7 +1457,7 @@ class BartForSequenceClassification(BartPretrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id)
 
-        if len(torch.unique(eos_mask.sum(1))) > 1:
+        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
             :, -1, :
