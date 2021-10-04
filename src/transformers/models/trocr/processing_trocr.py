@@ -17,8 +17,11 @@ Processor class for TrOCR.
 """
 from contextlib import contextmanager
 
-from ..auto.feature_extraction_auto import AutoFeatureExtractor
+from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.models.roberta.tokenization_roberta import RobertaTokenizer
+from transformers.models.roberta.tokenization_roberta_fast import RobertaTokenizerFast
+
+from ..auto.feature_extraction_auto import AutoFeatureExtractor
 
 
 class TrOCRProcessor:
@@ -41,8 +44,10 @@ class TrOCRProcessor:
             raise ValueError(
                 f"`feature_extractor` has to be of type {FeatureExtractionMixin.__class__}, but is {type(feature_extractor)}"
             )
-        if not isinstance(tokenizer, RobertaTokenizer):
-            raise ValueError(f"`tokenizer` has to be of type {RobertaTokenizer.__class__}, but is {type(tokenizer)}")
+        if not (isinstance(tokenizer, RobertaTokenizer) or (isinstance(tokenizer, RobertaTokenizerFast))):
+            raise ValueError(
+                f"`tokenizer` has to be of type {RobertaTokenizer.__class__} or {RobertaTokenizerFast.__class__}, but is {type(tokenizer)}"
+            )
 
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer

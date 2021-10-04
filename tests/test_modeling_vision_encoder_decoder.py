@@ -22,8 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_modeling_bert import BertModelTester
 from .test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
-from .test_modeling_speech_to_text import Speech2TextModelTester
-from .test_modeling_speech_to_text_2 import Speech2Text2StandaloneDecoderModelTester
+from .test_modeling_trocr import TrOCRStandaloneDecoderModelTester
 from .test_modeling_vit import ViTModelTester
 
 
@@ -33,13 +32,13 @@ if is_torch_available():
 
     from transformers import (
         BertLMHeadModel,
-        Speech2Text2ForCausalLM,
-        SpeechEncoderDecoderConfig,
-        SpeechEncoderDecoderModel,
+        TrOCRForCausalLM,
+        VisionEncoderDecoderConfig,
+        VisionEncoderDecoderModel,
         ViTModel,
     )
     from transformers.modeling_outputs import BaseModelOutput
-    from transformers.models.speech_to_text.modeling_speech_to_text import Speech2TextEncoder
+    from transformers.models.vit.modeling_vit import to_2tuple
 
 
 @require_torch
@@ -74,8 +73,8 @@ class EncoderDecoderMixin:
 
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
-            decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
         )
 
@@ -94,15 +93,15 @@ class EncoderDecoderMixin:
         **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         self.assertTrue(enc_dec_model.config.decoder.is_decoder)
         self.assertTrue(enc_dec_model.config.decoder.add_cross_attention)
         self.assertTrue(enc_dec_model.config.is_encoder_decoder)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
-            decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             output_hidden_states=True,
         )
@@ -112,8 +111,8 @@ class EncoderDecoderMixin:
         encoder_outputs = BaseModelOutput(last_hidden_state=outputs_encoder_decoder.encoder_hidden_states[-1])
         outputs_encoder_decoder = enc_dec_model(
             encoder_outputs=encoder_outputs,
-            decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
         )
 
@@ -134,12 +133,12 @@ class EncoderDecoderMixin:
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
-        enc_dec_model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        enc_dec_model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
-            decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             output_hidden_states=True,
             return_dict=True,
@@ -160,14 +159,14 @@ class EncoderDecoderMixin:
         **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         enc_dec_model.eval()
         with torch.no_grad():
             outputs = enc_dec_model(
                 pixel_values=pixel_values,
-                decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
             )
             out_2 = outputs[0].cpu().numpy()
@@ -175,13 +174,13 @@ class EncoderDecoderMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 enc_dec_model.save_pretrained(tmpdirname)
-                enc_dec_model = SpeechEncoderDecoderModel.from_pretrained(tmpdirname)
+                enc_dec_model = VisionEncoderDecoderModel.from_pretrained(tmpdirname)
                 enc_dec_model.to(torch_device)
 
                 after_outputs = enc_dec_model(
                     pixel_values=pixel_values,
-                    decoder_input_ids=decoder_input_ids,
                     attention_mask=attention_mask,
+                    decoder_input_ids=decoder_input_ids,
                     decoder_attention_mask=decoder_attention_mask,
                 )
                 out_1 = after_outputs[0].cpu().numpy()
@@ -200,14 +199,14 @@ class EncoderDecoderMixin:
         **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         enc_dec_model.eval()
         with torch.no_grad():
             outputs = enc_dec_model(
                 pixel_values=pixel_values,
-                decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
             )
             out_2 = outputs[0].cpu().numpy()
@@ -216,15 +215,15 @@ class EncoderDecoderMixin:
             with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
                 enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
                 enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
-                SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+                VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
                     encoder_pretrained_model_name_or_path=encoder_tmp_dirname,
                     decoder_pretrained_model_name_or_path=decoder_tmp_dirname,
                 )
 
                 after_outputs = enc_dec_model(
                     pixel_values=pixel_values,
-                    decoder_input_ids=decoder_input_ids,
                     attention_mask=attention_mask,
+                    decoder_input_ids=decoder_input_ids,
                     decoder_attention_mask=decoder_attention_mask,
                 )
                 out_1 = after_outputs[0].cpu().numpy()
@@ -247,12 +246,12 @@ class EncoderDecoderMixin:
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
-            decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             output_attentions=True,
         )
@@ -262,7 +261,11 @@ class EncoderDecoderMixin:
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
         self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
 
-        seq_len = enc_dec_model.encoder._get_feat_extract_output_lengths(inputs.shape[1])
+        # in ViT, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        image_size = to_2tuple(encoder_model.config.image_size)
+        patch_size = to_2tuple(encoder_model.config.image_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        seq_len = num_patches + 1
         self.assertEqual(encoder_attentions[0].shape[-3:], (config.num_attention_heads, seq_len, seq_len))
 
         decoder_attentions = outputs_encoder_decoder["decoder_attentions"]
@@ -289,7 +292,7 @@ class EncoderDecoderMixin:
 
     def check_encoder_decoder_model_generate(self, config, decoder_config, pixel_values=None, **kwargs):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
 
         inputs = pixel_values
@@ -344,7 +347,7 @@ class EncoderDecoderMixin:
 
             with tempfile.TemporaryDirectory() as tmp_dirname:
                 model_2.save_pretrained(tmp_dirname)
-                model_1 = SpeechEncoderDecoderModel.from_pretrained(tmp_dirname)
+                model_1 = VisionEncoderDecoderModel.from_pretrained(tmp_dirname)
                 model_1.to(torch_device)
 
                 after_outputs = model_1(**inputs)
@@ -357,7 +360,7 @@ class EncoderDecoderMixin:
 @require_torch
 class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
-        model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+        model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
             "google/vit-base-patch16-224-in21k", "bert-base-cased"
         )
         batch_size = 13
@@ -421,7 +424,7 @@ class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
 @require_torch
 class Vision2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
-        model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+        model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
             "google/vit-base-patch16-224-in21k", "bert-base-cased"
         )
         batch_size = 13
@@ -443,9 +446,9 @@ class Vision2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
+        vit_model_tester = ViTModelTester(self)
         bert_model_tester = BertModelTester(self)
-        speech2text_model_tester = Speech2TextModelTester(self)
-        encoder_config_and_inputs = speech2text_model_tester.prepare_config_and_inputs()
+        encoder_config_and_inputs = vit_model_tester.prepare_config_and_inputs()
         decoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs_for_decoder()
 
         config, inputs = encoder_config_and_inputs

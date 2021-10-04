@@ -27,10 +27,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.models.trocr.modeling_trocr import (
-        TrOCRDecoder,
-        TrOCRForCausalLM,
-    )
+    from transformers.models.trocr.modeling_trocr import TrOCRDecoder, TrOCRForCausalLM
 
 
 @require_torch
