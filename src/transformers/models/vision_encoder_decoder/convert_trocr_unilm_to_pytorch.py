@@ -110,7 +110,7 @@ def prepare_img():
     url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-00.jpg"  # industry
     # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-12.jpg" # have
     # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-10.jpg" # let
-    url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"  #
+    # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"  #
     # url = "https://fki.tic.heia-fr.ch/static/img/a01-122.jpg"
     im = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return im
@@ -144,7 +144,7 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     model = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
     model.eval()
 
-    # load state_dict of original model, remove and rename some keys
+    # load state_dict of original model, rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["model"]
 
     rename_keys = create_rename_keys(encoder_config, decoder_config)
@@ -152,11 +152,12 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, encoder_config)
 
+    # remove parameters we don't need
     del state_dict["encoder.deit.head.weight"]
     del state_dict["encoder.deit.head.bias"]
     del state_dict["decoder.version"]
 
-    # add prefix to decoder keys (v2)
+    # add prefix to decoder keys
     for key, val in state_dict.copy().items():
         val = state_dict.pop(key)
         if key.startswith("decoder") and "output_projection" not in key:
@@ -176,13 +177,17 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     generated_ids = model.generate(input_ids=pixel_values, num_beams=5)
     print(tokenizer.decode(generated_ids[0]))
 
-    # forward pass
-    # decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
-    # outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
-    # logits = outputs.logits
-    # TODO verify logits
-    # print("Shape of logits:", logits.shape)
-    # print("First elements of logits:", logits[0,0,:10])
+    # verify logits
+    decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
+    outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+    logits = outputs.logits
+    expected_shape = torch.Size([1, 1, 50265])
+    expected_slice = torch.tensor(
+        [-1.4502, -4.6683, -0.5347, -2.9291, 9.1435, -3.0571, 8.9764, 1.7560, 8.7358, -1.5311]
+    )
+
+    assert logits.shape == expected_shape, "Shape of logits not as expected"
+    assert torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-3), "First elements of logits not as expected"
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")

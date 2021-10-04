@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_modeling_bert import BertModelTester
 from .test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from .test_modeling_deit import DeiTModelTester
 from .test_modeling_trocr import TrOCRStandaloneDecoderModelTester
 from .test_modeling_vit import ViTModelTester
 
@@ -32,6 +33,7 @@ if is_torch_available():
 
     from transformers import (
         BertLMHeadModel,
+        DeiTModel,
         TrOCRForCausalLM,
         VisionEncoderDecoderConfig,
         VisionEncoderDecoderModel,
@@ -256,8 +258,6 @@ class EncoderDecoderMixin:
             output_attentions=True,
         )
 
-        inputs = pixel_values
-
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
         self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
 
@@ -358,12 +358,12 @@ class EncoderDecoderMixin:
 
 
 @require_torch
-class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
+class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
         model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "google/vit-base-patch16-224-in21k", "bert-base-cased"
+            "hf-internal-testing/tiny-random-deit", "hf-internal-testing/tiny-random-roberta"
         )
-        batch_size = 1
+        batch_size = 13
         pixel_values = floats_tensor(
             [
                 batch_size,
@@ -372,7 +372,9 @@ class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
                 model.encoder.config.image_size,
             ]
         )
-        attention_mask = random_attention_mask([batch_size, 512])
+        # for DEiT, the sequence length is equal to the number of patches + 2 (for the [CLS] and distillation tokens)
+        seq_len = (model.encoder.config.image_size // model.encoder.config.patch_size) ** 2 + 2
+        attention_mask = random_attention_mask([batch_size, seq_len])
         decoder_input_ids = ids_tensor([batch_size, 4], model.decoder.config.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
         inputs = {
@@ -384,21 +386,79 @@ class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
 
         return model, inputs
 
+    def check_encoder_decoder_model_output_attentions(
+        self,
+        config,
+        attention_mask,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        labels=None,
+        pixel_values=None,
+        **kwargs
+    ):
+        # make the decoder inputs a different shape from the encoder inputs to harden the test
+        decoder_input_ids = decoder_input_ids[:, :-1]
+        decoder_attention_mask = decoder_attention_mask[:, :-1]
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
+        outputs_encoder_decoder = enc_dec_model(
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            output_attentions=True,
+        )
+
+        encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
+        self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
+
+        # in DEiT, the seq_len equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
+        image_size = to_2tuple(encoder_model.config.image_size)
+        patch_size = to_2tuple(encoder_model.config.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        seq_len = num_patches + 2
+        self.assertEqual(encoder_attentions[0].shape[-3:], (config.num_attention_heads, seq_len, seq_len))
+
+        decoder_attentions = outputs_encoder_decoder["decoder_attentions"]
+        num_decoder_layers = (
+            decoder_config.num_decoder_layers
+            if hasattr(decoder_config, "num_decoder_layers")
+            else decoder_config.num_hidden_layers
+        )
+        self.assertEqual(len(decoder_attentions), num_decoder_layers)
+
+        self.assertEqual(
+            decoder_attentions[0].shape[-3:],
+            (decoder_config.num_attention_heads, decoder_input_ids.shape[-1], decoder_input_ids.shape[-1]),
+        )
+
+        cross_attentions = outputs_encoder_decoder["cross_attentions"]
+        self.assertEqual(len(cross_attentions), num_decoder_layers)
+
+        cross_attention_input_seq_len = decoder_input_ids.shape[-1]
+        self.assertEqual(
+            cross_attentions[0].shape[-3:],
+            (decoder_config.num_attention_heads, cross_attention_input_seq_len, seq_len),
+        )
+
     def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = ViTModel(config).eval()
+        encoder_model = DeiTModel(config).eval()
         decoder_model = BertLMHeadModel(decoder_config).eval()
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
         bert_model_tester = BertModelTester(self)
-        vit_model_tester = ViTModelTester(self)
-        encoder_config_and_inputs = vit_model_tester.prepare_config_and_inputs()
+        deit_model_tester = DeiTModelTester(self)
+        encoder_config_and_inputs = deit_model_tester.prepare_config_and_inputs()
         decoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs_for_decoder()
         (
             config,
             pixel_values,
-            input_mask,
+            _,
         ) = encoder_config_and_inputs
+        input_mask = None  # TODO add once attention_mask is supported for vision models
         (
             decoder_config,
             decoder_input_ids,
@@ -429,13 +489,23 @@ class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
 
 
 @require_torch
-class Vision2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
+class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
         model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "google/vit-base-patch16-224-in21k", "bert-base-cased"
+            "hf-internal-testing/tiny-random-vit", "hf-internal-testing/tiny-bert"
         )
         batch_size = 13
-        attention_mask = random_attention_mask([batch_size, 7])
+        pixel_values = floats_tensor(
+            [
+                batch_size,
+                model.encoder.config.num_channels,
+                model.encoder.config.image_size,
+                model.encoder.config.image_size,
+            ]
+        )
+        # for ViT, the sequence length is equal to the number of patches + 1 (for the [CLS] token)
+        seq_len = (model.encoder.config.image_size // model.encoder.config.patch_size) ** 2 + 1
+        attention_mask = random_attention_mask([batch_size, seq_len])
         decoder_input_ids = ids_tensor([batch_size, 4], model.decoder.config.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
         inputs = {
@@ -448,7 +518,7 @@ class Vision2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
         return model, inputs
 
     def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = Vision2TextEncoder(config).eval()
+        encoder_model = ViTModel(config).eval()
         decoder_model = BertLMHeadModel(decoder_config).eval()
         return encoder_model, decoder_model
 
@@ -458,9 +528,8 @@ class Vision2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
         encoder_config_and_inputs = vit_model_tester.prepare_config_and_inputs()
         decoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs_for_decoder()
 
-        config, inputs = encoder_config_and_inputs
-        pixel_values = inputs["pixel_values"]
-        input_mask = inputs["attention_mask"]
+        config, pixel_values, _ = encoder_config_and_inputs
+        input_mask = None  # TODO add once attention_mask is supported for vision models
 
         (
             decoder_config,
@@ -489,18 +558,6 @@ class Vision2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
             "decoder_choice_labels": decoder_choice_labels,
             "labels": decoder_token_labels,
         }
-
-    # can't save full model for now because Speech2TextModel != Speech2TextEncoder
-    def test_encoder_decoder_model_from_pretrained_configs(self):
-        pass
-
-    # can't save full model for now because Speech2TextModel != Speech2TextEncoder
-    def test_save_and_load_from_pretrained(self):
-        pass
-
-    # all published pretrained models are Speech2TextModel != Speech2TextEncoder
-    def test_real_model_save_load_from_pretrained(self):
-        pass
 
 
 @require_torch
@@ -520,8 +577,9 @@ class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
         (
             config,
             pixel_values,
-            input_mask,
+            _,
         ) = encoder_config_and_inputs
+        input_mask = None  # TODO add once attention_mask is supported for vision models
         (decoder_config, decoder_input_ids, decoder_attention_mask, _) = decoder_config_and_inputs
 
         # make sure that cross attention layers are added
@@ -537,6 +595,6 @@ class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
             "decoder_attention_mask": decoder_attention_mask,
         }
 
-    # there are no published pretrained Speech2Text2ForCausalLM for now
+    # there are no published pretrained TrOCR checkpoints for now
     def test_real_model_save_load_from_pretrained(self):
         pass
