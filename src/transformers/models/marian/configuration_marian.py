@@ -16,7 +16,7 @@
 from collections import OrderedDict
 from typing import Mapping
 
-from transformers.onnx import OnnxConfigWithPast
+from transformers.onnx import OnnxConfig
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -105,7 +105,10 @@ class MarianConfig(PretrainedConfig):
     """
     model_type = "marian"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+    }
 
     def __init__(
         self,
@@ -164,30 +167,17 @@ class MarianConfig(PretrainedConfig):
             **kwargs,
         )
 
-class MarianOnnxConfig(OnnxConfigWithPast):
+
+class MarianOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("input_ids", {0: "batch", 1: "encoder_sequence"}),
-                ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
             ]
         )
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.use_past:
-            return OrderedDict(
-                [
-                    ("last_hidden_state", {0: "batch", 1: "sequence"}),
-                    ("past_keys", {0: "batch", 2: "sequence"}),
-                    ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
-                ]
-            )
-        else:
-            return OrderedDict(
-                [
-                    ("last_hidden_state", {0: "batch", 1: "sequence"}),
-                    ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
-                ]
-            )
+        return super().outputs
