@@ -248,6 +248,8 @@ if (
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(hf_cache_home, "modules"))
+TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
 DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False) in ENV_VARS_TRUE_VALUES
 
@@ -276,11 +278,6 @@ _default_endpoint = "https://moon-staging.huggingface.co" if _staging_mode else 
 
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", _default_endpoint)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
-
-PRESET_MIRROR_DICT = {
-    "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
-    "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
-}
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.9")
@@ -1262,12 +1259,13 @@ def hf_bucket_url(
         filename = f"{subfolder}/{filename}"
 
     if mirror:
-        endpoint = PRESET_MIRROR_DICT.get(mirror, mirror)
+        if mirror in ["tuna", "bfsu"]:
+            raise ValueError("The Tuna and BFSU mirrors are no longer available. Try removing the mirror argument.")
         legacy_format = "/" not in model_id
         if legacy_format:
-            return f"{endpoint}/{model_id}-{filename}"
+            return f"{mirror}/{model_id}-{filename}"
         else:
-            return f"{endpoint}/{model_id}/{filename}"
+            return f"{mirror}/{model_id}/{filename}"
 
     if revision is None:
         revision = "main"
@@ -1518,6 +1516,7 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     progress = tqdm(
         unit="B",
         unit_scale=True,
+        unit_divisor=1024,
         total=total,
         initial=resume_size,
         desc="Downloading",
@@ -1856,8 +1855,28 @@ def to_py_obj(obj):
         return obj.numpy().tolist()
     elif is_torch_available() and _is_torch(obj):
         return obj.detach().cpu().tolist()
+    elif is_flax_available() and _is_jax(obj):
+        return np.asarray(obj).tolist()
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
+    else:
+        return obj
+
+
+def to_numpy(obj):
+    """
+    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
+    """
+    if isinstance(obj, (dict, UserDict)):
+        return {k: to_numpy(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return np.array(obj)
+    elif is_tf_available() and _is_tensorflow(obj):
+        return obj.numpy()
+    elif is_torch_available() and _is_torch(obj):
+        return obj.detach().cpu().numpy()
+    elif is_flax_available() and _is_jax(obj):
+        return np.asarray(obj)
     else:
         return obj
 
@@ -2241,3 +2260,13 @@ class PushToHubMixin:
                 commit_message = "add model"
 
         return repo.push_to_hub(commit_message=commit_message)
+
+
+def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
+    if token is None:
+        token = HfFolder.get_token()
+    if organization is None:
+        username = HfApi().whoami(token)["name"]
+        return f"{username}/{model_id}"
+    else:
+        return f"{organization}/{model_id}"

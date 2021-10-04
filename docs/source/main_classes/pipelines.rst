@@ -29,6 +29,7 @@ There are two categories of pipeline abstractions to be aware about:
     - :class:`~transformers.FeatureExtractionPipeline`
     - :class:`~transformers.FillMaskPipeline`
     - :class:`~transformers.ImageClassificationPipeline`
+    - :class:`~transformers.ObjectDetectionPipeline`
     - :class:`~transformers.QuestionAnsweringPipeline`
     - :class:`~transformers.SummarizationPipeline`
     - :class:`~transformers.TableQuestionAnsweringPipeline`
@@ -45,11 +46,52 @@ The pipeline abstraction
 The `pipeline` abstraction is a wrapper around all the other available pipelines. It is instantiated as any other
 pipeline but requires an additional argument which is the `task`.
 
+Simple call on one item:
+
+.. code-block::
+
+    >>> pipe = pipeline("text-classification")
+    >>> pipe("This restaurant is awesome")
+    [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
+
+To call a pipeline on many items, you can either call with a `list`.
+
+.. code-block::
+
+    >>> pipe = pipeline("text-classification")
+    >>> pipe(["This restaurant is awesome", "This restaurant is aweful"])
+    [{'label': 'POSITIVE', 'score': 0.9998743534088135},
+     {'label': 'NEGATIVE', 'score': 0.9996669292449951}]
+
+
+To iterate of full datasets it is recommended to use a :obj:`dataset` directly. This means you don't need to allocate
+the whole dataset at once, nor do you need to do batching yourself. This should work just as fast as custom loops on
+GPU. If it doesn't don't hesitate to create an issue.
+
+.. code-block::
+
+    pipe = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
+    dataset = datasets.load_dataset("superb", name="asr", split="test")
+
+    # KeyDataset (only `pt`) will simply return the item in the dict returned by the dataset item
+    # as we're not interested in the `target` part of the dataset.
+    for out in tqdm.tqdm(pipe(KeyDataset(dataset, "file"))):
+        print(out)
+        # {"text": "NUMBER TEN FRESH NELLY IS WAITING ON YOU GOOD NIGHT HUSBAND"}
+        # {"text": ....}
+        # ....
+
+
 .. autofunction:: transformers.pipeline
 
+Implementing a pipeline
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:doc:`Implementing a new pipeline <../add_new_pipeline>`
 
 The task specific pipelines
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 
 AudioClassificationPipeline
 =======================================================================================================================
@@ -101,6 +143,13 @@ NerPipeline
 .. autoclass:: transformers.NerPipeline
 
 See :class:`~transformers.TokenClassificationPipeline` for all details.
+
+ObjectDetectionPipeline
+=======================================================================================================================
+
+.. autoclass:: transformers.ObjectDetectionPipeline
+    :special-members: __call__
+    :members:
 
 QuestionAnsweringPipeline
 =======================================================================================================================

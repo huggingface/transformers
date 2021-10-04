@@ -82,8 +82,6 @@ class LEDConfig(PretrainedConfig):
             https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models)
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
         Example::
 
@@ -99,6 +97,12 @@ class LEDConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "led"
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "attention_probs_dropout_prob": "attention_dropout",
+        "initializer_range": "init_std",
+    }
 
     def __init__(
         self,
@@ -126,19 +130,9 @@ class LEDConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        gradient_checkpointing=False,
         attention_window: Union[List[int], int] = 512,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
-
         self.vocab_size = vocab_size
         self.max_encoder_position_embeddings = max_encoder_position_embeddings
         self.max_decoder_position_embeddings = max_decoder_position_embeddings
@@ -160,20 +154,12 @@ class LEDConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.attention_window = attention_window
-        self.gradient_checkpointing = gradient_checkpointing
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def attention_probs_dropout_prob(self) -> float:
-        return self.attention_dropout
-
-    @property
-    def initializer_range(self) -> float:
-        return self.init_std
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )

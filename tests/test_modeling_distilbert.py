@@ -215,6 +215,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = True
     test_resize_embeddings = True
     test_sequence_classification_problem_types = True
+    test_resize_position_embeddings = True
 
     def setUp(self):
         self.model_tester = DistilBertModelTester(self)
@@ -273,7 +274,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
 
             with tempfile.TemporaryDirectory() as tmp:
                 torch.jit.save(traced_model, os.path.join(tmp, "traced_model.pt"))
-                loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
+                loaded = torch.jit.load(os.path.join(tmp, "traced_model.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
 

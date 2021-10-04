@@ -109,6 +109,10 @@ def _compute_mask_indices(
     # scatter indices to mask
     spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, True)
 
+    if attention_mask is not None:
+        # make sure padded input ids cannot be masked
+        spec_aug_mask = torch.where(attention_mask.bool(), spec_aug_mask, False)
+
     return spec_aug_mask
 
 
@@ -521,6 +525,7 @@ class HubertEncoder(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([HubertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -560,7 +565,7 @@ class HubertEncoder(nn.Module):
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if self.gradient_checkpointing and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -608,6 +613,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
         self.layers = nn.ModuleList(
             [HubertEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -647,7 +653,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if self.gradient_checkpointing and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -694,6 +700,7 @@ class HubertPreTrainedModel(PreTrainedModel):
 
     config_class = HubertConfig
     base_model_prefix = "hubert"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -720,6 +727,10 @@ class HubertPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (HubertEncoder, HubertEncoderStableLayerNorm)):
+            module.gradient_checkpointing = value
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
@@ -953,6 +964,14 @@ class HubertForCTC(HubertPreTrainedModel):
 
         self.hubert = HubertModel(config)
         self.dropout = nn.Dropout(config.final_dropout)
+
+        if config.vocab_size is None:
+            raise ValueError(
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `HubertForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
+            )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()

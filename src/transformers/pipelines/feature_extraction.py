@@ -1,14 +1,6 @@
-from typing import TYPE_CHECKING, Optional, Union
+from typing import Dict
 
-from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..modelcard import ModelCard
-from ..tokenization_utils import PreTrainedTokenizer
-from .base import ArgumentHandler, Pipeline
-
-
-if TYPE_CHECKING:
-    from ..modeling_tf_utils import TFPreTrainedModel
-    from ..modeling_utils import PreTrainedModel
+from .base import GenericTensor, Pipeline
 
 
 # Can't use @add_end_docstrings(PIPELINE_INIT_ARGS) here because this one does not accept `binary_output`
@@ -49,28 +41,24 @@ class FeatureExtractionPipeline(Pipeline):
             the associated CUDA device id.
     """
 
-    def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
-        device: int = -1,
-        task: str = "",
-    ):
-        super().__init__(
-            model=model,
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            modelcard=modelcard,
-            framework=framework,
-            args_parser=args_parser,
-            device=device,
-            binary_output=True,
-            task=task,
-        )
+    def _sanitize_parameters(self, **kwargs):
+        return {}, {}, {}
+
+    def preprocess(self, inputs) -> Dict[str, GenericTensor]:
+        return_tensors = self.framework
+        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors)
+        return model_inputs
+
+    def _forward(self, model_inputs):
+        model_outputs = self.model(**model_inputs)
+        return model_outputs
+
+    def postprocess(self, model_outputs):
+        # [0] is the first available tensor, logits or last_hidden_state.
+        if self.framework == "pt":
+            return model_outputs[0].tolist()
+        elif self.framework == "tf":
+            return model_outputs[0].numpy().tolist()
 
     def __call__(self, *args, **kwargs):
         """
@@ -82,10 +70,4 @@ class FeatureExtractionPipeline(Pipeline):
         Return:
             A nested list of :obj:`float`: The features computed by the model.
         """
-        results = super().__call__(*args, **kwargs)
-        if isinstance(results, list):
-            # Sequential run
-            results = [r.tolist() for r in results]
-        else:
-            results = results.tolist()
-        return results
+        return super().__call__(*args, **kwargs)

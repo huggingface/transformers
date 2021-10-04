@@ -68,8 +68,6 @@ class GPTJConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_attn_weights (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Scale attention weights by dividing by sqrt(hidden_size).
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -87,6 +85,12 @@ class GPTJConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "gptj"
+    attribute_map = {
+        "max_position_embeddings": "n_positions",
+        "hidden_size": "n_embd",
+        "num_attention_heads": "n_head",
+        "num_hidden_layers": "n_layer",
+    }
 
     def __init__(
         self,
@@ -105,14 +109,11 @@ class GPTJConfig(PretrainedConfig):
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         scale_attn_weights=True,
-        gradient_checkpointing=False,
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
         **kwargs
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx
         self.n_positions = n_positions
@@ -127,25 +128,10 @@ class GPTJConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-    @property
-    def max_position_embeddings(self):
-        return self.n_positions
-
-    @property
-    def hidden_size(self):
-        return self.n_embd
-
-    @property
-    def num_attention_heads(self):
-        return self.n_head
-
-    @property
-    def num_hidden_layers(self):
-        return self.n_layer
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)

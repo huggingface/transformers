@@ -90,7 +90,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.5.1",
+    "deepspeed>=0.5.3",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -100,7 +100,7 @@ _deps = [
     "flax>=0.3.4",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "huggingface-hub>=0.0.12",
+    "huggingface-hub>=0.0.17",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -115,7 +115,7 @@ _deps = [
     "onnxruntime>=1.4.0",
     "optuna",
     "optax>=0.0.8",
-    "packaging",
+    "packaging>=20.0",
     "parameterized",
     "protobuf",
     "psutil",
@@ -134,7 +134,8 @@ _deps = [
     "sacremoses",
     "sagemaker>=2.31.0",
     "scikit-learn",
-    "sentencepiece==0.1.91",
+    "sentencepiece>=0.1.91,!=0.1.92",
+    "sigopt",
     "soundfile",
     "sphinx-copybutton",
     "sphinx-markdown-tables",
@@ -248,8 +249,9 @@ extras["deepspeed"] = deps_list("deepspeed")
 extras["fairscale"] = deps_list("fairscale")
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
+extras["sigopt"] = deps_list("sigopt")
 
-extras["integrations"] = extras["optuna"] + extras["ray"]
+extras["integrations"] = extras["optuna"] + extras["ray"]+ extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list("soundfile")
@@ -342,7 +344,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.11.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.12.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
@@ -369,6 +371,8 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},

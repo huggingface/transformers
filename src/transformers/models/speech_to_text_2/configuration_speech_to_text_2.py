@@ -89,6 +89,7 @@ class Speech2Text2Config(PretrainedConfig):
     """
     model_type = "speech_to_text_2"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_attention_heads": "decoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
@@ -107,7 +108,6 @@ class Speech2Text2Config(PretrainedConfig):
         decoder_start_token_id=2,
         classifier_dropout=0.0,
         scale_embedding=True,
-        gradient_checkpointing=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -115,14 +115,6 @@ class Speech2Text2Config(PretrainedConfig):
         max_target_positions=1024,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
-
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.decoder_ffn_dim = decoder_ffn_dim
@@ -137,15 +129,14 @@ class Speech2Text2Config(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = decoder_layers
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.decoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )
