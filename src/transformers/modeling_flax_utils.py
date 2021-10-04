@@ -76,11 +76,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
           :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
-        - **framework** (:obj:`str`) -- A string indicating the framework of the model.
     """
     config_class = None
     base_model_prefix = ""
-    framework = "flax"
 
     def __init__(
         self,
@@ -120,6 +118,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         All context managers that the model should be initialized under go here.
         """
         return cls(config, **kwargs)
+    
+    @property
+    def framework(self) -> string:
+        return "flax"
 
     @property
     def config(self) -> PretrainedConfig:
