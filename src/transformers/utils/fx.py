@@ -341,6 +341,22 @@ class HFTracer(Tracer):
         for cache_name in self.recorded_methods.values():
             setattr(model, cache_name, getattr(clone, cache_name))
 
+    def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
+        if isinstance(attr_val, torch.nn.Parameter):
+            for n, p in self.root.named_parameters():
+                if attr_val is p:
+                    if n not in parameter_proxy_cache:
+                        parameter_proxy_cache[n] = self.create_proxy('get_attr', n, (), {})
+                    return parameter_proxy_cache[n]
+        # TODO: condition this on wether dynamic axes were requested.
+        if isinstance(attr_val, torch.Tensor):
+            for n, p in self.root.named_buffers():
+                if attr_val is p:
+                    if n not in parameter_proxy_cache:
+                        parameter_proxy_cache[n] = self.create_proxy('get_attr', n, (), {})
+                    return parameter_proxy_cache[n]
+        return attr_val
+
     def trace(self, root: PreTrainedModel, concrete_args: Optional[Dict[str, Any]] = None, method_names=None) -> Graph:
         sig = inspect.signature(root.forward)
         input_names = sig.parameters.keys() - concrete_args.keys()

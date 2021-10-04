@@ -7,7 +7,6 @@ from typing import Any, Callable, Dict, Optional, Union
 import torch
 from torch.fx import Graph, GraphModule, Node
 
-
 # Torch FX transformation convention:
 #   - transformations that are supposed to act on a copy of the original GraphModule are decorated with @transformation
 #   - transformations that are inplace have a name ending with "_"
@@ -247,59 +246,59 @@ def _patch_getitem_(
             gm.recompile()
 
 
-def _register_position_ids_and_replace_(gm: GraphModule, sequence_length_node: Node, lint_and_recompile: bool = True):
-    """
-    Redefines position_ids (as tracing with static shapes can introduce optimizations that fix position_ids to a value
-    not suitable for dynamic input shapes), and replaces old position_ids usage by the redefined version.
-    """
-    graph = gm.graph
-
-    any_buffer = next(gm.buffers())
-    position_ids = torch.arange(gm.config.max_position_embeddings).expand(1, -1).to(any_buffer.device)
-    partial_position_ids = position_ids[:, : gm.static_sequence_length[0]]
-    position_ids_buffer_name = None
-    for name, buffer in gm.named_buffers():
-        if (
-            isinstance(buffer, torch.Tensor)
-            and partial_position_ids.size() == buffer.size()
-            and torch.all(partial_position_ids == buffer)
-        ):
-            position_ids_buffer_name = name
-            gm.register_buffer(name, position_ids)
-
-    inserted = False
-    position_ids_node = None
-    for node in graph.nodes:
-        is_position_ids_present = False
-        position_ids_idx = 0
-        for i, arg in enumerate(node.args):
-            if isinstance(arg, Node) and arg.name == position_ids_buffer_name:
-                is_position_ids_present = True
-                position_ids_idx = i
-
-        if is_position_ids_present:
-            if not inserted:
-                with graph.inserting_before(node):
-                    get_position_ids_node = graph.get_attr(position_ids_buffer_name)
-                with graph.inserting_after(get_position_ids_node):
-                    position_ids_args = [
-                        get_position_ids_node,
-                        (slice(None, None, None), slice(None, sequence_length_node, None)),
-                    ]
-                    position_ids_node = graph.call_function(operator.getitem, args=tuple(position_ids_args))
-                inserted = True
-
-            old_position_ids_node = node.args[position_ids_idx]
-            old_position_ids_node.replace_all_uses_with(position_ids_node)
-
-    if lint_and_recompile:
-        graph.lint()
-        gm.recompile()
-
-    # Useful when retracing for quantization.
-    if hasattr(gm, "_qconfig_map"):
-        gm._qconfig_map[get_position_ids_node.name] = None
-        gm._qconfig_map[position_ids_node.name] = None
+# def _register_position_ids_and_replace_(gm: GraphModule, sequence_length_node: Node, lint_and_recompile: bool = True):
+#     """
+#     Redefines position_ids (as tracing with static shapes can introduce optimizations that fix position_ids to a value
+#     not suitable for dynamic input shapes), and replaces old position_ids usage by the redefined version.
+#     """
+#     graph = gm.graph
+#
+#     any_buffer = next(gm.buffers())
+#     position_ids = torch.arange(gm.config.max_position_embeddings).expand(1, -1).to(any_buffer.device)
+#     partial_position_ids = position_ids[:, : gm.static_sequence_length[0]]
+#     position_ids_buffer_name = None
+#     for name, buffer in gm.named_buffers():
+#         if (
+#             isinstance(buffer, torch.Tensor)
+#             and partial_position_ids.size() == buffer.size()
+#             and torch.all(partial_position_ids == buffer)
+#         ):
+#             position_ids_buffer_name = name
+#             gm.register_buffer(name, position_ids)
+#
+#     inserted = False
+#     position_ids_node = None
+#     for node in graph.nodes:
+#         is_position_ids_present = False
+#         position_ids_idx = 0
+#         for i, arg in enumerate(node.args):
+#             if isinstance(arg, Node) and arg.name == position_ids_buffer_name:
+#                 is_position_ids_present = True
+#                 position_ids_idx = i
+#
+#         if is_position_ids_present:
+#             if not inserted:
+#                 with graph.inserting_before(node):
+#                     get_position_ids_node = graph.get_attr(position_ids_buffer_name)
+#                 with graph.inserting_after(get_position_ids_node):
+#                     position_ids_args = [
+#                         get_position_ids_node,
+#                         (slice(None, None, None), slice(None, sequence_length_node, None)),
+#                     ]
+#                     position_ids_node = graph.call_function(operator.getitem, args=tuple(position_ids_args))
+#                 inserted = True
+#
+#             old_position_ids_node = node.args[position_ids_idx]
+#             old_position_ids_node.replace_all_uses_with(position_ids_node)
+#
+#     if lint_and_recompile:
+#         graph.lint()
+#         gm.recompile()
+#
+#     # Useful when retracing for quantization.
+#     if hasattr(gm, "_qconfig_map"):
+#         gm._qconfig_map[get_position_ids_node.name] = None
+#         gm._qconfig_map[position_ids_node.name] = None
 
 
 def _patch_arguments_(
@@ -342,7 +341,6 @@ def _patch_arguments_(
 def transform_to_dynamic_input_(gm: GraphModule, is_retracing: bool = False):
     """Transformation that enables traced models to perform inference on dynamic input shapes."""
     graph = gm.graph
-    input_names = set(gm.dummy_inputs.keys())
     static2dynamic = {}
 
     # Inserting the nodes that will fetch the batch size and sequence lengths dynamically.
@@ -367,13 +365,6 @@ def transform_to_dynamic_input_(gm: GraphModule, is_retracing: bool = False):
 
     _change_view_methods_(gm, static2dynamic, lint_and_recompile=False)
     _patch_getitem_(gm, static2dynamic, lint_and_recompile=False)
-
-    if (
-        gm.use_dynamic_sequence_length
-        and "position_ids" not in input_names
-        and hasattr(gm.config, "max_position_embeddings")
-    ):
-        _register_position_ids_and_replace_(gm, encoder_sequence_length_node, lint_and_recompile=False)
 
     remove_unused_nodes_(gm, lint_and_recompile=False)
 
