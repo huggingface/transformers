@@ -156,9 +156,7 @@ class HfArgumentParser(ArgumentParser):
             # here and we do not need those changes/additional keys.
             if field.default is True and (field.type is bool or field.type == Optional[bool]):
                 bool_kwargs["default"] = False
-                parser.add_argument(
-                    f"--no_{field.name}", action="store_false", dest=field.name, **bool_kwargs
-                )
+                parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **bool_kwargs)
 
     def parse_args_into_dataclasses(
         self, args=None, return_remaining_strings=False, look_for_args_file=True, args_filename=None
