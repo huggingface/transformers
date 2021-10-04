@@ -120,7 +120,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         return cls(config, **kwargs)
     
     @property
-    def framework(self) -> string:
+    def framework(self) -> str:
         """
         :str: Identifies that this is a Flax model.
         """
