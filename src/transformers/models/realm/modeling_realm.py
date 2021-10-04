@@ -45,7 +45,7 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_realm import RealmConfig
-from .utils_realm import load_scann_searcher, convert_tfrecord_to_np
+from .utils_realm import BruteForceSearcher, ScaNNSearcher, convert_tfrecord_to_np
 
 logger = logging.get_logger(__name__)
 _BERT_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-bert"
@@ -163,7 +163,7 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
     return model
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings
+# Copied from transformers.models.bert.modeling_bert.BertEmbeddings->RealmEmbeddings
 class RealmEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -224,7 +224,7 @@ class RealmEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention->RealmSelfAttention
 class RealmSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -350,7 +350,7 @@ class RealmSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput->RealmSelfOutput
 class RealmSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -365,7 +365,7 @@ class RealmSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention
+# Copied from transformers.models.bert.modeling_bert.BertAttention->RealmAttention
 class RealmAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -415,7 +415,7 @@ class RealmAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate->RealmIntermediate
 class RealmIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -431,7 +431,7 @@ class RealmIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput->RealmOutput
 class RealmOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -446,7 +446,7 @@ class RealmOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer
+# Copied from transformers.models.bert.modeling_bert.BertLayer->RealmLayer
 class RealmLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -530,7 +530,7 @@ class RealmLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder
+# Copied from transformers.models.bert.modeling_bert.BertEncoder->RealmEncoder
 class RealmEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -628,7 +628,7 @@ class RealmEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler->RealmPooler
 class RealmPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1521,15 +1521,17 @@ class RealmSearcher(RealmPreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        try:
-            import scann
-        except ImportError:
-            raise ImportError(
-                "RealmSearcher requires ScaNN to retrieve documents from the corpus."
-                "Please install it through `pip install scann`."
-            )
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-    
+        realm_searcher = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        if realm_searcher.config.use_scann:
+            try:
+                import scann
+            except ImportError:
+                raise ImportError(
+                    "RealmSearcher requires ScaNN to retrieve documents from the corpus."
+                    "Please install it through `pip install scann`."
+                )
+        return realm_searcher
+
     @add_start_docstrings_to_model_forward(
         REALM_INPUTS_DOCSTRING.format("1, searcher_seq_len")
     )
@@ -1561,13 +1563,19 @@ class RealmSearcher(RealmPreTrainedModel):
         else:
             beam_size = self.config.reader_beam_size
        
-        if self.block_emb.device != torch.device("cpu"):
+        if self.config.use_scann and self.block_emb.device != torch.device("cpu"):
             self.block_emb = self.block_emb.cpu()
         if self.searcher is None:
-            self.searcher = load_scann_searcher(
-                db = self.block_emb,
-                num_neighbors=beam_size
-            )
+            if self.config.use_scann:
+                self.searcher = ScaNNSearcher(
+                    db = self.block_emb,
+                    num_neighbors = beam_size,
+                )
+            else:
+                self.searcher = BruteForceSearcher(
+                    db = self.block_emb,
+                    num_neighbors = beam_size,
+                )
 
         question_outputs = self.embedder(
             input_ids,
@@ -1584,16 +1592,16 @@ class RealmSearcher(RealmPreTrainedModel):
         question_projection = question_outputs[0]
 
         # [1, searcher_beam_size]
-        retrieved_block_ids, _ = self.searcher.search_batched(question_projection.detach().cpu())
+        retrieved_block_ids = self.searcher.search_batched(question_projection)
 
         # [searcher_beam_size]
-        retrieved_block_ids = torch.tensor(retrieved_block_ids.astype('int64').squeeze())
+        retrieved_block_ids = retrieved_block_ids.squeeze()
 
         # [searcher_beam_size]
         retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
 
         # [searcher_beam_size, projection_size]
-        retrieved_block_emb = torch.index_select(self.block_emb, dim=0, index=retrieved_block_ids)
+        retrieved_block_emb = torch.index_select(self.block_emb, dim=0, index=retrieved_block_ids.to(self.block_emb.device))
 
         # [searcher_beam_size]
         retrieved_logits = torch.einsum("D,BD->B", question_projection.squeeze(), retrieved_block_emb.to(question_projection.device))
