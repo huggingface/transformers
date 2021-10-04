@@ -27,7 +27,7 @@ Predictions = List[Prediction]
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ImageSegmentationPipeline(Pipeline):
     """
-    Image segmntation pipeline using any :obj:`AutoModelForImageSegmentation`. This pipeline predicts masks of objects
+    Image segmentation pipeline using any :obj:`AutoModelForImageSegmentation`. This pipeline predicts masks of objects
     and their classes.
 
     This image segmntation pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
