@@ -364,7 +364,14 @@ class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
             "google/vit-base-patch16-224-in21k", "bert-base-cased"
         )
         batch_size = 1
-        pixel_values = floats_tensor([batch_size, model.encoder.config.num_channels, model.encoder.config.image_size, model.encoder.config.image_size])
+        pixel_values = floats_tensor(
+            [
+                batch_size,
+                model.encoder.config.num_channels,
+                model.encoder.config.image_size,
+                model.encoder.config.image_size,
+            ]
+        )
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], model.decoder.config.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])

@@ -3596,6 +3596,15 @@ class TrOCRPreTrainedModel:
         requires_backends(cls, ["torch"])
 
 
+class TrOCRProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class VisionEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

@@ -16,12 +16,12 @@ TrOCR
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The TrOCR model is used together with :doc:`ViT <vit>` for optical character recognition models proposed in `TrOCR:
-Transformer-based Optical Character Recognition with Pre-trained Models <https://arxiv.org/abs/2109.10282>`__ by
-Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei.
+The TrOCR model was proposed in `TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models
+<https://arxiv.org/abs/2109.10282>`__ by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
+Zhoujun Li, Furu Wei. TrOCR consists of an image Transformer encoder and an autoregressive text Transformer decoder to
+perform `optical character recognition (OCR) <https://en.wikipedia.org/wiki/Optical_character_recognition>`__.
 
-TrOCR consists of a Vision Transformer encoder and an autoregressive text Transformer decoder. Please refer to the
-:doc:`VisionEncoderDecoder <visionencoderdecoder>` class on how to use this model.
+Please refer to the :doc:`VisionEncoderDecoder <visionencoderdecoder>` class on how to use this model.
 
 This model was contributed by `Niels Rogge <https://huggingface.co/nielsr>`__.
 
@@ -31,8 +31,9 @@ The original code can be found `here
 
 Tips:
 
-- TrOCR achieves state-of-the-art results on the IAM Handwriting dataset. For more information, see the `official
-  models <https://huggingface.co/models?other=trocr>`__ .
+- TrOCR achieves state-of-the-art results on both printed and handwritten text recognition tasks, such as the `IAM
+  Handwriting dataset <https://fki.tic.heia-fr.ch/databases/iam-handwriting-database>`__. For more information, see the
+  `official models <https://huggingface.co/models?other=trocr>`__.
 - TrOCR is always used within the :doc:`VisionEncoderDecoder <visionencoderdecoder>` framework.
 
 Inference
@@ -56,8 +57,8 @@ predicted token ids.
         >>> import requests
         >>> from PIL import Image
 
-        >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base")
-        >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base")
+        >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-finetuned-iam")
+        >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-finetuned-iam")
 
         >>> # load image from the IAM dataset
         >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
@@ -69,7 +70,7 @@ predicted token ids.
         >>> generated_text = processor.batch_decode(generated_ids)
 
 
-See `model hub <https://huggingface.co/models?filter=trocr>`__ to look for TrOCR checkpoints.
+See the `model hub <https://huggingface.co/models?filter=trocr>`__ to look for TrOCR checkpoints.
 
 
 TrOCRConfig

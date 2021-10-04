@@ -74,18 +74,18 @@ class TrOCRConfig(PretrainedConfig):
         scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to scale the word embeddings by sqrt(d_model).
 
-        Example::
+    Example::
 
-            >>> from transformers import TrOCRForCausalLM, TrOCRConfig
+        >>> from transformers import TrOCRForCausalLM, TrOCRConfig
 
-            >>> # Initializing a TrOCR-base style configuration
-            >>> configuration = TrOCRConfig()
+        >>> # Initializing a TrOCR-base style configuration
+        >>> configuration = TrOCRConfig()
 
-            >>> # Initializing a model from the TrOCR-base style configuration
-            >>> model = TrOCRForCausalLM(configuration)
+        >>> # Initializing a model from the TrOCR-base style configuration
+        >>> model = TrOCRForCausalLM(configuration)
 
-            >>> # Accessing the model configuration
-            >>> configuration = model.config
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
     """
     model_type = "trocr"
     keys_to_ignore_at_inference = ["past_key_values"]

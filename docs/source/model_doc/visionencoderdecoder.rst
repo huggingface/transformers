@@ -13,12 +13,12 @@
 Vision Encoder Decoder Models
 -----------------------------------------------------------------------------------------------------------------------
 
-The :class:`~transformers.VisionEncoderDecoderModel` can be used to initialize a image-to-text-sequence model with any
-pretrained vision autoencoding model as the encoder (*e.g.* :doc:`ViT <vit>`, :doc:`BEiT <beit>`) and any pretrained
-autoregressive model as the decoder.
+The :class:`~transformers.VisionEncoderDecoderModel` can be used to initialize an image-to-text-sequence model with any
+pretrained vision autoencoding model as the encoder (*e.g.* :doc:`ViT <vit>`, :doc:`BEiT <beit>`, :doc:`DeiT <deit>`)
+and any pretrained autoregressive model as the decoder.
 
-The effectiveness of initializing image-to-text-sequence models with pretrained checkpoints for *e.g.* optical
-character recognition has been shown in `TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models
+The effectiveness of initializing image-to-text-sequence models with pretrained checkpoints has been shown in (for
+example) `TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models
 <https://arxiv.org/abs/2109.10282>`__ by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
 Zhoujun Li, Furu Wei.
 
