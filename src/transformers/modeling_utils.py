@@ -460,11 +460,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         :obj:`Dict[str, torch.Tensor]`: Dummy inputs to do a forward pass in the network.
         """
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
-    
+
     @property
     def framework(self) -> string:
+        """
+        :str: Identifies that this is a pytorch model.
+        """
         return "pt"
-    
+
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
