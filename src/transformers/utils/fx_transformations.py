@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, Optional, Union
 import torch
 from torch.fx import Graph, GraphModule, Node
 
+
 # Torch FX transformation convention:
 #   - transformations that are supposed to act on a copy of the original GraphModule are decorated with @transformation
 #   - transformations that are inplace have a name ending with "_"
@@ -132,7 +133,7 @@ def remove_unused_nodes_(gm: GraphModule, lint_and_recompile: bool = True):
     """Removes all the unused nodes in a GraphModule."""
     graph = gm.graph
     for node in graph.nodes:
-        if not node.users and node.op != "output":
+        if not node.users and node.op not in ["placeholder", "output"]:
             graph.erase_node(node)
 
     if lint_and_recompile:
@@ -248,9 +249,9 @@ def _patch_getitem_(
 
 # def _register_position_ids_and_replace_(gm: GraphModule, sequence_length_node: Node, lint_and_recompile: bool = True):
 #     """
-#     Redefines position_ids (as tracing with static shapes can introduce optimizations that fix position_ids to a value
-#     not suitable for dynamic input shapes), and replaces old position_ids usage by the redefined version.
-#     """
+# Redefines position_ids (as tracing with static shapes can introduce optimizations that fix position_ids to a value #
+not suitable for dynamic input shapes), and replaces old position_ids usage by the redefined version. #
+"""
 #     graph = gm.graph
 #
 #     any_buffer = next(gm.buffers())
