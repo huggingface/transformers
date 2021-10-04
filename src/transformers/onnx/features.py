@@ -10,6 +10,7 @@ from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.longformer import LongformerOnnxConfig
+from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
@@ -60,6 +61,7 @@ class FeaturesManager:
     _SUPPORTED_MODEL_KIND = {
         "albert": supported_features_mapping("default", onnx_config_cls=AlbertOnnxConfig),
         "bart": supported_features_mapping("default", onnx_config_cls=BartOnnxConfig),
+        "marian": supported_features_mapping("seq2seq-lm", onnx_config_cls=MarianOnnxConfig),
         "mbart": supported_features_mapping("default", onnx_config_cls=MBartOnnxConfig),
         "bert": supported_features_mapping("default", onnx_config_cls=BertOnnxConfig),
         "distilbert": supported_features_mapping("default", onnx_config_cls=DistilBertOnnxConfig),
