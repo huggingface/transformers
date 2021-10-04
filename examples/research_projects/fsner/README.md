@@ -65,7 +65,6 @@ supports = [
             "[E] Walmart [/E] is a leading e-commerce company",
             "I recently ordered a book from [E] Amazon [/E]",
             "I ordered this from [E] ShopClues [/E]",
-            "Fridge can be ordered in [E] Amazon [/E]",
             "[E] Flipkart [/E] started it's journey from zero"
         ]
    ]
@@ -73,7 +72,7 @@ supports = [
 device = 'cpu'
 
 W_query = tokenizer.tokenize(query).to(device)
-W_supports = tokenizer.tokenize([s for support in supports for s in support]).to(device)
+W_supports = tokenizer.tokenize(supports).to(device)
 
 start_prob, end_prob = model(W_query, W_supports)
 

@@ -1,3 +1,4 @@
+import torch
 from transformers import AutoTokenizer
 
 
@@ -6,7 +7,33 @@ class FSNERTokenizerUtils(object):
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
 
     def tokenize(self, x):
-        return self.tokenizer(x, padding="max_length", max_length=384, truncation=True, return_tensors="pt")
+        """
+        Wrapper function for tokenizing query and supports
+        Args:
+            x (`List[str] or List[List[str]]`):
+                List of strings for query or list of lists of strings for supports.
+        Returns:
+            `transformers.tokenization_utils_base.BatchEncoding` dict with additional keys and values for start_token_id, end_token_id and sizes of example lists for each entity type
+        """
+
+        if isinstance(x, list) and all([isinstance(_x, list) for _x in x]):
+            d = None
+            for l in x:
+                t = self.tokenizer(l, padding="max_length", max_length=384, truncation=True, return_tensors="pt")
+                t['sizes'] = torch.tensor([len(l)])
+                if d is not None:
+                    for k in d.keys():
+                        d[k] = torch.cat((d[k], t[k]), 0)
+                else:
+                    d = t
+
+        elif isinstance(x, list) and all([isinstance(_x, str) for _x in x]):
+            d = self.tokenizer(x, padding="max_length", max_length=384, truncation=True, return_tensors="pt")
+
+        else:
+            raise Exception("Type of parameter x was not recognized! Only `list of strings` for query or `list of lists of strings` for supports are supported.")
+
+        return d
 
     def extract_entity_from_scores(self, query, W_query, p_start, p_end, thresh=0.70):
         """
