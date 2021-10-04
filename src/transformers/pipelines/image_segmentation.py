@@ -78,7 +78,7 @@ class ImageSegmentationPipeline(Pipeline):
 
     def __call__(self, *args, **kwargs) -> Union[Predictions, List[Prediction]]:
         """
-        Perform segmentation (detect maskss & classes) in the image(s) passed as inputs.
+        Perform segmentation (detect masks & classes) in the image(s) passed as inputs.
 
         Args:
             images (:obj:`str`, :obj:`List[str]`, :obj:`PIL.Image` or :obj:`List[PIL.Image]`):
