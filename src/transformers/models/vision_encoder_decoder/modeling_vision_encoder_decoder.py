@@ -394,23 +394,26 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ViTFeatureExtractor, VisionEncoderDecoderModel
-            >>> import torch
+            >>> from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+            >>> import requests
             >>> from PIL import Image
+            >>> import torch
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-            >>> model = VisionEncoderDecoderModel.from_pretrained('microsoft/tr-ocr-base')
+            >>> processor = TrOCRProcessor.from_pretrained('microsoft/tr-ocr-base-iam')
+            >>> model = VisionEncoderDecoderModel.from_pretrained('microsoft/tr-ocr-base-iam')
 
             >>> # load image
-            >>> image = Image.open("...")
+            >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
+            >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-            >>> pixel_values = feature_extractor(image, return_tensors="pt").pixel_values  # Batch size 1
+            >>> # training
+            >>> pixel_values = processor(image, return_tensors="pt").pixel_values  # Batch size 1
             >>> decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
             >>> outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
 
-            >>> # generation
-            >>> generated = model.generate(pixel_values)
-            >>> caption = processor.batch_decode(generated)
+            >>> # inference (generation)
+            >>> generated_ids = model.generate(pixel_values)
+            >>> generated_text = processor.batch_decode(generated_ids)
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -263,7 +263,7 @@ class EncoderDecoderMixin:
 
         # in ViT, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
         image_size = to_2tuple(encoder_model.config.image_size)
-        patch_size = to_2tuple(encoder_model.config.image_size)
+        patch_size = to_2tuple(encoder_model.config.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         seq_len = num_patches + 1
         self.assertEqual(encoder_attentions[0].shape[-3:], (config.num_attention_heads, seq_len, seq_len))
@@ -363,8 +363,8 @@ class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
         model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
             "google/vit-base-patch16-224-in21k", "bert-base-cased"
         )
-        batch_size = 13
-        pixel_values = floats_tensor([batch_size, 512], model.encoder.config.vocab_size)
+        batch_size = 1
+        pixel_values = floats_tensor([batch_size, model.encoder.config.num_channels, model.encoder.config.image_size, model.encoder.config.image_size])
         attention_mask = random_attention_mask([batch_size, 512])
         decoder_input_ids = ids_tensor([batch_size, 4], model.decoder.config.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
