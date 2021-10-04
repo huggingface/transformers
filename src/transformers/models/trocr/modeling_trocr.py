@@ -98,8 +98,7 @@ class TrOCRLearnedPositionalEmbedding(nn.Embedding):
 
 
 class TrOCRAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper.    
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper."""
 
     def __init__(
         self,
@@ -187,7 +186,7 @@ class TrOCRAttention(nn.Module):
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
-        
+
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
@@ -327,10 +326,10 @@ class TrOCRDecoderLayer(nn.Module):
         # Cross-Attention Block
         cross_attn_present_key_value = None
         cross_attn_weights = None
-                
+
         if encoder_hidden_states is not None:
             residual = hidden_states
-            
+
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
@@ -354,7 +353,7 @@ class TrOCRDecoderLayer(nn.Module):
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-                
+
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
@@ -545,7 +544,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -566,7 +565,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         embed_pos = self.embed_positions(input_shape)
 
         hidden_states = inputs_embeds + embed_pos
-        
+
         hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -629,7 +628,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
                     None,
                 )
             else:
-                
+
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,

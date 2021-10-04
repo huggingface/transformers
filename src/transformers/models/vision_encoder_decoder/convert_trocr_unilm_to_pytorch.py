@@ -23,13 +23,13 @@ from PIL import Image
 
 import requests
 from transformers import (
+    RobertaTokenizer,
     TrOCRConfig,
     TrOCRForCausalLM,
     VisionEncoderDecoderModel,
     ViTConfig,
     ViTFeatureExtractor,
     ViTModel,
-    RobertaTokenizer,
 )
 from transformers.utils import logging
 
@@ -107,11 +107,11 @@ def rename_key(dct, old, new):
 
 # We will verify our results on an image of the IAM Handwriting Database
 def prepare_img():
-    url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-00.jpg" # industry
-    #url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-12.jpg" # have
-    #url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-10.jpg" # let
-    url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg" # 
-    #url = "https://fki.tic.heia-fr.ch/static/img/a01-122.jpg"
+    url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-00.jpg"  # industry
+    # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-12.jpg" # have
+    # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-10.jpg" # let
+    url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"  #
+    # url = "https://fki.tic.heia-fr.ch/static/img/a01-122.jpg"
     im = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return im
 
@@ -170,19 +170,19 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # Check outputs on an image
     feature_extractor = ViTFeatureExtractor(size=encoder_config.image_size)
     tokenizer = RobertaTokenizer.from_pretrained("roberta-large")
-    
+
     pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
-    
+
     generated_ids = model.generate(input_ids=pixel_values, num_beams=5)
     print(tokenizer.decode(generated_ids[0]))
-    
-    #forward pass
-    #decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
-    #outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
-    #logits = outputs.logits
+
+    # forward pass
+    # decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
+    # outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+    # logits = outputs.logits
     # TODO verify logits
-    #print("Shape of logits:", logits.shape)
-    #print("First elements of logits:", logits[0,0,:10])
+    # print("Shape of logits:", logits.shape)
+    # print("First elements of logits:", logits[0,0,:10])
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
