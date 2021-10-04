@@ -654,6 +654,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     
     @property
     def framework(self) -> string:
+        """
+        :str: Identifies that this is a TensorFlow model.
+        """
         return "tf"
     
     def __init__(self, config, *inputs, **kwargs):
