@@ -419,6 +419,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
     def __init__(self, config: TrOCRConfig):
         super().__init__(config)
         self.dropout = config.dropout
+        self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 

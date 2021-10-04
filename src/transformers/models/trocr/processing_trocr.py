@@ -18,12 +18,12 @@ Processor class for TrOCR.
 from contextlib import contextmanager
 
 from ..auto.feature_extraction_auto import AutoFeatureExtractor
-from .tokenization_roberta import RobertaTokenizer
+from transformers.models.roberta.tokenization_roberta import RobertaTokenizer
 
 
 class TrOCRProcessor:
     r"""
-    Constructs a TrOCR processor which wraps a TrOCR feature extractor and a RoBERTa tokenizer into a single processor.
+    Constructs a TrOCR processor which wraps a vision feature extractor and a TrOCR tokenizer into a single processor.
 
     :class:`~transformers.TrOCRProcessor` offers all the functionalities of :class:`~transformers.AutoFeatureExtractor`
     and :class:`~transformers.RobertaTokenizer`. See the :meth:`~transformers.TrOCRProcessor.__call__` and

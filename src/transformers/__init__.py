@@ -274,6 +274,7 @@ _import_structure = {
     "models.trocr": [
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrOCRConfig",
+        "TrOCRProcessor",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
@@ -2853,7 +2854,7 @@ if TYPE_CHECKING:
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
         )
-        from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRModel, TrOCRPreTrainedModel
+        from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRModel, TrOCRPreTrainedModel, TrOCRProcessor
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,

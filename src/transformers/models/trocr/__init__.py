@@ -25,6 +25,7 @@ _import_structure = {
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrOCRConfig",
     ],
+    "processing_trocr": ["TrOCRProcessor"],
 }
 
 
@@ -38,6 +39,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig
+    from .processing_trocr import TrOCRProcessor
 
     if is_torch_available():
         from .modeling_trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
