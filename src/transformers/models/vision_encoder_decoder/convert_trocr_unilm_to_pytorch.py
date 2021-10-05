@@ -201,7 +201,9 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
             [-5.6816, -5.8388, 1.1398, -6.9034, 6.8505, -2.4393, 1.2284, -1.0232, -1.9661, -3.9210]
         )
     elif "trocr-large-printed" in checkpoint_url:
-        expected_slice = torch.tensor()
+        expected_slice = torch.tensor(
+            [-6.0162, -7.0959, 4.4155, -5.1063, 7.0468, -3.1631, 2.6466, -0.3081, -0.8106, -1.7535]
+        )
     elif "trocr-base-stage1" in checkpoint_url:
         expected_slice = torch.tensor()
     elif "trocr-large-stage1" in checkpoint_url:

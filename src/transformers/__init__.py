@@ -2856,12 +2856,7 @@ if TYPE_CHECKING:
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
         )
-        from .models.trocr import (
-            TROCR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TrOCRForCausalLM,
-            TrOCRPreTrainedModel,
-            TrOCRProcessor,
-        )
+        from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,

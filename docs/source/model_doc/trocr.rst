@@ -57,8 +57,8 @@ predicted token ids.
         >>> import requests
         >>> from PIL import Image
 
-        >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-finetuned-iam")
-        >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-finetuned-iam")
+        >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
+        >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
 
         >>> # load image from the IAM dataset
         >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
