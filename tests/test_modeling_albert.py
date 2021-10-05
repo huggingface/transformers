@@ -232,6 +232,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     fx_ready_model_classes = all_model_classes
+    fx_dynamic_ready_model_classes = all_model_classes
 
     test_sequence_classification_problem_types = True
 

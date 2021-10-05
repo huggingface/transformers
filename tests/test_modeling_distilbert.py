@@ -210,6 +210,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
         else None
     )
     fx_ready_model_classes = all_model_classes
+    fx_dynamic_ready_model_classes = all_model_classes
     test_pruning = True
     test_torchscript = True
     test_resize_embeddings = True

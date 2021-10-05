@@ -284,6 +284,7 @@ class MegatronBertModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     fx_ready_model_classes = all_model_classes
+    fx_dynamic_ready_model_classes = all_model_classes
 
     # test_resize_embeddings = False
     test_head_masking = False
