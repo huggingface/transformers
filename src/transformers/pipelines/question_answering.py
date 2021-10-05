@@ -251,7 +251,7 @@ class QuestionAnsweringPipeline(Pipeline):
     def preprocess(self, example, padding="do_not_pad", doc_stride=None, max_question_len=64, max_seq_len=None):
 
         if max_seq_len is None:
-            max_seq_len = self.tokenizer.model_max_length
+            max_seq_len = min(self.tokenizer.model_max_length, 1024)
         if doc_stride is None:
             doc_stride = min(max_seq_len // 4, 128)
 
