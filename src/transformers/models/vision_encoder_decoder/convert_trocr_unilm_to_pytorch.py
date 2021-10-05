@@ -114,7 +114,7 @@ def prepare_img(checkpoint_url):
         # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"  #
         # url = "https://fki.tic.heia-fr.ch/static/img/a01-122.jpg"
     elif "printed" in checkpoint_url:
-        url = "https://rrc.cvc.uab.es/files/sample21.jpg"
+        url = "https://www.researchgate.net/profile/Dinh-Sang/publication/338099565/figure/fig8/AS:840413229350922@1577381536857/An-receipt-example-in-the-SROIE-2019-dataset_Q640.jpg"
     im = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return im
 
