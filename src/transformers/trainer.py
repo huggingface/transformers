@@ -572,16 +572,16 @@ class Trainer:
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             if self.args.world_size <= 1:
                 return LengthGroupedSampler(
-                    self.train_dataset,
                     self.args.train_batch_size,
+                    dataset=self.train_dataset,
                     lengths=lengths,
                     model_input_name=model_input_name,
                     generator=generator,
                 )
             else:
                 return DistributedLengthGroupedSampler(
-                    self.train_dataset,
                     self.args.train_batch_size,
+                    dataset=self.train_dataset,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     lengths=lengths,
