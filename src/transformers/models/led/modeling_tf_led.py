@@ -1604,7 +1604,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         if config.encoder_layerdrop > 0:
             logger.warning("Layerdrop is currently disabled in TFLED models.")
-        self.layerdrop = 0.
+        self.layerdrop = 0.0
         self.padding_idx = config.pad_token_id
 
         if isinstance(config.attention_window, int):
@@ -1871,7 +1871,7 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         self.embed_tokens = embed_tokens
         if config.decoder_layerdrop > 0:
             logger.warning("Layerdrop is currently disabled in TFLED models.")
-        self.layerdrop = 0.
+        self.layerdrop = 0.0
         self.embed_positions = TFLEDLearnedPositionalEmbedding(
             config.max_decoder_position_embeddings,
             config.d_model,
