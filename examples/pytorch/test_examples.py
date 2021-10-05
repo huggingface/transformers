@@ -41,6 +41,7 @@ SRC_DIRS = [
         "image-classification",
         "speech-recognition",
         "audio-classification",
+        "speech-pretraining",
     ]
 ]
 sys.path.extend(SRC_DIRS)
@@ -59,6 +60,7 @@ if SRC_DIRS is not None:
     import run_summarization
     import run_swag
     import run_translation
+    import run_wav2vec2_pretraining_no_trainer
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -446,4 +448,33 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_audio_classification.main()
             result = get_results(tmp_dir)
+            self.assertLess(result["eval_loss"], result["train_loss"])
+
+    def test_run_wav2vec2_pretraining(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_wav2vec2_pretraining_no_trainer.py
+            --output_dir {tmp_dir}
+            --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
+            --dataset_name patrickvonplaten/librispeech_asr_dummy
+            --dataset_config_names clean
+            --dataset_split_names validation
+            --learning_rate 1e-4
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 1
+            --preprocessing_num_workers 16
+            --max_steps 10
+            --seed 42
+        """.split()
+
+        if is_cuda_and_apex_available():
+            testargs.append("--fp16")
+
+        with patch.object(sys, "argv", testargs):
+            run_wav2vec2_pretraining_no_trainer.main()
+            result = get_results(tmp_dir)
+            import ipdb; ipdb.set_trace()
             self.assertLess(result["eval_loss"], result["train_loss"])
