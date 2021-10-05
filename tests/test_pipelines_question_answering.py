@@ -142,7 +142,7 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         )
         self.assertEqual(
             nested_simplify(outputs),
-            {"answer": "a accused in the loan fraud case", "end": 294, "score": 0.55, "start": 261},
+            {"answer": "an accused in the loan fraud case", "end": 294, "score": 0.001, "start": 261},
         )
 
     @slow

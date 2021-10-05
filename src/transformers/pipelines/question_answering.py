@@ -248,7 +248,13 @@ class QuestionAnsweringPipeline(Pipeline):
             return super().__call__(examples[0], **kwargs)
         return super().__call__(examples, **kwargs)
 
-    def preprocess(self, example, padding="do_not_pad", doc_stride=128, max_question_len=64, max_seq_len=384):
+    def preprocess(self, example, padding="do_not_pad", doc_stride=None, max_question_len=64, max_seq_len=None):
+
+        if max_seq_len is None:
+            max_seq_len = self.tokenizer.model_max_length
+        if doc_stride is None:
+            doc_stride = min(max_seq_len // 4, 128)
+
         if not self.tokenizer.is_fast:
             features = squad_convert_examples_to_features(
                 examples=[example],
@@ -277,7 +283,6 @@ class QuestionAnsweringPipeline(Pipeline):
                 return_offsets_mapping=True,
                 return_special_tokens_mask=True,
             )
-
             # When the input is too long, it's converted in a batch of inputs with overflowing tokens
             # and a stride of overlap between the inputs. If a batch of inputs is given, a special output
             # "overflow_to_sample_mapping" indicate which member of the encoded batch belong to which original batch sample.
