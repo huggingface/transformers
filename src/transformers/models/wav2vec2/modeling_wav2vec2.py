@@ -1221,12 +1221,12 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         self.dropout_features = nn.Dropout(config.feat_quantizer_dropout)
 
         self.quantizer = Wav2Vec2GumbelVectorQuantizer(config)
-        self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
 
         self.init_weights()
 
-        # make sure that project_hid is not included in `init_weights`
+        # make sure that project_hid & project_q are initialized like normal linear layers
         self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
+        self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
 
     def set_gumbel_temperature(self, temperature: int):
         """
