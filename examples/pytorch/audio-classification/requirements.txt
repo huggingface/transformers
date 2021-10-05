@@ -1,0 +1,3 @@
+datasets>=1.12.0
+torchaudio
+torch>=1.6

@@ -281,6 +281,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "test_trainer_distributed.py",
         "test_trainer_tpu.py",
     ],
+    "train_pt_utils.py": "test_trainer_utils.py",
     "utils/versions.py": "test_versions_utils.py",
 }
 
@@ -442,8 +443,10 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if os.path.isfile(f) or os.path.isdir(f)]
         if filters is not None:
+            filtered_files = []
             for filter in filters:
-                test_files_to_run = [f for f in test_files_to_run if f.startswith(filter)]
+                filtered_files.extend([f for f in test_files_to_run if f.startswith(filter)])
+            test_files_to_run = filtered_files
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
     if len(test_files_to_run) > 0:
