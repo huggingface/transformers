@@ -142,6 +142,11 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     else:
         raise ValueError("Should either find 'base' or 'large' in checkpoint URL")
 
+    # the large-printed checkpoint uses sinusoidal position embeddings, no layernorm afterwards
+    if "large-printed" in checkpoint_url:
+        decoder_config.use_learned_position_embeddings = False
+        decoder_config.layernorm_embedding = False
+
     # load HuggingFace model
     encoder = ViTModel(encoder_config, add_pooling_layer=False)
     decoder = TrOCRForCausalLM(decoder_config)
@@ -160,6 +165,8 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     del state_dict["encoder.deit.head.weight"]
     del state_dict["encoder.deit.head.bias"]
     del state_dict["decoder.version"]
+    if "large-printed" in checkpoint_url:
+        del state_dict["decoder.embed_positions._float_tensor"]
 
     # add prefix to decoder keys
     for key, val in state_dict.copy().items():

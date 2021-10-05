@@ -73,6 +73,10 @@ class TrOCRConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to scale the word embeddings by sqrt(d_model).
+        use_learned_position_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to use learned position embeddings. If not, sinusoidal position embeddings will be used.
+        layernorm_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to use a layernorm after the word + position embeddings.
 
     Example::
 
@@ -113,6 +117,8 @@ class TrOCRConfig(PretrainedConfig):
         decoder_layerdrop=0.0,
         use_cache=False,
         scale_embedding=False,
+        use_learned_position_embeddings=True,
+        layernorm_embedding=True,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -133,6 +139,8 @@ class TrOCRConfig(PretrainedConfig):
         self.decoder_layerdrop = decoder_layerdrop
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding
+        self.use_learned_position_embeddings = use_learned_position_embeddings
+        self.layernorm_embedding = layernorm_embedding
 
         super().__init__(
             pad_token_id=pad_token_id,
