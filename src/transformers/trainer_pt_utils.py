@@ -520,25 +520,27 @@ class LengthGroupedSampler(Sampler):
 
     def __init__(
         self,
-        dataset: Dataset,
         batch_size: int,
+        dataset: Optional[Dataset] = None,
         lengths: Optional[List[int]] = None,
         model_input_name: Optional[str] = None,
         generator=None,
     ):
-        self.dataset = dataset
+        if dataset is None and lengths is None:
+            raise ValueError("One of dataset and lengths must be provided.")
+
         self.batch_size = batch_size
-        self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
         if lengths is None:
+            model_input_name = model_input_name if model_input_name is not None else "input_ids"
             if (
                 not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
-                or self.model_input_name not in dataset[0]
+                or model_input_name not in dataset[0]
             ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    f"'{self.model_input_name}' key."
+                    f"'{model_input_name}' key."
                 )
-            lengths = [len(feature[self.model_input_name]) for feature in dataset]
+            lengths = [len(feature[model_input_name]) for feature in dataset]
         self.lengths = lengths
         self.generator = generator
 
@@ -558,8 +560,8 @@ class DistributedLengthGroupedSampler(DistributedSampler):
     # Copied and adapted from PyTorch DistributedSampler.
     def __init__(
         self,
-        dataset: Dataset,
         batch_size: int,
+        dataset: Optional[Dataset] = None,
         num_replicas: Optional[int] = None,
         rank: Optional[int] = None,
         seed: int = 0,
@@ -567,6 +569,8 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         lengths: Optional[List[int]] = None,
         model_input_name: Optional[str] = None,
     ):
+        if dataset is None and lengths is None:
+            raise ValueError("One of dataset and lengths must be provided.")
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -575,36 +579,37 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
             rank = dist.get_rank()
-        self.dataset = dataset
+
         self.batch_size = batch_size
         self.num_replicas = num_replicas
         self.rank = rank
         self.epoch = 0
         self.drop_last = drop_last
-        # If the dataset length is evenly divisible by # of replicas, then there
-        # is no need to drop any data, since the dataset will be split equally.
-        if self.drop_last and len(self.dataset) % self.num_replicas != 0:
-            # Split to nearest available length that is evenly divisible.
-            # This is to ensure each rank receives the same amount of data when
-            # using this Sampler.
-            self.num_samples = math.ceil((len(self.dataset) - self.num_replicas) / self.num_replicas)
-        else:
-            self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
-        self.total_size = self.num_samples * self.num_replicas
-        self.seed = seed
-        self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
 
         if lengths is None:
+            model_input_name = model_input_name if model_input_name is not None else "input_ids"
             if (
                 not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
-                or self.model_input_name not in dataset[0]
+                or model_input_name not in dataset[0]
             ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    f"'{self.model_input_name}' key."
+                    f"'{model_input_name}' key."
                 )
-            lengths = [len(feature[self.model_input_name]) for feature in dataset]
+            lengths = [len(feature[model_input_name]) for feature in dataset]
         self.lengths = lengths
+
+        # If the dataset length is evenly divisible by # of replicas, then there
+        # is no need to drop any data, since the dataset will be split equally.
+        if self.drop_last and len(self.lengths) % self.num_replicas != 0:
+            # Split to nearest available length that is evenly divisible.
+            # This is to ensure each rank receives the same amount of data when
+            # using this Sampler.
+            self.num_samples = math.ceil((len(self.lengths) - self.num_replicas) / self.num_replicas)
+        else:
+            self.num_samples = math.ceil(len(self.lengths) / self.num_replicas)
+        self.total_size = self.num_samples * self.num_replicas
+        self.seed = seed
 
     def __iter__(self) -> Iterator:
         # Deterministically shuffle based on epoch and seed
