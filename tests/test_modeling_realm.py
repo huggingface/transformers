@@ -28,7 +28,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     import torch
 
-    from transformers import RealmEmbedder, RealmEncoder, RealmRetriever
+    from transformers import RealmEmbedder, RealmKnowledgeAugEncoder, RealmRetriever, RealmSearcher, RealmReader, RealmForOpenQA
 
 
 class RealmModelTester:
@@ -172,7 +172,7 @@ class RealmModelTester:
         token_labels,
         choice_labels,
     ):
-        model = RealmEncoder(config=config)
+        model = RealmKnowledgeAugEncoder(config=config)
         model.to(torch_device)
         model.eval()
         relevance_score = floats_tensor([self.batch_size, self.num_candidates])
@@ -237,7 +237,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RealmEmbedder,
-            RealmEncoder,
+            RealmKnowledgeAugEncoder,
             # RealmRetriever is excluded from common tests as it is a container model
             # consisting of two RealmEmbedders & simple inner product calculation.
             # RealmRetriever
@@ -285,7 +285,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        for model_class in [RealmEncoder]:
+        for model_class in [RealmKnowledgeAugEncoder]:
             model = model_class(config)
             model.to(torch_device)
             model.train()
@@ -300,14 +300,30 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_encoder_from_pretrained(self):
-        model = RealmEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
+        model = RealmKnowledgeAugEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
+        self.assertIsNotNone(model)
+    
+    @slow
+    def test_open_qa_from_pretrained(self):
+        #TODO: TF record dataset
+        model = RealmRetriever.from_pretrained("qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader")
+        self.assertIsNotNone(model)
+
+    @slow
+    def test_reader_from_pretrained(self):
+        model = RealmRetriever.from_pretrained("qqaatw/realm-orqa-nq-reader")
         self.assertIsNotNone(model)
 
     @slow
     def test_retriever_from_pretrained(self):
         model = RealmRetriever.from_pretrained("qqaatw/realm-cc-news-pretrained-retriever")
         self.assertIsNotNone(model)
-
+    
+    @slow
+    def test_searcher_from_pretrained(self):
+        #TODO: TF record dataset
+        model = RealmRetriever.from_pretrained("qqaatw/realm-orqa-nq-searcher")
+        self.assertIsNotNone(model)
 
 @require_torch
 class RealmModelIntegrationTest(unittest.TestCase):
@@ -330,7 +346,7 @@ class RealmModelIntegrationTest(unittest.TestCase):
         num_candidates = 2
         vocab_size = 30522
 
-        model = RealmEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-bert", num_candidates=num_candidates)
+        model = RealmKnowledgeAugEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-bert", num_candidates=num_candidates)
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11]])
         relevance_score = torch.tensor([[0.3, 0.7]], dtype=torch.float32)
         output = model(input_ids, relevance_score=relevance_score)[0]
@@ -341,6 +357,40 @@ class RealmModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([[[-11.0888, -11.2544], [-10.2170, -10.3874]]])
 
         self.assertTrue(torch.allclose(output[1, :2, :2], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_open_qa(self):
+        #TODO: TF record dataset
+        model = RealmForOpenQA.from_pretrained(
+            r"/mnt/sda1/testing/pytorch-realm-orqa/export/searcher",
+            r"/mnt/sda1/testing/pytorch-realm-orqa/export/reader",
+            r"/mnt/sda1/REALM/language/language/data/enwiki-20181220/blocks.tfr"
+        )
+        
+        question = "Who is the pioneer in modern computer science?"
+        searcher_output, reader_output, predicted_answer = model(question)
+
+        self.assertEqual(predicted_answer, "alan mathison turing")
+
+    @slow
+    def test_inference_reader(self):
+        config = RealmConfig(searcher_beam_size=5)
+        model = RealmReader.from_pretrained("qqaatw/realm-orqa-nq-reader", config)
+
+        concat_inputs = torch.arange(25).view((5, 5))
+        output = model(
+            concat_inputs,
+            return_dict=True)
+
+        block_idx_expected_shape = torch.Size(())
+        start_pos_expected_shape = torch.Size((1))
+        end_pos_expected_shape = torch.Size((1))
+        self.assertEqual(output.block_idx.shape, block_idx_expected_shape)
+        self.assertEqual(output.start_pos.shape, start_pos_expected_shape)
+        self.assertEqual(output.end_pos.shape, end_pos_expected_shape)
+
+        expected_slice = torch.tensor([[0.7410, 0.7170]])
+        self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
 
     @slow
     def test_inference_retriever(self):
@@ -359,3 +409,19 @@ class RealmModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[0.7410, 0.7170]])
         self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
+    
+    @slow
+    def test_inference_searcher(self):
+        #TODO: TF record dataset
+        config = RealmConfig(searcher_beam_size=5)
+        model = RealmSearcher.from_pretrained("qqaatw/realm-orqa-nq-searcher", config=config)
+
+        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        expected_shape = torch.Size((5))
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor([[0.7410, 0.7170]])
+        self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
+    

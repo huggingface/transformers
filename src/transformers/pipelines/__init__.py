@@ -44,6 +44,7 @@ from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
+from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
@@ -91,6 +92,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoModelForImageClassification,
         AutoModelForMaskedLM,
+        AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
@@ -228,6 +230,12 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {"model": {"pt": "google/vit-base-patch16-224"}},
+    },
+    "object-detection": {
+        "impl": ObjectDetectionPipeline,
+        "tf": (),
+        "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/detr-resnet-50"}},
     },
 }
 
@@ -448,6 +456,13 @@ def pipeline(
 
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
+
+    if task in {"audio-classification"}:
+        # Audio classification will never require a tokenizer.
+        # the model on the other hand might have a tokenizer, but
+        # the files could be missing from the hub, instead of failing
+        # on such repos, we just force to not load it.
+        load_tokenizer = False
 
     if load_tokenizer:
         # Try to infer tokenizer from model or config name (if provided as str)

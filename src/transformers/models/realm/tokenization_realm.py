@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The REALM authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,6 +29,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "realm-cc-news-pretrained-embedder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder/resolve/main/vocab.txt",
         "realm-cc-news-pretrained-retriever": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-retriever/resolve/main/vocab.txt",
         "realm-cc-news-pretrained-encoder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-encoder/resolve/main/vocab.txt",
+        "realm-orqa-nq-searcher": "https://huggingface.co/qqaatw/realm-orqa-nq-searcher/resolve/main/vocab.txt",
+        "realm-orqa-nq-reader": "https://huggingface.co/qqaatw/realm-orqa-nq-searcher/resolve/main/vocab.txt",
     }
 }
 
@@ -36,6 +38,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "realm-cc-news-pretrained-embedder": 512,
     "realm-cc-news-pretrained-retriever": 512,
     "realm-cc-news-pretrained-encoder": 512,
+    "realm-orqa-nq-searcher": 512,
+    "realm-orqa-nq-reader": 512,
 }
 
 
@@ -43,6 +47,8 @@ PRETRAINED_INIT_CONFIGURATION = {
     "realm-cc-news-pretrained-embedder": {"do_lower_case": True},
     "realm-cc-news-pretrained-retriever": {"do_lower_case": True},
     "realm-cc-news-pretrained-encoder": {"do_lower_case": True},
+    "realm-orqa-nq-searcher": {"do_lower_case": True},
+    "realm-orqa-nq-reader": {"do_lower_case": True},
 }
 
 

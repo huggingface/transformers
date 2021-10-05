@@ -137,6 +137,12 @@ class XLNetConfig(PretrainedConfig):
 
     model_type = "xlnet"
     keys_to_ignore_at_inference = ["mems"]
+    attribute_map = {
+        "n_token": "vocab_size",  # Backward compatibility
+        "hidden_size": "d_model",
+        "num_attention_heads": "n_head",
+        "num_hidden_layers": "n_layer",
+    }
 
     def __init__(
         self,
@@ -170,7 +176,6 @@ class XLNetConfig(PretrainedConfig):
         **kwargs
     ):
         """Constructs XLNetConfig."""
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_layer = n_layer
@@ -216,27 +221,16 @@ class XLNetConfig(PretrainedConfig):
 
         self.use_mems_eval = use_mems_eval
         self.use_mems_train = use_mems_train
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
     @property
     def max_position_embeddings(self):
+        logger.info(f"The model {self.model_type} is one of the few models that has no sequence length limit.")
         return -1
 
-    @property
-    def n_token(self):  # Backward compatibility
-        return self.vocab_size
-
-    @n_token.setter
-    def n_token(self, value):  # Backward compatibility
-        self.vocab_size = value
-
-    @property
-    def hidden_size(self):
-        return self.d_model
-
-    @property
-    def num_attention_heads(self):
-        return self.n_head
-
-    @property
-    def num_hidden_layers(self):
-        return self.n_layer
+    @max_position_embeddings.setter
+    def max_position_embeddings(self, value):
+        # Message copied from Transformer-XL documentation
+        raise NotImplementedError(
+            f"The model {self.model_type} is one of the few models that has no sequence length limit."
+        )

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Team The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The REALM authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,23 +15,37 @@
 """ PyTorch REALM model. """
 
 
+import math
 import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss
+import numpy as np
+from transformers.models.realm.tokenization_realm import RealmTokenizer
+
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import MaskedLMOutput, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...modeling_outputs import (
+    BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+    MaskedLMOutput,
+    ModelOutput,
+)
+from ...modeling_utils import (
+    PreTrainedModel,
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 from ...utils import logging
-from ..bert import BertModel
 from .configuration_realm import RealmConfig
-
+from .utils_realm import BruteForceSearcher, ScaNNSearcher, convert_tfrecord_to_np
 
 logger = logging.get_logger(__name__)
 _BERT_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-bert"
@@ -44,6 +58,8 @@ REALM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "qqaatw/realm-cc-news-pretrained-bert",
     "qqaatw/realm-cc-news-pretrained-embedder",
     "qqaatw/realm-cc-news-pretrained-retriever",
+    "qqaatw/realm-orqa-nq-searcher",
+    "qqaatw/realm-orqa-nq-reader",
     # See all REALM models at https://huggingface.co/models?filter=realm
 ]
 
@@ -67,20 +83,41 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
+    is_reader_checkpoint = False
+
     for name, shape in init_vars:
         logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
-
+    
     for name, array in zip(names, arrays):
-
-        # embedder
+        # For reader
+        if isinstance(model, RealmReader) and "reader" not in name:
+            logger.info(f"Skipping {name} as it is not {model.__class__.__name__}'s parameter")
+            continue
+        elif not isinstance(model, RealmReader) and "reader" in name:
+            logger.info(f"Skipping {name} as it is not {model.__class__.__name__}'s parameter")
+            continue
+        name = name.replace("reader/module/bert/", "bert/")
+        name = name.replace("reader/module/cls/", "cls/")
+        name = name.replace("reader/dense/", "qa_outputs/dense_intermediate/")
+        name = name.replace("reader/dense_1/", "qa_outputs/dense_output/")
+        name = name.replace("reader/layer_normalization", "qa_outputs/layer_normalization")
+        
+        
+        # For embedder and retriever
         embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
         name = name.replace("module/module/module/bert/", f"{embedder_prefix}bert/")
         name = name.replace("module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
         name = name.replace("module/module/dense/", f"{embedder_prefix}cls/dense/")
         name = name.replace("module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
+        
+        # Fine-tuned checkpoints
+        name = name.replace("module/module/module/module/bert/", f"{embedder_prefix}bert/")
+        name = name.replace("module/module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
+        name = name.replace("module/module/module/dense/", f"{embedder_prefix}cls/dense/")
+        name = name.replace("module/module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
 
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
@@ -124,6 +161,628 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         logger.info(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
     return model
+
+
+# Copied from transformers.models.bert.modeling_bert.BertEmbeddings->RealmEmbeddings
+class RealmEmbeddings(nn.Module):
+    """Construct the embeddings from word, position and token_type embeddings."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        if version.parse(torch.__version__) > version.parse("1.6.0"):
+            self.register_buffer(
+                "token_type_ids",
+                torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
+                persistent=False,
+            )
+
+    def forward(
+        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+    ):
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+
+        # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
+        # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
+        # issue #5664
+        if token_type_ids is None:
+            if hasattr(self, "token_type_ids"):
+                buffered_token_type_ids = self.token_type_ids[:, :seq_length]
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
+                token_type_ids = buffered_token_type_ids_expanded
+            else:
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = inputs_embeds + token_type_embeddings
+        if self.position_embedding_type == "absolute":
+            position_embeddings = self.position_embeddings(position_ids)
+            embeddings += position_embeddings
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
+
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention->RealmSelfAttention
+class RealmSelfAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            self.max_position_embeddings = config.max_position_embeddings
+            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+
+        self.is_decoder = config.is_decoder
+
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_value=None,
+        output_attentions=False,
+    ):
+        mixed_query_layer = self.query(hidden_states)
+
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            key_layer = past_key_value[0]
+            value_layer = past_key_value[1]
+            attention_mask = encoder_attention_mask
+        elif is_cross_attention:
+            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
+            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
+            attention_mask = encoder_attention_mask
+        elif past_key_value is not None:
+            key_layer = self.transpose_for_scores(self.key(hidden_states))
+            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+        else:
+            key_layer = self.transpose_for_scores(self.key(hidden_states))
+            value_layer = self.transpose_for_scores(self.value(hidden_states))
+
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_layer, value_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            seq_length = hidden_states.size()[1]
+            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            distance = position_ids_l - position_ids_r
+            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+
+            if self.position_embedding_type == "relative_key":
+                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores
+            elif self.position_embedding_type == "relative_key_query":
+                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(*new_context_layer_shape)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+        return outputs
+
+
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput->RealmSelfOutput
+class RealmSelfOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states, input_tensor):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention->RealmAttention
+class RealmAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.self = RealmSelfAttention(config)
+        self.output = RealmSelfOutput(config)
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.self.query = prune_linear_layer(self.self.query, index)
+        self.self.key = prune_linear_layer(self.self.key, index)
+        self.self.value = prune_linear_layer(self.self.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
+        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_value=None,
+        output_attentions=False,
+    ):
+        self_outputs = self.self(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            past_key_value,
+            output_attentions,
+        )
+        attention_output = self.output(self_outputs[0], hidden_states)
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
+
+
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate->RealmIntermediate
+class RealmIntermediate(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_bert.BertOutput->RealmOutput
+class RealmOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states, input_tensor):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_bert.BertLayer->RealmLayer
+class RealmLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
+        self.attention = RealmAttention(config)
+        self.is_decoder = config.is_decoder
+        self.add_cross_attention = config.add_cross_attention
+        if self.add_cross_attention:
+            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            self.crossattention = RealmAttention(config)
+        self.intermediate = RealmIntermediate(config)
+        self.output = RealmOutput(config)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_value=None,
+        output_attentions=False,
+    ):
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attention_outputs = self.attention(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions=output_attentions,
+            past_key_value=self_attn_past_key_value,
+        )
+        attention_output = self_attention_outputs[0]
+
+        # if decoder, the last output is tuple of self-attn cache
+        if self.is_decoder:
+            outputs = self_attention_outputs[1:-1]
+            present_key_value = self_attention_outputs[-1]
+        else:
+            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+        cross_attn_present_key_value = None
+        if self.is_decoder and encoder_hidden_states is not None:
+            assert hasattr(
+                self, "crossattention"
+            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+
+            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            cross_attention_outputs = self.crossattention(
+                attention_output,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                cross_attn_past_key_value,
+                output_attentions,
+            )
+            attention_output = cross_attention_outputs[0]
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+
+            # add cross-attn cache to positions 3,4 of present_key_value tuple
+            cross_attn_present_key_value = cross_attention_outputs[-1]
+            present_key_value = present_key_value + cross_attn_present_key_value
+
+        layer_output = apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        )
+        outputs = (layer_output,) + outputs
+
+        # if decoder, return the attn key/values as the last output
+        if self.is_decoder:
+            outputs = outputs + (present_key_value,)
+
+        return outputs
+
+    def feed_forward_chunk(self, attention_output):
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.output(intermediate_output, attention_output)
+        return layer_output
+
+
+# Copied from transformers.models.bert.modeling_bert.BertEncoder->RealmEncoder
+class RealmEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.layer = nn.ModuleList([RealmLayer(config) for _ in range(config.num_hidden_layers)])
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+
+        next_decoder_cache = () if use_cache else None
+        for i, layer_module in enumerate(self.layer):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_head_mask = head_mask[i] if head_mask is not None else None
+            past_key_value = past_key_values[i] if past_key_values is not None else None
+
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+
+                if use_cache:
+                    logger.warning(
+                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
+                        "`use_cache=False`..."
+                    )
+                    use_cache = False
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, past_key_value, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                )
+            else:
+                layer_outputs = layer_module(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
+                )
+
+            hidden_states = layer_outputs[0]
+            if use_cache:
+                next_decoder_cache += (layer_outputs[-1],)
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                if self.config.add_cross_attention:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    next_decoder_cache,
+                    all_hidden_states,
+                    all_self_attentions,
+                    all_cross_attentions,
+                ]
+                if v is not None
+            )
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=next_decoder_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+            cross_attentions=all_cross_attentions,
+        )
+
+
+# Copied from transformers.models.bert.modeling_bert.BertPooler->RealmPooler
+class RealmPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
+class RealmBertModel(PreTrainedModel):
+    """
+    Same as the original BertModel but remvoe docstrings and inherit PreTrainedModel directly.
+    """
+
+    def __init__(self, config, add_pooling_layer=True):
+        super().__init__(config)
+        self.config = config
+
+        self.embeddings = RealmEmbeddings(config)
+        self.encoder = RealmEncoder(config)
+
+        self.pooler = RealmPooler(config) if add_pooling_layer else None
+
+        # Weight initialization is managed by Realm models.
+        # self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if self.config.is_decoder:
+            use_cache = use_cache if use_cache is not None else self.config.use_cache
+        else:
+            use_cache = False
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        batch_size, seq_length = input_shape
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        # past_key_values_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+
+        if attention_mask is None:
+            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+
+        if token_type_ids is None:
+            if hasattr(self.embeddings, "token_type_ids"):
+                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
+                token_type_ids = buffered_token_type_ids_expanded
+            else:
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+
+        # If a 2D or 3D attention mask is provided for the cross-attention
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+        if self.config.is_decoder and encoder_hidden_states is not None:
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        else:
+            encoder_extended_attention_mask = None
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
+        )
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+
+        if not return_dict:
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPoolingAndCrossAttentions(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            past_key_values=encoder_outputs.past_key_values,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            cross_attentions=encoder_outputs.cross_attentions,
+        )
 
 
 @dataclass
@@ -170,6 +829,95 @@ class RealmRetrieverOutput(ModelOutput):
     relevance_score: torch.FloatTensor = None
     query_score: torch.FloatTensor = None
     candidate_score: torch.FloatTensor = None
+
+
+@dataclass
+class RealmSearcherOutput(ModelOutput):
+    """
+    Outputs of RealmSearcher models.
+
+    Args:
+        retrieved_logits (:obj:`torch.FloatTensor` of shape :obj:`(config.searcher_beam_size,)`):
+            The relevance score of document candidates (before softmax).
+        retrieved_blocks (:obj:`np.ndarray` of shape :obj:`(config.searcher_beam_size,)`):
+            Retrieved document blocks.
+        retrieved_block_ids (:obj:`torch.LongTensor` of shape :obj:`(config.searcher_beam_size,)`):
+            IDs of retrieved blocks.
+    """
+
+    retrieved_logits: torch.FloatTensor = None
+    retrieved_blocks: np.ndarray = None
+    retrieved_block_ids: torch.LongTensor = None
+
+
+@dataclass
+class RealmReaderOutput(ModelOutput):
+    """
+    Outputs of RealmReader models.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`start_positions`, :obj:`end_positions`, :obj:`has_answers` are provided):
+            Total loss.
+        retriever_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`start_positions`, :obj:`end_positions`, :obj:`has_answers` are provided):
+            Retriever loss.
+        reader_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`start_positions`, :obj:`end_positions`, :obj:`has_answers` are provided):
+            Reader loss.
+        retriever_correct (:obj:`torch.BoolTensor` of shape :obj:`(config.searcher_beam_size,)`, `optional`):
+            Whether or not a evidence block derived from `RealmSearcher` contains answer.
+        reader_correct (:obj:`torch.BoolTensor` of shape :obj:`(config.reader_beam_size, num_candidates)`, `optional`):
+            Whether or not a span candidate contains answer.
+        block_idx (:obj:`torch.LongTensor` of shape :obj:`()`):
+            The index of retrieved evidence blocks in which the predicted answer in most likely
+        candidate (:obj:`torch.LongTensor` of shape :obj:`()`):
+            .
+        start_pos (:obj:`torch.IntTensor` of shape :obj:`()`):
+            Predicted answer starting position in `RealmReader`'s inputs.
+        end_pos: (:obj:`torch.IntTensor` of shape :obj:`()`):
+            Predicted answer ending position in `RealmReader`'s inputs.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: torch.FloatTensor = None
+    retriever_loss: torch.FloatTensor = None
+    reader_loss:torch.FloatTensor = None
+    retriever_correct: torch.BoolTensor = None
+    reader_correct: torch.BoolTensor = None
+    block_idx: torch.LongTensor = None
+    candidate: torch.LongTensor = None
+    start_pos: torch.int32 = None
+    end_pos: torch.int32 = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class RealmForOpenQAOutput(ModelOutput):
+    """
+
+    Outputs of RealmReader models.
+
+    Args:
+        searcher_output (:obj:`dict`):
+            Searcher output.
+        reader_output (:obj:`dict`):
+            Reader output.
+        predicted_answer (:obj:`str`):
+            Predicted answer.
+    """
+
+    searcher_output: dict = None
+    reader_output: dict = None
+    predicted_answer: str = None
 
 
 class RealmPredictionHeadTransform(nn.Module):
@@ -232,6 +980,75 @@ class RealmRetrieverProjection(nn.Module):
         return hidden_states
 
 
+class RealmReaderProjection(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.dense_intermediate = nn.Linear(config.hidden_size, config.span_hidden_size * 2)
+        self.dense_output = nn.Linear(config.span_hidden_size, 1)
+        self.layer_normalization = nn.LayerNorm(config.span_hidden_size, eps=config.reader_layer_norm_eps)
+        self.relu = nn.ReLU()
+
+    def forward(self, hidden_states, token_type_ids):
+        def span_candidates(masks):
+            """Generate span candidates.
+
+                Args:
+                masks: <int32> [num_retrievals, max_sequence_len]
+
+                Returns:
+                starts: <int32> [num_spans]
+                ends: <int32> [num_spans]
+                span_masks: <int32> [num_retrievals, num_spans] whether spans locate in evidence block.
+            """
+            _, max_sequence_len = masks.shape
+            def _spans_given_width(width):
+                current_starts = torch.arange(max_sequence_len - width + 1, device=masks.device)
+                current_ends = torch.arange(width - 1, max_sequence_len, device=masks.device)
+                return current_starts, current_ends
+
+            starts, ends = zip(*(_spans_given_width(w + 1)
+                                for w in range(self.config.max_span_width)))
+
+            # [num_spans]
+            starts = torch.cat(starts, 0)
+            ends = torch.cat(ends, 0)
+
+            # [num_retrievals, num_spans]
+            start_masks = torch.index_select(masks, dim=-1, index=starts)
+            end_masks = torch.index_select(masks, dim=-1, index=ends)
+            span_masks = start_masks * end_masks
+
+            return starts, ends, span_masks
+
+        def mask_to_score(mask):
+            return (1.0 - mask.type(torch.float32)) * -10000.0
+
+
+        # [reader_beam_size, max_sequence_len, span_hidden_size * 2]
+        hidden_states = self.dense_intermediate(hidden_states)
+        # [reader_beam_size, max_sequence_len, span_hidden_size]
+        start_projection, end_projection = hidden_states.chunk(2, dim=-1)
+        block_mask = token_type_ids.detach().clone()
+        block_mask[:, -1] = 0
+        candidate_starts, candidate_ends, candidate_mask = span_candidates(block_mask)
+        
+        candidate_start_projections = torch.index_select(start_projection, dim=1, index=candidate_starts)
+        candidate_end_projections = torch.index_select(end_projection, dim=1, index=candidate_ends)
+        candidate_hidden = candidate_start_projections + candidate_end_projections
+
+        # [reader_beam_size, num_candidates, span_hidden_size]
+        candidate_hidden = self.relu(candidate_hidden)
+        # [reader_beam_size, num_candidates, span_hidden_size]
+        candidate_hidden = self.layer_normalization(candidate_hidden)
+        # [reader_beam_size, num_candidates]
+        reader_logits = self.dense_output(candidate_hidden).squeeze(-1)
+        # [reader_beam_size, num_candidates]
+        reader_logits += mask_to_score(candidate_mask)
+        
+        return reader_logits, candidate_starts, candidate_ends
+
+
 class RealmPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -260,7 +1077,7 @@ class RealmPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _flatten_inputs(self, *inputs):
-        """Flatten inputs to (batch_size, ..., input_shape[-1])"""
+        """Flatten inputs' shape to (-1, input_shape[-1])"""
         flattened_inputs = []
         for tensor in inputs:
             if tensor is None:
@@ -344,7 +1161,7 @@ class RealmEmbedder(RealmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = BertModel(self.config)
+        self.bert = RealmBertModel(self.config)
         self.cls = RealmRetrieverProjection(self.config)
         self.init_weights()
 
@@ -407,7 +1224,7 @@ class RealmEmbedder(RealmPreTrainedModel):
 )
 class RealmRetriever(RealmPreTrainedModel):
     r"""
-    Parameters:
+    Args:
         query_embedder (:class:`~transformers.RealmEmbedder`):
             Embedder for input sequences. If not specified, it will use the same embedder as candidate sequences.
     """
@@ -526,13 +1343,13 @@ class RealmRetriever(RealmPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The encoder of REALM outputting masked language model logits and marginal log-likelihood loss.",
+    "The knowledge-augmented encoder of REALM outputting masked language model logits and marginal log-likelihood loss.",
     REALM_START_DOCSTRING,
 )
-class RealmEncoder(RealmPreTrainedModel):
+class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.bert = BertModel(self.config)
+        self.bert = RealmBertModel(self.config)
         self.cls = RealmOnlyMLMHead(self.config)
         self.init_weights()
 
@@ -589,10 +1406,10 @@ class RealmEncoder(RealmPreTrainedModel):
         Example::
 
             >>> import torch
-            >>> from transformers import RealmTokenizer, RealmEncoder
+            >>> from transformers import RealmTokenizer, RealmKnowledgeAugEncoder
 
             >>> tokenizer = RealmTokenizer.from_pretrained('qqaatw/realm-cc-news-pretrained-bert')
-            >>> model = RealmEncoder.from_pretrained('qqaatw/realm-cc-news-pretrained-bert', num_candidates=2)
+            >>> model = RealmKnowledgeAugEncoder.from_pretrained('qqaatw/realm-cc-news-pretrained-bert', num_candidates=2)
 
             >>> # batch_size = 2, num_candidates = 2
             >>> text = [
@@ -637,6 +1454,8 @@ class RealmEncoder(RealmPreTrainedModel):
                     "You have to specify `relevance_score` when `labels` is specified in order to compute loss."
                 )
 
+            batch_size, seq_length = labels.size()
+
             if mlm_mask is None:
                 mlm_mask = torch.ones_like(labels, dtype=torch.float32)
             else:
@@ -650,7 +1469,9 @@ class RealmEncoder(RealmPreTrainedModel):
             # [batch_size * num_candidates * joint_seq_len]
             mlm_targets = labels.tile(1, self.config.num_candidates).view(-1)
             # [batch_size, num_candidates, joint_seq_len]
-            masked_lm_log_prob = -loss_fct(mlm_logits, mlm_targets).view_as(input_ids)
+            masked_lm_log_prob = -loss_fct(mlm_logits, mlm_targets).view(
+                batch_size, self.config.num_candidates, seq_length
+            )
             # [batch_size, num_candidates, 1]
             candidate_log_prob = candidate_score.log_softmax(-1).unsqueeze(-1)
             # [batch_size, num_candidates, joint_seq_len]
@@ -670,3 +1491,468 @@ class RealmEncoder(RealmPreTrainedModel):
             hidden_states=joint_outputs.hidden_states,
             attentions=joint_outputs.attentions,
         )
+
+@add_start_docstrings(
+    "The searcher of REALM outputting relevance score (before softmax) and corresponding document blocks.",
+    REALM_START_DOCSTRING,
+)
+class RealmSearcher(RealmPreTrainedModel):
+    r"""
+    Args:
+        block_records_path (:obj:`str`):
+            Block records path.
+    """
+    def __init__(self, config, block_records_path):
+        super().__init__(config)
+        self.embedder = RealmEmbedder(config)
+        self.searcher = None
+        self.block_records = convert_tfrecord_to_np(
+            block_records_path = block_records_path,
+            num_block_records = config.num_block_records,
+        )
+        self.register_buffer("block_emb",
+            torch.zeros(()).new_empty(
+                size=(config.num_block_records, config.retriever_proj_size),
+                dtype=torch.float32,
+                device=torch.device('cpu')
+            )
+        )
+        self.init_weights()
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        realm_searcher = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        if realm_searcher.config.use_scann:
+            try:
+                import scann
+            except ImportError:
+                raise ImportError(
+                    "RealmSearcher requires ScaNN to retrieve documents from the corpus."
+                    "Please install it through `pip install scann`."
+                )
+        return realm_searcher
+
+    @add_start_docstrings_to_model_forward(
+        REALM_INPUTS_DOCSTRING.format("1, searcher_seq_len")
+    )
+    @replace_return_docstrings(output_type=RealmSearcherOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        Returns:
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is not None and input_ids.shape[0] != 1) or (inputs_embeds is not None and inputs_embeds.shape[0] != 1):
+            raise ValueError(
+                "The batch_size of the inputs must be 1."
+            )
+
+        if self.training:
+            beam_size = self.config.searcher_beam_size
+        else:
+            beam_size = self.config.reader_beam_size
+       
+        if self.config.use_scann and self.block_emb.device != torch.device("cpu"):
+            self.block_emb = self.block_emb.cpu()
+        if self.searcher is None:
+            if self.config.use_scann:
+                self.searcher = ScaNNSearcher(
+                    db = self.block_emb,
+                    num_neighbors = beam_size,
+                )
+            else:
+                self.searcher = BruteForceSearcher(
+                    db = self.block_emb,
+                    num_neighbors = beam_size,
+                )
+
+        question_outputs = self.embedder(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        # [1, projection_size]
+        question_projection = question_outputs[0]
+
+        # [1, searcher_beam_size]
+        retrieved_block_ids = self.searcher.search_batched(question_projection)
+
+        # [searcher_beam_size]
+        retrieved_block_ids = retrieved_block_ids.squeeze()
+
+        # [searcher_beam_size]
+        retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
+
+        # [searcher_beam_size, projection_size]
+        retrieved_block_emb = torch.index_select(self.block_emb, dim=0, index=retrieved_block_ids.to(self.block_emb.device))
+
+        # [searcher_beam_size]
+        retrieved_logits = torch.einsum("D,BD->B", question_projection.squeeze(), retrieved_block_emb.to(question_projection.device))
+        
+        if not return_dict:
+            return (retrieved_logits, retrieved_blocks, retrieved_block_ids)
+        
+        return RealmSearcherOutput(
+            retrieved_logits=retrieved_logits,
+            retrieved_blocks=retrieved_blocks,
+            retrieved_block_ids=retrieved_block_ids,
+        )
+
+
+@add_start_docstrings(
+    "The reader of REALM.",
+    REALM_START_DOCSTRING,
+)
+class RealmReader(RealmPreTrainedModel):
+
+    _keys_to_ignore_on_load_unexpected = [r"pooler", "cls"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.bert = RealmBertModel(config)
+        self.cls = RealmOnlyMLMHead(config)
+        self.qa_outputs = RealmReaderProjection(config)
+
+        self.init_weights()
+
+    
+    @add_start_docstrings_to_model_forward(
+        REALM_INPUTS_DOCSTRING.format("reader_beam_size, sequence_length")
+    )
+    @replace_return_docstrings(output_type=RealmReaderOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        relevance_score=None,
+        retrieved_blocks=None,
+        start_positions=None,
+        end_positions=None,
+        has_answers=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        relevance_score (:obj:`torch.FloatTensor` of shape :obj:`(searcher_beam_size,)`, `optional`):
+            Relevance score derived from `RealmSearcher`, must be specified if you want to compute the marginal log loss.
+        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
+        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
+        has_answers (:obj:`torch.BoolTensor` of shape :obj:`(searcher_beam_size,)`, `optional`):
+            Whether or not the evidence blocks derived from `RealmSearcher` have answer(s).
+        
+        Returns:
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if token_type_ids is None:
+            raise ValueError(
+                "You have to specify `token_type_ids` for separating question block and evidence block."
+            )
+
+        outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        # [reader_beam_size, joint_seq_len, hidden_size]
+        sequence_output = outputs[0]
+    
+        # [reader_beam_size, num_candidates], [num_candidates], [num_candidates]
+        reader_logits, candidate_starts, candidate_ends = self.qa_outputs(sequence_output, token_type_ids)
+        # [searcher_beam_size, 1]
+        retriever_logits = torch.unsqueeze(relevance_score[0: self.config.reader_beam_size], -1)
+        # [reader_beam_size, num_candidates]
+        reader_logits += retriever_logits
+        # []
+        predicted_block_index = torch.argmax(torch.max(reader_logits, dim=1).values)
+        # []
+        predicted_candidate = torch.argmax(torch.max(reader_logits, dim=0).values)
+        # [1]
+        predicted_start = torch.index_select(candidate_starts, dim=0, index=predicted_candidate)
+        # [1]
+        predicted_end = torch.index_select(candidate_ends, dim=0, index=predicted_candidate)
+
+        total_loss = None
+        retriever_loss = None
+        reader_loss = None
+        retriever_correct = None
+        reader_correct = None
+        if start_positions is not None and end_positions is not None and has_answers is not None:
+            def compute_correct_candidates(candidate_starts, candidate_ends, gold_starts,
+                               gold_ends):
+                """Compute correct span."""
+                # [reader_beam_size, num_answers, num_candidates]
+                is_gold_start = torch.eq(
+                    torch.unsqueeze(torch.unsqueeze(candidate_starts, 0), 0),
+                    torch.unsqueeze(gold_starts, -1))
+                is_gold_end = torch.eq(
+                    torch.unsqueeze(torch.unsqueeze(candidate_ends, 0), 0),
+                    torch.unsqueeze(gold_ends, -1))
+
+                # [reader_beam_size, num_candidates]
+                return torch.any(torch.logical_and(is_gold_start, is_gold_end), 1)
+
+            def marginal_log_loss(logits, is_correct):
+                """Loss based on the negative marginal log-likelihood."""
+                
+                def mask_to_score(mask):
+                    return (1.0 - mask.type(torch.float32)) * -10000.0
+                
+                # []
+                log_numerator = torch.logsumexp(logits + mask_to_score(is_correct), dim=-1)
+                log_denominator = torch.logsumexp(logits, dim=-1)
+                return log_denominator - log_numerator
+            
+            # sometimes the start/end positions are outside our model inputs, we ignore these terms
+            # `-1` is reserved for no answer.
+            ignored_index = sequence_output.size(1)
+            start_positions = start_positions.clamp(-1, ignored_index)
+            end_positions = end_positions.clamp(-1, ignored_index)
+
+            retriever_correct = has_answers
+            any_retriever_correct = torch.any(retriever_correct)
+
+            reader_correct = compute_correct_candidates(
+                candidate_starts=candidate_starts,
+                candidate_ends=candidate_ends,
+                gold_starts=start_positions[0: self.config.reader_beam_size],
+                gold_ends=end_positions[0: self.config.reader_beam_size],
+            )
+            any_reader_correct = torch.any(reader_correct)
+
+            retriever_loss = marginal_log_loss(relevance_score, retriever_correct)
+            reader_loss = marginal_log_loss(reader_logits.view(-1), reader_correct.view(-1))
+            retriever_loss *= any_retriever_correct.type(torch.float32)
+            reader_loss *= any_reader_correct.type(torch.float32)
+
+            total_loss = (retriever_loss + reader_loss).mean()
+
+        if not return_dict:
+            output = (predicted_block_index, predicted_candidate, predicted_start, predicted_end) + outputs[2:]
+            return ((total_loss, retriever_loss, reader_loss, retriever_correct, reader_correct) + output) if total_loss is not None else output
+
+        return RealmReaderOutput(
+            loss=total_loss,
+            retriever_loss=retriever_loss,
+            reader_loss=reader_loss,
+            retriever_correct=retriever_correct,
+            reader_correct=reader_correct,
+            block_idx=predicted_block_index,
+            candidate=predicted_candidate,
+            start_pos=predicted_start,
+            end_pos=predicted_end,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+REALM_FOR_OPEN_QA_DOCSTRING = r"""
+    Args:
+        question (:obj:`str`):
+            OpenQA Question.
+        answer_ids (:obj:`torch.LongTensor` of shape :obj:`(num_answers, answer_length)`, `optional`):
+            Answer ids for computing the marginal log-likelihood loss. Indices should be in ``[-1, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-1`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+"""
+@add_start_docstrings(
+    "A wrapper of `RealmSearcher` and `RealmReader` providing end-to-end open domain question answering.",
+    REALM_START_DOCSTRING,
+)
+class RealmForOpenQA(RealmPreTrainedModel):
+    def __init__(self, config, searcher, reader, tokenizer):
+        super().__init__(config)
+        self.searcher = searcher
+        self.reader = reader
+        self.tokenizer = tokenizer
+
+    @classmethod
+    def from_pretrained(cls, searcher_pretrained_name_or_path, reader_pretrained_name_or_path, block_records_path, **kwargs):
+        """
+        Args:
+            searcher_pretrained_name_or_path (:obj:`str`):
+                Searcher pretrained name or path.
+            reader_pretrained_name_or_path (:obj:`str`):
+                Reader pretrained name or path.
+            block_records_path (:obj:`str`):
+                Block records path.
+
+        """
+        config = kwargs.pop("config", None) or RealmConfig.from_pretrained(searcher_pretrained_name_or_path, **kwargs)
+        searcher = RealmSearcher.from_pretrained(searcher_pretrained_name_or_path, block_records_path, config=config, **kwargs)
+        reader = RealmReader.from_pretrained(reader_pretrained_name_or_path, config=config, **kwargs)
+        tokenizer = RealmTokenizer.from_pretrained(searcher_pretrained_name_or_path)
+        return cls(config, searcher, reader, tokenizer)
+    
+    def save_pretrained(self, save_directory):
+        self.searcher.save_pretrained(save_directory)
+        self.reader.save_pretrained(save_directory)
+
+    def retrieve(self, input_ids, **kwargs):
+        output = self.searcher(
+            input_ids,
+            return_dict=True, 
+            **kwargs)
+        return output
+
+    def read(self, searcher_output, question, answers):
+        def block_has_answer(concat_inputs, answers):
+            """check if retrieved_blocks has answers."""
+            has_answers = []
+            start_pos = []
+            end_pos = []
+            max_answers = 0
+
+            for input_id in concat_inputs.input_ids:
+                pass_sep = False
+                answer_pos = 0
+                start=-1
+                start_pos.append([])
+                end_pos.append([])
+                for answer in answers:
+                    for idx, id in enumerate(input_id):
+                        if id == self.tokenizer.sep_token_id:
+                            pass_sep = True
+                        if not pass_sep:
+                            continue
+                        if answer[answer_pos] == id:
+                            if start == -1:
+                                start = idx
+                            if answer_pos == len(answer) - 1:
+                                start_pos[-1].append(start)
+                                end_pos[-1].append(idx)
+                                answer_pos = 0
+                                start = -1
+                                break
+                            else:
+                                answer_pos += 1
+                        else:
+                            answer_pos = 0
+                            start = -1
+                
+                if len(start_pos[-1]) == 0:
+                    has_answers.append(False)
+                else:
+                    has_answers.append(True)
+                    if len(start_pos[-1]) > max_answers:
+                        max_answers = len(start_pos[-1])
+
+            # Pad -1 to max_answers
+            for start_pos_, end_pos_ in zip(start_pos, end_pos):
+                while len(start_pos_) < max_answers:
+                    start_pos_.append(-1)
+                while len(end_pos_) < max_answers:
+                    end_pos_.append(-1)
+
+            assert len(has_answers) == len(start_pos) == len(end_pos)
+
+            return (
+                torch.tensor(has_answers, dtype=torch.bool, device=concat_inputs.input_ids.device),
+                torch.tensor(start_pos, dtype=torch.int64, device=concat_inputs.input_ids.device),
+                torch.tensor(end_pos, dtype=torch.int64, device=concat_inputs.input_ids.device),
+            )
+
+        text = []
+        text_pair = []
+        for retrieved_block in searcher_output.retrieved_blocks:
+            text.append(question)
+            text_pair.append(retrieved_block.decode())
+
+        concat_inputs = self.tokenizer(text, text_pair, padding=True, truncation=True, max_length=self.config.reader_seq_len, return_tensors='pt')
+
+        if answers is not None:
+            has_answers, start_positions, end_positions = block_has_answer(concat_inputs.to(searcher_output.retrieved_logits.device), answers)
+        else:
+            has_answers, start_positions, end_positions = (None, None, None)
+
+        output = self.reader(
+            input_ids=concat_inputs.input_ids[0: self.config.reader_beam_size],
+            attention_mask=concat_inputs.attention_mask[0: self.config.reader_beam_size],
+            token_type_ids=concat_inputs.token_type_ids[0: self.config.reader_beam_size],
+            relevance_score=searcher_output.retrieved_logits,
+            has_answers=has_answers,
+            start_positions=start_positions,
+            end_positions=end_positions,
+            return_dict=True,
+        )
+
+        answer = self.tokenizer.decode(concat_inputs.input_ids[output.block_idx][output.start_pos: output.end_pos + 1])
+
+        return output, answer
+
+    @add_start_docstrings_to_model_forward(REALM_FOR_OPEN_QA_DOCSTRING)
+    @replace_return_docstrings(output_type=RealmForOpenQAOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(self, question, answer_ids=None, return_dict=None):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> import torch
+            >>> from transformers import RealmForOpenQA, RealmTokenizer
+
+            >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader", blocks.tfr)
+
+            >>> question = "Who is the pioneer in modern computer science?"
+            >>> answer_ids = tokenizer(["alan mathison turing"], add_special_tokens=False, return_token_type_ids=False, return_attention_mask=False).input_ids
+
+            >>> searcher_output, reader_output, predicted_answer = model(question, answer_ids)
+            >>> loss = reader_output.loss
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        question_ids = self.tokenizer([question], padding=True, truncation=True, max_length=self.config.searcher_seq_len, return_tensors='pt')
+
+        searcher_output = self.retrieve(**question_ids)
+
+        reader_output, predicted_answer = self.read(searcher_output, question, answer_ids)
+
+        if return_dict:
+            return searcher_output, reader_output, predicted_answer
+        
+        return RealmForOpenQAOutput(
+            searcher_output=searcher_output,
+            reader_output=reader_output,
+            predicted_answer=predicted_answer,
+        )
+        

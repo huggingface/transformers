@@ -295,6 +295,7 @@ _import_structure = {
         "ImageClassificationPipeline",
         "JsonPipelineDataFormat",
         "NerPipeline",
+        "ObjectDetectionPipeline",
         "PipedPipelineDataFormat",
         "Pipeline",
         "PipelineDataFormat",
@@ -517,6 +518,7 @@ if is_torch_available():
         "StoppingCriteriaList",
     ]
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
+    _import_structure["modeling_outputs"] = []
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
@@ -558,6 +560,7 @@ if is_torch_available():
             "AutoModelForMaskedLM",
             "AutoModelForMultipleChoice",
             "AutoModelForNextSentencePrediction",
+            "AutoModelForObjectDetection",
             "AutoModelForPreTraining",
             "AutoModelForQuestionAnswering",
             "AutoModelForSeq2SeqLM",
@@ -1027,9 +1030,12 @@ if is_torch_available():
         [
             "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "RealmEmbedder",
-            "RealmEncoder",
+            "RealmForOpenQA",
+            "RealmKnowledgeAugEncoder",
             "RealmPreTrainedModel",
+            "RealmReader",
             "RealmRetriever",
+            "RealmSearcher",
             "load_tf_weights_in_realm",
         ]
     )
@@ -1142,6 +1148,7 @@ if is_torch_available():
             "TapasForSequenceClassification",
             "TapasModel",
             "TapasPreTrainedModel",
+            "load_tf_weights_in_tapas",
         ]
     )
     _import_structure["models.transfo_xl"].extend(
@@ -1260,6 +1267,7 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
+    _import_structure["modeling_tf_outputs"] = []
     _import_structure["modeling_tf_utils"] = [
         "TFPreTrainedModel",
         "TFSequenceSummary",
@@ -1686,6 +1694,8 @@ if is_flax_available():
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
     ]
+    _import_structure["generation_flax_utils"] = []
+    _import_structure["modeling_flax_outputs"] = []
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.albert"].extend(
         [
@@ -2081,6 +2091,7 @@ if TYPE_CHECKING:
         ImageClassificationPipeline,
         JsonPipelineDataFormat,
         NerPipeline,
+        ObjectDetectionPipeline,
         PipedPipelineDataFormat,
         Pipeline,
         PipelineDataFormat,
@@ -2302,6 +2313,7 @@ if TYPE_CHECKING:
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
             AutoModelForNextSentencePrediction,
+            AutoModelForObjectDetection,
             AutoModelForPreTraining,
             AutoModelForQuestionAnswering,
             AutoModelForSeq2SeqLM,
@@ -2692,9 +2704,12 @@ if TYPE_CHECKING:
         from .models.realm import (
             REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
             RealmEmbedder,
-            RealmEncoder,
+            RealmKnowledgeAugEncoder,
             RealmPreTrainedModel,
             RealmRetriever,
+            RealmSearcher,
+            RealmReader,
+            RealmForOpenQA,
             load_tf_weights_in_realm,
         )
         from .models.reformer import (
@@ -2787,6 +2802,7 @@ if TYPE_CHECKING:
             TapasForSequenceClassification,
             TapasModel,
             TapasPreTrainedModel,
+            load_tf_weights_in_tapas,
         )
         from .models.transfo_xl import (
             TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
