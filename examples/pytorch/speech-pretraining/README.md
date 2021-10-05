@@ -21,20 +21,16 @@ limitations under the License.
 
 The script [`run_speech_wav2vec2_pretraining_no_trainer.py`](https://github.com/huggingface/transformers/blob/master/examples/pytorch/speech-pretraining/run_wav2vec2_pretraining_no_trainer.py) can be used to pre-train a [Wav2Vec2](https://huggingface.co/transformers/model_doc/wav2vec2.html?highlight=wav2vec2) model from scratch.
 
-In the script [`run_speech_recognition_ctc`], we first create a vocabulary from all unique characters of both the training data and evaluation data. Then, we preprocesses the speech recognition dataset, which includes correct resampling, normalization and padding. Finally, the pretrained speech recognition model is fine-tuned on the annotated speech recognition datasets using CTC loss.
+In the script [`run_speech_wav2vec2_pretraining_no_trainer`](https://github.com/huggingface/transformers/blob/master/examples/pytorch/speech-pretraining/run_wav2vec2_pretraining_no_trainer.py), a Wav2Vec2 model is pre-trained on audio data alone using [Wav2Vec2's contrastive loss objective](https://arxiv.org/abs/2006.11477).
+
+The following examples show how to fine-tune a `"base"`-sized Wav2Vec2 model as well as a `"large"`-sized Wav2Vec2 model using [`accelerate`](https://github.com/huggingface/accelerate).
 
 ---
 **NOTE**
 
-If you encounter problems with data preprocessing by setting `--preprocessing_num_workers` > 1, 
-you might want to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
-
-```bash
-OMP_NUM_THREADS=1 python run_speech_recognition_ctc ...
-```
-
-If the environment variable is not set, the training script might freeze, *i.e.* see: https://github.com/pytorch/audio/issues/1021#issuecomment-726915239
-
+Wav2Vec2's pre-training is known to be quite unstable. 
+It is advised to do a couple of training runs with a smaller dataset,
+*i.e.* `--dataset_config_names clean clean` and `--dataset_split_names validation test`.
 ---
 
 ### Base
@@ -45,7 +41,7 @@ python run_wav2vec2_pretraining_no_trainer.py \
 	--dataset_config_name clean clean
 	--dataset_train_split_names validation test
 	--model_name_or_path="patrickvonplaten/wav2vec2-base-v2" \
-	--output_dir="./wav2vec2-pretrained-demo" \
+	--output_dir="./wav2vec2-pretrained-base-demo" \
 	--max_train_steps="200000" \
 	--num_warmup_steps="32000" \
 	--gradient_accumulation_steps="2" \
