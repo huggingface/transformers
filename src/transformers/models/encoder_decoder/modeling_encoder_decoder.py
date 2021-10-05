@@ -481,6 +481,7 @@ class EncoderDecoderModel(PreTrainedModel):
             "use_cache": use_cache,
         }
         
+        print(decoder_inputs)
         for key, value in decoder_inputs.items():
             if not key in DEFAULT_KEYS:
                 input_dict.update({key: value})
