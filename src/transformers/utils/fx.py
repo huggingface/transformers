@@ -122,6 +122,18 @@ _SUPPORTED_MODELS_FOR_DYNAMIC_AXES = tuple(
 )
 
 
+def model_is_supported_for_symbolic_tracing(model: PreTrainedModel) -> Tuple[bool]:
+    """
+    Returns a tuple of booleans specifying:
+
+        1. Whether the model can symbolically traced
+        2. Whether dynamic axes for this model are supported
+    """
+    tracing_is_supported = isinstance(model, _SUPPORTED_MODELS)
+    dynamic_axes_are_supported = isinstance(model, _SUPPORTED_MODELS_FOR_DYNAMIC_AXES)
+    return tracing_is_supported, dynamic_axes_are_supported
+
+
 class HFProxy(Proxy):
     """
     Proxy that is able to provide the proper ranks, shapes and boolean values during symbolic tracing by implementing
@@ -557,14 +569,13 @@ def symbolic_trace(
             decoder_sequence_length = _generate_random_int(forbidden_values=forbidden_values)
             sequence_length = [encoder_sequence_length, decoder_sequence_length]
 
-    if not isinstance(model, _SUPPORTED_MODELS):
+    tracing_is_supported, dynamic_axes_are_supported = model_is_supported_for_symbolic_tracing(model)
+    if not tracing_is_supported:
         supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
         raise NotImplementedError(
             f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
         )
-    if (use_dynamic_batch_size or use_dynamic_sequence_length) and not isinstance(
-        model, _SUPPORTED_MODELS_FOR_DYNAMIC_AXES
-    ):
+    if (use_dynamic_batch_size or use_dynamic_sequence_length) and not dynamic_axes_are_supported:
         supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS_FOR_DYNAMIC_AXES))
         raise NotImplementedError(
             f"Dynamic axes are not supported for {model.__class__.__name__} yet, supported models: {supported_model_names}"
