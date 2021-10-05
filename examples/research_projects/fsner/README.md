@@ -1,6 +1,8 @@
-# FSNER
+<p align="center"> <img src="http://sayef.tech:8082/uploads/FSNER-LOGO-2.png" alt="FSNER LOGO"> </p>
 
-Implemented by [sayef](https://huggingface.co/sayef).
+<p align="center">
+  Implemented by <a href="https://huggingface.co/sayef"> sayef </a>. 
+</p>
 
 ## Overview
 
