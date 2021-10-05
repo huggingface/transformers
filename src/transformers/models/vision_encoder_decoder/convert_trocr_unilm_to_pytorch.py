@@ -26,6 +26,7 @@ from transformers import (
     RobertaTokenizer,
     TrOCRConfig,
     TrOCRForCausalLM,
+    TrOCRProcessor,
     VisionEncoderDecoderModel,
     ViTConfig,
     ViTFeatureExtractor,
@@ -174,11 +175,12 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # Check outputs on an image
     feature_extractor = ViTFeatureExtractor(size=encoder_config.image_size)
     tokenizer = RobertaTokenizer.from_pretrained("roberta-large")
+    processor = TrOCRProcessor(feature_extractor, tokenizer)
 
-    pixel_values = feature_extractor(images=prepare_img(checkpoint_url), return_tensors="pt").pixel_values
+    pixel_values = processor(images=prepare_img(checkpoint_url), return_tensors="pt").pixel_values
 
     generated_ids = model.generate(input_ids=pixel_values, num_beams=5)
-    print(tokenizer.decode(generated_ids[0]))
+    print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
     # verify logits
     decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
@@ -195,7 +197,9 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
             [-2.6437, -1.3129, -2.2596, -5.3455, 6.3539, 1.7604, 5.4991, 1.4702, 5.6113, 2.0170]
         )
     elif "trocr-base-printed" in checkpoint_url:
-        expected_slice = torch.tensor()
+        expected_slice = torch.tensor(
+            [-5.6816, -5.8388, 1.1398, -6.9034, 6.8505, -2.4393, 1.2284, -1.0232, -1.9661, -3.9210]
+        )
     elif "trocr-large-printed" in checkpoint_url:
         expected_slice = torch.tensor()
     elif "trocr-base-stage1" in checkpoint_url:
@@ -211,8 +215,8 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving processor to {pytorch_dump_folder_path}")
+    processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
