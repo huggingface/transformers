@@ -3562,3 +3562,15 @@ class TrieTest(unittest.TestCase):
         trie.add("extra_id_1")
         trie.add("extra_id_100")
         self.assertEqual(trie.split("[CLS] This is a extra_id_100"), ["[CLS]", " This is a ", "extra_id_100"])
+
+    def test_trie_single(self):
+        trie = Trie()
+        trie.add("A")
+        self.assertEqual(trie.split("ABC"), ["A", "BC"])
+        self.assertEqual(trie.split("BCA"), ["BC", "A"])
+
+    def test_trie_final(self):
+        trie = Trie()
+        trie.add("TOKEN]")
+        trie.add("[SPECIAL_TOKEN]")
+        self.assertEqual(trie.split("This is something [SPECIAL_TOKEN]"), ["This is something ", "[SPECIAL_TOKEN]"])
