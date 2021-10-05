@@ -251,7 +251,7 @@ class QuestionAnsweringPipeline(Pipeline):
     def preprocess(self, example, padding="do_not_pad", doc_stride=None, max_question_len=64, max_seq_len=None):
 
         if max_seq_len is None:
-            max_seq_len = min(self.tokenizer.model_max_length, 1024)
+            max_seq_len = min(self.tokenizer.model_max_length, 384)
         if doc_stride is None:
             doc_stride = min(max_seq_len // 4, 128)
 
@@ -369,10 +369,7 @@ class QuestionAnsweringPipeline(Pipeline):
         ends = []
         for feature in features:
             fw_args = feature["fw_args"]
-            if self.framework == "tf":
-                start, end = self.model(fw_args)[:2]
-            elif self.framework == "pt":
-                start, end = self.model(**fw_args)[:2]
+            start, end = self.model(**fw_args)[:2]
             starts.append(start)
             ends.append(end)
         return {"starts": starts, "ends": ends, "features": features, "example": example}
