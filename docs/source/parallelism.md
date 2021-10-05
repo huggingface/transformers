@@ -296,12 +296,27 @@ Paper: ["Beyond Data and Model Parallelism for Deep Neural Networks" by Zhihao J
 
 It performs a sort of 4D Parallelism over Sample-Operator-Attribute-Parameter.
 
-1. Sample = Data Parallelism
-2. Operator = part vertical Layer Parallelism, but it can split the layer too - more refined level
-3. Attribute = horizontal Model Parallelism (Megatron-LM style)
-4. Parameter = Sharded model params
+1. Sample = Data Parallelism (sample-wise parallel)
+2. Operator = Parallelize one operation into several tasks
+3. Attribute = Data Parallelism (length-wise parallel)
+4. Parameter = Model Parallelism (it doesn't matter dimension like horizontal or vertical)
 
-and they are working on Pipeline Parallelism. I guess ZeRO-DP is Sample+Parameter in this context.
+### Examples
+* Sample
+
+We have 10 batches of 512 length. If we parallelize them by sample dimension into 2 devices, 10 x 512 will be 5 x 2 x 512.
+
+* Operator
+
+If we perform layer normalization, we compute std first and mean second, finally we can normalize data. At this time, computing std and mean can be parallelize. So if we parallelize them by operator dimension into 2 devices (cuda:0, cuda:1), firstly we copied input data into both devices, and cuda:0 computes std, cuda:1 computes mean at the same time.
+
+* Attribute
+
+We have 10 batches of 512 length. If we parallelize them by attribute dimension into 2 devices, 10 x 512 will be 10 x 2 x 256.
+
+* Parameter
+
+It is similar with tensor model parallelism or niave layer-wise model parallelism.
 
 ![flex-flow-soap](imgs/parallelism-flexflow.jpeg)
 
