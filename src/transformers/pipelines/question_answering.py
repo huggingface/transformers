@@ -339,7 +339,7 @@ class QuestionAnsweringPipeline(Pipeline):
                     )
                 )
 
-        shallow = []
+        split_features = []
         for feature in features:
             fw_args = {}
             others = {}
@@ -359,8 +359,8 @@ class QuestionAnsweringPipeline(Pipeline):
                         fw_args[k] = tensor.unsqueeze(0)
                 else:
                     others[k] = v
-            shallow.append({"fw_args": fw_args, "others": others})
-        return {"features": shallow, "example": example}
+            split_features.append({"fw_args": fw_args, "others": others})
+        return {"features": split_features, "example": example}
 
     def _forward(self, model_inputs):
         features = model_inputs["features"]
