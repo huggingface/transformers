@@ -1079,7 +1079,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 device=self.device,
                 attention_mask=attention_mask,
             )
-            mask_time_indices = torch.from_numpy(mask_time_indices, device=hidden_states.device)
+            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.long)
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
 
         if self.config.mask_feature_prob > 0 and self.training:
@@ -1091,7 +1091,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 device=self.device,
                 attention_mask=attention_mask,
             )
-            mask_feature_indices = torch.from_numpy(mask_feature_indices, device=hidden_states.device)[:, None].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.long)[:, None].expand(-1, sequence_length, -1)
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states
