@@ -27,13 +27,17 @@ The FSNER model was proposed in [Example-Based Named Entity Recognition](https:/
 ## Installation and Example Usage
 ------
 
-You can use the FSNER model in two ways:
+You can use the FSNER model in 3 ways:
 
-1. Install as a package: `python setup.py install` and import the model as shown in the code example below
+1. Install directly from PyPI: `pip install fsner` and import the model as shown in the code example below
 
     or
 
-2. Change directory to `src` and import the model as shown in the code example below
+2. Install from source: `python setup.py install` and import the model as shown in the code example below
+
+    or
+
+3. Clone repo and change directory to `src` and import the model as shown in the code example below
 
 
 
