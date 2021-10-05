@@ -3578,7 +3578,7 @@ def load_tf_weights_in_transfo_xl(*args, **kwargs):
 TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class TrOCRModel:
+class TrOCRForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

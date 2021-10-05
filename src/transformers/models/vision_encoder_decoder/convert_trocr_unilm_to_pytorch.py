@@ -106,12 +106,15 @@ def rename_key(dct, old, new):
 
 
 # We will verify our results on an image of the IAM Handwriting Database
-def prepare_img():
-    url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-00.jpg"  # industry
-    # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-12.jpg" # have
-    # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-10.jpg" # let
-    # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"  #
-    # url = "https://fki.tic.heia-fr.ch/static/img/a01-122.jpg"
+def prepare_img(checkpoint_url):
+    if "handwritten" in checkpoint_url:
+        url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-00.jpg"  # industry
+        # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-12.jpg" # have
+        # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-10.jpg" # let
+        # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"  #
+        # url = "https://fki.tic.heia-fr.ch/static/img/a01-122.jpg"
+    elif "printed" in checkpoint_url:
+        url = "https://rrc.cvc.uab.es/files/sample21.jpg"
     im = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return im
 
@@ -172,7 +175,7 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     feature_extractor = ViTFeatureExtractor(size=encoder_config.image_size)
     tokenizer = RobertaTokenizer.from_pretrained("roberta-large")
 
-    pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
+    pixel_values = feature_extractor(images=prepare_img(checkpoint_url), return_tensors="pt").pixel_values
 
     generated_ids = model.generate(input_ids=pixel_values, num_beams=5)
     print(tokenizer.decode(generated_ids[0]))
@@ -181,10 +184,26 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
     outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
     logits = outputs.logits
+
     expected_shape = torch.Size([1, 1, 50265])
-    expected_slice = torch.tensor(
-        [-1.4502, -4.6683, -0.5347, -2.9291, 9.1435, -3.0571, 8.9764, 1.7560, 8.7358, -1.5311]
-    )
+    if "trocr-base-handwritten" in checkpoint_url:
+        expected_slice = torch.tensor(
+            [-1.4502, -4.6683, -0.5347, -2.9291, 9.1435, -3.0571, 8.9764, 1.7560, 8.7358, -1.5311]
+        )
+    elif "trocr-large-handwritten" in checkpoint_url:
+        expected_slice = torch.tensor(
+            [-2.6437, -1.3129, -2.2596, -5.3455, 6.3539, 1.7604, 5.4991, 1.4702, 5.6113, 2.0170]
+        )
+    elif "trocr-base-printed" in checkpoint_url:
+        expected_slice = torch.tensor()
+    elif "trocr-large-printed" in checkpoint_url:
+        expected_slice = torch.tensor()
+    elif "trocr-base-stage1" in checkpoint_url:
+        expected_slice = torch.tensor()
+    elif "trocr-large-stage1" in checkpoint_url:
+        expected_slice = torch.tensor()
+    else:
+        raise ValueError("Unsupported model!")
 
     assert logits.shape == expected_shape, "Shape of logits not as expected"
     assert torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-3), "First elements of logits not as expected"
