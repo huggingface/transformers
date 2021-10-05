@@ -19,13 +19,16 @@ import collections.abc
 import math
 from typing import Dict, Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
+    TFModelInputType,
     TFPreTrainedModel,
+    TFSequenceClassificationLoss,
     get_initializer,
     input_processing,
     keras_serializable,
@@ -65,8 +68,8 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
 
     """
 
-    def __init__(self, config):
-        super().__init__()
+    def __init__(self, config: ViTConfig, **kwargs):
+        super().__init__(**kwargs)
 
         self.patch_embeddings = PatchEmbeddings(
             image_size=config.image_size,
@@ -114,9 +117,6 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
             images=tf.reshape(patch_pos_embed, shape=(1, int(math.sqrt(N)), int(math.sqrt(N)), dim)),
             size=(h0, w0),
             method="bicubic",
-            preserve_aspect_ratio=False,
-            # antialias=False,
-            antialias=True,
         )
 
         assert int(h0) == patch_pos_embed.shape[-1] and int(w0) == patch_pos_embed.shape[-2]
@@ -214,6 +214,7 @@ class TFViTSelfAttention(tf.keras.layers.Layer):
         # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
+    # Copied from without `attention_mask`
     # OK
     def call(
         self,
@@ -257,6 +258,7 @@ class TFViTSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# OK (no LayerNorm)
 class TFViTSelfOutput(tf.keras.layers.Layer):
     """
     The residual connection is defined in TFViTLayer instead of here (as is the case with other models), due to the
@@ -272,23 +274,32 @@ class TFViTSelfOutput(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
-
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
 
         return hidden_states
 
 
+# OK
 class TFViTAttention(tf.keras.layers.Layer):
+    # OK
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
+
         self.self_attention = TFViTSelfAttention(config, name="attention")
         self.dense_output = TFViTSelfOutput(config, name="output")
 
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, input_tensor, head_mask=None, output_attentions=False, training=False):
+    # OK
+    def call(
+        self,
+        input_tensor: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor]:
         self_outputs = self.self_attention(
             hidden_states=input_tensor,
             head_mask=head_mask,
@@ -303,6 +314,7 @@ class TFViTAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# OK
 class TFViTIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
@@ -323,6 +335,7 @@ class TFViTIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
+# OK
 class TFViTOutput(tf.keras.layers.Layer):
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
@@ -333,117 +346,209 @@ class TFViTOutput(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = hidden_states + input_tensor
 
         return hidden_states
 
 
+# OK
 class TFViTLayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config):
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = TFViTAttention(config)
-        self.intermediate = TFViTIntermediate(config)
-        self.output = TFViTOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+    # OK
+    def __init__(self, config: ViTConfig, **kwargs):
+        super().__init__(**kwargs)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
-        self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
-            head_mask,
+        self.attention = TFViTAttention(config, name="attention")
+        self.intermediate = TFViTIntermediate(config, name="intermediate")
+        self.vit_output = TFViTOutput(config, name="output")
+
+        self.layernorm_before = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
+        self.layernorm_after = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
+
+    # OK
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor]:
+        attention_outputs = self.attention(
+            input_tensor=self.layernorm_before(inputs=hidden_states),  # in ViT, layernorm is applied before self-attention
+            head_mask=head_mask,
             output_attentions=output_attentions,
+            training=training,
         )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        attention_output = attention_outputs[0]
 
         # first residual connection
         hidden_states = attention_output + hidden_states
 
         # in ViT, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
+        layer_output = self.layernorm_after(inputs=hidden_states)
 
-        # TODO feedforward chunking not working for now
-        # layer_output = apply_chunking_to_forward(
-        #     self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, layer_output
-        # )
-
-        layer_output = self.intermediate(layer_output)
+        intermediate_output = self.intermediate(hidden_states=layer_output)
 
         # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
-
-        outputs = (layer_output,) + outputs
+        layer_output = self.vit_output(hidden_states=intermediate_output, input_tensor=hidden_states, training=training)
+        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output)
-        return layer_output
 
-
+# OK
 class TFViTEncoder(tf.keras.layers.Layer):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.layer = tf.keras.layers.LayerList([TFViTLayer(config) for _ in range(config.num_hidden_layers)])
+    # OK
+    def __init__(self, config: ViTConfig, **kwargs):
+        super().__init__(**kwargs)
 
-    def forward(
+        self.layer = [TFViTLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
+
+    # OK
+    def call(
         self,
-        hidden_states,
-        head_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        output_hidden_states: bool,
+        return_dict: bool,
+        training: bool = False,
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+        all_attentions = () if output_attentions else None
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    layer_head_mask,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
-
+            layer_outputs = layer_module(
+                hidden_states=hidden_states,
+                head_mask=head_mask[i],
+                output_attentions=output_attentions,
+                training=training,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                all_attentions = all_attentions + (layer_outputs[1],)
 
+        # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
 
+@keras_serializable
+class TFViTMainLayer(tf.keras.layers.Layer):
+    config_class = ViTConfig
+
+    # OK
+    def __init__(self, config: ViTConfig, add_pooling_layer: bool = True, **kwargs):
+        super().__init__(**kwargs)
+
+        self.config = config
+
+        self.embeddings = TFViTEmbeddings(config, name="embeddings")
+        self.encoder = TFViTEncoder(config, name="encoder")
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.pooler = TFViTPooler(config, name="pooler") if add_pooling_layer else None
+
+    # OK
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+        return self.embeddings
+
+    # OK
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        raise NotImplementedError
+
+    # OK
+    def call(
+        self,
+        pixel_values: Optional[TFModelInputType] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+        **kwargs,
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+
+        if "input_ids" in inputs:
+            inputs["pixel_values"] = inputs.pop("input_ids")
+
+        if inputs["pixel_values"] is None:
+            raise ValueError("You have to specify pixel_values")
+
+        embedding_output = self.embeddings(
+            pixel_values=inputs["pixel_values"],
+            interpolate_pos_encoding=inputs["interpolate_pos_encoding"],
+            training=inputs["training"],
+        )
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        if inputs["head_mask"] is not None:
+            raise NotImplementedError
+        else:
+            inputs["head_mask"] = [None] * self.config.num_hidden_layers
+
+        encoder_outputs = self.encoder(
+            hidden_states=embedding_output,
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        sequence_output = encoder_outputs[0]
+        sequence_output = self.layernorm(inputs=sequence_output)
+        pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
+
+        if not inputs["return_dict"]:
+            return (
+                sequence_output,
+                pooled_output,
+            ) + encoder_outputs[1:]
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+# OK
 class TFViTPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -453,42 +558,41 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
     config_class = ViTConfig
     base_model_prefix = "vit"
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
 
 VIT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.tf.keras.layers.Layer <https://pytorch.org/docs/stable/nn.html#torch.tf.keras.layers.Layer>`_ subclass. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
 
-    Parameters:
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
+
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
+
+    .. note::
+
+        TF 2.0 models accepts two formats as inputs:
+
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+
+    Args:
         config (:class:`~transformers.ViTConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
+            model weights.
 """
 
 VIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+        pixel_values (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
-            :meth:`transformers.ViTFeatureExtractor.__call__` for details.
-
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+            :meth:`transformers.ViTFeatureExtractor.__call__` for details.            
+            
+        head_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
@@ -496,56 +600,49 @@ VIT_INPUTS_DOCSTRING = r"""
 
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         interpolate_pos_encoding (:obj:`bool`, `optional`):
             Whether to interpolate the pre-trained position encodings.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 
+# OK
 @add_start_docstrings(
     "The bare ViT Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
 )
 class TFViTModel(TFViTPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
-        super().__init__(config)
-        self.config = config
+    # OK
+    def __init__(self, config: ViTConfig, *inputs, add_pooling_layer=True, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
 
-        self.embeddings = TFViTEmbeddings(config)
-        self.encoder = TFViTEncoder(config)
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = TFViTPooler(config) if add_pooling_layer else None
-
-        self.init_weights()
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
+        self.vit = TFViTMainLayer(config, name="vit")
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
-    def forward(
+    def call(
         self,
-        pixel_values=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        interpolate_pos_encoding=None,
-        return_dict=None,
-    ):
+        pixel_values: Optional[TFModelInputType] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+        **kwargs,
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+        # TODO: Begin
         r"""
         Returns:
 
@@ -565,58 +662,68 @@ class TFViTModel(TFViTPreTrainedModel):
             >>> outputs = model(**inputs)
             >>> last_hidden_states = outputs.last_hidden_state
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
-        embedding_output = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
+        # TODO: End
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
         )
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+        if "input_ids" in inputs:
+            inputs["pixel_values"] = inputs.pop("input_ids")
+
+        outputs = self.vit(
+            pixel_values=inputs["pixel_values"],
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            interpolate_pos_encoding=inputs["interpolate_pos_encoding"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        return outputs
+
+    # OK
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFBaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
+# OK
 class TFViTPooler(tf.keras.layers.Layer):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+    # OK
+    def __init__(self, config: ViTConfig, **kwargs):
+        super().__init__(**kwargs)
 
-    def forward(self, hidden_states):
+        self.dense = tf.keras.layers.Dense(
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            activation="tanh",
+            name="dense",
+        )
+
+    # OK
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
+        pooled_output = self.dense(inputs=first_token_tensor)
+
         return pooled_output
 
 
@@ -627,30 +734,37 @@ class TFViTPooler(tf.keras.layers.Layer):
     """,
     VIT_START_DOCSTRING,
 )
-class TFViTForImageClassification(TFViTPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
+class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassificationLoss):
+    # OK
+    def __init__(self, config: ViTConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.vit = TFViTModel(config, add_pooling_layer=False)
+        self.vit = TFViTMainLayer(config, add_pooling_layer=False, name="vit")
 
         # Classifier head
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.classifier = tf.keras.layers.Dense(
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
+        )
 
-        self.init_weights()
-
+    # OK
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
+    def call(
         self,
-        pixel_values=None,
-        head_mask=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        interpolate_pos_encoding=None,
-        return_dict=None,
+        pixel_values: Optional[TFModelInputType] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+        **kwargs,
     ):
+        # TODO: Begin
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
@@ -678,32 +792,38 @@ class TFViTForImageClassification(TFViTPreTrainedModel):
             >>> predicted_class_idx = logits.argmax(-1).item()
             >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.vit(
-            pixel_values,
+        # TODO: End
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
+            labels=labels,
+            training=training,
+            kwargs_call=kwargs,
         )
 
+        if "input_ids" in inputs:
+            inputs["pixel_values"] = inputs.pop("input_ids")
+
+        outputs = self.vit(
+            input_ids=inputs["pixel_values"],
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            interpolate_pos_encoding=inputs["interpolate_pos_encoding"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
         sequence_output = outputs[0]
+        logits = self.classifier(inputs=sequence_output[:, 0, :])
+        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
 
-        logits = self.classifier(sequence_output[:, 0, :])
-
-        loss = None
-        if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
-                loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -713,3 +833,9 @@ class TFViTForImageClassification(TFViTPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
