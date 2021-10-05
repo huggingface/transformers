@@ -115,5 +115,5 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             outputs = text_generator("")
             self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         else:
-            with self.assertRaises(ValueError):
+            with self.assertRaises((ValueError, AssertionError)):
                 outputs = text_generator("")
