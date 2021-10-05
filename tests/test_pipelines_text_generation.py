@@ -106,3 +106,14 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         outputs = text_generator("This is a test", return_full_text=True)
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         self.assertTrue(outputs[0]["generated_text"].startswith("This is a test"))
+
+        # Empty prompt is slighly special
+        # it requires BOS token to exist.
+        # Special case for Pegasus which will always append EOS so will
+        # work even without BOS.
+        if text_generator.tokenizer.bos_token_id is not None or "Pegasus" in tokenizer.__class__.__name__:
+            outputs = text_generator("")
+            self.assertEqual(outputs, [{"generated_text": ANY(str)}])
+        else:
+            with self.assertRaises((ValueError, AssertionError)):
+                outputs = text_generator("")
