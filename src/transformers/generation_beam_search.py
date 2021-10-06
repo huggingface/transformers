@@ -215,7 +215,7 @@ class BeamSearchScorer(BeamScorer):
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
-            raise ValueError(f"Incorrect batch size")
+            raise ValueError("Incorrect batch size")
 
         device = input_ids.device
         next_beam_scores = torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
@@ -227,7 +227,7 @@ class BeamSearchScorer(BeamScorer):
                 if self.num_beams < len(beam_hyp):
                     raise ValueError(f"Batch can only be done if at least {self.num_beams} beams have been generated")
                 if eos_token_id is None or pad_token_id is None:
-                    raise ValueError(f"Generated beams >= num_beams -> eos_token_id and pad_token have to be defined")
+                    raise ValueError("Generated beams >= num_beams -> eos_token_id and pad_token have to be defined")
                 # pad the batch
                 next_beam_scores[batch_idx, :] = 0
                 next_beam_tokens[batch_idx, :] = pad_token_id
