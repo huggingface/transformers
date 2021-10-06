@@ -509,7 +509,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             self.embed_positions = TrOCRLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
         else:
             self.embed_positions = TrOCRSinusoidalPositionalEmbedding(
-                config.max_position_embeddings * 2 + self.padding_idx + 1,
+                config.max_position_embeddings + self.padding_idx + 1,
                 config.hidden_size,
                 self.padding_idx,
             )
@@ -652,10 +652,15 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
+        print("Input_ids:", input_ids)
+        print("Weights of embed tokens:", self.embed_tokens.weight[:3,:3])
+        
         if inputs_embeds is None:
+            y = self.embed_tokens(input_ids)
+            print("First elements of embeddings before embed_scale:", y[0,:3,:3])
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        print("First elements of embeddings before position embeddings:", inputs_embeds[0, :3, :3])
+        print("First elements of embeddings after embed_scale, before position embeddings:", inputs_embeds[0, :3, :3])
         print("Embed scale:", self.embed_scale)
 
         if self.config.use_learned_position_embeddings:

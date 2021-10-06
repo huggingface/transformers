@@ -144,6 +144,7 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # the large-printed + stage1 checkpoints uses sinusoidal position embeddings, no layernorm afterwards
     if "large-printed" in checkpoint_url or "stage1" in checkpoint_url:
+        decoder_config.max_position_embeddings = 1024
         decoder_config.scale_embedding = True
         decoder_config.use_learned_position_embeddings = False
         decoder_config.layernorm_embedding = False
@@ -184,6 +185,8 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     processor = TrOCRProcessor(feature_extractor, tokenizer)
 
     pixel_values = processor(images=prepare_img(checkpoint_url), return_tensors="pt").pixel_values
+
+    print("First elements of pixel values:", pixel_values[0,0,:3,:3])
 
     # generated_ids = model.generate(input_ids=pixel_values, num_beams=5)
     # print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
