@@ -655,6 +655,9 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
+        print("First elements of embeddings before position embeddings:", inputs_embeds[0,:3,:3])
+        print("Embed scale:", self.embed_scale)
+        
         if self.config.use_learned_position_embeddings:
             embed_pos = self.embed_positions(input_shape, past_key_values_length=past_key_values_length)
         else:
@@ -666,6 +669,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         print("First elements of embeddings after position embeddings:", hidden_states[0,:3,:3])
 
         if self.layernorm_embedding is not None:
+            print("Adding layernorm to the embeddings")
             hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
