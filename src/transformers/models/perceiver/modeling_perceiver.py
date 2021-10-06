@@ -95,6 +95,37 @@ class PerceiverModelOutput(ModelOutput):
 
 
 @dataclass
+class PerceiverDecoderOutput(ModelOutput):
+    """
+    Base class for Perceiver decoder outputs, with potential cross-attentions.
+
+    Args:
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_labels)`):
+            Output of the basic decoder.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` and ``config.add_cross_attention=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
+            attention softmax, used to compute the weighted average in the cross-attention heads.
+    """
+
+    logits: torch.FloatTensor = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class PerceiverClassificationDecoderOutput(ModelOutput):
+    """
+    Base class for Perceiver classification decoder outputs.
+
+    Args:
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_labels)`):
+            Output of the basic decoder.
+    """
+
+    logits: torch.FloatTensor = None
+
+
+@dataclass
 class PerceiverMaskedLMOutput(ModelOutput):
     """
     Base class for Perceiver's masked language model outputs.
@@ -799,7 +830,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
             decoder_query = self.decoder.decoder_query(
                 inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_output_points
             )
-            logits = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
+            decoder_outputs = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
+            logits = decoder_outputs.logits
 
             print("Shape of decoder outputs:", logits.shape)
 
@@ -1605,6 +1637,8 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         # print("Shape of z before decoder cross attention:", z.shape)
         # print("First elements of z before decoder cross attention:", z[0,:3,:3])
         
+        cross_attentions = () if output_attentions else None
+        
         layer_outputs = self.decoding_cross_attention(
             query,
             attention_mask=query_mask,
@@ -1615,12 +1649,15 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         )
         output = layer_outputs[0]
 
+        if output_attentions:
+            cross_attentions = cross_attentions + (layer_outputs[2],)
+
         # print("Shape of output after decoder cross attention:", output.shape)
         # print("First elements of output after decoder cross attention:", output[0,:3,:3])
 
-        output = self.final_layer(output)
+        logits = self.final_layer(output)
 
-        return output
+        return PerceiverDecoderOutput(logits=logits, cross_attentions=cross_attentions)
 
 
 class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
@@ -1649,10 +1686,12 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
     def output_shape(self, inputs):
         return (inputs.shape[0], self.num_labels), None
 
-    def forward(self, query, z, query_mask=None):
+    def forward(self, query, z, query_mask=None, output_attentions=False):
+        decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
         # B x 1 x num_classes -> B x num_classes
-        logits = self.decoder(query, z)
-        return logits[:, 0, :]
+        logits = decoder_outputs.logits[:, 0, :]
+        
+        return PerceiverDecoderOutput(logits=logits, cross_attentions=decoder_outputs.cross_attentions)
 
 
 class PerceiverFlowDecoder(PerceiverAbstractDecoder):
@@ -1677,13 +1716,13 @@ class PerceiverFlowDecoder(PerceiverAbstractDecoder):
         # assumes merged in time
         return inputs
 
-    def forward(self, query, z, query_mask=None):
+    def forward(self, query, z, query_mask=None, output_attentions=False):
+        decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
+        preds = decoder_outputs.logits
         # Output flow and rescale.
-
-        preds = self.decoder(query, z)
         preds /= self.rescale_factor
-
-        return preds.reshape([preds.shape[0]] + list(self.output_image_shape) + [preds.shape[-1]])
+        preds = preds.reshape([preds.shape[0]] + list(self.output_image_shape) + [preds.shape[-1]])
+        return PerceiverDecoderOutput(logits=preds, cross_attentions=decoder_outputs.cross_attentions)
 
 
 class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
@@ -1719,10 +1758,10 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
         return ([inputs.shape[0]] + self.output_shape[1:] + [self.output_num_channels], None)
 
     def forward(self, query, z, query_mask=None):
-        output = self.decoder(query, z)
-
-        output = torch.reshape(output, self.output_shape + [output.shape[-1]])
-        return output
+        decoder_outputs = self.decoder(query, z)
+        
+        output = torch.reshape(decoder_outputs.output, self.output_shape + [output.shape[-1]])
+        return PerceiverDecoderOutput(logits=output, cross_attentions=decoder_outputs.cross_attentions)
 
 
 def restructure(modality_sizes, inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
@@ -1830,9 +1869,11 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
             subsampled_index_dims = self.num_outputs
         return ((inputs.shape[0], subsampled_index_dims, self.output_num_channels), self.subsampled_index_dims)
 
-    def forward(self, query, z, query_mask=None):
+    def forward(self, query, z, query_mask=None, output_attentions=False):
         # B x 1 x num_classes -> B x num_classes
-        return self.decoder(query, z)
+        decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
+        
+        return decoder_outputs
 
 
 ## Below: IO pre- and post-processor classes for Perceiver.
