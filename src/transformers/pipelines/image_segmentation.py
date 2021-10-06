@@ -1,6 +1,9 @@
 import base64
+import io
 import os
 from typing import Any, Dict, List, Union
+
+import numpy as np
 
 import requests
 
@@ -72,8 +75,8 @@ class ImageSegmentationPipeline(Pipeline):
         postprocess_kwargs = {}
         if "threshold" in kwargs:
             postprocess_kwargs["threshold"] = kwargs["threshold"]
-        if "subtask" in kwargs:
-            postprocess_kwargs["subtask"] = kwargs["subtask"]
+        if "mask_threshold" in kwargs:
+            postprocess_kwargs["mask_threshold"] = kwargs["mask_threshold"]
         return {}, {}, postprocess_kwargs
 
     def __call__(self, *args, **kwargs) -> Union[Predictions, List[Prediction]]:
@@ -92,8 +95,8 @@ class ImageSegmentationPipeline(Pipeline):
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
             threshold (:obj:`float`, `optional`, defaults to 0.9):
                 The probability necessary to make a prediction.
-            subtask (:obj:`str`, `optional`, defaults to None):
-                Type of image segmentation: a value from set (semantic, panoptic, part, instance, part-aware)
+            mask_threshold (:obj:`float`, `optional`, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
 
         Return:
             A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
@@ -102,17 +105,11 @@ class ImageSegmentationPipeline(Pipeline):
 
             The dictionaries contain the following keys:
 
-            - **png_string** (:obj:`str`) -- base64 string of a PNG image that contain masks information. Per-pixel
-              segment ids are stored as the PNG image. Each segment is assigned a unique id. Unlabeled pixels (void)
-              are assigned a value of 0. Note that when you load the PNG as an RGB image, you will need to compute the
-              ids via ids=R+G*256+B*256^2 (inspired by https://cocodataset.org/#format-data).
-            - **segments_info** (:obj:`List[dict]`) -- list that contains labels for segments.
-
-            **segments_info** contains dictionaries with the following keys:
-
-            - **id** (:obj:`int`) -- The id attributed for segment.
             - **label** (:obj:`str`) -- The class label identified by the model.
             - **score** (:obj:`float`) -- The score attributed by the model for that label.
+            - **mask** (:obj:`str`) -- base64 string of a single-channel PNG image that contain masks information. The
+              PNG image has size (heigth, width) of the original image. Pixel values in the image are either 0 or 255
+              (i.e. mask is absent VS mask is present).
         """
 
         return super().__call__(*args, **kwargs)
@@ -130,25 +127,39 @@ class ImageSegmentationPipeline(Pipeline):
         model_outputs = {"outputs": outputs, "target_size": target_size}
         return model_outputs
 
-    def postprocess(self, model_outputs, threshold=0.9, subtask=None):
+    def postprocess(self, model_outputs, threshold=0.9, mask_threshold=0.5):
         raw_annotations = self.feature_extractor.post_process_segmentation(
-            model_outputs["outputs"], model_outputs["target_size"], threshold=threshold, subtask=subtask
+            model_outputs["outputs"], model_outputs["target_size"], threshold=threshold, mask_threshold=0.5
         )
         raw_annotation = raw_annotations[0]
 
-        raw_annotation["ids"] = raw_annotation["ids"].tolist()
+        raw_annotation["masks"] *= 255  # [0,1] -> [0,255] black and white pixels
+
         raw_annotation["scores"] = raw_annotation["scores"].tolist()
         raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in raw_annotation["labels"]]
+        raw_annotation["masks"] = [self._get_mask_str(mask) for mask in raw_annotation["masks"].cpu().numpy()]
 
         # {"scores": [...], ...} --> [{"score":x, ...}, ...]
-        keys = ["id", "score", "label", "png_string"]
-        segments_info = [
+        keys = ["score", "label", "mask"]
+        annotation = [
             dict(zip(keys, vals))
-            for vals in zip(raw_annotation["ids"], raw_annotation["scores"], raw_annotation["labels"])
+            for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["masks"])
         ]
-        # decoding bytestring into UTF-8
-        png_string = base64.b64encode(raw_annotation["png_string"]).decode("utf-8")
-
-        annotation = {"segments_info": segments_info, "png_string": png_string}
 
         return annotation
+
+    def _get_mask_str(self, mask: np.array) -> str:
+        """
+        Turns mask numpy array into mask base64 str.
+
+        Args:
+            mask (np.array): Numpy array (with shape (heigth, width) of the original image) containing masks information. Values in the array are either 0 or 255 (i.e. mask is absent VS mask is present).
+
+        Returns:
+            A base64 string of a single-channel PNG image that contain masks information.
+        """
+        img = Image.fromarray(mask.astype(np.int8))
+        with io.BytesIO() as out:
+            img.save(out, format="PNG")
+            png_string = out.getvalue()
+            return base64.b64encode(png_string).decode("utf-8")

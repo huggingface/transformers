@@ -713,7 +713,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return results
 
-    def post_process_segmentation(self, outputs, processed_sizes, threshold=0.85, subtask=None):
+    def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
         """
         Converts the output of :class:`~transformers.DetrForSegmentation` into image segmentation predictions. Only
         supports PyTorch.
@@ -723,34 +723,40 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 Raw outputs of the model.
             target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`):
                 Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction.
-            threshold (:obj:`float`, `optional`, defaults to 0.85):
+            threshold (:obj:`float`, `optional`, defaults to 0.9):
                 Threshold to use to filter out queries.
-            subtask (:obj:`string`, `optional`):
-                Type of segmentation to be performed. Can be one of [`panoptic`, `instance`]. When no option or option
-                other than available ones is provided, defaults to `panoptic`.
+            mask_threshold (:obj:`float`, `optional`, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
 
         Returns:
-            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values
-            for an image in the batch as predicted by the model.
+            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an
+            image in the batch as predicted by the model.
         """
-        # Perform panoptic segmentation if no subtask is provided
-        if subtask is None:
-            logger.warning("No subtask was supplied, defaulted to panoptic")
-            return self.post_process_panoptic(outputs, processed_sizes, threshold=threshold)
-        if subtask == "panoptic":
-            return self.post_process_panoptic(outputs, processed_sizes, threshold=threshold)
-        elif subtask == "instance":
-            results = self.post_process(outputs, processed_sizes)
-            return self.post_process_instance(results, outputs, processed_sizes, processed_sizes, threshold=threshold)
-        else:
-            # Perform panoptic segmentation if subtask not available
-            logger.warning(f"{subtask} was not available, defaulted to panoptic")
-            return self.post_process_panoptic(outputs, processed_sizes, threshold=threshold)
+        out_logits, raw_masks = outputs.logits, outputs.pred_masks
+        preds = []
+
+        def to_tuple(tup):
+            if isinstance(tup, tuple):
+                return tup
+            return tuple(tup.cpu().tolist())
+
+        for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
+            # we filter empty queries and detection below threshold
+            scores, labels = cur_logits.softmax(-1).max(-1)
+            keep = labels.ne(outputs.logits.shape[-1] - 1) & (scores > threshold)
+            cur_scores, cur_classes = cur_logits.softmax(-1).max(-1)
+            cur_scores = cur_scores[keep]
+            cur_classes = cur_classes[keep]
+            cur_masks = cur_masks[keep]
+            cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
+            cur_masks = (cur_masks.sigmoid() > mask_threshold) * 1
+
+            predictions = {"scores": cur_scores, "labels": cur_classes, "masks": cur_masks}
+            preds.append(predictions)
+        return preds
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
-    def post_process_instance(
-        self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.85, mask_threshold=0.5
-    ):
+    def post_process_instance(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
         """
         Converts the output of :class:`~transformers.DetrForSegmentation` into actual instance segmentation
         predictions. Only supports PyTorch.
@@ -767,13 +773,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             max_target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`):
                 Tensor containing the maximum size (h, w) of each image of the batch. For evaluation, this must be the
                 original image size (before any data augmentation).
-            threshold (:obj:`float`, `optional`, defaults to 0.85):
-                Threshold to use to filter out queries.
-            mask_threshold (:obj:`float`, `optional`, defaults to 0.5):
+            threshold (:obj:`float`, `optional`, defaults to 0.5):
                 Threshold to use when turning the predicted masks into binary values.
 
         Returns:
-            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values
+            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks
             for an image in the batch as predicted by the model.
         """
 
@@ -785,34 +789,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         outputs_masks = nn.functional.interpolate(
             outputs_masks, size=(max_h, max_w), mode="bilinear", align_corners=False
         )
-        outputs_masks = (outputs_masks.sigmoid() > mask_threshold).cpu()
+        outputs_masks = (outputs_masks.sigmoid() > threshold).cpu()
 
-        for result, cur_mask, (img_h, img_w), tt in zip(results, outputs_masks, max_target_sizes, orig_target_sizes):
-            del result["boxes"]
-            keep = result["scores"] > threshold
-            result["labels"] = result["labels"][keep]
-            result["scores"] = result["scores"][keep]
-            cur_mask = cur_mask[keep]
-
-            cur_mask = cur_mask[:, :img_h, :img_w].unsqueeze(1)
-            cur_mask = nn.functional.interpolate(cur_mask.float(), size=tuple(tt.tolist()), mode="nearest").byte()
-            masks_shape = cur_mask.shape
-            if masks_shape[0] > 0:
-                ids = torch.arange(1, 1 + masks_shape[0])
-                masks_ids = ids.view(masks_shape[0], *[1 for _ in range(len(masks_shape) - 1)])
-                cur_mask *= masks_ids
-                cur_mask = cur_mask.max(dim=0).values
-                seg_img = Image.fromarray(id_to_rgb(cur_mask.view(img_h, img_w).cpu().numpy()))
-                with io.BytesIO() as out:
-                    seg_img.save(out, format="PNG")
-                    png_string = out.getvalue()
-            else:
-                # No mask was detected
-                png_string = ""
-                ids = torch.empty(0)
-
-            result["png_string"] = png_string
-            result["ids"] = ids
+        for i, (cur_mask, t, tt) in enumerate(zip(outputs_masks, max_target_sizes, orig_target_sizes)):
+            img_h, img_w = t[0], t[1]
+            results[i]["masks"] = cur_mask[:, :img_h, :img_w].unsqueeze(1)
+            results[i]["masks"] = nn.functional.interpolate(
+                results[i]["masks"].float(), size=tuple(tt.tolist()), mode="nearest"
+            ).byte()
 
         return results
 
@@ -939,9 +923,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             else:
                 cur_classes = torch.ones(1, dtype=torch.long, device=cur_classes.device)
 
-            predictions = {"scores": cur_scores, "labels": cur_classes, "ids": torch.arange(cur_classes.shape[0])}
+            segments_info = []
+            for i, a in enumerate(area):
+                cat = cur_classes[i].item()
+                segments_info.append({"id": i, "isthing": is_thing_map[cat], "category_id": cat, "area": a})
+            del cur_classes
+
             with io.BytesIO() as out:
                 seg_img.save(out, format="PNG")
-                predictions["png_string"] = out.getvalue()
+                predictions = {"png_string": out.getvalue(), "segments_info": segments_info}
             preds.append(predictions)
         return preds

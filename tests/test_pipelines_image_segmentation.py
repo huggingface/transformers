@@ -56,30 +56,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
     @require_datasets
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
-        def test_outputs(outputs):
-            png_string, segments_info = outputs["png_string"], outputs["segments_info"]
-            self.assertEqual(png_string, ANY(str))
-            self.assertGreater(len(segments_info), 0)
-            for segment_info in segments_info:
-                self.assertEqual(
-                    segment_info,
-                    {
-                        "id": ANY(int),
-                        "score": ANY(float),
-                        "label": ANY(str),
-                    },
-                )
-
         image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
         outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
-        test_outputs(outputs)
-
-        subtasks = [None, "panoptic", "instance", "semantic"]
-        for subtask in subtasks:
-            outputs = image_segmenter(
-                "./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0, subtask=subtask
-            )
-            test_outputs(outputs)
+        for o in outputs:
+            self.assertEqual(o, {"score": ANY(float), "label": ANY(str), "mask": ANY(str)})
 
         import datasets
 
@@ -99,7 +79,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
         self.assertEqual(len(batch), len(batch_outputs))
         for outputs in batch_outputs:
-            test_outputs(outputs)
+            for o in outputs:
+                self.assertEqual(o, {"score": ANY(float), "label": ANY(str), "mask": ANY(str)})
 
     @require_tf
     @unittest.skip("Image segmentation not implemented in TF")
@@ -111,21 +92,28 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         model_id = "mishig/tiny-detr-mobilenetsv3-panoptic"
 
         model = AutoModelForImageSegmentation.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/detr-resnet-50-panoptic")
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
         image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
 
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.0)
+        for o in outputs:
+            # shortening by hashing
+            o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
 
-        # shortening by hashing
-        outputs["png_string"] = hashlib.sha1(outputs["png_string"].encode("UTF-8")).hexdigest()
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            {
-                "png_string": "2a286c4660866fcaf4c9da6ba565ff658bd663ca",
-                "segments_info": [
-                    {"id": 0, "label": "LABEL_0", "score": 0.004},
-                ],
-            },
+            [
+                {
+                    "score": 0.004,
+                    "label": "LABEL_0",
+                    "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                },
+                {
+                    "score": 0.004,
+                    "label": "LABEL_0",
+                    "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                },
+            ],
         )
 
         outputs = image_segmenter(
@@ -135,24 +123,37 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             ],
             threshold=0.0,
         )
-        for o in outputs:
-            o["png_string"] = hashlib.sha1(o["png_string"].encode("UTF-8")).hexdigest()
+        for output in outputs:
+            for o in output:
+                o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "png_string": "2a286c4660866fcaf4c9da6ba565ff658bd663ca",
-                    "segments_info": [
-                        {"id": 0, "label": "LABEL_0", "score": 0.004},
-                    ],
-                },
-                {
-                    "png_string": "2a286c4660866fcaf4c9da6ba565ff658bd663ca",
-                    "segments_info": [
-                        {"id": 0, "label": "LABEL_0", "score": 0.004},
-                    ],
-                },
+                [
+                    {
+                        "score": 0.004,
+                        "label": "LABEL_0",
+                        "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                    },
+                    {
+                        "score": 0.004,
+                        "label": "LABEL_0",
+                        "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                    },
+                ],
+                [
+                    {
+                        "score": 0.004,
+                        "label": "LABEL_0",
+                        "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                    },
+                    {
+                        "score": 0.004,
+                        "label": "LABEL_0",
+                        "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                    },
+                ],
             ],
         )
 
@@ -164,20 +165,19 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         image_segmenter = pipeline("image-segmentation", model=model_id)
 
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg")
-        outputs["png_string"] = hashlib.sha1(outputs["png_string"].encode("UTF-8")).hexdigest()
+        for o in outputs:
+            o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
+
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            {
-                "segments_info": [
-                    {"id": 0, "score": 0.9094, "label": "blanket"},
-                    {"id": 1, "score": 0.9941, "label": "cat"},
-                    {"id": 2, "score": 0.9987, "label": "remote"},
-                    {"id": 3, "score": 0.9995, "label": "remote"},
-                    {"id": 4, "score": 0.9722, "label": "couch"},
-                    {"id": 5, "score": 0.9994, "label": "cat"},
-                ],
-                "png_string": "d0c3d58467818e568604e369c945b18ce05e28c0",
-            },
+            [
+                {"score": 0.9094, "label": "blanket", "mask": "f939d943609821ad27cdb92844f2754ad3735b52"},
+                {"score": 0.9941, "label": "cat", "mask": "32913606de3958812ced0090df7b699abb6e2644"},
+                {"score": 0.9987, "label": "remote", "mask": "f3988d35f3065f591fa6a0a9414614d98a9ca13e"},
+                {"score": 0.9995, "label": "remote", "mask": "ff0d541ace4fe386fc14ced0c546490a8e7001d7"},
+                {"score": 0.9722, "label": "couch", "mask": "543c3244b291c4aec134f1d8f92af553da795529"},
+                {"score": 0.9994, "label": "cat", "mask": "891313e21290200e6169613e6a9cb7aff9e7b22f"},
+            ],
         )
 
         outputs = image_segmenter(
@@ -187,96 +187,62 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             ],
             threshold=0.0,
         )
-        for o in outputs:
-            o["png_string"] = hashlib.sha1(o["png_string"].encode("UTF-8")).hexdigest()
+        for output in outputs:
+            for o in output:
+                o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "segments_info": [
-                        {"id": 0, "score": 0.9094, "label": "blanket"},
-                        {"id": 1, "score": 0.9941, "label": "cat"},
-                        {"id": 2, "score": 0.9987, "label": "remote"},
-                        {"id": 3, "score": 0.9995, "label": "remote"},
-                        {"id": 4, "score": 0.9722, "label": "couch"},
-                        {"id": 5, "score": 0.9994, "label": "cat"},
-                    ],
-                    "png_string": "d0c3d58467818e568604e369c945b18ce05e28c0",
-                },
-                {
-                    "segments_info": [
-                        {"id": 0, "score": 0.9094, "label": "blanket"},
-                        {"id": 1, "score": 0.9941, "label": "cat"},
-                        {"id": 2, "score": 0.9987, "label": "remote"},
-                        {"id": 3, "score": 0.9995, "label": "remote"},
-                        {"id": 4, "score": 0.9722, "label": "couch"},
-                        {"id": 5, "score": 0.9994, "label": "cat"},
-                    ],
-                    "png_string": "d0c3d58467818e568604e369c945b18ce05e28c0",
-                },
+                [
+                    {"score": 0.9094, "label": "blanket", "mask": "f939d943609821ad27cdb92844f2754ad3735b52"},
+                    {"score": 0.9941, "label": "cat", "mask": "32913606de3958812ced0090df7b699abb6e2644"},
+                    {"score": 0.9987, "label": "remote", "mask": "f3988d35f3065f591fa6a0a9414614d98a9ca13e"},
+                    {"score": 0.9995, "label": "remote", "mask": "ff0d541ace4fe386fc14ced0c546490a8e7001d7"},
+                    {"score": 0.9722, "label": "couch", "mask": "543c3244b291c4aec134f1d8f92af553da795529"},
+                    {"score": 0.9994, "label": "cat", "mask": "891313e21290200e6169613e6a9cb7aff9e7b22f"},
+                ],
+                [
+                    {"score": 0.9094, "label": "blanket", "mask": "f939d943609821ad27cdb92844f2754ad3735b52"},
+                    {"score": 0.9941, "label": "cat", "mask": "32913606de3958812ced0090df7b699abb6e2644"},
+                    {"score": 0.9987, "label": "remote", "mask": "f3988d35f3065f591fa6a0a9414614d98a9ca13e"},
+                    {"score": 0.9995, "label": "remote", "mask": "ff0d541ace4fe386fc14ced0c546490a8e7001d7"},
+                    {"score": 0.9722, "label": "couch", "mask": "543c3244b291c4aec134f1d8f92af553da795529"},
+                    {"score": 0.9994, "label": "cat", "mask": "891313e21290200e6169613e6a9cb7aff9e7b22f"},
+                ],
             ],
         )
 
     @require_torch
     @slow
-    def test_subtask(self):
-        model_id = "facebook/detr-resnet-50-panoptic"
-
-        image_segmenter = pipeline("image-segmentation", model=model_id)
-
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="panoptic")
-        outputs["png_string"] = hashlib.sha1(outputs["png_string"].encode("UTF-8")).hexdigest()
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            {
-                "segments_info": [
-                    {"id": 0, "score": 0.9094, "label": "blanket"},
-                    {"id": 1, "score": 0.9941, "label": "cat"},
-                    {"id": 2, "score": 0.9987, "label": "remote"},
-                    {"id": 3, "score": 0.9995, "label": "remote"},
-                    {"id": 4, "score": 0.9722, "label": "couch"},
-                    {"id": 5, "score": 0.9994, "label": "cat"},
-                ],
-                "png_string": "d0c3d58467818e568604e369c945b18ce05e28c0",
-            },
-        )
-
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="instance")
-        outputs["png_string"] = hashlib.sha1(outputs["png_string"].encode("UTF-8")).hexdigest()
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            {
-                "segments_info": [
-                    {"id": 1, "score": 0.9094, "label": "blanket"},
-                    {"id": 2, "score": 0.9941, "label": "cat"},
-                    {"id": 3, "score": 0.9987, "label": "remote"},
-                    {"id": 4, "score": 0.9995, "label": "remote"},
-                    {"id": 5, "score": 0.9722, "label": "couch"},
-                    {"id": 6, "score": 0.9994, "label": "cat"},
-                ],
-                "png_string": "14e626f2b18c2614b6aef6dbbf1ea2b8880a7bae",
-            },
-        )
-
-    @require_torch
-    @slow
     def test_threshold(self):
-        threshold = 0.995
+        threshold = 0.999
         model_id = "facebook/detr-resnet-50-panoptic"
 
         image_segmenter = pipeline("image-segmentation", model=model_id)
 
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=threshold)
-        outputs["png_string"] = hashlib.sha1(outputs["png_string"].encode("UTF-8")).hexdigest()
+
+        for o in outputs:
+            o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
+
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            {
-                "segments_info": [
-                    {"id": 0, "score": 0.9987, "label": "remote"},
-                    {"id": 1, "score": 0.9995, "label": "remote"},
-                    {"id": 2, "score": 0.9994, "label": "cat"},
-                ],
-                "png_string": "6a7d047acc1346ce5c3e3fe9b929b871a5d0a247",
-            },
+            [
+                {"score": 0.9995, "label": "remote", "mask": "ff0d541ace4fe386fc14ced0c546490a8e7001d7"},
+                {"score": 0.9994, "label": "cat", "mask": "891313e21290200e6169613e6a9cb7aff9e7b22f"},
+            ],
         )
+
+    def test(self):
+        model_id = "facebook/detr-resnet-50-panoptic"
+
+        model = AutoModelForImageSegmentation.from_pretrained(model_id)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
+
+        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg")
+        for o in outputs:
+            o["score"] = round(o["score"], 4)
+            o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
+        # print(outputs)
