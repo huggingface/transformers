@@ -1971,6 +1971,29 @@ class TFTransfoXLPreTrainedModel:
         requires_backends(cls, ["tf"])
 
 
+class TFViTForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFViTPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

@@ -43,11 +43,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ViTConfig"
 _CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224"
 
-VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vit-base-patch16-224",
-    # See all ViT models at https://huggingface.co/models?filter=vit
-]
-
 
 # Inspired by
 # https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
