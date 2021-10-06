@@ -71,12 +71,13 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.patch_embeddings = PatchEmbeddings(
+        self.patch_embeddings = TFPatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
             num_channels=config.num_channels,
             embed_dim=config.hidden_size,
             initializer_range=config.initializer_range,
+            name="patch_embeddings",
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
@@ -89,7 +90,7 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def interpolate_pos_encoding(self, embeddings, height, width):
+    def interpolate_pos_encoding(self, embeddings, height, width) -> tf.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
         resolution images.
@@ -112,6 +113,7 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
         w0 = width // self.config.patch_size
         # # we add a small number to avoid floating point error in the interpolation
         # # see discussion at https://github.com/facebookresearch/dino/issues/8
+        # TODO: different to PT version
         # h0, w0 = h0 + 0.1, w0 + 0.1
         patch_pos_embed = tf.image.resize(
             images=tf.reshape(patch_pos_embed, shape=(1, int(math.sqrt(N)), int(math.sqrt(N)), dim)),
@@ -119,13 +121,14 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
             method="bicubic",
         )
 
-        assert int(h0) == patch_pos_embed.shape[-1] and int(w0) == patch_pos_embed.shape[-2]
-        patch_pos_embed = tf.reshape(patch_pos_embed, shape=(1, -1, dim))
-        return tf.concat((class_pos_embed, patch_pos_embed), axis=1)
+        shape = shape_list(patch_pos_embed)
+        assert h0 == shape[-3] and w0 == shape[-2]
+        patch_pos_embed = tf.reshape(tensor=patch_pos_embed, shape=(1, -1, dim))
+        return tf.concat(values=(class_pos_embed, patch_pos_embed), axis=1)
 
-    def call(self, pixel_values, interpolate_pos_encoding=False, training=False):
+    def call(self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, training=training)
 
         # add the [CLS] token to the embedded patch tokens
         cls_tokens = tf.repeat(self.cls_token, repeats=batch_size, axis=0)
@@ -144,14 +147,14 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
 
 # Based on timm implementation, which can be found here:
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class PatchEmbeddings(tf.keras.layers.Layer):
+class TFPatchEmbeddings(tf.keras.layers.Layer):
     """
     Image to Patch Embedding.
 
     """
 
-    def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768, initializer_range=0.02):
-        super().__init__()
+    def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768, initializer_range=0.02, **kwargs):
+        super().__init__(*kwargs)
         image_size = to_2tuple(image_size)
         patch_size = to_2tuple(patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
@@ -163,23 +166,21 @@ class PatchEmbeddings(tf.keras.layers.Layer):
             filters=embed_dim, kernel_size=patch_size, strides=patch_size,
             data_format="channels_first",
             kernel_initializer=get_initializer(initializer_range),
+            name="projection",
         )
 
-    def call(self, pixel_values, interpolate_pos_encoding=False, training=False):
+    def call(self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
         if not interpolate_pos_encoding:
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
                     f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
                 )
-        x = tf.transpose(tf.reshape(self.projection(pixel_values), shape=(batch_size, num_channels, -1)), perm=(0, 2, 1))
+        x = tf.transpose(tf.reshape(tensor=self.projection(inputs=pixel_values, training=training), shape=(batch_size, num_channels, -1)), perm=(0, 2, 1))
         return x
 
 
-# OK
 class TFViTSelfAttention(tf.keras.layers.Layer):
-    # Copied from
-    # OK
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -205,8 +206,6 @@ class TFViTSelfAttention(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
-    # Copied from
-    # OK
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
@@ -214,8 +213,6 @@ class TFViTSelfAttention(tf.keras.layers.Layer):
         # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
-    # Copied from without `attention_mask`
-    # OK
     def call(
         self,
         hidden_states: tf.Tensor,
@@ -258,7 +255,6 @@ class TFViTSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# OK (no LayerNorm)
 class TFViTSelfOutput(tf.keras.layers.Layer):
     """
     The residual connection is defined in TFViTLayer instead of here (as is the case with other models), due to the
@@ -280,9 +276,7 @@ class TFViTSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# OK
 class TFViTAttention(tf.keras.layers.Layer):
-    # OK
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -292,7 +286,6 @@ class TFViTAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    # OK
     def call(
         self,
         input_tensor: tf.Tensor,
@@ -314,7 +307,6 @@ class TFViTAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# OK
 class TFViTIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
@@ -335,7 +327,6 @@ class TFViTIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# OK
 class TFViTOutput(tf.keras.layers.Layer):
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
@@ -353,11 +344,9 @@ class TFViTOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# OK
 class TFViTLayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
-    # OK
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -368,7 +357,6 @@ class TFViTLayer(tf.keras.layers.Layer):
         self.layernorm_before = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
         self.layernorm_after = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
 
-    # OK
     def call(
         self,
         hidden_states: tf.Tensor,
@@ -399,15 +387,12 @@ class TFViTLayer(tf.keras.layers.Layer):
         return outputs
 
 
-# OK
 class TFViTEncoder(tf.keras.layers.Layer):
-    # OK
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.layer = [TFViTLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
-    # OK
     def call(
         self,
         hidden_states: tf.Tensor,
@@ -451,7 +436,6 @@ class TFViTEncoder(tf.keras.layers.Layer):
 class TFViTMainLayer(tf.keras.layers.Layer):
     config_class = ViTConfig
 
-    # OK
     def __init__(self, config: ViTConfig, add_pooling_layer: bool = True, **kwargs):
         super().__init__(**kwargs)
 
@@ -462,11 +446,10 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         self.pooler = TFViTPooler(config, name="pooler") if add_pooling_layer else None
 
-    # OK
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
-        return self.embeddings
+        # TODO: should it be `patch_embeddings`?
+        return self.embeddings.patch_embeddings
 
-    # OK
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -474,7 +457,6 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    # OK
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -548,7 +530,6 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         )
 
 
-# OK
 class TFViTPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -617,17 +598,15 @@ VIT_INPUTS_DOCSTRING = r"""
 """
 
 
-# OK
 @add_start_docstrings(
     "The bare ViT Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
 )
 class TFViTModel(TFViTPreTrainedModel):
-    # OK
     def __init__(self, config: ViTConfig, *inputs, add_pooling_layer=True, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.vit = TFViTMainLayer(config, name="vit")
+        self.vit = TFViTMainLayer(config, add_pooling_layer=add_pooling_layer, name="vit")
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
@@ -642,7 +621,6 @@ class TFViTModel(TFViTPreTrainedModel):
         training: bool = False,
         **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        # TODO: Begin
         r"""
         Returns:
 
@@ -658,11 +636,10 @@ class TFViTModel(TFViTPreTrainedModel):
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
             >>> model = TFViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> inputs = feature_extractor(images=image, return_tensors="tf")
             >>> outputs = model(**inputs)
             >>> last_hidden_states = outputs.last_hidden_state
         """
-        # TODO: End
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -691,7 +668,6 @@ class TFViTModel(TFViTPreTrainedModel):
 
         return outputs
 
-    # OK
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
@@ -704,9 +680,7 @@ class TFViTModel(TFViTPreTrainedModel):
         )
 
 
-# OK
 class TFViTPooler(tf.keras.layers.Layer):
-    # OK
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -717,7 +691,6 @@ class TFViTPooler(tf.keras.layers.Layer):
             name="dense",
         )
 
-    # OK
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
@@ -735,7 +708,6 @@ class TFViTPooler(tf.keras.layers.Layer):
     VIT_START_DOCSTRING,
 )
 class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassificationLoss):
-    # OK
     def __init__(self, config: ViTConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -749,7 +721,6 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
             name="classifier",
         )
 
-    # OK
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -763,10 +734,9 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ):
-        # TODO: Begin
+    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
@@ -785,14 +755,13 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
             >>> model = TFViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> inputs = feature_extractor(images=image, return_tensors="tf")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
             >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
             >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
-        # TODO: End
         inputs = input_processing(
             func=self.call,
             config=self.config,
