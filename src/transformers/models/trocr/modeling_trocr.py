@@ -509,7 +509,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             self.embed_positions = TrOCRLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
         else:
             self.embed_positions = TrOCRSinusoidalPositionalEmbedding(
-                config.max_position_embeddings,
+                config.max_position_embeddings * 2 + self.padding_idx + 1,
                 config.hidden_size,
                 self.padding_idx,
             )
