@@ -1090,7 +1090,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 (batch_size, sequence_length),
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
-                device=self.device,
                 attention_mask=attention_mask,
             )
             mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.long)
@@ -1102,7 +1101,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 (batch_size, hidden_size),
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
-                device=self.device,
                 attention_mask=attention_mask,
             )
             mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.long)[

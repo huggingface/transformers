@@ -634,7 +634,8 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 1
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, torch_device)
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = torch.from_numpy(mask).to(torch_device)
 
         self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
 
@@ -644,7 +645,8 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, torch_device)
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = torch.from_numpy(mask).to(torch_device)
 
         # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
         for batch_sum in mask.sum(axis=-1):
@@ -660,8 +662,9 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         attention_mask[:2, sequence_length // 2 :] = 0
 
         mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, device=torch_device, attention_mask=attention_mask
+            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
         )
+        mask = torch.from_numpy(mask).to(torch_device)
 
         for batch_sum in mask.sum(axis=-1):
             self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
@@ -855,9 +858,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             features_shape,
             model.config.mask_time_prob,
             model.config.mask_time_length,
-            device=inputs_dict["input_values"].device,
             min_masks=2,
-        ).to(torch_device)
+        )
+        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
 
         with torch.no_grad():
             outputs = model(
@@ -975,9 +978,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             features_shape,
             model.config.mask_time_prob,
             model.config.mask_time_length,
-            device=inputs_dict["input_values"].device,
             min_masks=2,
-        ).to(torch_device)
+        )
+        mask_time_indices = torch.tensor(mask_time_indices, device=torch_device, dtype=torch.bool)
 
         with torch.no_grad():
             outputs = model(

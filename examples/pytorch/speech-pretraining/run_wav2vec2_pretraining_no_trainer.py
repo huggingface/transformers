@@ -32,7 +32,6 @@ from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-import wandb
 from accelerate import Accelerator
 from huggingface_hub import Repository
 from transformers import (
@@ -295,7 +294,7 @@ class DataCollatorForWav2Vec2Pretraining:
         mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
 
         # make sure that no loss is computed on padded inputs
-        if batch["attention_mask"] is not None:
+        if batch.get("attention_mask") is not None:
             # compute real output lengths according to convolution formula
             batch["sub_attention_mask"] = self.model._get_feature_vector_attention_mask(
                 mask_indices_seq_length, batch["attention_mask"]
@@ -308,7 +307,7 @@ class DataCollatorForWav2Vec2Pretraining:
             features_shape,
             self.model.config.mask_time_prob,
             self.model.config.mask_time_length,
-            attention_mask=batch["sub_attention_mask"],
+            attention_mask=batch.get("sub_attention_mask"),
         )
 
         # sample negative indices
@@ -360,7 +359,10 @@ def main():
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
 
+        # set up weights and biases if available
         if is_wandb_available():
+            import wandb
+
             wandb.init(project=args.output_dir.split("/")[-1])
     else:
         datasets.utils.logging.set_verbosity_error()
@@ -402,6 +404,14 @@ def main():
 
     # Take ``args.validation_split_percentage`` from the training dataset for the validation_split_percentage
     num_validation_samples = raw_datasets["train"].num_rows * args.validation_split_percentage // 100
+
+    if num_validation_samples == 0:
+        raise ValueError(
+            "`args.validation_split_percentage` is less than a single sample "
+            f"for {len(raw_datasets['train'])} training samples. Increase "
+            "`args.num_validation_split_percentage`. "
+        )
+
     raw_datasets["validation"] = raw_datasets["train"].select(range(num_validation_samples))
     raw_datasets["train"] = raw_datasets["train"].select(range(num_validation_samples, raw_datasets["train"].num_rows))
 
@@ -535,12 +545,11 @@ def main():
     for epoch in range(args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
-            # sub attention mask in only required for logging
-            sub_attention_mask = batch.pop("sub_attention_mask")
-
             # compute num of losses
             num_losses = batch["mask_time_indices"].sum()
-            percent_masked = num_losses / sub_attention_mask.sum()
+            percent_masked = (
+                num_losses / batch.pop("sub_attention_mask", torch.ones_like(batch["mask_time_indices"])).sum()
+            )
 
             # forward
             outputs = model(**batch)
@@ -560,7 +569,7 @@ def main():
                 multiply_grads(model.parameters(), 1 / num_losses)
 
             # update step
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
 
                 # compute grad norm for monitoring
                 scale = (
@@ -598,7 +607,7 @@ def main():
                 completed_steps += 1
 
             # 6. Log all results
-            if step % (args.gradient_accumulation_steps * args.logging_steps) == 0:
+            if (step + 1) % (args.gradient_accumulation_steps * args.logging_steps) == 0:
                 loss.detach()
                 outputs.contrastive_loss.detach()
                 outputs.diversity_loss.detach()
@@ -629,7 +638,7 @@ def main():
                         wandb.log(train_logs)
 
             # save model every `args.saving_steps` steps
-            if step % (args.gradient_accumulation_steps * args.saving_steps) == 0:
+            if (step + 1) % (args.gradient_accumulation_steps * args.saving_steps) == 0:
                 if args.push_to_hub and epoch < args.num_train_epochs - 1:
                     accelerator.wait_for_everyone()
                     unwrapped_model = accelerator.unwrap_model(model)
@@ -640,6 +649,10 @@ def main():
                     accelerator.wait_for_everyone()
                     unwrapped_model = accelerator.unwrap_model(model)
                     unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+
+            # if completed steps > `args.max_train_steps` stop
+            if completed_steps >= args.max_train_steps:
+                break
 
         # 7. Validate!
         model.eval()
@@ -652,8 +665,6 @@ def main():
             "val_num_losses": 0,
         }
         for step, batch in enumerate(eval_dataloader):
-            sub_attention_mask = batch.pop("sub_attention_mask")
-
             with torch.no_grad():
                 outputs = model(**batch)
 
