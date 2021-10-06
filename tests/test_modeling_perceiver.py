@@ -17,6 +17,8 @@
 
 import unittest
 
+import inspect
+
 from transformers import PerceiverConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -26,6 +28,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
     from transformers import PerceiverForMaskedLM, PerceiverModel, PerceiverTokenizer
     from transformers.models.perceiver.modeling_perceiver import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -37,49 +40,45 @@ class PerceiverModelTester:
         parent,
         batch_size=13,
         seq_length=7,
+        num_latents=10,
+        d_latents=20,
+        num_blocks=1,
+        num_self_attends_per_block=2,
+        num_self_attention_heads=1,
+        num_cross_attention_heads=1,
         is_training=True,
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
         initializer_range=0.02,
+        max_position_embeddings=7,
         num_labels=3,
-        num_choices=4,
         scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
+        self.num_latents = num_latents
+        self.d_latents = d_latents
+        self.num_blocks = num_blocks
+        self.num_self_attends_per_block = num_self_attends_per_block
+        self.num_self_attention_heads = num_self_attention_heads
+        self.num_cross_attention_heads = num_cross_attention_heads
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_labels = num_labels
-        self.num_choices = num_choices
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
         if self.use_input_mask:
@@ -87,33 +86,45 @@ class PerceiverModelTester:
 
         sequence_labels = None
         token_labels = None
-        choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            sequence_labels = ids_tensor([self.batch_size], self.num_labels)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, inputs, input_mask, sequence_labels, token_labels
+    
+    def prepare_config_and_inputs_masked_lm(self):
+        inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        token_labels = None
+        if self.use_labels:
+            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+
+        config = self.get_config()
+
+        return config, inputs, input_mask, token_labels
 
     def get_config(self):
         return PerceiverConfig(
+            num_latents=self.num_latents,
+            d_latents=self.d_latents,
+            num_blocks=self.num_blocks,
+            num_self_attends_per_block=self.num_self_attends_per_block,
+            num_self_attention_heads=self.num_self_attention_heads,
+            num_cross_attention_heads=self.num_cross_attention_heads,
             vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
             initializer_range=self.initializer_range,
+            max_position_embeddings=self.max_position_embeddings,
         )
 
-    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels):
         model = PerceiverModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -123,25 +134,28 @@ class PerceiverModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_masked_lm(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        inputs,
+        input_mask,
+        token_labels,
     ):
         model = PerceiverForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        result = model(inputs, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
-            input_ids,
+            inputs,
             input_mask,
             sequence_labels,
             token_labels,
-            choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        inputs_dict = {"inputs": inputs, "attention_mask": input_mask}
         return config, inputs_dict
 
 
@@ -156,48 +170,128 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    test_pruning = False
+    test_head_masking = False
+    test_torchscript = False
 
+    maxDiff = None
+    
     def setUp(self):
         self.model_tester = PerceiverModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PerceiverConfig, hidden_size=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # we don't test 
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_masked_lm()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
-    def test_for_multiple_choice(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            # we overwrite this, as the embeddings of Perceiver are an instance of nn.Parameter
+            # and Perceiver doesn't support get_output_embeddings
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Parameter))
+    
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
 
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+            expected_arg_names = ["inputs"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+    
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
 
-    def test_for_token_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+        seq_len = getattr(self.model_tester, "num_latents", None)
+        
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "PerceiverModel":
+                continue
 
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self_attentions = outputs.attentions
+            cross_attentions = outputs.cross_attentions
+
+            # check expected number of attentions depending on model class
+            if model.__class__.__name__ == "PerceiverForMaskedLM":
+                expected_num_self_attentions = self.model_tester.num_blocks * self.model_tester.num_self_attends_per_block
+                # TODO this should become 2, as we have one in the PerceiverEncoder, and one in PerceiverBasicDecoder
+                # for now, PerceiverBasicDecoder doesn't support returning cross-attentions
+                expected_num_cross_attentions = 1 
+            else:
+                # todo
+                pass
+            self.assertEqual(len(self_attentions), expected_num_self_attentions)
+            self.assertEqual(len(cross_attentions), expected_num_cross_attentions)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self_attentions = outputs.attentions
+            cross_attentions = outputs.cross_attentions
+            self.assertEqual(len(self_attentions), expected_num_self_attentions)
+            self.assertEqual(len(cross_attentions), expected_num_cross_attentions)
+
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_self_attention_heads, seq_len, seq_len],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            self.assertEqual(out_len + 1, len(outputs))
+
+            self_attentions = outputs.attentions
+
+            self.assertEqual(len(self_attentions), expected_num_self_attentions)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_self_attention_heads, seq_len, seq_len],
+            )
+    
+    @unittest.skip(reason="Perceiver doesn't support inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+    
     @slow
     def test_model_from_pretrained(self):
         for model_name in PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -210,26 +304,32 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
 
-        tokenizer = PerceiverTokenizer()
-        model = PerceiverForMaskedLM.from_pretrained("deepmind/language-perceiver")
+        tokenizer = PerceiverTokenizer.from_pretrained("nielsr/language-perceiver")
+        model = PerceiverForMaskedLM.from_pretrained("nielsr/language-perceiver")
+        model.to(torch_device)
 
         # prepare inputs
         text = "This is an incomplete sentence where some words are missing."
         encoding = tokenizer(text, padding="max_length", return_tensors="pt")
 
-        # forward pass
-        outputs = model(**encoding)
+        # mask " missing.".
+        encoding.input_ids[0, 51:60] = tokenizer.mask_token_id
+        inputs, input_mask = encoding.input_ids.to(torch_device), encoding.attention_mask.to(torch_device)
 
-        # verify outputs
+        # forward pass
+        outputs = model(inputs=inputs, attention_mask=input_mask)
+        logits = outputs.logits
+
+        # verify logits
         expected_shape = torch.Size((1, tokenizer.model_max_length, tokenizer.vocab_size))
-        self.assertEqual(outputs.shape, expected_shape)
+        self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [[-11.8336, -11.6850, -11.8483], [-12.8149, -12.5863, -12.7904], [-12.8440, -12.6410, -12.8646]]
         )
 
-        self.assertTrue(torch.allclose(outputs[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4))
 
         expected_greedy_predictions = [38, 115, 111, 121, 121, 111, 116, 109, 52]
-        masked_tokens_predictions = outputs[0, 51:60].argmax(dim=-1).tolist()
+        masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1).tolist()
         self.assertListEqual(expected_greedy_predictions, masked_tokens_predictions)

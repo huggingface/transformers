@@ -67,12 +67,8 @@ class PerceiverConfig(PretrainedConfig):
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
-        hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        position_embedding_init_scale (:obj:`float`, `optional`, defaults to 0.02):
-            The scale of the initial position embeddings.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -81,9 +77,10 @@ class PerceiverConfig(PretrainedConfig):
             Whether to add a query residual in the cross-attention layer of the encoder.
         vocab_size (:obj:`int`, `optional`, defaults to 262):
             Vocabulary size of the Perceiver model.
-        seq_len (:obj:`int`, `optional`, defaults to 2048):
-            Sequence length of the Perceiver model.
-        train_size (:obj:`Tuple[int]`, `optional`, defaults to (368, 496)):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        train_size (:obj:`List[int]`, `optional`, defaults to [368, 496]):
             Training size of the images for the flow model.
 
     Example::
@@ -116,7 +113,6 @@ class PerceiverConfig(PretrainedConfig):
         self_attention_widening_factor=1,
         cross_attention_widening_factor=1,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         position_embedding_init_scale=0.02,
         initializer_range=0.02,
@@ -124,10 +120,10 @@ class PerceiverConfig(PretrainedConfig):
         is_encoder_decoder=False,
         use_query_residual=True,
         vocab_size=262,
-        seq_len=2048,
-        train_size=(368, 496),
+        max_position_embeddings=2048,
+        train_size=[368, 496],
         num_frames=16,
-        audio_samples_per_frame=48000 // 25,
+        audio_samples_per_frame=1920, # 48000 // 25
         samples_per_patch=16,
         image_size=56,
         output_shape=[1, 16, 224, 224],
@@ -148,15 +144,13 @@ class PerceiverConfig(PretrainedConfig):
         self.self_attention_widening_factor = self_attention_widening_factor
         self.cross_attention_widening_factor = cross_attention_widening_factor
         self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.position_embedding_init_scale = position_embedding_init_scale
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_query_residual = use_query_residual
         # masked language modeling attributes
         self.vocab_size = vocab_size
-        self.seq_len = seq_len
+        self.max_position_embeddings = max_position_embeddings
         # image classification attributes
 
         # flow attributes

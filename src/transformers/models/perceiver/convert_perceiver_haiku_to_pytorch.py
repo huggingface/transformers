@@ -155,13 +155,21 @@ def rename_keys(state_dict, task):
         name = name.replace("basic_decoder/~/", "decoder.")
 
         ## POSTPROCESSORS
-        name = name.replace("projection_postprocessor/linear/b", "output_postprocessor.modalities.image.classifier.bias")
-        name = name.replace("projection_postprocessor/linear/w", "output_postprocessor.modalities.image.classifier.weight")
-        name = name.replace("classification_postprocessor/linear/b", "output_postprocessor.modalities.label.classifier.bias")
-        name = name.replace("classification_postprocessor/linear/w", "output_postprocessor.modalities.label.classifier.weight")
+        name = name.replace(
+            "projection_postprocessor/linear/b", "output_postprocessor.modalities.image.classifier.bias"
+        )
+        name = name.replace(
+            "projection_postprocessor/linear/w", "output_postprocessor.modalities.image.classifier.weight"
+        )
+        name = name.replace(
+            "classification_postprocessor/linear/b", "output_postprocessor.modalities.label.classifier.bias"
+        )
+        name = name.replace(
+            "classification_postprocessor/linear/w", "output_postprocessor.modalities.label.classifier.weight"
+        )
         name = name.replace("audio_postprocessor/linear/b", "output_postprocessor.modalities.audio.classifier.bias")
         name = name.replace("audio_postprocessor/linear/w", "output_postprocessor.modalities.audio.classifier.weight")
-        
+
         ## PERCEIVER MODEL ##
 
         # rename latent embeddings
@@ -407,7 +415,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
     if not isinstance(logits, dict):
         print("Shape of logits:", logits.shape)
     else:
-        for k,v in logits.items():
+        for k, v in logits.items():
             print(f"Shape of logits of modality {k}", v.shape)
 
     if task == "MLM":
