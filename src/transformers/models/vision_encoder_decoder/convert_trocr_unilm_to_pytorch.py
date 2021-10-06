@@ -176,8 +176,14 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         else:
             state_dict[key] = val
 
+    print("Embed tokens in state dict:")
+    print(state_dict["decoder.model.decoder.embed_tokens.weight"][:3,:3])
+    
     # load state dict
     model.load_state_dict(state_dict)
+
+    print("Embed tokens of model:")
+    print(model.decoder.model.decoder.embed_tokens.weight[:3,:3])
 
     # Check outputs on an image
     feature_extractor = ViTFeatureExtractor(size=encoder_config.image_size)
