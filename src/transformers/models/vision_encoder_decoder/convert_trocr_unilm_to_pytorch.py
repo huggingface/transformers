@@ -165,8 +165,6 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     del state_dict["encoder.deit.head.weight"]
     del state_dict["encoder.deit.head.bias"]
     del state_dict["decoder.version"]
-    if "large-printed" in checkpoint_url:
-        del state_dict["decoder.embed_positions._float_tensor"]
 
     # add prefix to decoder keys
     for key, val in state_dict.copy().items():
