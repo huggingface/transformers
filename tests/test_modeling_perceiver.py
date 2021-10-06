@@ -18,6 +18,8 @@
 import unittest
 
 import inspect
+import copy
+import numpy as np
 
 from transformers import PerceiverConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -124,15 +126,6 @@ class PerceiverModelTester:
             max_position_embeddings=self.max_position_embeddings,
         )
 
-    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels):
-        model = PerceiverModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
     def create_and_check_for_masked_lm(
         self,
         config,
@@ -188,10 +181,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_masked_lm()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
@@ -216,6 +205,27 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["inputs"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
+    
+    def test_determinism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "PerceiverModel":
+                continue
+            
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+                second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            out_1 = first.cpu().numpy()
+            out_2 = second.cpu().numpy()
+            out_1 = out_1[~np.isnan(out_1)]
+            out_2 = out_2[~np.isnan(out_2)]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
     
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -287,6 +297,71 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_self_attention_heads, seq_len, seq_len],
             )
+    
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+
+            expected_num_layers = self.model_tester.num_blocks * self.model_tester.num_self_attends_per_block + 1
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            seq_length = self.model_tester.num_latents
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.d_latents],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "PerceiverModel":
+                continue
+
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+    
+    def test_feed_forward_chunking(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "PerceiverModel":
+                continue
+            torch.manual_seed(0)
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hidden_states_no_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            torch.manual_seed(0)
+            config.chunk_size_feed_forward = 1
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
+
+    @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
+    def test_resize_tokens_embeddings(self):
+        pass
     
     @unittest.skip(reason="Perceiver doesn't support inputs_embeds")
     def test_inputs_embeds(self):
