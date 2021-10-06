@@ -547,8 +547,7 @@ def main():
         for step, batch in enumerate(train_dataloader):
             # compute num of losses
             num_losses = batch["mask_time_indices"].sum()
-            sub_attention_mask = batch.pop("sub_attention_mask", None)
-            sub_attention_mask = sub_attention_mask or torch.ones_like(batch["mask_time_indices"])
+            sub_attention_mask = batch.pop("sub_attention_mask", None) or torch.ones_like(batch["mask_time_indices"])
             percent_masked = num_losses / sub_attention_mask.sum()
 
             # forward
@@ -666,6 +665,7 @@ def main():
         }
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
+                batch.pop("sub_attention_mask", None)
                 outputs = model(**batch)
 
             val_logs["val_loss"] += outputs.loss

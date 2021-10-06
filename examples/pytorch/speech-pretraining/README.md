@@ -69,12 +69,12 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--gradient_accumulation_steps="4" \
 	--learning_rate="0.001" \
 	--weight_decay="0.01" \
-	--max_duration_in_seconds="15.0" \
+	--max_duration_in_seconds="20.0" \
 	--min_duration_in_seconds="2.0" \
 	--logging_steps="1" \
 	--saving_steps="10000" \
-	--per_device_train_batch_size="16" \
-	--per_device_eval_batch_size="16" \
+	--per_device_train_batch_size="8" \
+	--per_device_eval_batch_size="8" \
 	--adam_beta1="0.9" \
 	--adam_beta2="0.98" \
 	--adam_epsilon="1e-06" \
