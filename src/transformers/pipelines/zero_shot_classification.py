@@ -191,10 +191,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         else:
             raise ValueError(f"Unable to understand extra arguments {args}")
 
-        result = super().__call__(sequences, **kwargs)
-        if len(result) == 1:
-            return result[0]
-        return result
+        return super().__call__(sequences, **kwargs)
 
     def preprocess(self, inputs, candidate_labels=None, hypothesis_template="This example is {}."):
         sequence_pairs, sequences = self._args_parser(inputs, candidate_labels, hypothesis_template)
@@ -264,4 +261,6 @@ class ZeroShotClassificationPipeline(Pipeline):
                     "scores": scores[iseq, top_inds].tolist(),
                 }
             )
+        if len(result) == 1:
+            return result[0]
         return result
