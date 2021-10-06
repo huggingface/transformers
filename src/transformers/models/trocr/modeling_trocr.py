@@ -103,10 +103,10 @@ class TrOCRSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
-        
+
         print("Embedding dim:", embedding_dim)
         print("Padding idx:", padding_idx)
-        
+
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.weights = self.get_embedding(num_positions, embedding_dim, padding_idx)
@@ -128,10 +128,10 @@ class TrOCRSinusoidalPositionalEmbedding(nn.Module):
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
         if padding_idx is not None:
             emb[padding_idx, :] = 0
-        
+
         print("Shape of emb in get_embedding:", emb.shape)
-        print("First elements of emb in get_embedding:", emb[:3,:3])
-        
+        print("First elements of emb in get_embedding:", emb[:3, :3])
+
         return emb
 
     @torch.no_grad()
@@ -156,7 +156,7 @@ class TrOCRSinusoidalPositionalEmbedding(nn.Module):
         x = self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
         print("Shape of position embeddings:", x.shape)
-        print("First elements of position embeddings:", x[0,0,:3])
+        print("First elements of position embeddings:", x[0, 0, :3])
 
         return x
 
@@ -655,9 +655,9 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        print("First elements of embeddings before position embeddings:", inputs_embeds[0,:3,:3])
+        print("First elements of embeddings before position embeddings:", inputs_embeds[0, :3, :3])
         print("Embed scale:", self.embed_scale)
-        
+
         if self.config.use_learned_position_embeddings:
             embed_pos = self.embed_positions(input_shape, past_key_values_length=past_key_values_length)
         else:
@@ -666,7 +666,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         hidden_states = inputs_embeds + embed_pos
 
         print("Shape of embeddings after position embeddings:", hidden_states.shape)
-        print("First elements of embeddings after position embeddings:", hidden_states[0,:3,:3])
+        print("First elements of embeddings after position embeddings:", hidden_states[0, :3, :3])
 
         if self.layernorm_embedding is not None:
             print("Adding layernorm to the embeddings")

@@ -142,8 +142,9 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     else:
         raise ValueError("Should either find 'base' or 'large' in checkpoint URL")
 
-    # the large-printed checkpoint uses sinusoidal position embeddings, no layernorm afterwards
-    if "large-printed" in checkpoint_url:
+    # the large-printed + stage1 checkpoints uses sinusoidal position embeddings, no layernorm afterwards
+    if "large-printed" in checkpoint_url or "stage1" in checkpoint_url:
+        decoder_config.scale_embedding = True
         decoder_config.use_learned_position_embeddings = False
         decoder_config.layernorm_embedding = False
 
@@ -184,8 +185,8 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     pixel_values = processor(images=prepare_img(checkpoint_url), return_tensors="pt").pixel_values
 
-    #generated_ids = model.generate(input_ids=pixel_values, num_beams=5)
-    #print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+    # generated_ids = model.generate(input_ids=pixel_values, num_beams=5)
+    # print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
     # verify logits
     decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
