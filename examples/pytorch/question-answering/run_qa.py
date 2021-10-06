@@ -420,7 +420,7 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = raw_datasets["train"]
         if data_args.max_train_samples is not None:
-            # We will select sample from whole data if agument is specified
+            # We will select sample from whole data if argument is specified
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         # Create train feature from dataset
         with training_args.main_process_first(desc="train dataset map pre-processing"):
