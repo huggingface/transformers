@@ -316,7 +316,7 @@ We have 10 batches of 512 length. If we parallelize them by attribute dimension 
 
 * Parameter
 
-It is similar with tensor model parallelism or niave layer-wise model parallelism.
+It is similar with tensor model parallelism or naive layer-wise model parallelism.
 
 ![flex-flow-soap](imgs/parallelism-flexflow.jpeg)
 
