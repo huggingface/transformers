@@ -192,6 +192,8 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
     logits = outputs.logits
 
+    print("First elements of logits:", logits[0, 0, :10])
+
     expected_shape = torch.Size([1, 1, 50265])
     if "trocr-base-handwritten" in checkpoint_url:
         expected_slice = torch.tensor(
