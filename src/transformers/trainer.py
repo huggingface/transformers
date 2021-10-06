@@ -1315,10 +1315,13 @@ class Trainer:
                 else:
                     tr_loss_step = self.training_step(model, inputs)
 
-                if args.logging_nan_inf_filter and not is_torch_tpu_available():
-                    if torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step):
-                        # if loss is nan or inf simply add the average of previous logged losses
-                        tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                if (
+                    args.logging_nan_inf_filter
+                    and not is_torch_tpu_available()
+                    and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
+                ):
+                    # if loss is nan or inf simply add the average of previous logged losses
+                    tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
                 else:
                     tr_loss += tr_loss_step
 
