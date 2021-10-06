@@ -1896,10 +1896,10 @@ class ModelOutput(OrderedDict):
         class_fields = fields(self)
 
         # Safety and consistency checks
-        assert len(class_fields), f"{self.__class__.__name__} has no fields."
-        assert all(
-            field.default is None for field in class_fields[1:]
-        ), f"{self.__class__.__name__} should not have more than one required field."
+        if not len(class_fields):
+            raise ValueError(f"{self.__class__.__name__} has no fields.")
+        if not all(field.default is None for field in class_fields[1:]):
+            raise ValueError(f"{self.__class__.__name__} should not have more than one required field.")
 
         first_field = getattr(self, class_fields[0].name)
         other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
