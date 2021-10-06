@@ -493,7 +493,6 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
 
     Args:
         config: TrOCRConfig
-        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: TrOCRConfig):

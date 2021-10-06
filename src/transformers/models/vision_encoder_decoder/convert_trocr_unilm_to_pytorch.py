@@ -176,12 +176,19 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         else:
             state_dict[key] = val
 
+    print("Embed tokens of model before loading state dict:")
+    print(model.decoder.model.decoder.embed_tokens.weight[:3,:3])
+    
+    print("Shape of embed tokens in state dict:", state_dict["decoder.model.decoder.embed_tokens.weight"].shape)
     print("Embed tokens in state dict:")
     print(state_dict["decoder.model.decoder.embed_tokens.weight"][:3,:3])
     
     # load state dict
+    for name, param in model.named_parameters():
+        print(name, param.shape)
     model.load_state_dict(state_dict)
 
+    print("Shape of embed tokens in model:", model.decoder.model.decoder.embed_tokens.weight.shape)
     print("Embed tokens of model:")
     print(model.decoder.model.decoder.embed_tokens.weight[:3,:3])
 
