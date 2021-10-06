@@ -191,6 +191,7 @@ def _compute_mask_indices(
 
         # pick first sampled index that will serve as a dummy index to pad vector
         dummy_mask_idx = spec_aug_mask_idx[0]
+
         spec_aug_mask_idx = np.concatenate(
             [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
         )
@@ -230,8 +231,12 @@ def _sample_negative_indices(
     # get `num_negatives` random vector indices from the same utterance
     sampled_negative_indices = np.zeros(shape=(batch_size, sequence_length, num_negatives), dtype=np.int32)
 
+    mask_time_indices = (
+        mask_time_indices.astype(np.bool) if mask_time_indices is not None else np.ones(features_shape, dtype=np.bool)
+    )
+
     for batch_idx in range(batch_size):
-        high = mask_time_indices[batch_idx].sum() - 1 if mask_time_indices is not None else sequence_length - 1
+        high = mask_time_indices[batch_idx].sum() - 1
         mapped_masked_indices = sequence_length_range[mask_time_indices[batch_idx]]
 
         feature_indices = np.broadcast_to(np.arange(high + 1)[:, None], (high + 1, num_negatives))
@@ -1091,6 +1096,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
                 attention_mask=attention_mask,
+                min_masks=2,
             )
             mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.long)
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -1336,9 +1342,11 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # 3. sample K negatives (distractors) quantized states for contrastive loss
             # if attention_mask is passed, make sure that padded feature vectors cannot be sampled
             # sample negative quantized vectors BTC => (BxT)C
-            negative_quantized_features = quantized_features.view(-1, hidden_size)[sampled_negative_indices.view(-1)]
+            negative_quantized_features = quantized_features.view(-1, hidden_size)[
+                sampled_negative_indices.long().view(-1)
+            ]
             negative_quantized_features = negative_quantized_features.view(
-                batch_size, sequence_length, self.config.num_negatives, hidden_size
+                batch_size, sequence_length, -1, hidden_size
             ).permute(2, 0, 1, 3)
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
