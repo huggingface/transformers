@@ -66,8 +66,8 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--output_dir="./wav2vec2-pretrained-demo" \
 	--max_train_steps="20000" \
 	--num_warmup_steps="32000" \
-	--gradient_accumulation_steps="4" \
-	--learning_rate="0.001" \
+	--gradient_accumulation_steps="8" \
+	--learning_rate="0.005" \
 	--weight_decay="0.01" \
 	--max_duration_in_seconds="20.0" \
 	--min_duration_in_seconds="2.0" \
