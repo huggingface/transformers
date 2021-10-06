@@ -40,22 +40,41 @@ class FSNERModel(torch.nn.Module):
             p_end (`torch.FloatTensor` of shape `(batch_size, sequence_length)`): Scores of each token as
             being end token of an entity
         """
+
+        support_sizes = W_supports["sizes"].tolist()
+        start_token_id = W_supports["start_token_id"].item()
+        end_token_id = W_supports["end_token_id"].item()
+
+        del W_supports["sizes"]
+        del W_supports["start_token_id"]
+        del W_supports["end_token_id"]
+
         q = self.BERT(**W_query)
         S = self.BERT(**W_supports)
 
-        # reshape from (batch_size, 384, 784) to (batch_size, 1, 384, 784)
-        q = q.view(q.shape[0], -1, q.shape[1], q.shape[2])
+        p_starts = None
+        p_ends = None
 
-        # reshape from (batch_size*n_exaples_per_entity, 384, 784) to (batch_size, n_exaples_per_entity, 384, 784)
-        S = S.view(q.shape[0], -1, S.shape[1], S.shape[2])
+        start_token_masks = W_supports["input_ids"] == start_token_id
+        end_token_masks = W_supports["input_ids"] == end_token_id
 
-        s_start = S[(W_supports["input_ids"] == 30522).view(S.shape[:3])].view(S.shape[0], -1, 1, S.shape[-1])
-        s_end = S[(W_supports["input_ids"] == 30523).view(S.shape[:3])].view(S.shape[0], -1, 1, S.shape[-1])
+        for i, size in enumerate(support_sizes):
+            if i == 0:
+                s = 0
+            else:
+                s = support_sizes[i - 1]
 
-        p_start = torch.sum(torch.einsum("bitf,bejf->bet", q, s_start), dim=1)
-        p_end = torch.sum(torch.einsum("bitf,bejf->bet", q, s_end), dim=1)
+            s_start = S[s : s + size][start_token_masks[s : s + size]]
+            s_end = S[s : s + size][end_token_masks[s : s + size]]
 
-        p_start = p_start.softmax(dim=1)
-        p_end = p_end.softmax(dim=1)
+            p_start = torch.matmul(q[i], s_start.T).sum(1).softmax(0)
+            p_end = torch.matmul(q[i], s_end.T).sum(1).softmax(0)
 
-        return p_start, p_end
+            if p_starts is not None:
+                p_starts = torch.vstack((p_starts, p_start))
+                p_ends = torch.vstack((p_ends, p_end))
+            else:
+                p_starts = p_start
+                p_ends = p_end
+
+        return p_starts, p_ends
