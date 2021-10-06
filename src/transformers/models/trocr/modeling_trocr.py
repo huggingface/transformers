@@ -103,6 +103,10 @@ class TrOCRSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        
+        print("Embedding dim:", embedding_dim)
+        print("Padding idx:", padding_idx)
+        
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.weights = self.get_embedding(num_positions, embedding_dim, padding_idx)
@@ -124,6 +128,10 @@ class TrOCRSinusoidalPositionalEmbedding(nn.Module):
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
         if padding_idx is not None:
             emb[padding_idx, :] = 0
+        
+        print("Shape of emb in get_embedding:", emb.shape)
+        print("First elements of emb in get_embedding:", emb[:3,:3])
+        
         return emb
 
     @torch.no_grad()
@@ -136,12 +144,21 @@ class TrOCRSinusoidalPositionalEmbedding(nn.Module):
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len
+
+        print("Seq_len:", seq_len)
+        print("Max_pos:", max_pos)
+
         if self.weights is None or max_pos > self.weights.size(0):
             # recompute/expand embeddings if needed
             self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx)
         self.weights = self.weights.to(self._float_tensor)
 
-        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+        x = self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+
+        print("Shape of position embeddings:", x.shape)
+        print("First elements of position embeddings:", x[0,0,:3])
+
+        return x
 
     def create_position_ids_from_input_ids(
         self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
@@ -644,6 +661,9 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             embed_pos = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
 
         hidden_states = inputs_embeds + embed_pos
+
+        print("Shape of embeddings after position embeddings:", hidden_states.shape)
+        print("First elements of embeddings after position embeddings:", hidden_states[0,:3,:3])
 
         if self.layernorm_embedding is not None:
             hidden_states = self.layernorm_embedding(hidden_states)
