@@ -476,5 +476,7 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_wav2vec2_pretraining_no_trainer.main()
             result = get_results(tmp_dir)
-            import ipdb; ipdb.set_trace()
+            import ipdb
+
+            ipdb.set_trace()
             self.assertLess(result["eval_loss"], result["train_loss"])

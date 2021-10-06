@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-#accelerate launch run_wav2vec2_pretraining_no_trainer.py \
-python run_wav2vec2_pretraining_no_trainer.py \
+accelerate launch run_wav2vec2_pretraining_no_trainer.py \
         --dataset_name="librispeech_asr" \
         --dataset_config_names clean clean \
 				--dataset_split_names validation test \
@@ -8,7 +7,7 @@ python run_wav2vec2_pretraining_no_trainer.py \
         --output_dir="./wav2vec2-pretrained-demo" \
         --max_train_steps="200000" \
         --num_warmup_steps="32000" \
-        --gradient_accumulation_steps="4" \
+        --gradient_accumulation_steps="1" \
 				--gradient_checkpointing \
         --learning_rate="0.001" \
         --weight_decay="0.01" \
@@ -21,5 +20,3 @@ python run_wav2vec2_pretraining_no_trainer.py \
         --adam_beta1="0.9" \
         --adam_beta2="0.98" \
         --adam_epsilon="1e-06" \
-				--push_to_hub \
-				--preprocessing_only \

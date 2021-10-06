@@ -15,31 +15,32 @@
 
 """ Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data """
 
-import os
-import torch
-import math
-import datasets
-import wandb
 import argparse
 import logging
-import torchaudio
-import transformers
-
-from datasets import DatasetDict, load_dataset, concatenate_datasets
+import math
+import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
 from pathlib import Path
-from accelerate import Accelerator
-from tqdm.auto import tqdm
-from torch.utils.data.dataloader import DataLoader
+from typing import Dict, List, Optional, Union
+
+import datasets
+import torch
 import torch.distributed as dist
+import torchaudio
+from datasets import DatasetDict, concatenate_datasets, load_dataset
+from torch.utils.data.dataloader import DataLoader
+from tqdm.auto import tqdm
+
+import transformers
+import wandb
+from accelerate import Accelerator
 from huggingface_hub import Repository
 from transformers import (
+    AdamW,
     SchedulerType,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2ForPreTraining,
-    AdamW,
     get_scheduler,
     is_wandb_available,
     set_seed,
@@ -83,7 +84,9 @@ def parse_args():
         "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
-        "--preprocessing_only", action="store_true", help="Only run the preprocessing script to be cached for future use"
+        "--preprocessing_only",
+        action="store_true",
+        help="Only run the preprocessing script to be cached for future use",
     )
     parser.add_argument(
         "--cache_dir",
@@ -162,7 +165,7 @@ def parse_args():
     parser.add_argument(
         "--gradient_checkpointing",
         action="store_true",
-        help="If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        help="If True, use gradient checkpointing to save memory at the expense of slower backward pass.",
     )
     parser.add_argument(
         "--lr_scheduler_type",
@@ -294,7 +297,9 @@ class DataCollatorForWav2Vec2Pretraining:
         # make sure that no loss is computed on padded inputs
         if batch["attention_mask"] is not None:
             # compute real output lengths according to convolution formula
-            batch["sub_attention_mask"] = self.model._get_feature_vector_attention_mask(mask_indices_seq_length, batch["attention_mask"])
+            batch["sub_attention_mask"] = self.model._get_feature_vector_attention_mask(
+                mask_indices_seq_length, batch["attention_mask"]
+            )
 
         features_shape = (batch_size, mask_indices_seq_length)
 
@@ -383,7 +388,9 @@ def main():
     datasets_splits = []
     for dataset_config_name, train_split_name in zip(args.dataset_config_names, args.dataset_split_names):
         # load dataset
-        dataset_split = load_dataset(args.dataset_name, dataset_config_name, split=train_split_name, cache_dir=args.cache_dir)
+        dataset_split = load_dataset(
+            args.dataset_name, dataset_config_name, split=train_split_name, cache_dir=args.cache_dir
+        )
         datasets_splits.append(dataset_split)
 
     # Next, we concatenate all configurations and splits into a single training dataset
@@ -404,8 +411,7 @@ def main():
     # only normalized-inputs-training is supported
     if not feature_extractor.do_normalize:
         raise ValueError(
-            "Training is only supported for normalized inputs. "
-            "Make sure ``feature_extractor.do_normalize == True``"
+            "Training is only supported for normalized inputs. " "Make sure ``feature_extractor.do_normalize == True``"
         )
 
     # set max & min audio length in number of samples
@@ -428,18 +434,21 @@ def main():
             sampling_rate = resampler.new_freq
 
         speech_array = speech_array.numpy()
-        inputs = feature_extractor(
-            speech_array, sampling_rate=sampling_rate, max_length=max_length, truncation=True
-        )
+        inputs = feature_extractor(speech_array, sampling_rate=sampling_rate, max_length=max_length, truncation=True)
         batch["input_values"] = inputs.input_values[0]
         return batch
 
     # load audio files into numpy arrays
     with accelerator.main_process_first():
         vectorized_datasets = raw_datasets.map(
-            prepare_dataset, num_proc=args.preprocessing_num_workers, remove_columns=raw_datasets["train"].column_names, load_from_cache_file=not args.overwrite_cache,
+            prepare_dataset,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=raw_datasets["train"].column_names,
+            load_from_cache_file=not args.overwrite_cache,
         )
-        vectorized_datasets = vectorized_datasets.filter(lambda x: len(x["input_values"]) > min_length, load_from_cache_file=not args.overwrite_cache)
+        vectorized_datasets = vectorized_datasets.filter(
+            lambda x: len(x["input_values"]) > min_length, load_from_cache_file=not args.overwrite_cache
+        )
 
     # for large datasets it is advised to run the preprocessing on a
     # single machine first with ``args.preprocessing_only`` since there will mostly likely
@@ -471,17 +480,27 @@ def main():
         model=model, feature_extractor=feature_extractor, pad_to_multiple_of=args.pad_to_multiple_of
     )
     train_dataloader = DataLoader(
-        vectorized_datasets["train"], shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
+        vectorized_datasets["train"],
+        shuffle=True,
+        collate_fn=data_collator,
+        batch_size=args.per_device_train_batch_size,
     )
     eval_dataloader = DataLoader(
         vectorized_datasets["validation"], collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
     )
 
     # Optimizer
-    optimizer = AdamW(list(model.parameters()), lr=args.learning_rate, betas=[args.adam_beta1, args.adam_beta2], eps=args.adam_epsilon)
+    optimizer = AdamW(
+        list(model.parameters()),
+        lr=args.learning_rate,
+        betas=[args.adam_beta1, args.adam_beta2],
+        eps=args.adam_epsilon,
+    )
 
     # Prepare everything with our `accelerator`.
-    model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(model, optimizer, train_dataloader, eval_dataloader)
+    model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader
+    )
 
     # Scheduler and math around the number of training steps.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -544,7 +563,11 @@ def main():
             if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
 
                 # compute grad norm for monitoring
-                scale = accelerator.scaler._scale.item() if hasattr(accelerator, "scaler") and accelerator.scaler is not None else 1
+                scale = (
+                    accelerator.scaler._scale.item()
+                    if hasattr(accelerator, "scaler") and accelerator.scaler is not None
+                    else 1
+                )
                 if accelerator.state.num_processes > 1:
                     grad_norm = get_grad_norm(model.module.parameters(), scale)
                 else:
@@ -558,12 +581,14 @@ def main():
                     lr_scheduler.step()
                 elif accelerator.is_local_main_process:
                     progress_bar.write(
-                        "Gradients have overflown - skipping update step... "
-                        f"Updating gradient scale to {scale}..."
+                        "Gradients have overflown - skipping update step... " f"Updating gradient scale to {scale}..."
                     )
 
                 # update gumbel temperature
-                gumbel_temperature = max(args.max_gumbel_temperature * args.gumbel_temperature_decay ** completed_steps, args.min_gumbel_temperature)
+                gumbel_temperature = max(
+                    args.max_gumbel_temperature * args.gumbel_temperature_decay ** completed_steps,
+                    args.min_gumbel_temperature,
+                )
                 if hasattr(model, "module"):
                     model.module.set_gumbel_temperature(gumbel_temperature)
                 else:

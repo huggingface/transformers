@@ -88,7 +88,7 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     Output type of :class:`~transformers.Wav2Vec2ForPreTrainingOutput`, with potential hidden states and attentions.
 
     Args:
-        loss (`optional`, returned when model is in train mode, ``torch.FloatTensor`` of shape :obj:`(1,)`):
+        loss (`optional`, returned when :obj:`sample_negative_indices` are passed, ``torch.FloatTensor`` of shape :obj:`(1,)`):
             Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the `official
             paper <https://arxiv.org/pdf/2006.11477.pdf>`__ . (classification) loss.
         projected_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
@@ -108,6 +108,10 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        contrastive_loss (`optional`, returned when :obj:`sample_negative_indices` are passed, ``torch.FloatTensor`` of shape :obj:`(1,)`):
+            The contrastive loss (L_m) as stated in the `official paper <https://arxiv.org/pdf/2006.11477.pdf>`__ .
+        diversity_loss (`optional`, returned when :obj:`sample_negative_indices` are passed, ``torch.FloatTensor`` of shape :obj:`(1,)`):
+            The diversity loss (L_d) as stated in the `official paper <https://arxiv.org/pdf/2006.11477.pdf>`__ .
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -131,6 +135,7 @@ def _compute_mask_indices(
     Computes random mask spans for a given shape. Used to implement `SpecAugment: A Simple Data Augmentation Method for
     ASR <https://arxiv.org/abs/1904.08779>`__. Note that this method is not optimized to run on TPU and should be run
     on CPU as part of the preprocessing during training.
+
     Args:
         shape: the the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
@@ -165,7 +170,9 @@ def _compute_mask_indices(
 
     # compute number of masked spans in batch
     input_lengths = (
-        attention_mask.sum(-1).detach().tolist() if attention_mask is not None else [sequence_length for _ in range(batch_size)]
+        attention_mask.sum(-1).detach().tolist()
+        if attention_mask is not None
+        else [sequence_length for _ in range(batch_size)]
     )
 
     # SpecAugment mask to fill
@@ -389,6 +396,7 @@ class Wav2Vec2FeatureExtractor(nn.Module):
         for conv_layer in self.conv_layers:
 
             if self.gradient_checkpointing and self.training:
+
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         return module(*inputs)
@@ -527,7 +535,9 @@ class Wav2Vec2Attention(nn.Module):
                 raise ValueError(
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(batch_size, self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                batch_size, self.num_heads, tgt_len, src_len
+            )
             attn_weights = attn_weights.view(batch_size * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
@@ -921,7 +931,11 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
         elif isinstance(module, Wav2Vec2PositionalConvEmbedding):
-            nn.init.normal_(module.conv.weight, mean=0, std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)))
+            nn.init.normal_(
+                module.conv.weight,
+                mean=0,
+                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
+            )
             nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, Wav2Vec2FeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
@@ -1091,7 +1105,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 device=self.device,
                 attention_mask=attention_mask,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.long)[:, None].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.long)[
+                :, None
+            ].expand(-1, sequence_length, -1)
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states
@@ -1235,6 +1251,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         mask_time_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in `config.proj_codevector_dim` space.
+        sampled_negative_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length, num_negatives)`, `optional`):
+            Indices indicating which quantized target vectors are used as negative sampled vectors in contrastive loss.
+            Required input for pre-training.
 
         Returns:
 
@@ -1306,10 +1325,12 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # compute reduced attention_mask correponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
-        quantized_features, codevector_perplexity = self.quantizer(extract_features, mask_time_indices=mask_time_indices)
+        quantized_features, codevector_perplexity = self.quantizer(
+            extract_features, mask_time_indices=mask_time_indices
+        )
         quantized_features = self.project_q(quantized_features)
 
-        loss = None
+        loss = contrastive_loss = diversity_loss = None
         if sampled_negative_indices is not None:
             batch_size, sequence_length, hidden_size = quantized_features.shape
 
@@ -1318,7 +1339,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # if attention_mask is passed, make sure that padded feature vectors cannot be sampled
             # sample negative quantized vectors BTC => (BxT)C
             negative_quantized_features = quantized_features.view(-1, hidden_size)[sampled_negative_indices.view(-1)]
-            negative_quantized_features = negative_quantized_features.view(batch_size, sequence_length, self.config.num_negatives, hidden_size).permute(2, 0, 1, 3)
+            negative_quantized_features = negative_quantized_features.view(
+                batch_size, sequence_length, self.config.num_negatives, hidden_size
+            ).permute(2, 0, 1, 3)
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
             # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
