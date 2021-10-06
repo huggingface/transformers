@@ -233,16 +233,3 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 {"score": 0.9994, "label": "cat", "mask": "891313e21290200e6169613e6a9cb7aff9e7b22f"},
             ],
         )
-
-    def test(self):
-        model_id = "facebook/detr-resnet-50-panoptic"
-
-        model = AutoModelForImageSegmentation.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
-
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg")
-        for o in outputs:
-            o["score"] = round(o["score"], 4)
-            o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
-        # print(outputs)
