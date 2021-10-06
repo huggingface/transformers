@@ -301,7 +301,7 @@ It performs a sort of 4D Parallelism over Sample-Operator-Attribute-Parameter.
 3. Attribute = Data Parallelism (length-wise parallel)
 4. Parameter = Model Parallelism (it doesn't matter dimension like horizontal or vertical)
 
-### Examples
+Examples:
 * Sample
 
 We have 10 batches of 512 length. If we parallelize them by sample dimension into 2 devices, 10 x 512 will be 5 x 2 x 512.
