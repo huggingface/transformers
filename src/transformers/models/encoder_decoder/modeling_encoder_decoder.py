@@ -466,7 +466,7 @@ class EncoderDecoderModel(PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, use_default_keys=True, **kwargs
     ):
         DEFAULT_KEYS = ["attention_mask", "decoder_attention_mask", "decoder_input_ids", "encoder_outputs", "past_key_values", "use_cache"]
         
@@ -481,10 +481,10 @@ class EncoderDecoderModel(PreTrainedModel):
             "use_cache": use_cache,
         }
         
-        print(decoder_inputs)
-        for key, value in decoder_inputs.items():
-            if not key in DEFAULT_KEYS:
-                input_dict.update({key: value})
+        if not use_default_keys:
+            for key, value in decoder_inputs.items():
+                if not key in DEFAULT_KEYS:
+                    input_dict.update({key: value})
         return input_dict
 
     def resize_token_embeddings(self, *args, **kwargs):
