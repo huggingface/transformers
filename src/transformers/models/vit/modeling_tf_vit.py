@@ -80,8 +80,15 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
     def build(self, input_shape: tf.TensorShape):
 
         num_patches = self.patch_embeddings.num_patches
-        self.cls_token = self.add_weight(shape=(1, 1, self.config.hidden_size), initializer="zeros", trainable=True, name="cls_token")
-        self.position_embeddings = self.add_weight(shape=(1, num_patches + 1, self.config.hidden_size), initializer="zeros", trainable=True, name="position_embeddings")
+        self.cls_token = self.add_weight(
+            shape=(1, 1, self.config.hidden_size), initializer="zeros", trainable=True, name="cls_token"
+        )
+        self.position_embeddings = self.add_weight(
+            shape=(1, num_patches + 1, self.config.hidden_size),
+            initializer="zeros",
+            trainable=True,
+            name="position_embeddings",
+        )
 
         super().build(input_shape)
 
@@ -121,9 +128,13 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
         patch_pos_embed = tf.reshape(tensor=patch_pos_embed, shape=(1, -1, dim))
         return tf.concat(values=(class_pos_embed, patch_pos_embed), axis=1)
 
-    def call(self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False) -> tf.Tensor:
+    def call(
+        self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
+    ) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, training=training)
+        embeddings = self.patch_embeddings(
+            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, training=training
+        )
 
         # add the [CLS] token to the embedded patch tokens
         cls_tokens = tf.repeat(self.cls_token, repeats=batch_size, axis=0)
@@ -158,20 +169,29 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         self.num_patches = num_patches
 
         self.projection = tf.keras.layers.Conv2D(
-            filters=embed_dim, kernel_size=patch_size, strides=patch_size,
+            filters=embed_dim,
+            kernel_size=patch_size,
+            strides=patch_size,
             data_format="channels_first",
             kernel_initializer=get_initializer(initializer_range),
             name="projection",
         )
 
-    def call(self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False) -> tf.Tensor:
+    def call(
+        self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
+    ) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
         if not interpolate_pos_encoding:
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
                     f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
                 )
-        x = tf.transpose(tf.reshape(tensor=self.projection(inputs=pixel_values, training=training), shape=(batch_size, num_channels, -1)), perm=(0, 2, 1))
+        x = tf.transpose(
+            tf.reshape(
+                tensor=self.projection(inputs=pixel_values, training=training), shape=(batch_size, num_channels, -1)
+            ),
+            perm=(0, 2, 1),
+        )
         return x
 
 
@@ -289,10 +309,7 @@ class TFViTAttention(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         self_outputs = self.self_attention(
-            hidden_states=input_tensor,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            training=training
+            hidden_states=input_tensor, head_mask=head_mask, output_attentions=output_attentions, training=training
         )
         attention_output = self.dense_output(
             hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
@@ -349,8 +366,12 @@ class TFViTLayer(tf.keras.layers.Layer):
         self.intermediate = TFViTIntermediate(config, name="intermediate")
         self.vit_output = TFViTOutput(config, name="output")
 
-        self.layernorm_before = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
-        self.layernorm_after = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
+        self.layernorm_before = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layernorm_before"
+        )
+        self.layernorm_after = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layernorm_after"
+        )
 
     def call(
         self,
@@ -360,7 +381,9 @@ class TFViTLayer(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
-            input_tensor=self.layernorm_before(inputs=hidden_states),  # in ViT, layernorm is applied before self-attention
+            input_tensor=self.layernorm_before(
+                inputs=hidden_states
+            ),  # in ViT, layernorm is applied before self-attention
             head_mask=head_mask,
             output_attentions=output_attentions,
             training=training,
@@ -376,7 +399,9 @@ class TFViTLayer(tf.keras.layers.Layer):
         intermediate_output = self.intermediate(hidden_states=layer_output)
 
         # second residual connection is done here
-        layer_output = self.vit_output(hidden_states=intermediate_output, input_tensor=hidden_states, training=training)
+        layer_output = self.vit_output(
+            hidden_states=intermediate_output, input_tensor=hidden_states, training=training
+        )
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
@@ -566,8 +591,8 @@ VIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
-            :meth:`transformers.ViTFeatureExtractor.__call__` for details.            
-            
+            :meth:`transformers.ViTFeatureExtractor.__call__` for details.
+
         head_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 

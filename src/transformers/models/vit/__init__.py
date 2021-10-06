@@ -64,11 +64,7 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_vit import (
-            TFViTForImageClassification,
-            TFViTModel,
-            TFViTPreTrainedModel,
-        )
+        from .modeling_tf_vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
 
     if is_flax_available():
         from .modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
