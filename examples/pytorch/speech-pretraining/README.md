@@ -29,8 +29,11 @@ The following examples show how to fine-tune a `"base"`-sized Wav2Vec2 model as 
 **NOTE**
 
 Wav2Vec2's pre-training is known to be quite unstable. 
-It is advised to do a couple of training runs with a smaller dataset,
-*i.e.* `--dataset_config_names clean clean` and `--dataset_split_names validation test`.
+It is advised to do a couple of test runs with a smaller dataset,
+*i.e.* `--dataset_config_names clean clean`, `--dataset_split_names validation test`
+to finetune hyper-parameters, such as `learning_rate`, `batch_size`, `num_warmup_steps`,
+ and optimizer settings.
+
 ---
 
 ### Base

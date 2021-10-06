@@ -17,6 +17,7 @@
 import math
 import unittest
 
+import numpy as np
 import pytest
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
@@ -868,16 +869,11 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
-    # Wav2Vec2 pretraining seems to be broken. TODO(PVP) - reenable test once pretraining works
-    # correctly
+    @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU")
     def test_inference_integration(self):
-        return
-
         model = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
         model.to(torch_device)
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "facebook/wav2vec2-base", return_attention_mask=True
-        )
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-base")
         input_speech = self._load_datasamples(2)
 
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
@@ -887,7 +883,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             model._get_feat_extract_output_lengths(torch.tensor(inputs_dict["input_values"].shape[1])),
         )
 
-        torch.manual_seed(0)
+        np.random.seed(4)
         mask_time_indices = _compute_mask_indices(
             features_shape,
             model.config.mask_time_prob,
@@ -899,7 +895,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(
                 inputs_dict.input_values.to(torch_device),
-                attention_mask=inputs_dict.attention_mask.to(torch_device),
                 mask_time_indices=mask_time_indices,
             )
 
@@ -909,14 +904,16 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         # retrieve cosine sim of masked features
         cosine_sim_masked = cosine_sim[mask_time_indices]
 
+        # cosine similarity of model is all > 0.5 as model is
+        # pre-trained on contrastive loss
         # fmt: off
-        expected_cosine_sim_masked = torch.tensor(
-            [0.7458, 0.7188, 0.6418, 0.3729, 0.3741, 0.3694, 0.3110, 0.2257, 0.4403, 0.5415, 0.3950, 0.3701, 0.8831,
-             0.8613, 0.5229, 0.6696, 0.7206, 0.7877, 0.6758, 0.8746, 0.6596, 0.6282, 0.6178, 0.5839, 0.5926, 0.6651,
-             0.4635, 0.6332, 0.6572, 0.8776, 0.4999, 0.7001, 0.7257, 0.5098, 0.6229, 0.4566, 0.5261, 0.6363, 0.5371,
-             0.6997],
-            device=torch_device,
-        )
+        expected_cosine_sim_masked = torch.tensor([
+            0.8523, 0.5860, 0.6905, 0.5557, 0.7456, 0.5249, 0.6639, 0.7654, 0.7565,
+            0.8167, 0.8222, 0.7960, 0.8034, 0.8166, 0.8310, 0.8263, 0.8274, 0.8258,
+            0.8179, 0.8412, 0.8536, 0.5098, 0.4728, 0.6461, 0.4498, 0.6002, 0.5774,
+            0.6457, 0.7123, 0.5668, 0.6866, 0.4960, 0.6293, 0.7423, 0.7419, 0.7526,
+            0.7768, 0.4898, 0.5393, 0.8183
+        ], device=torch_device)
         # fmt: on
 
         self.assertTrue(torch.allclose(cosine_sim_masked, expected_cosine_sim_masked, atol=1e-3))
@@ -941,9 +938,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             features_shape,
             model.config.mask_time_prob,
             model.config.mask_time_length,
-            device=inputs_dict["input_values"].device,
             min_masks=2,
-        ).to(torch_device)
+        )
+        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
 
         with torch.no_grad():
             outputs = model(
@@ -1008,28 +1005,36 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         )
 
         torch.manual_seed(0)
+        np.random.seed(0)
+
         mask_time_indices = _compute_mask_indices(
             features_shape,
             model.config.mask_time_prob,
             model.config.mask_time_length,
             min_masks=2,
         )
-        mask_time_indices = torch.tensor(mask_time_indices, device=torch_device, dtype=torch.bool)
+        sampled_negative_indices = _sample_negative_indices(
+            mask_time_indices.shape, model.config.num_negatives, mask_time_indices
+        )
+
+        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
+        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
 
         with torch.no_grad():
             outputs = model(
                 inputs_dict.input_values.to(torch_device),
                 attention_mask=inputs_dict.attention_mask.to(torch_device),
                 mask_time_indices=mask_time_indices,
+                sampled_negative_indices=sampled_negative_indices,
             )
 
         # check diversity loss
         num_codevectors = model.config.num_codevectors_per_group * model.config.num_codevector_groups
         diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
-        self.assertTrue(abs(diversity_loss.item() - 0.8859) < 1e-3)
+        self.assertTrue(abs(diversity_loss.item() - 0.9538) < 1e-3)
 
         # check overall loss (contrastive loss + diversity loss)
-        expected_loss = 62.5170
+        expected_loss = 116.7094
 
         self.assertTrue(abs(outputs.loss.item() - expected_loss) < 1e-3)
 
