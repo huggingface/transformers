@@ -37,7 +37,7 @@ from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
 from types import ModuleType
-from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union, ContextManager
+from typing import Any, BinaryIO, ContextManager, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 from zipfile import ZipFile, is_zipfile
