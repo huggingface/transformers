@@ -297,7 +297,7 @@ Paper: ["Beyond Data and Model Parallelism for Deep Neural Networks" by Zhihao J
 It performs a sort of 4D Parallelism over Sample-Operator-Attribute-Parameter.
 
 1. Sample = Data Parallelism (sample-wise parallel)
-2. Operator = Parallelize one operation into several tasks
+2. Operator = Parallelize a single operation into several sub-operations
 3. Attribute = Data Parallelism (length-wise parallel)
 4. Parameter = Model Parallelism (it doesn't matter dimension like horizontal or vertical)
 
