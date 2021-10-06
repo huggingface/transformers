@@ -80,6 +80,7 @@ from . import (
     retribert,
     roberta,
     roformer,
+    sew,
     speech_to_text,
     splinter,
     squeezebert,

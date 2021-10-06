@@ -250,6 +250,7 @@ _import_structure = {
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
+    "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1103,6 +1104,14 @@ if is_torch_available():
             "RoFormerModel",
             "RoFormerPreTrainedModel",
             "load_tf_weights_in_roformer",
+        ]
+    )
+    _import_structure["models.sew"].extend(
+        [
+            "SEW_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SEWForCTC",
+            "SEWModel",
+            "SEWPreTrainedModel",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
@@ -2069,6 +2078,7 @@ if TYPE_CHECKING:
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
+    from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
     from .models.speech_to_text_2 import (
@@ -2789,6 +2799,12 @@ if TYPE_CHECKING:
             RoFormerModel,
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
+        )
+        from .models.sew import (
+            SEW_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SEWForCTC,
+            SEWModel,
+            SEWPreTrainedModel,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
