@@ -43,6 +43,8 @@ if is_torch_available():
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         PerceiverForImageClassification,
+        PerceiverForImageClassificationConvProcessing,
+        PerceiverForImageClassificationFourier,
         PerceiverForMaskedLM,
         PerceiverForOpticalFlow,
         PerceiverModel,
@@ -126,6 +128,12 @@ class PerceiverModelTester:
                 input_mask = random_attention_mask([self.batch_size, self.seq_length])
         elif model_class.__name__ == "PerceiverForImageClassification":
             config.d_model = 512
+            inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        elif model_class.__name__ == "PerceiverForImageClassificationFourier":
+            config.d_model = 261
+            inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        elif model_class.__name__ == "PerceiverForImageClassificationConvProcessing":
+            config.d_model = 322
             inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         elif model_class.__name__ == "PerceiverForOpticalFlow":
             config.d_model = 322
@@ -243,6 +251,8 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             PerceiverModel,
             PerceiverForMaskedLM,
             PerceiverForImageClassification,
+            PerceiverForImageClassificationConvProcessing,
+            PerceiverForImageClassificationFourier,
             PerceiverForOpticalFlow,
         )
         if is_torch_available()
@@ -295,7 +305,12 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
-
+            elif model_class.__name__ == "PerceiverForOpticalFlow":
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.train_size[0], self.model_tester.train_size[1],
+                    2), dtype=torch.long, device=torch_device
+                )
+        
         return inputs_dict
 
     def test_config(self):
