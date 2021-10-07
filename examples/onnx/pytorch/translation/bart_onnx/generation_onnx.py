@@ -1,14 +1,11 @@
+import copy
+from typing import List, Optional, Tuple
+
 import torch
 import torch.nn.functional as F
-import copy
 
-from transformers import (
-    BartConfig,
-)
-
+from transformers import BartConfig
 from transformers.generation_utils import GenerationMixin
-
-from typing import Optional, List, Tuple
 
 
 def flatten_list(past):

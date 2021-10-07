@@ -19,26 +19,18 @@
 import argparse
 import logging
 import os
-import onnxruntime
 import sys
-import torch
-
-import numpy as np
-
-from bart_onnx.reduce_onnx_size import remove_dup_initializers
 from datetime import datetime
 
+import numpy as np
+import torch
 
+import onnxruntime
 import transformers
-from transformers import (
-    MODEL_MAPPING,
-    BartForConditionalGeneration,
-    BartTokenizer,
-)
+from bart_onnx.generation_onnx import BARTBeamSearchGenerator
+from bart_onnx.reduce_onnx_size import remove_dup_initializers
+from transformers import MODEL_MAPPING, BartForConditionalGeneration, BartTokenizer
 
-from bart_onnx.generation_onnx import (
-    BARTBeamSearchGenerator,
-)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s |  [%(filename)s:%(lineno)d] %(message)s",

@@ -1,7 +1,9 @@
 import io
-import numpy
-import onnx
 import os
+
+import numpy
+
+import onnx
 
 
 def is_equal_tensor_proto(a, b):
