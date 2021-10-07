@@ -232,10 +232,6 @@ class PerceiverSelfAttention(nn.Module):
         #     print("Sum of queries before layernorm:", hidden_states.sum())
         #     print("First few elements of keys + values before layernorm:", inputs[0,:3,:3])
         #     print("Sum of keys + values before layernorm:", inputs.sum())
-
-        print("Shape of queries:", hidden_states.shape)
-        if inputs is not None:
-            print("Shape of keys+values:", inputs.shape)
         
         hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
@@ -972,7 +968,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
             decoder=PerceiverClassificationDecoder(
                 config,
                 num_channels=config.d_latents,
-                trainable_position_encoding_kwargs=dict(num_channels=1024),
+                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents),
                 use_query_residual=True,
             ),
         )
@@ -1049,7 +1045,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
             decoder=PerceiverClassificationDecoder(
                 config,
                 num_channels=config.d_latents,
-                trainable_position_encoding_kwargs=dict(num_channels=1024),
+                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents),
                 use_query_residual=True,
             ),
         )
@@ -1127,7 +1123,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
             decoder=PerceiverClassificationDecoder(
                 config,
                 num_channels=config.d_latents,
-                trainable_position_encoding_kwargs=dict(num_channels=1024),
+                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents),
                 use_query_residual=True,
             ),
         )
@@ -1702,10 +1698,7 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
     def output_shape(self, inputs):
         return (inputs.shape[0], self.num_labels), None
 
-    def forward(self, query, z, query_mask=None, output_attentions=False):
-        
-        print("Shape of decoder query:", query.shape)
-        
+    def forward(self, query, z, query_mask=None, output_attentions=False):        
         decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
         # B x 1 x num_classes -> B x num_classes
         logits = decoder_outputs.logits[:, 0, :]

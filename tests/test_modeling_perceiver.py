@@ -23,7 +23,8 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from transformers import PerceiverConfig, is_torch_available
+from transformers import PerceiverConfig
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -36,6 +37,12 @@ if is_torch_available():
 
     from transformers import PerceiverForImageClassification, PerceiverForMaskedLM, PerceiverModel, PerceiverTokenizer
     from transformers.models.perceiver.modeling_perceiver import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST
+
+
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import PerceiverFeatureExtractor
 
 
 class PerceiverModelTester:
@@ -165,8 +172,9 @@ class PerceiverModelTester:
         input_mask,
         image_labels,
     ):
-        # set d_model
+        # set d_model and num_labels
         config.d_model = 512
+        config.num_labels = self.num_labels
         model = PerceiverForImageClassification(config=config)
         model.to(torch_device)
         model.eval()
@@ -542,11 +550,18 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
+
 @require_torch
 class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
 
+        # TODO replace by deepmind/language-perceiver
         tokenizer = PerceiverTokenizer.from_pretrained("nielsr/language-perceiver")
         model = PerceiverForMaskedLM.from_pretrained("nielsr/language-perceiver")
         model.to(torch_device)
@@ -576,3 +591,28 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         expected_greedy_predictions = [38, 115, 111, 121, 121, 111, 116, 109, 52]
         masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1).tolist()
         self.assertListEqual(expected_greedy_predictions, masked_tokens_predictions)
+
+    @slow
+    def test_inference_image_classification(self):
+
+        # TODO replace by deepmind/vision-perceiver
+        feature_extractor = PerceiverFeatureExtractor()
+        model = PerceiverForImageClassification.from_pretrained("nielsr/vision-perceiver")
+        model.to(torch_device)
+
+        # prepare inputs
+        image = prepare_img()
+        inputs = feature_extractor(image, return_tensors="pt").pixel_values.to(torch_device)
+        input_mask = None
+
+        # forward pass
+        outputs = model(inputs=inputs, attention_mask=input_mask)
+        logits = outputs.logits
+
+        # verify logits
+        expected_shape = torch.Size((1, model.config.num_labels))
+        self.assertEqual(logits.shape, expected_shape)
+
+        expected_slice = torch.tensor([-1.1653, -0.1993, -0.7521])
+
+        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
