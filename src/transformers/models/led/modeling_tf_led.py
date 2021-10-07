@@ -1602,7 +1602,9 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.layerdrop = config.encoder_layerdrop
+        if config.encoder_layerdrop > 0:
+            logger.warning("Layerdrop is currently disabled in TFLED models.")
+        self.layerdrop = 0.0
         self.padding_idx = config.pad_token_id
 
         if isinstance(config.attention_window, int):
@@ -1867,7 +1869,9 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         self.config = config
         self.padding_idx = config.pad_token_id
         self.embed_tokens = embed_tokens
-        self.layerdrop = config.decoder_layerdrop
+        if config.decoder_layerdrop > 0:
+            logger.warning("Layerdrop is currently disabled in TFLED models.")
+        self.layerdrop = 0.0
         self.embed_positions = TFLEDLearnedPositionalEmbedding(
             config.max_decoder_position_embeddings,
             config.d_model,
@@ -2451,7 +2455,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             past_key_values=outputs.past_key_values,  # index 1 of d outputs
             decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
             decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
-            encoder_last_hidden_state=outputs.last_hidden_state,  # index 0 of encoder outputs
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,  # index 0 of encoder outputs
             encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
             encoder_global_attentions=outputs.encoder_global_attentions,
