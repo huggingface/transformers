@@ -81,7 +81,7 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--gradient_checkpointing \
 ```
 
-The results of this run can be seen here: TODO
+The results of this run can be seen [here](https://wandb.ai/patrickvonplaten/wav2vec2-pretrained-demo/reports/Wav2Vec2-PreTraining-Demo-Run--VmlldzoxMDk3MjAw?accessToken=oa05s1y57lizo2ocxy3k01g6db1u4pt8m6ur2n8nl4cb0ug02ms2cw313kb8ruch).
 
 ### Base
 
