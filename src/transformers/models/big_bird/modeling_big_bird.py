@@ -2066,7 +2066,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
                 "+ additional buffer: config.num_random_blocks * config.block_size "
                 f"= {max_tokens_to_attend} with config.block_size "
                 f"= {self.config.block_size}, config.num_random_blocks "
-                f"= {self.config.num_random_blocks}."
+                f"= {self.config.num_random_blocks}. "
                 "Changing attention type to 'original_full'..."
             )
             self.set_attention_type("original_full")

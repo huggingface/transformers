@@ -1421,7 +1421,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             raise ValueError(
                 f"You are trying to instantiate {self.__class__} with a configuration that "
                 "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `Wav2Vec2ForCTC.from_pretrained(..., vocab_size=vocab_size)`."
+                "instantiate the model as follows: `Wav2Vec2ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)

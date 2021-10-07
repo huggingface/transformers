@@ -533,7 +533,7 @@ class TFGenerationMixin:
         # We cannot generate if the model does not have a LM head
         if self.get_output_embeddings() is None:
             raise AttributeError(
-                "You tried to generate sequences with a model that does not have a LM Head."
+                "You tried to generate sequences with a model that does not have a LM Head. "
                 "Please use another model class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`, `TFCTRLLMHeadModel`, `TFT5ForConditionalGeneration`, `TFTransfoXLLMHeadModel`)"
             )
 

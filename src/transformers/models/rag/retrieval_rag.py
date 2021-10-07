@@ -122,7 +122,7 @@ class LegacyIndex(Index):
         except EnvironmentError:
             msg = (
                 f"Can't load '{archive_file}'. Make sure that:\n\n"
-                f"- '{index_path}' is a correct remote path to a directory containing a file named {filename}"
+                f"- '{index_path}' is a correct remote path to a directory containing a file named {filename}\n\n"
                 f"- or '{index_path}' is the correct path to a directory containing a file named {filename}.\n\n"
             )
             raise EnvironmentError(msg)

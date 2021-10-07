@@ -385,7 +385,7 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Overwrite the content of the output directory."
+                "Overwrite the content of the output directory. "
                 "Use this to continue training if output_dir points to a checkpoint directory."
             )
         },
@@ -420,7 +420,7 @@ class TrainingArguments:
     per_gpu_eval_batch_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred."
+            "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred. "
             "Batch size per GPU/TPU core/CPU for evaluation."
         },
     )
@@ -492,7 +492,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Limit the total amount of checkpoints."
+                "Limit the total amount of checkpoints. "
                 "Deletes the older checkpoints in the output_dir. Default is unlimited checkpoints"
             )
         },
@@ -514,7 +514,7 @@ class TrainingArguments:
         default="O1",
         metadata={
             "help": (
-                "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+                "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
                 "See details at https://nvidia.github.io/apex/amp.html"
             )
         },
