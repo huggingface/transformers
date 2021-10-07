@@ -105,7 +105,6 @@ trtexec --onnx=QAT-qdqbert/model.onnx --explicitBatch --workspace=16384 --int8 -
 ```
 python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
   --onnx_model_path=QAT-qdqbert/model.onnx \
-  --model_name_or_path QAT-qdqbert/finetuned_int8/bert-base-uncased/ \
   --output_dir QAT-qdqbert/ \
   --per_device_eval_batch_size 64 \
   --max_seq_length 128 \
@@ -167,7 +166,6 @@ python3 run_qa.py \
 ```
 python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
   --onnx_model_path=./model.onnx \
-  --model_name_or_path ./finetuned_fp32/bert-base-uncased/ \
   --output_dir ./ \
   --per_device_eval_batch_size 64 \
   --max_seq_length 128 \
@@ -182,7 +180,6 @@ python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
 ```
 python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
   --onnx_model_path=./model.onnx \
-  --model_name_or_path ./finetuned_fp32/bert-base-uncased/ \
   --output_dir ./ \
   --per_device_eval_batch_size 64 \
   --max_seq_length 128 \
