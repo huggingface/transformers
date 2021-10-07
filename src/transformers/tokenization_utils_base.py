@@ -3113,7 +3113,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if needs_to_be_padded:
             difference = max_length - len(required_input)
             # Initialize attention mask if not present.
-            if "attention_mask" not in encoded_inputs or len(encoded_inputs["attention_mask"]) == 0:
+            if return_attention_mask and (
+                "attention_mask" not in encoded_inputs or len(encoded_inputs["attention_mask"]) == 0
+            ):
                 encoded_inputs["attention_mask"] = [1] * len(required_input)
 
             if self.padding_side == "right":
