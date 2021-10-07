@@ -627,9 +627,7 @@ class GenerationMixin:
             processors.append(InfNanRemoveLogitsProcessor())
         return processors
 
-    def _get_stopping_criteria(
-        self, max_length: Optional[int], max_time: Optional[float], start_length: int
-    ) -> StoppingCriteriaList:
+    def _get_stopping_criteria(self, max_length: Optional[int], max_time: Optional[float]) -> StoppingCriteriaList:
         stopping_criteria = StoppingCriteriaList()
         if max_length is not None:
             stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
@@ -979,8 +977,7 @@ class GenerationMixin:
             remove_invalid_values=remove_invalid_values,
         )
 
-        cur_len = input_ids.shape[-1]
-        stopping_criteria = self._get_stopping_criteria(max_length=max_length, max_time=max_time, start_length=cur_len)
+        stopping_criteria = self._get_stopping_criteria(max_length=max_length, max_time=max_time)
 
         if is_greedy_gen_mode:
             if num_return_sequences > 1:
