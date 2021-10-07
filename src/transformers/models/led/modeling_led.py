@@ -1860,6 +1860,10 @@ class LEDEncoder(LEDPreTrainedModel):
             hidden_states = hidden_states[:, :-padding_len]
             if output_hidden_states:
                 encoder_states = tuple([state[:, :-padding_len] for state in encoder_states])
+
+            if output_attentions:
+                all_attentions = tuple([state[:, :, :-padding_len, :] for state in all_attentions])
+
         if not return_dict:
             return tuple(
                 v for v in [hidden_states, encoder_states, all_attentions, all_global_attentions] if v is not None
