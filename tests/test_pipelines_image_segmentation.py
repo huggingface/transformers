@@ -58,8 +58,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
     def run_pipeline_test(self, model, tokenizer, feature_extractor):
         image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
         outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
-        for o in outputs:
-            self.assertEqual(o, {"score": ANY(float), "label": ANY(str), "mask": ANY(str)})
+        self.assertEqual(outputs, [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12)
 
         import datasets
 
@@ -75,12 +74,19 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             # L
             dataset[2]["file"],
         ]
-        batch_outputs = image_segmenter(batch, threshold=0.0)
+        outputs = image_segmenter(batch, threshold=0.0)
 
-        self.assertEqual(len(batch), len(batch_outputs))
-        for outputs in batch_outputs:
-            for o in outputs:
-                self.assertEqual(o, {"score": ANY(float), "label": ANY(str), "mask": ANY(str)})
+        self.assertEqual(len(batch), len(outputs))
+        self.assertEqual(
+            outputs,
+            [
+                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12,
+                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12,
+                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12,
+                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12,
+                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12,
+            ],
+        )
 
     @require_tf
     @unittest.skip("Image segmentation not implemented in TF")
