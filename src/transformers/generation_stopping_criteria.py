@@ -72,7 +72,7 @@ class MaxNewTokensCriteria(StoppingCriteria):
 
     def __init__(self, start_length: int, max_new_tokens: int):
         warnings.warn(
-            "The class `Wav2Vec2ForMaskedLM` is deprecated. Please use `MaxLengthCriteria` instead.", FutureWarning
+            "The class `MaxNewTokensCriteria` is deprecated. Please use `MaxLengthCriteria` instead.", FutureWarning
         )
         self.start_length = start_length
         self.max_new_tokens = max_new_tokens
