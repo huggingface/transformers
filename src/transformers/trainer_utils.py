@@ -477,12 +477,13 @@ class TrainerMemoryTracker:
         # memory usage, in particular for GPU, let's report memory usage at the point init was called
         if stages[0] == "init":
             metrics["before_init_mem_cpu"] = self.cpu["init"]["begin"]
-            metrics["before_init_mem_gpu"] = self.gpu["init"]["begin"]
+            if self.torch is not None:
+                metrics["before_init_mem_gpu"] = self.gpu["init"]["begin"]
             # if we also wanted to report any additional memory allocations in between init and
             # whatever the next stage was we could also report this:
             # if self.cpu["init"]["end"] != self.cpu[stage]["begin"]:
             #     metrics[f"after_init_mem_cpu_delta"] = self.cpu[stage]["begin"] - self.cpu["init"]["end"]
-            # if self.gpu["init"]["end"] != self.gpu[stage]["begin"]:
+            # if self.torch is not None and self.gpu["init"]["end"] != self.gpu[stage]["begin"]:
             #     metrics[f"after_init_mem_gpu_delta"] = self.gpu[stage]["begin"] - self.gpu["init"]["end"]
 
     def stop_and_update_metrics(self, metrics=None):
