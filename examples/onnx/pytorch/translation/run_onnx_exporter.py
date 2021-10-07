@@ -29,7 +29,7 @@ import onnxruntime
 import transformers
 from bart_onnx.generation_onnx import BARTBeamSearchGenerator
 from bart_onnx.reduce_onnx_size import remove_dup_initializers
-from transformers import MODEL_MAPPING, BartForConditionalGeneration, BartTokenizer
+from transformers import BartForConditionalGeneration, BartTokenizer
 
 
 logging.basicConfig(
