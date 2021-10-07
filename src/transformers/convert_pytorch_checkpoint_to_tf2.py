@@ -444,7 +444,7 @@ if __name__ == "__main__":
         type=str,
         help="The config json file corresponding to the pre-trained model. \n"
         "This specifies the model architecture. If not given and "
-        "--pytorch_checkpoint_path is not given or is a shortcut name"
+        "--pytorch_checkpoint_path is not given or is a shortcut name "
         "use the configuration associated to the shortcut name on the AWS",
     )
     parser.add_argument(

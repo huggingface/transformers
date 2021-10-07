@@ -109,7 +109,7 @@ class FeaturesManager:
         task = FeaturesManager.feature_to_task(feature)
         if task not in FeaturesManager._TASKS_TO_AUTOMODELS:
             raise KeyError(
-                f"Unknown task: {feature}."
+                f"Unknown task: {feature}. "
                 f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
             )
 

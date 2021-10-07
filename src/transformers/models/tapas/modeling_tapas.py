@@ -54,8 +54,8 @@ if is_scatter_available():
         from torch_scatter import scatter
     except OSError:
         logger.error(
-            "TAPAS models are not usable since `torch_scatter` can't be loaded."
-            "It seems you have `torch_scatter` installed with the wrong CUDA version."
+            "TAPAS models are not usable since `torch_scatter` can't be loaded. "
+            "It seems you have `torch_scatter` installed with the wrong CUDA version. "
             "Please try to reinstall it following the instructions here: https://github.com/rusty1s/pytorch_scatter."
         )
 

@@ -385,7 +385,7 @@ class Trainer:
         self.optimizer, self.lr_scheduler = optimizers
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
-                "Passing a `model_init` is incompatible with providing the `optimizers` argument."
+                "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
@@ -1737,8 +1737,8 @@ class Trainer:
             if backend is None:
                 raise RuntimeError(
                     "At least one of optuna or ray should be installed. "
-                    "To install optuna run `pip install optuna`."
-                    "To install ray run `pip install ray[tune]`."
+                    "To install optuna run `pip install optuna`. "
+                    "To install ray run `pip install ray[tune]`. "
                     "To install sigopt run `pip install sigopt`."
                 )
         backend = HPSearchBackend(backend)

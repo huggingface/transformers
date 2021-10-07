@@ -122,7 +122,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         if not valid_images:
             raise ValueError(
-                "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example),"
+                "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example), "
                 "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
             )
 
