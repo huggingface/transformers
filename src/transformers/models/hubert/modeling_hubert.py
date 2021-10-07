@@ -877,7 +877,6 @@ class HubertModel(HubertPreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
                 device=hidden_states.device,
-                attention_mask=attention_mask,
             )
             hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
 
