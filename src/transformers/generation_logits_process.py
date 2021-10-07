@@ -438,7 +438,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
                     banned_mask_list.append([idx, token])
                 else:
                     logger.error(
-                        f"An invalid bad word ID is defined: {token}. This ID is not contained in the"
+                        f"An invalid bad word ID is defined: {token}. This ID is not contained in the "
                         f"vocabulary, and is therefore ignored."
                     )
         if not banned_mask_list and self.static_bad_words_mask is None:

@@ -905,7 +905,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         """
         if not isinstance(self.tokenizer, (BertTokenizer, BertTokenizerFast)):
             warnings.warn(
-                "DataCollatorForWholeWordMask is only suitable for BertTokenizer-like tokenizers."
+                "DataCollatorForWholeWordMask is only suitable for BertTokenizer-like tokenizers. "
                 "Please refer to the documentation for more information."
             )
 

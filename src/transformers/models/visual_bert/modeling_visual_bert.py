@@ -174,7 +174,7 @@ class VisualBertEmbeddings(nn.Module):
                 if visual_position_embeddings.size(1) != visual_embeds.size(1):
                     if visual_position_embeddings.size(1) < visual_embeds.size(1):
                         raise ValueError(
-                            f"Visual position embeddings length: {visual_position_embeddings.size(1)}"
+                            f"Visual position embeddings length: {visual_position_embeddings.size(1)} "
                             f"should be the same as `visual_embeds` length: {visual_embeds.size(1)}"
                         )
                     visual_position_embeddings = visual_position_embeddings[:, : visual_embeds.size(1), :]
@@ -973,7 +973,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
             if labels.size(-1) != total_size:
                 raise ValueError(
-                    f"The labels provided should have same sequence length as total attention mask."
+                    f"The labels provided should have same sequence length as total attention mask. "
                     f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
                 )
 
@@ -986,7 +986,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
             if labels.size(-1) != total_size:
                 raise ValueError(
-                    f"The labels provided should have same sequence length as total attention mask."
+                    f"The labels provided should have same sequence length as total attention mask. "
                     f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
                 )
 

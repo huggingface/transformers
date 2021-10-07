@@ -230,7 +230,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         if flax_key in pt_model_dict:
             if flax_tensor.shape != pt_model_dict[flax_key].shape:
                 raise ValueError(
-                    f"Flax checkpoint seems to be incorrect. Weight {flax_key_tuple} was expected"
+                    f"Flax checkpoint seems to be incorrect. Weight {flax_key_tuple} was expected "
                     f"to be of shape {pt_model_dict[flax_key].shape}, but is {flax_tensor.shape}."
                 )
             else:

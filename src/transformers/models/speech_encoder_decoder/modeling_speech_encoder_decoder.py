@@ -352,7 +352,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model."
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
                         "Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
                         "and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                     )
@@ -363,9 +363,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
             if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
                 logger.warning(
-                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder."
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
-                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config`"
+                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
                     "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
@@ -513,7 +513,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
-            "Resizing the embedding layers via the SpeechEncoderDecoderModel directly is not supported."
+            "Resizing the embedding layers via the SpeechEncoderDecoderModel directly is not supported. "
             "Please use the respective methods of the wrapped decoder object (model.decoder.resize_token_embeddings(...))"
         )
 

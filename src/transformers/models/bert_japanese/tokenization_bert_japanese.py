@@ -272,7 +272,7 @@ class MecabTokenizer:
                 dic_dir = unidic.DICDIR
                 if not os.path.isdir(dic_dir):
                     raise RuntimeError(
-                        "The unidic dictionary itself is not found."
+                        "The unidic dictionary itself is not found. "
                         "See https://github.com/polm/unidic-py for installation."
                     )
 
