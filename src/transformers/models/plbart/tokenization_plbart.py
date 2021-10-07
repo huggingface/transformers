@@ -34,7 +34,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "plbart-base": 1024,
+    "plbart-base": 1024, # TODO: Actually, the learned position embedding shape is 1026 for the pre-trained model, need to verify if this is fine.
 }
 
 

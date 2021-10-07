@@ -70,7 +70,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--finetuned", action="store_true", help="whether the model is a fine-tuned checkpoint")
     args = parser.parse_args()
-    model = convert_fairseq_mbart_checkpoint_from_disk(
+    model = convert_fairseq_plbart_checkpoint_from_disk(
         args.fairseq_path,
         hf_config_path=args.hf_config,
         finetuned=args.finetuned,
