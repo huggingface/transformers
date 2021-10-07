@@ -436,7 +436,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             - **path** (:obj:`str`) -- A path to the TensorFlow checkpoint.
 
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
-          derived classes of the same architecture adding modules on top of the base model.  
+          derived classes of the same architecture adding modules on top of the base model.
         - **is_parallelizable** (:obj:`bool`) -- A flag indicating whether this model supports model parallelization.
     """
     config_class = None
