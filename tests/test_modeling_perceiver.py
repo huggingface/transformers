@@ -26,6 +26,7 @@ import numpy as np
 from transformers import PerceiverConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.models.auto import get_values
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -37,6 +38,13 @@ if is_torch_available():
 
     from transformers import PerceiverForImageClassification, PerceiverForMaskedLM, PerceiverModel, PerceiverTokenizer
     from transformers.models.perceiver.modeling_perceiver import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST
+
+    from transformers import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+    )
 
 
 if is_vision_available():
@@ -91,7 +99,7 @@ class PerceiverModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.scope = scope
-
+    
     def prepare_config_and_inputs(self):
         inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -216,6 +224,32 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = PerceiverModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PerceiverConfig, hidden_size=37)
 
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+
+        if model_class in [*get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)]:
+            # overwrite inputs_dict
+            inputs_dict["inputs"] = floats_tensor([self.model_tester.batch_size, self.model_tester.num_channels, self.model_tester.image_size, self.model_tester.image_size])
+            inputs_dict["attention_mask"] = None
+        
+        if return_labels:
+            if model_class in [
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class in [
+                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
+                *get_values(MODEL_FOR_MASKED_LM_MAPPING),
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+        
+        return inputs_dict
+    
     def test_config(self):
         # we don't test
         self.config_tester.create_and_test_config_to_json_string()
@@ -287,6 +321,8 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
+            if model_class.__name__ == "PerceiverForImageClassification":
+                config.d_model = 512
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -296,7 +332,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             cross_attentions = outputs.cross_attentions
 
             # check expected number of attentions depending on model class
-            if model.__class__.__name__ == "PerceiverForMaskedLM":
+            if model.__class__.__name__ in ["PerceiverForMaskedLM", "PerceiverForImageClassification"]:
                 expected_num_self_attentions = (
                     self.model_tester.num_blocks * self.model_tester.num_self_attends_per_block
                 )
@@ -348,6 +384,9 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
+            if model_class.__name__ == "PerceiverForImageClassification":
+                config.d_model = 512
+            
             model = model_class(config)
             model.to(torch_device)
             model.eval()
