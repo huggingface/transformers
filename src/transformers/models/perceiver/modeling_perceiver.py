@@ -233,6 +233,10 @@ class PerceiverSelfAttention(nn.Module):
         #     print("First few elements of keys + values before layernorm:", inputs[0,:3,:3])
         #     print("Sum of keys + values before layernorm:", inputs.sum())
 
+        print("Shape of queries:", hidden_states.shape)
+        if inputs is not None:
+            print("Shape of keys+values:", inputs.shape)
+        
         hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
 
@@ -778,6 +782,9 @@ class PerceiverModel(PerceiverPreTrainedModel):
             modality_sizes = None
             inputs_without_pos = None
 
+        print("Shape of inputs before going into perceiver:", inputs.shape)
+        # print("First elements of inputs:", inputs[0,:3,:3])
+        
         if inputs.size()[-1] != self.config.d_model:
             raise ValueError(
                 f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}"
@@ -802,9 +809,6 @@ class PerceiverModel(PerceiverPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_blocks * self.config.num_self_attends_per_block)
 
         embedding_output = self.embeddings(batch_size=batch_size)
-
-        print("Shape of inputs before going into perceiver:", inputs.shape)
-        # print("First elements of inputs:", inputs[0,:3,:3])
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1699,6 +1703,9 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
         return (inputs.shape[0], self.num_labels), None
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
+        
+        print("Shape of decoder query:", query.shape)
+        
         decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
         # B x 1 x num_classes -> B x num_classes
         logits = decoder_outputs.logits[:, 0, :]

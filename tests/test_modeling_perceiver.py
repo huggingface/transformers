@@ -27,14 +27,14 @@ from transformers import PerceiverConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     import torch
     import torch.nn as nn
 
-    from transformers import PerceiverForMaskedLM, PerceiverModel, PerceiverTokenizer
+    from transformers import PerceiverForImageClassification, PerceiverForMaskedLM, PerceiverModel, PerceiverTokenizer
     from transformers.models.perceiver.modeling_perceiver import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -44,6 +44,8 @@ class PerceiverModelTester:
         parent,
         batch_size=13,
         seq_length=7,
+        num_channels=3,
+        image_size=224,
         num_latents=10,
         d_latents=20,
         num_blocks=1,
@@ -63,13 +65,15 @@ class PerceiverModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.num_channels = num_channels
+        self.image_size = image_size
         self.num_latents = num_latents
         self.d_latents = d_latents
         self.num_blocks = num_blocks
         self.num_self_attends_per_block = num_self_attends_per_block
         self.num_self_attention_heads = num_self_attention_heads
         self.num_cross_attention_heads = num_cross_attention_heads
-        self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_labels = use_labels
@@ -113,6 +117,19 @@ class PerceiverModelTester:
 
         return config, inputs, input_mask, token_labels
 
+    def prepare_config_and_inputs_image_classification(self):
+        inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+
+        input_mask = None
+
+        image_labels = None
+        if self.use_labels:
+            image_labels = ids_tensor([self.batch_size], self.num_labels)
+
+        config = self.get_config()
+
+        return config, inputs, input_mask, image_labels
+
     def get_config(self):
         return PerceiverConfig(
             num_latents=self.num_latents,
@@ -141,6 +158,21 @@ class PerceiverModelTester:
         result = model(inputs, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_for_image_classification(
+        self,
+        config,
+        inputs,
+        input_mask,
+        image_labels,
+    ):
+        # set d_model
+        config.d_model = 512
+        model = PerceiverForImageClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(inputs, attention_mask=input_mask, labels=image_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -161,6 +193,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         (
             PerceiverModel,
             PerceiverForMaskedLM,
+            PerceiverForImageClassification,
         )
         if is_torch_available()
         else ()
@@ -186,6 +219,10 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_masked_lm()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_image_classification()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
