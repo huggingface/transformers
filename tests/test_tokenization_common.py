@@ -3582,7 +3582,7 @@ class TrieTest(unittest.TestCase):
         trie.add("[SPECIAL_TOKEN]")
         self.assertEqual(trie.split("This is something [SPECIAL_TOKEN]"), ["This is something ", "[SPECIAL_TOKEN]"])
 
-    def test_trie_blunder(self):
+    def test_trie_suffix_tokens(self):
         trie = Trie()
         trie.add("AB")
         trie.add("B")
