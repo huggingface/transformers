@@ -125,6 +125,7 @@ class PerceiverModelTester:
             config.d_model = 512
             inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         elif model_class.__name__ == "PerceiverForOpticalFlow":
+            config.d_model = 322
             inputs = floats_tensor([self.batch_size, 2, 27, self.train_size[0], self.train_size[1]])
         else:
             raise ValueError(f"Model class {model_class} not supported")
@@ -173,6 +174,7 @@ class PerceiverModelTester:
             initializer_range=self.initializer_range,
             max_position_embeddings=self.max_position_embeddings,
             image_size=self.image_size,
+            train_size=self.train_size,
         )
 
     def create_and_check_for_masked_lm(
@@ -238,7 +240,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             PerceiverModel,
             PerceiverForMaskedLM,
             PerceiverForImageClassification,
-            #PerceiverForOpticalFlow,
+            PerceiverForOpticalFlow,
         )
         if is_torch_available()
         else ()
@@ -259,6 +261,11 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         if model_class in [*get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)]:
             # overwrite inputs_dict
             inputs_dict["inputs"] = floats_tensor([self.model_tester.batch_size, self.model_tester.num_channels, self.model_tester.image_size, self.model_tester.image_size])
+            inputs_dict["attention_mask"] = None
+        
+        elif model_class.__name__ == "PerceiverForOpticalFlow":
+            # overwrite inputs_dict
+            inputs_dict["inputs"] = floats_tensor([self.model_tester.batch_size, 2, 27, self.model_tester.train_size[0], self.model_tester.train_size[1]])
             inputs_dict["attention_mask"] = None
         
         if return_labels:
@@ -428,10 +435,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             )
 
     def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            if model_class.__name__ == "PerceiverForImageClassification":
-                config.d_model = 512
-            
+        def check_hidden_states_output(inputs_dict, config, model_class):            
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -609,9 +613,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             if model_class.__name__ == "PerceiverModel":
                 continue
-
-            if model_class.__name__ == "PerceiverForImageClassification":
-                config.d_model = 512
             
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             

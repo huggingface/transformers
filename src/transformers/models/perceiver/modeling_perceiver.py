@@ -860,8 +860,6 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
             print("Shape of decoder outputs:", logits.shape)
 
-            print("Deocder cross attentions:", decoder_outputs.cross_attentions)
-
             if self.output_postprocessor:
                 logits = self.output_postprocessor(logits, modality_sizes=output_modality_sizes)
 
@@ -2020,11 +2018,10 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
       ..., cos(pi*f_K*dim_d)], where dim_i is pos[:, i] and f_k is the kth frequency band.
     """
 
+    batch_size = pos.shape[0]
+    
     min_freq = 1.0
     # Nyquist frequency at the target resolution:
-
-    print("Shape of pos:", pos.shape)
-
     freq_bands = torch.stack(
         [torch.linspace(start=min_freq, end=res / 2, steps=num_bands) for res in max_resolution], dim=0
     )
@@ -2032,10 +2029,7 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
     # Get frequency bands for each spatial dimension.
     # Output is size [n, d * num_bands]
     per_pos_features = pos[0, :, :][:, :, None] * freq_bands[None, :, :]
-    print("Shape of per_pos_features:", per_pos_features.shape)
     per_pos_features = torch.reshape(per_pos_features, [-1, np.prod(per_pos_features.shape[1:])])
-
-    print("Shape of per_pos_features:", per_pos_features.shape)
 
     if sine_only:
         # Output is size [n, d * num_bands]
@@ -2048,7 +2042,7 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
     # Concatenate the raw input positions.
     if concat_pos:
         # Adds d bands to the encoding.
-        per_pos_features = torch.cat([pos, per_pos_features.unsqueeze(0)], dim=-1)
+        per_pos_features = torch.cat([pos, per_pos_features.expand(batch_size, -1, -1)], dim=-1)
     return per_pos_features
 
 
