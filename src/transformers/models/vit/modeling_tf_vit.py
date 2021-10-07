@@ -186,7 +186,10 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
                 raise ValueError(
                     f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
                 )
-        x = tf.reshape(tensor=self.projection(inputs=tf.transpose(pixel_values, perm=(0, 2, 3, 1)), training=training), shape=(batch_size, self.num_patches, -1))
+        x = tf.reshape(
+            tensor=self.projection(inputs=tf.transpose(pixel_values, perm=(0, 2, 3, 1)), training=training),
+            shape=(batch_size, self.num_patches, -1),
+        )
 
         return x
 
@@ -563,7 +566,9 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
         Returns:
             :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        VISION_DUMMY_INPUTS = tf.random.uniform(shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32)
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
+        )
         return {
             "pixel_values": tf.constant(VISION_DUMMY_INPUTS),
         }

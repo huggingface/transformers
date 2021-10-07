@@ -127,7 +127,10 @@ class TFModelTesterMixin:
             elif model_class in get_values(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                 inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
                 inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in [*get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING), *get_values(TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)]:
+            elif model_class in [
+                *get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
+                *get_values(TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            ]:
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in get_values(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING):
                 inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
@@ -616,7 +619,16 @@ class TFModelTesterMixin:
                 }
             # TODO: A better way to handle vision models
             elif model_class.__name__ in ["TFViTModel", "TFViTForImageClassification"]:
-                input_ids = tf.keras.Input(batch_shape=(3, self.model_tester.num_channels, self.model_tester.image_size, self.model_tester.image_size), name="pixel_values", dtype="float32")
+                input_ids = tf.keras.Input(
+                    batch_shape=(
+                        3,
+                        self.model_tester.num_channels,
+                        self.model_tester.image_size,
+                        self.model_tester.image_size,
+                    ),
+                    name="pixel_values",
+                    dtype="float32",
+                )
             elif model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 input_ids = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
