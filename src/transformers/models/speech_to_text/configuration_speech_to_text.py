@@ -175,9 +175,9 @@ class Speech2TextConfig(PretrainedConfig):
 
         if len(self.conv_kernel_sizes) != self.num_conv_layers:
             raise ValueError(
-                "Configuration for convolutional module is incorrect."
-                "It is required that `len(config.conv_kernel_sizes)` == `config.num_conv_layers`"
-                f"but is `len(config.conv_kernel_sizes) = {len(self.conv_kernel_sizes)}`,"
+                "Configuration for convolutional module is incorrect. "
+                "It is required that `len(config.conv_kernel_sizes)` == `config.num_conv_layers` "
+                f"but is `len(config.conv_kernel_sizes) = {len(self.conv_kernel_sizes)}`, "
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
 
