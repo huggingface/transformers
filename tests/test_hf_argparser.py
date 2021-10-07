@@ -126,8 +126,10 @@ class HfArgumentParserTest(unittest.TestCase):
 
         expected = argparse.ArgumentParser()
         expected.add_argument("--foo", type=string_to_bool, default=False, const=True, nargs="?")
-        expected.add_argument("--no_baz", action="store_false", dest="baz")
         expected.add_argument("--baz", type=string_to_bool, default=True, const=True, nargs="?")
+        # A boolean no_* argument always has to come after its "default: True" regular counter-part
+        # and its default must be set to False
+        expected.add_argument("--no_baz", action="store_false", default=False, dest="baz")
         expected.add_argument("--opt", type=string_to_bool, default=None)
         self.argparsersEqual(parser, expected)
 

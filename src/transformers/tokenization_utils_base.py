@@ -1722,7 +1722,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
             msg = (
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
             )
 
@@ -2223,8 +2224,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         elif padding is not False:
             if padding is True:
                 if verbose:
-                    if max_length is not None:
-                        warnings.warn("`max_length` is ignored when `padding`=`True`.")
+                    if max_length is not None and (truncation is False or truncation == "do_not_truncate"):
+                        warnings.warn(
+                            "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
+                            "To pad to max length, use `padding='max_length'`."
+                        )
                     if old_pad_to_max_length is not False:
                         warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch

@@ -17,55 +17,54 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
+from random import randint
 from typing import Optional
 
 import datasets
 import numpy as np
-import torch
-from datasets import load_dataset
-from PIL import Image
-from torchvision.transforms import (
-    CenterCrop,
-    Compose,
-    Normalize,
-    RandomHorizontalFlip,
-    RandomResizedCrop,
-    Resize,
-    ToTensor,
-)
+import torchaudio
+from datasets import DatasetDict, load_dataset
 
 import transformers
 from transformers import (
-    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
-    AutoModelForImageClassification,
+    AutoModelForAudioClassification,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
-""" Fine-tuning a 🤗 Transformers model for image classification"""
-
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.12.0.dev0")
+check_min_version("4.11.0.dev0")
 
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
-
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+require_version("datasets>=1.12.1", "To fix: pip install -r examples/pytorch/audio-classification/requirements.txt")
 
 
-def pil_loader(path: str):
-    with open(path, "rb") as f:
-        im = Image.open(f)
-        return im.convert("RGB")
+def load_audio(path: str, sample_rate: int = 16000):
+    wav, sr = torchaudio.load(path)
+    # convert multi-channel audio to mono
+    wav = wav.mean(0)
+    # standardize sample rate if it varies in the dataset
+    resampler = torchaudio.transforms.Resample(sr, sample_rate)
+    wav = resampler(wav)
+    return wav
+
+
+def random_subsample(wav: np.ndarray, max_length: float, sample_rate: int = 16000):
+    """Randomly sample chunks of `max_length` seconds from the input audio"""
+    sample_length = int(round(sample_rate * max_length))
+    if len(wav) <= sample_length:
+        return wav
+    random_offset = randint(0, len(wav) - sample_length - 1)
+    return wav[random_offset : random_offset + sample_length]
 
 
 @dataclass
@@ -77,16 +76,35 @@ class DataTrainingArguments:
     the command line.
     """
 
-    dataset_name: Optional[str] = field(
-        default="nateraw/image-folder", metadata={"help": "Name of a dataset from the datasets package"}
-    )
+    dataset_name: Optional[str] = field(default=None, metadata={"help": "Name of a dataset from the datasets package"})
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."})
-    validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
-    train_val_split: Optional[float] = field(
-        default=0.15, metadata={"help": "Percent to split off of train for validation."}
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "A file containing the training audio paths and labels."}
+    )
+    eval_file: Optional[str] = field(
+        default=None, metadata={"help": "A file containing the validation audio paths and labels."}
+    )
+    train_split_name: Optional[str] = field(
+        default="train",
+        metadata={
+            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
+        },
+    )
+    eval_split_name: Optional[str] = field(
+        default="validation",
+        metadata={
+            "help": "The name of the training data set split to use (via the datasets library). Defaults to "
+            "'validation'"
+        },
+    )
+    audio_column_name: Optional[str] = field(
+        default="file",
+        metadata={"help": "The name of the dataset column containing the audio data. Defaults to 'file'"},
+    )
+    label_column_name: Optional[str] = field(
+        default="label", metadata={"help": "The name of the dataset column containing the labels. Defaults to 'label'"}
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -102,14 +120,10 @@ class DataTrainingArguments:
             "value if set."
         },
     )
-
-    def __post_init__(self):
-        data_files = dict()
-        if self.train_dir is not None:
-            data_files["train"] = self.train_dir
-        if self.validation_dir is not None:
-            data_files["val"] = self.validation_dir
-        self.data_files = data_files if data_files else None
+    max_length_seconds: Optional[float] = field(
+        default=20,
+        metadata={"help": "Audio clips will be randomly cut to this length during training if the value is set."},
+    )
 
 
 @dataclass
@@ -119,24 +133,26 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="google/vit-base-patch16-224-in21k",
+        default="facebook/wav2vec2-base",
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
-    )
-    model_type: Optional[str] = field(
-        default=None,
-        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from the Hub"}
     )
     model_revision: str = field(
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
     feature_extractor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    freeze_feature_extractor: Optional[bool] = field(
+        default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+    )
+    attention_mask: Optional[bool] = field(
+        default=True, metadata={"help": "Whether to generate an attention mask in the feature extractor."}
+    )
     use_auth_token: bool = field(
         default=False,
         metadata={
@@ -144,12 +160,6 @@ class ModelArguments:
             "with private models)."
         },
     )
-
-
-def collate_fn(examples):
-    pixel_values = torch.stack([example["pixel_values"] for example in examples])
-    labels = torch.tensor([example["labels"] for example in examples])
-    return {"pixel_values": pixel_values, "labels": labels}
 
 
 def main():
@@ -180,10 +190,13 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu} "
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
+
+    # Set seed before initializing model.
+    set_seed(training_args.seed)
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -192,7 +205,7 @@ def main():
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
+                "Use --overwrite_output_dir to train from scratch."
             )
         elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
             logger.info(
@@ -200,25 +213,65 @@ def main():
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
 
-    # Initialize our dataset and prepare it for the 'image-classification' task.
-    ds = load_dataset(
-        data_args.dataset_name,
-        data_args.dataset_config_name,
-        data_files=data_args.data_files,
-        cache_dir=model_args.cache_dir,
-        task="image-classification",
+    # Initialize our dataset and prepare it for the audio classification task.
+    raw_datasets = DatasetDict()
+    raw_datasets["train"] = load_dataset(
+        data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
+    )
+    raw_datasets["eval"] = load_dataset(
+        data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
     )
 
-    # If we don't have a validation split, split off a percentage of train as validation.
-    data_args.train_val_split = None if "validation" in ds.keys() else data_args.train_val_split
-    if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
-        split = ds["train"].train_test_split(data_args.train_val_split)
-        ds["train"] = split["train"]
-        ds["validation"] = split["test"]
+    if data_args.audio_column_name not in raw_datasets["train"].column_names:
+        raise ValueError(
+            f"--audio_column_name {data_args.audio_column_name} not found in dataset '{data_args.dataset_name}'. "
+            "Make sure to set `--audio_column_name` to the correct audio column - one of "
+            f"{', '.join(raw_datasets['train'].column_names)}."
+        )
+
+    if data_args.label_column_name not in raw_datasets["train"].column_names:
+        raise ValueError(
+            f"--label_column_name {data_args.label_column_name} not found in dataset '{data_args.dataset_name}'. "
+            "Make sure to set `--label_column_name` to the correct text column - one of "
+            f"{', '.join(raw_datasets['train'].column_names)}."
+        )
+
+    # Setting `return_attention_mask=True` is the way to get a correctly masked mean-pooling over
+    # transformer outputs in the classifier, but it doesn't always lead to better accuracy
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
+        model_args.feature_extractor_name or model_args.model_name_or_path,
+        return_attention_mask=model_args.attention_mask,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
+
+    def train_transforms(batch):
+        """Apply train_transforms across a batch."""
+        output_batch = {"input_values": []}
+        for f in batch[data_args.audio_column_name]:
+            wav = load_audio(f, sample_rate=feature_extractor.sampling_rate)
+            wav = random_subsample(
+                wav, max_length=data_args.max_length_seconds, sample_rate=feature_extractor.sampling_rate
+            )
+            output_batch["input_values"].append(wav)
+        output_batch["labels"] = [label for label in batch[data_args.label_column_name]]
+
+        return output_batch
+
+    def val_transforms(batch):
+        """Apply val_transforms across a batch."""
+        output_batch = {"input_values": []}
+        for f in batch[data_args.audio_column_name]:
+            wav = load_audio(f, sample_rate=feature_extractor.sampling_rate)
+            output_batch["input_values"].append(wav)
+        output_batch["labels"] = [label for label in batch[data_args.label_column_name]]
+
+        return output_batch
 
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
-    labels = ds["train"].features["labels"].names
+    labels = raw_datasets["train"].features[data_args.label_column_name].names
     label2id, id2label = dict(), dict()
     for i, label in enumerate(labels):
         label2id[label] = str(i)
@@ -227,23 +280,24 @@ def main():
     # Load the accuracy metric from the datasets package
     metric = datasets.load_metric("accuracy")
 
-    # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
-    # predictions and label_ids field) and has to return a dictionary string to float.
-    def compute_metrics(p):
+    # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with
+    # `predictions` and `label_ids` fields) and has to return a dictionary string to float.
+    def compute_metrics(eval_pred):
         """Computes accuracy on a batch of predictions"""
-        return metric.compute(predictions=np.argmax(p.predictions, axis=1), references=p.label_ids)
+        predictions = np.argmax(eval_pred.predictions, axis=1)
+        return metric.compute(predictions=predictions, references=eval_pred.label_ids)
 
     config = AutoConfig.from_pretrained(
         model_args.config_name or model_args.model_name_or_path,
         num_labels=len(labels),
         label2id=label2id,
         id2label=id2label,
-        finetuning_task="image-classification",
+        finetuning_task="audio-classification",
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    model = AutoModelForImageClassification.from_pretrained(
+    model = AutoModelForAudioClassification.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
         config=config,
@@ -251,69 +305,39 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.feature_extractor_name or model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
 
-    # Define torchvision transforms to be applied to each image.
-    normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
-    _train_transforms = Compose(
-        [
-            RandomResizedCrop(feature_extractor.size),
-            RandomHorizontalFlip(),
-            ToTensor(),
-            normalize,
-        ]
-    )
-    _val_transforms = Compose(
-        [
-            Resize(feature_extractor.size),
-            CenterCrop(feature_extractor.size),
-            ToTensor(),
-            normalize,
-        ]
-    )
-
-    def train_transforms(example_batch):
-        """Apply _train_transforms across a batch."""
-        example_batch["pixel_values"] = [_train_transforms(pil_loader(f)) for f in example_batch["image_file_path"]]
-        return example_batch
-
-    def val_transforms(example_batch):
-        """Apply _val_transforms across a batch."""
-        example_batch["pixel_values"] = [_val_transforms(pil_loader(f)) for f in example_batch["image_file_path"]]
-        return example_batch
+    # freeze the convolutional waveform encoder
+    if model_args.freeze_feature_extractor:
+        model.freeze_feature_extractor()
 
     if training_args.do_train:
-        if "train" not in ds:
+        if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
         if data_args.max_train_samples is not None:
-            ds["train"] = ds["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+            raw_datasets["train"] = (
+                raw_datasets["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+            )
         # Set the training transforms
-        ds["train"].set_transform(train_transforms)
+        raw_datasets["train"].set_transform(train_transforms, output_all_columns=False)
 
     if training_args.do_eval:
-        if "validation" not in ds:
+        if "eval" not in raw_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         if data_args.max_eval_samples is not None:
-            ds["validation"] = (
-                ds["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+            raw_datasets["eval"] = (
+                raw_datasets["eval"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
             )
         # Set the validation transforms
-        ds["validation"].set_transform(val_transforms)
+        raw_datasets["eval"].set_transform(val_transforms, output_all_columns=False)
 
-    # Initalize our trainer
+    # Initialize our trainer
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=ds["train"] if training_args.do_train else None,
-        eval_dataset=ds["validation"] if training_args.do_eval else None,
+        train_dataset=raw_datasets["train"] if training_args.do_train else None,
+        eval_dataset=raw_datasets["eval"] if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=feature_extractor,
-        data_collator=collate_fn,
     )
 
     # Training
@@ -338,9 +362,9 @@ def main():
     # Write model card and (optionally) push to hub
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
-        "tasks": "image-classification",
+        "tasks": "audio-classification",
         "dataset": data_args.dataset_name,
-        "tags": ["image-classification"],
+        "tags": ["audio-classification"],
     }
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)
