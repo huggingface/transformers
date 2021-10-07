@@ -152,13 +152,11 @@ class PerceiverConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         # image classification attributes
-
+        self.image_size = image_size
         # flow attributes
         self.train_size = train_size
-
         # multimodal autoencoding attributes
         self.num_frames = num_frames
         self.audio_samples_per_frame = audio_samples_per_frame
         self.samples_per_patch = samples_per_patch
-        self.image_size = image_size
         self.output_shape = output_shape

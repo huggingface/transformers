@@ -834,7 +834,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         print("Shape of encoder outputs:", sequence_output.shape)
         # print("Encoder outputs:", sequence_output[0, :3, :3])
 
-        print("Modality sizes before postprocessing:", modality_sizes)
+        #print("Modality sizes before postprocessing:", modality_sizes)
 
         logits = None
         if self.decoder:
@@ -859,6 +859,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
                     encoder_outputs = encoder_outputs + decoder_outputs.cross_attentions
 
             print("Shape of decoder outputs:", logits.shape)
+
+            print("Deocder cross attentions:", decoder_outputs.cross_attentions)
 
             if self.output_postprocessor:
                 logits = self.output_postprocessor(logits, modality_sizes=output_modality_sizes)
@@ -896,7 +898,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
                 num_heads=8,
                 use_query_residual=False,
                 final_project=False,
-                trainable_position_encoding_kwargs=dict(num_channels=config.d_model),
+                trainable_position_encoding_kwargs=dict(num_channels=config.d_model, index_dims=config.max_position_embeddings),
             ),
         )
         self.embedding_decoder = PerceiverEmbeddingDecoder(config)
@@ -976,12 +978,13 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
                 project_pos_dim=256,
                 trainable_position_encoding_kwargs=dict(
                     num_channels=256,
+                    index_dims=config.image_size**2,  
                 ),
             ),
             decoder=PerceiverClassificationDecoder(
                 config,
                 num_channels=config.d_latents,
-                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents),
+                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
                 use_query_residual=True,
             ),
         )
@@ -1015,7 +1018,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        logits = outputs.logits
+        logits = outputs.logits if return_dict else outputs[0]
 
         loss = None
         if labels is not None:
@@ -1026,7 +1029,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
             else:
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
+        
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
@@ -1059,7 +1062,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
             decoder=PerceiverClassificationDecoder(
                 config,
                 num_channels=config.d_latents,
-                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents),
+                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
                 use_query_residual=True,
             ),
         )
@@ -1138,7 +1141,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
             decoder=PerceiverClassificationDecoder(
                 config,
                 num_channels=config.d_latents,
-                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents),
+                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
                 use_query_residual=True,
             ),
         )
@@ -1393,6 +1396,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     position_encoding_type="trainable",
                     trainable_position_encoding_kwargs=dict(
                         num_channels=1024,
+                        index_dims=1,
                     ),
                 ),
             },
@@ -1477,20 +1481,23 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
 
 def build_position_encoding(
     position_encoding_type,
-    index_dims,
     out_channels=None,
     project_pos_dim=-1,
     trainable_position_encoding_kwargs=None,
     fourier_position_encoding_kwargs=None,
 ):
-    """Builds the position encoding."""
+    """Builds the position encoding.
+    
+    Args:
+    - out_channels: refers to the number of channels of the position encodings.
+    - project_pos_dim: if specified, will project the position encodings to this dimension.
+    
+    """
 
     if position_encoding_type == "trainable":
         if not trainable_position_encoding_kwargs:
             raise ValueError("Make sure to pass trainable_position_encoding_kwargs")
-        output_pos_enc = PerceiverTrainablePositionEncoding(
-            index_dim=np.prod(index_dims), **trainable_position_encoding_kwargs
-        )
+        output_pos_enc = PerceiverTrainablePositionEncoding(**trainable_position_encoding_kwargs)
     elif position_encoding_type == "fourier":
         # We don't use the index_dims argument, as this is only known during the forward pass
         if not fourier_position_encoding_kwargs:
@@ -1582,7 +1589,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         self.position_encoding_type = position_encoding_type
         if position_encoding_type != "none":
             self.output_position_encodings, self.positions_projection = build_position_encoding(
-                position_encoding_type=position_encoding_type, index_dims=output_index_dims, **position_encoding_kwargs
+                position_encoding_type=position_encoding_type, **position_encoding_kwargs
             )
 
         self.output_index_dims = output_index_dims
@@ -1718,6 +1725,7 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
 
     def forward(self, query, z, query_mask=None, output_attentions=False):        
         decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
+
         # B x 1 x num_classes -> B x num_classes
         logits = decoder_outputs.logits[:, 0, :]
 
@@ -2076,8 +2084,9 @@ class PerceiverAbstractPositionEncoding(nn.Module, metaclass=abc.ABCMeta):
 class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
     """Trainable position encoding."""
 
-    def __init__(self, index_dim, num_channels=128):
+    def __init__(self, index_dims, num_channels=128):
         super().__init__()
+        index_dim=np.prod(index_dims) 
         self.position_embeddings = nn.Parameter(torch.randn(index_dim, num_channels))
 
     def forward(self, batch_size):
@@ -2277,7 +2286,6 @@ class PerceiverImagePreprocessor(nn.Module):
         conv2d_use_batchnorm: bool = True,
         concat_or_add_pos: str = "concat",
         project_pos_dim: int = -1,
-        index_dims=50176,  # only relevant when position_encoding_type = "trainable"
         **position_encoding_kwargs,
     ):
         super().__init__()
@@ -2323,7 +2331,6 @@ class PerceiverImagePreprocessor(nn.Module):
         # Position embeddings
         self.position_embeddings, self.positions_projection = build_position_encoding(
             position_encoding_type=position_encoding_type,
-            index_dims=index_dims,
             out_channels=out_channels,
             project_pos_dim=project_pos_dim,
             **position_encoding_kwargs,
@@ -2380,12 +2387,12 @@ class PerceiverImagePreprocessor(nn.Module):
             inputs = self.convnet(inputs)
 
         elif self.prep_type == "conv1x1":
-            print("Shape of inputs:", inputs.shape)
+            #print("Shape of inputs:", inputs.shape)
 
             # map inputs to self.out_channels
             inputs = self.convnet_1x1(inputs)
 
-            print("Shape of inputs after conv1x1:", inputs.shape)
+            #print("Shape of inputs after conv1x1:", inputs.shape)
 
         elif self.prep_type == "pixels":
             # if requested, downsamples in the crudest way
@@ -2456,7 +2463,6 @@ class PerceiverAudioPreprocessor(nn.Module):
         position_encoding_type: str = "fourier",
         concat_or_add_pos: str = "concat",
         out_channels=64,
-        index_dims=30720,  # only relevant when position_encoding_type = "trainable"
         project_pos_dim=-1,
         **position_encoding_kwargs,
     ):
@@ -2476,7 +2482,6 @@ class PerceiverAudioPreprocessor(nn.Module):
         # Position embeddings
         self.position_embeddings, self.positions_projection = build_position_encoding(
             position_encoding_type=position_encoding_type,
-            index_dims=index_dims,
             out_channels=out_channels,
             project_pos_dim=project_pos_dim,
             **position_encoding_kwargs,

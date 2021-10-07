@@ -324,6 +324,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
         if task == "image_classification":
+            config.image_size = 224
             model = PerceiverForImageClassification(config)
         elif task == "image_classification_fourier":
             config.d_model = 261
