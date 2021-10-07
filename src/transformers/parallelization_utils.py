@@ -746,6 +746,7 @@ class MPU(object):
                 dist.broadcast(
                     tensor=_input,
                     src=self.get_tensor_model_parallel_src_rank(),
+                    group=self.get_tensor_model_parallel_group(),
                 )
             elif isinstance(_input, Iterable):
                 self.synchronize_across_tensor_model_parallel_world(*_input)
@@ -759,6 +760,7 @@ class MPU(object):
                 dist.broadcast(
                     tensor=kwargs[k],
                     src=self.get_tensor_model_parallel_src_rank(),
+                    group=self.get_tensor_model_parallel_group(),
                 )
             elif isinstance(kwargs[k], Iterable):
                 self.synchronize_across_tensor_model_parallel_world(**kwargs[k])
