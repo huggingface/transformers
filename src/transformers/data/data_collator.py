@@ -1060,11 +1060,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         indices_random = (
             np.random.binomial(1, 0.5, size=labels.shape).astype(np.bool) & masked_indices & ~indices_replaced
         )
-        random_words = np.random.randint(
-            low=0, high=len(self.tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64
-        )
-        if any(random_words):
-            inputs[indices_random] = random_words[indices_random]
+        random_words = np.random.randint(low=0, high=len(self.tokenizer), size=labels.shape, dtype=np.int64)
+        inputs[indices_random] = random_words[indices_random]
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
