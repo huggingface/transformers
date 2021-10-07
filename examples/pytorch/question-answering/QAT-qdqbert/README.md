@@ -15,16 +15,9 @@ limitations under the License.
 
 # Huggingface BERT Quantization Example
 
-Forked from `https://github.com/huggingface/transformers/tree/v4.9.1`
-
-Original README [here](README_org.md)
-
-Mainly modified the following files:
- * examples/pytorch/question-answering/QAT-qdqbert/
- * src/transformers/models/qdqbert/
 
 Quantized tensors:
- * embedding weights
+ <!---* embedding weights-->
  * encoder
    * linear layer inputs and weights
    * matmul inputs
@@ -169,6 +162,38 @@ python3 run_qa.py \
   --tokenizer_name bert-base-uncased
 ```
 
+## Evaluate the FP32 ONNX model inference with TensorRT
+
+```
+python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
+  --onnx_model_path=./model.onnx \
+  --model_name_or_path ./finetuned_fp32/bert-base-uncased/ \
+  --output_dir ./ \
+  --per_device_eval_batch_size 64 \
+  --max_seq_length 128 \
+  --doc_stride 32 \
+  --dataset_name squad \
+  --tokenizer_name bert-base-uncased \
+  --seed 42
+```
+
+## Evaluate the FP32 ONNX model inference in FP16 with TensorRT
+
+```
+python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
+  --onnx_model_path=./model.onnx \
+  --model_name_or_path ./finetuned_fp32/bert-base-uncased/ \
+  --output_dir ./ \
+  --per_device_eval_batch_size 64 \
+  --max_seq_length 128 \
+  --doc_stride 32 \
+  --dataset_name squad \
+  --tokenizer_name bert-base-uncased \
+  --fp16 \
+  --seed 42
+```
+
+<!---
 ## FP16 Fine-tuning for comparison
 
 Finetune a high precision model with:
@@ -203,3 +228,4 @@ python3 run_qa.py \
   --tokenizer_name bert-base-uncased \
   --fp16
 ```
+-->
