@@ -17,7 +17,7 @@
 
 import collections.abc
 import math
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -138,7 +138,7 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
 
         # add the [CLS] token to the embedded patch tokens
         cls_tokens = tf.repeat(self.cls_token, repeats=batch_size, axis=0)
-        embeddings = tf.concat((cls_tokens, embeddings), dim=1)
+        embeddings = tf.concat((cls_tokens, embeddings), axis=1)
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
@@ -172,7 +172,7 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
             filters=embed_dim,
             kernel_size=patch_size,
             strides=patch_size,
-            data_format="channels_first",
+            data_format="channels_last",
             kernel_initializer=get_initializer(initializer_range),
             name="projection",
         )
@@ -186,12 +186,8 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
                 raise ValueError(
                     f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
                 )
-        x = tf.transpose(
-            tf.reshape(
-                tensor=self.projection(inputs=pixel_values, training=training), shape=(batch_size, num_channels, -1)
-            ),
-            perm=(0, 2, 1),
-        )
+        x = tf.reshape(tensor=self.projection(inputs=tf.transpose(pixel_values, perm=(0, 2, 3, 1)), training=training), shape=(batch_size, self.num_patches, -1))
+
         return x
 
 
@@ -559,6 +555,19 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
     config_class = ViTConfig
     base_model_prefix = "vit"
 
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32)
+        return {
+            "pixel_values": tf.constant(VISION_DUMMY_INPUTS),
+        }
+
 
 VIT_START_DOCSTRING = r"""
 
@@ -800,7 +809,7 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
             inputs["pixel_values"] = inputs.pop("input_ids")
 
         outputs = self.vit(
-            input_ids=inputs["pixel_values"],
+            pixel_values=inputs["pixel_values"],
             head_mask=inputs["head_mask"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],

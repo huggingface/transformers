@@ -49,6 +49,7 @@ if is_tf_available():
 
     from transformers import (
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -126,7 +127,7 @@ class TFModelTesterMixin:
             elif model_class in get_values(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                 inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
                 inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+            elif model_class in [*get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING), *get_values(TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)]:
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in get_values(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING):
                 inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
@@ -613,6 +614,9 @@ class TFModelTesterMixin:
                     ),
                     "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
+            # TODO: A better way to handle vision models
+            elif model_class.__name__ in ["TFViTModel", "TFViTForImageClassification"]:
+                input_ids = tf.keras.Input(batch_shape=(3, self.model_tester.num_channels, self.model_tester.image_size, self.model_tester.image_size), name="pixel_values", dtype="float32")
             elif model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 input_ids = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
@@ -647,6 +651,8 @@ class TFModelTesterMixin:
 
             inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             input_ids = inputs_keywords.pop("input_ids", None)
+            if input_ids is None:
+                input_ids = inputs_keywords.pop("pixel_values", None)
             outputs_keywords = model(input_ids, **inputs_keywords)
             output_dict = outputs_dict[0].numpy()
             output_keywords = outputs_keywords[0].numpy()
@@ -1236,7 +1242,8 @@ class TFModelTesterMixin:
 
                 # Test that model correctly compute the loss with kwargs
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-                input_ids = prepared_for_class.pop("input_ids")
+                input_name = "input_ids" if "input_ids" in prepared_for_class else "pixel_values"
+                input_ids = prepared_for_class.pop(input_name)
 
                 loss = model(input_ids, **prepared_for_class)[0]
                 self.assertEqual(loss.shape, [loss_size])
@@ -1255,7 +1262,7 @@ class TFModelTesterMixin:
                 signature_names = list(signature.keys())
 
                 # Create a dictionary holding the location of the tensors in the tuple
-                tuple_index_mapping = {0: "input_ids"}
+                tuple_index_mapping = {0: input_name}
                 for label_key in label_keys:
                     label_key_index = signature_names.index(label_key)
                     tuple_index_mapping[label_key_index] = label_key
