@@ -81,7 +81,7 @@ class PerceiverModelOutput(ModelOutput):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
             weighted average in the self-attention heads.
-        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` and ``config.add_cross_attention=True`` is passed or when ``config.output_attentions=True``):
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
             attention softmax, used to compute the weighted average in the cross-attention heads.
@@ -102,7 +102,7 @@ class PerceiverDecoderOutput(ModelOutput):
     Args:
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_labels)`):
             Output of the basic decoder.
-        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` and ``config.add_cross_attention=True`` is passed or when ``config.output_attentions=True``):
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
             attention softmax, used to compute the weighted average in the cross-attention heads.
@@ -129,6 +129,7 @@ class PerceiverClassificationDecoderOutput(ModelOutput):
 class PerceiverMaskedLMOutput(ModelOutput):
     """
     Base class for Perceiver's masked language model outputs.
+
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Masked language modeling (MLM) loss.
@@ -136,14 +137,13 @@ class PerceiverMaskedLMOutput(ModelOutput):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+            each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` and ``config.add_cross_attention=True`` is passed or when ``config.output_attentions=True``):
+            num_latents, num_latents)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
             attention softmax, used to compute the weighted average in the cross-attention heads.
@@ -830,8 +830,20 @@ class PerceiverModel(PerceiverPreTrainedModel):
             decoder_query = self.decoder.decoder_query(
                 inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_output_points
             )
-            decoder_outputs = self.decoder(decoder_query, z=sequence_output, query_mask=extended_attention_mask)
+            decoder_outputs = self.decoder(
+                decoder_query,
+                z=sequence_output,
+                query_mask=extended_attention_mask,
+                output_attentions=output_attentions,
+            )
             logits = decoder_outputs.logits
+
+            # add cross-attentions of decoder
+            if output_attentions and decoder_outputs.cross_attentions is not None:
+                if return_dict:
+                    encoder_outputs.cross_attentions = encoder_outputs.cross_attentions + decoder_outputs.cross_attentions
+                else:
+                    encoder_outputs = encoder_outputs + decoder_outputs.cross_attentions
 
             print("Shape of decoder outputs:", logits.shape)
 
@@ -864,7 +876,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
             decoder=PerceiverBasicDecoder(
                 config,
                 output_num_channels=config.d_latents,
-                output_index_dims=config.max_position_embeddings, # we need to define the seq_len of the inputs beforehand
+                output_index_dims=config.max_position_embeddings,  # we need to define the seq_len of the inputs beforehand
                 num_channels=config.d_model,
                 qk_channels=8 * 32,
                 v_channels=config.d_model,
@@ -913,7 +925,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
             return_dict=return_dict,
         )
 
-        logits = self.embedding_decoder(outputs.logits, embedding_layer=self.perceiver.input_preprocessor.embeddings)
+        logits = self.embedding_decoder(outputs.logits if return_dict else outputs[0], embedding_layer=self.perceiver.input_preprocessor.embeddings)
 
         masked_lm_loss = None
         if labels is not None:
@@ -1636,9 +1648,9 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
 
         # print("Shape of z before decoder cross attention:", z.shape)
         # print("First elements of z before decoder cross attention:", z[0,:3,:3])
-        
+
         cross_attentions = () if output_attentions else None
-        
+
         layer_outputs = self.decoding_cross_attention(
             query,
             attention_mask=query_mask,
@@ -1650,7 +1662,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         output = layer_outputs[0]
 
         if output_attentions:
-            cross_attentions = cross_attentions + (layer_outputs[2],)
+            cross_attentions = cross_attentions + (layer_outputs[1],)
 
         # print("Shape of output after decoder cross attention:", output.shape)
         # print("First elements of output after decoder cross attention:", output[0,:3,:3])
@@ -1690,7 +1702,7 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
         decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
         # B x 1 x num_classes -> B x num_classes
         logits = decoder_outputs.logits[:, 0, :]
-        
+
         return PerceiverDecoderOutput(logits=logits, cross_attentions=decoder_outputs.cross_attentions)
 
 
@@ -1759,7 +1771,7 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
 
     def forward(self, query, z, query_mask=None):
         decoder_outputs = self.decoder(query, z)
-        
+
         output = torch.reshape(decoder_outputs.output, self.output_shape + [output.shape[-1]])
         return PerceiverDecoderOutput(logits=output, cross_attentions=decoder_outputs.cross_attentions)
 
@@ -1872,7 +1884,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
     def forward(self, query, z, query_mask=None, output_attentions=False):
         # B x 1 x num_classes -> B x num_classes
         decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
-        
+
         return decoder_outputs
 
 

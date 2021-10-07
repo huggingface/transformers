@@ -123,7 +123,7 @@ class PerceiverConfig(PretrainedConfig):
         max_position_embeddings=2048,
         train_size=[368, 496],
         num_frames=16,
-        audio_samples_per_frame=1920, # 48000 // 25
+        audio_samples_per_frame=1920,  # 48000 // 25
         samples_per_patch=16,
         image_size=56,
         output_shape=[1, 16, 224, 224],

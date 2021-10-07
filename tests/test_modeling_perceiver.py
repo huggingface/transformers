@@ -15,10 +15,12 @@
 """ Testing suite for the PyTorch Perceiver model. """
 
 
-import unittest
-
-import inspect
 import copy
+import inspect
+import unittest
+import tempfile
+from typing import Dict, List, Tuple
+
 import numpy as np
 
 from transformers import PerceiverConfig, is_torch_available
@@ -95,7 +97,7 @@ class PerceiverModelTester:
         config = self.get_config()
 
         return config, inputs, input_mask, sequence_labels, token_labels
-    
+
     def prepare_config_and_inputs_masked_lm(self):
         inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -168,13 +170,13 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     maxDiff = None
-    
+
     def setUp(self):
         self.model_tester = PerceiverModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PerceiverConfig, hidden_size=37)
 
     def test_config(self):
-        # we don't test 
+        # we don't test
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
         self.config_tester.create_and_test_config_from_and_save_pretrained()
@@ -193,7 +195,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             # we overwrite this, as the embeddings of Perceiver are an instance of nn.Parameter
             # and Perceiver doesn't support get_output_embeddings
             self.assertIsInstance(model.get_input_embeddings(), (nn.Parameter))
-    
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -205,14 +207,14 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["inputs"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-    
+
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             if model_class.__name__ == "PerceiverModel":
                 continue
-            
+
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -226,13 +228,13 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             out_2 = out_2[~np.isnan(out_2)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
-    
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
         seq_len = getattr(self.model_tester, "num_latents", None)
-        
+
         for model_class in self.all_model_classes:
             if model_class.__name__ == "PerceiverModel":
                 continue
@@ -250,10 +252,11 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             # check expected number of attentions depending on model class
             if model.__class__.__name__ == "PerceiverForMaskedLM":
-                expected_num_self_attentions = self.model_tester.num_blocks * self.model_tester.num_self_attends_per_block
-                # TODO this should become 2, as we have one in the PerceiverEncoder, and one in PerceiverBasicDecoder
-                # for now, PerceiverBasicDecoder doesn't support returning cross-attentions
-                expected_num_cross_attentions = 1 
+                expected_num_self_attentions = (
+                    self.model_tester.num_blocks * self.model_tester.num_self_attends_per_block
+                )
+                # we expect to have 2 cross-attentions, namely one in the PerceiverEncoder, and one in PerceiverBasicDecoder
+                expected_num_cross_attentions = 2
             else:
                 # todo
                 pass
@@ -297,7 +300,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_self_attention_heads, seq_len, seq_len],
             )
-    
+
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -333,6 +336,105 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            with torch.no_grad():
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+                def recursive_check(tuple_object, dict_object):
+                    if isinstance(tuple_object, (List, Tuple)):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
+                    else:
+                        self.assertTrue(
+                            torch.allclose(
+                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                            ),
+                            msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`: {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}.",
+                        )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "PerceiverModel":
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+            )
+    
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = PerceiverForMaskedLM
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        output = outputs[0]
+    
+        # Encoder-only model
+        hidden_states = outputs.hidden_states[0]
+        attentions = outputs.attentions[0]
+
+        hidden_states.retain_grad()
+        attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states.grad)
+        self.assertIsNotNone(attentions.grad)
     
     def test_feed_forward_chunking(self):
         (
@@ -359,14 +461,43 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
             self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
+    def test_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "PerceiverModel":
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            out_2 = outputs[0].cpu().numpy()
+            out_2[np.isnan(out_2)] = 0
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname)
+                model.to(torch_device)
+                with torch.no_grad():
+                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+                # Make sure we don't have nans
+                out_1 = after_outputs[0].cpu().numpy()
+                out_1[np.isnan(out_1)] = 0
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
+    
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):
         pass
-    
+
     @unittest.skip(reason="Perceiver doesn't support inputs_embeds")
     def test_inputs_embeds(self):
         pass
-    
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
