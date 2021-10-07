@@ -17,6 +17,7 @@
 import math
 import unittest
 
+import numpy as np
 import pytest
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
@@ -433,6 +434,52 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
+    def test_mask_feature_prob_ctc(self):
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", mask_feature_prob=0.2, mask_feature_length=2
+        )
+        model.to(torch_device).train()
+        processor = Wav2Vec2Processor.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
+        )
+
+        batch_duration_in_seconds = [1, 3, 2, 6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+
+        batch = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
+
+        logits = model(
+            input_values=batch["input_values"].to(torch_device),
+            attention_mask=batch["attention_mask"].to(torch_device),
+        ).logits
+
+        self.assertEqual(logits.shape, (4, 1498, 32))
+
+    def test_mask_time_prob_ctc(self):
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", mask_time_prob=0.2, mask_time_length=2
+        )
+        model.to(torch_device).train()
+        processor = Wav2Vec2Processor.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
+        )
+
+        batch_duration_in_seconds = [1, 3, 2, 6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+
+        batch = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
+
+        logits = model(
+            input_values=batch["input_values"].to(torch_device),
+            attention_mask=batch["attention_mask"].to(torch_device),
+        ).logits
+
+        self.assertEqual(logits.shape, (4, 1498, 32))
+
     @slow
     def test_model_from_pretrained(self):
         model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
@@ -619,6 +666,52 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         # loss_more_masked has to be bigger or equal loss since more masked inputs have to be predicted
         self.assertTrue(loss.detach().item() <= loss_more_masked.detach().item())
+
+    def test_mask_feature_prob_ctc(self):
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", mask_feature_prob=0.2, mask_feature_length=2
+        )
+        model.to(torch_device).train()
+        processor = Wav2Vec2Processor.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
+        )
+
+        batch_duration_in_seconds = [1, 3, 2, 6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+
+        batch = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
+
+        logits = model(
+            input_values=batch["input_values"].to(torch_device),
+            attention_mask=batch["attention_mask"].to(torch_device),
+        ).logits
+
+        self.assertEqual(logits.shape, (4, 1498, 32))
+
+    def test_mask_time_prob_ctc(self):
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", mask_time_prob=0.2, mask_time_length=2
+        )
+        model.to(torch_device).train()
+        processor = Wav2Vec2Processor.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
+        )
+
+        batch_duration_in_seconds = [1, 3, 2, 6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+
+        batch = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
+
+        logits = model(
+            input_values=batch["input_values"].to(torch_device),
+            attention_mask=batch["attention_mask"].to(torch_device),
+        ).logits
+
+        self.assertEqual(logits.shape, (4, 1498, 32))
 
     @slow
     def test_model_from_pretrained(self):
