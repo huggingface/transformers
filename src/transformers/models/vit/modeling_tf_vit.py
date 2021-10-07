@@ -160,7 +160,7 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
     """
 
     def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768, initializer_range=0.02, **kwargs):
-        super().__init__(*kwargs)
+        super().__init__(**kwargs)
         image_size = to_2tuple(image_size)
         patch_size = to_2tuple(patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
