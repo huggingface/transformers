@@ -267,7 +267,6 @@ def main():
     if args.config_file == "":
 
         if ds_args is not None:
-            ds_args = input_state_dict["args"]
             if ds_args.bias_gelu_fusion:
                 activation_function = "gelu_fast"
             elif ds_args.openai_gelu:
