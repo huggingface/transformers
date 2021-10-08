@@ -37,7 +37,7 @@ Models:
 - TensorFlow: @Rocketknight1
 - JAX/Flax: @patil-suraj @patrickvonplaten 
 - Canine, DETR, DEIT, VIT, LayoutLM, LayoutLM-v2, LUKE, TAPAS: @NielsRogge
-- GPT-Neo, GPT-J: @patil-suraj
+- GPT-Neo, GPT-J, CLIP: @patil-suraj
 
 If the model isn't in the list, ping @LysandreJik who will redirect you to the correct contributor.
 
