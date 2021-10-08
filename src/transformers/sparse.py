@@ -8,6 +8,7 @@ import numpy
 import torch
 
 import onnxruntime
+from sparseml.pytorch.optim import LayerPruningModifier, QuantizationModifier
 from sparseml.pytorch.optim.manager import ScheduledModifierManager
 from sparseml.pytorch.optim.optimizer import ScheduledOptimizer
 from sparseml.pytorch.utils import logger
@@ -53,7 +54,7 @@ class SparseMLTrainer(Trainer):
 
     def apply_recipes(self, epoch=0.0):
         """
-        Apply recipes and sparsification related parameters to the model
+        Apply architecture changing modifiers and sparsification related parameters to the model
         """
         if self.manager is not None:
             org_state_dict = self.model.state_dict()
@@ -128,16 +129,28 @@ class SparseMLTrainer(Trainer):
 
     def save_model(self, output_dir: Optional[str] = None):
         """
-        Save model during or after training. The sparsification recipe will also be saved.
+        Save model during or after training. Modifiers that change the model architecture will also be saved.
         """
         super().save_model(output_dir=output_dir)
         if self.manager is not None:
-            self._save_recipe(output_dir=output_dir)
+            self._save_arch_modifiers(output_dir=output_dir)
 
-    def _save_recipe(self, output_dir: Optional[str] = None):
+    def _save_arch_modifiers(self, output_dir: Optional[str] = None):
+        """
+        Save modifiers that change the model's architecture, which is to be applied
+        later on whenever the model is loaded
+        """
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         output_recipe_file = os.path.join(output_dir, RECIPE_NAME)
-        self.manager.save(output_recipe_file)
+        saved_mods = [
+            mod
+            for mod in self.manager.modifiers
+            if isinstance(mod, QuantizationModifier) or isinstance(mod, LayerPruningModifier)
+        ]
+        if saved_mods:
+            with open(output_recipe_file, "a") as yaml_file:
+                for mod in saved_mods:
+                    yaml_file.write(str(mod) + "\n\n")
 
 
 def export_model(exporter, dataloader, output_dir, num_exported_samples):
