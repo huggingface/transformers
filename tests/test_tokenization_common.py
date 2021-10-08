@@ -3562,3 +3562,36 @@ class TrieTest(unittest.TestCase):
         trie.add("extra_id_1")
         trie.add("extra_id_100")
         self.assertEqual(trie.split("[CLS] This is a extra_id_100"), ["[CLS]", " This is a ", "extra_id_100"])
+
+    def test_trie_single(self):
+        trie = Trie()
+        trie.add("A")
+        self.assertEqual(trie.split("ABC"), ["A", "BC"])
+        self.assertEqual(trie.split("BCA"), ["BC", "A"])
+
+    def test_trie_final(self):
+        trie = Trie()
+        trie.add("TOKEN]")
+        trie.add("[SPECIAL_TOKEN]")
+        self.assertEqual(trie.split("This is something [SPECIAL_TOKEN]"), ["This is something ", "[SPECIAL_TOKEN]"])
+
+    def test_trie_subtokens(self):
+        trie = Trie()
+        trie.add("A")
+        trie.add("P")
+        trie.add("[SPECIAL_TOKEN]")
+        self.assertEqual(trie.split("This is something [SPECIAL_TOKEN]"), ["This is something ", "[SPECIAL_TOKEN]"])
+
+    def test_trie_suffix_tokens(self):
+        trie = Trie()
+        trie.add("AB")
+        trie.add("B")
+        trie.add("C")
+        self.assertEqual(trie.split("ABC"), ["AB", "C"])
+
+    def test_cut_text_hardening(self):
+        # Even if the offsets are wrong, we necessarily output correct string
+        # parts.
+        trie = Trie()
+        parts = trie.cut_text("ABC", [0, 0, 2, 1, 2, 3])
+        self.assertEqual(parts, ["AB", "C"])
