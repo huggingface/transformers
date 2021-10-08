@@ -652,6 +652,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             "input_ids": tf.constant(DUMMY_INPUTS),
         }
 
+    @property
+    def framework(self) -> str:
+        """
+        :str: Identifies that this is a TensorFlow model.
+        """
+        return "tf"
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         if not isinstance(config, PretrainedConfig):
