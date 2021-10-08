@@ -38,6 +38,7 @@ Models:
 - JAX/Flax: @patil-suraj @patrickvonplaten 
 - TAPAS, LayoutLM, LayoutLMv2, LUKE, ViT, BEiT, DEiT, DETR, CANINE: @NielsRogge
 - GPT-Neo, GPT-J, CLIP: @patil-suraj
+- Wav2Vec2, HuBERT, SpeechEncoderDecoder: @patrickvonplaten, @anton-l
 
 If the model isn't in the list, ping @LysandreJik who will redirect you to the correct contributor.
 
