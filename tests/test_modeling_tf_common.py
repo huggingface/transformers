@@ -613,7 +613,7 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if self.is_encoder_decoder:
-                input_ids = {
+                inputs = {
                     "decoder_input_ids": tf.keras.Input(
                         batch_shape=(2, max_input),
                         name="decoder_input_ids",
@@ -623,7 +623,7 @@ class TFModelTesterMixin:
                 }
             # TODO: A better way to handle vision models
             elif model_class.__name__ in ["TFViTModel", "TFViTForImageClassification"]:
-                input_ids = tf.keras.Input(
+                inputs = tf.keras.Input(
                     batch_shape=(
                         3,
                         self.model_tester.num_channels,
@@ -634,9 +634,9 @@ class TFModelTesterMixin:
                     dtype="float32",
                 )
             elif model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-                input_ids = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
+                inputs = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
-                input_ids = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
+                inputs = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
 
             # Prepare our model
             model = model_class(config)
@@ -646,14 +646,14 @@ class TFModelTesterMixin:
                 model.save_pretrained(tmpdirname, saved_model=False)
                 model = model_class.from_pretrained(tmpdirname)
 
-            outputs_dict = model(input_ids)
+            outputs_dict = model(inputs)
             hidden_states = outputs_dict[0]
 
             # Add a dense layer on top to test integration with other keras modules
             outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
 
             # Compile extended model
-            extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
+            extended_model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
             extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
 
     def test_keyword_and_dict_args(self):
