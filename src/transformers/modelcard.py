@@ -45,6 +45,7 @@ from .models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
@@ -60,6 +61,7 @@ from .utils import logging
 TASK_MAPPING = {
     "text-generation": MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    "image-segmentation": MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
     "fill-mask": MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     "object-detection": MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
     "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
@@ -273,6 +275,7 @@ should probably proofread and complete it, then remove this comment. -->
 TASK_TAG_TO_NAME_MAPPING = {
     "fill-mask": "Masked Language Modeling",
     "image-classification": "Image Classification",
+    "image-segmentation": "Image Segmentation",
     "multiple-choice": "Multiple Choice",
     "object-detection": "Object Detection",
     "question-answering": "Question Answering",
