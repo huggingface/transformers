@@ -651,14 +651,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return {
             "input_ids": tf.constant(DUMMY_INPUTS),
         }
-    
+
     @property
     def framework(self) -> str:
         """
         :str: Identifies that this is a TensorFlow model.
         """
         return "tf"
-    
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         if not isinstance(config, PretrainedConfig):
@@ -708,6 +708,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 The output returned by the model.
         """
         raise NotImplementedError
+
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
         Returns the model's input embeddings layer.

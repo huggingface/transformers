@@ -118,7 +118,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         All context managers that the model should be initialized under go here.
         """
         return cls(config, **kwargs)
-    
+
     @property
     def framework(self) -> str:
         """
