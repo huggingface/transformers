@@ -713,8 +713,50 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return results
 
+    def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
+        """
+        Converts the output of :class:`~transformers.DetrForSegmentation` into image segmentation predictions. Only
+        supports PyTorch.
+
+        Parameters:
+            outputs (:class:`~transformers.DetrSegmentationOutput`):
+                Raw outputs of the model.
+            target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`):
+                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction.
+            threshold (:obj:`float`, `optional`, defaults to 0.9):
+                Threshold to use to filter out queries.
+            mask_threshold (:obj:`float`, `optional`, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+
+        Returns:
+            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an
+            image in the batch as predicted by the model.
+        """
+        out_logits, raw_masks = outputs.logits, outputs.pred_masks
+        preds = []
+
+        def to_tuple(tup):
+            if isinstance(tup, tuple):
+                return tup
+            return tuple(tup.cpu().tolist())
+
+        for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
+            # we filter empty queries and detection below threshold
+            scores, labels = cur_logits.softmax(-1).max(-1)
+            keep = labels.ne(outputs.logits.shape[-1] - 1) & (scores > threshold)
+            cur_scores, cur_classes = cur_logits.softmax(-1).max(-1)
+            cur_scores = cur_scores[keep]
+            cur_classes = cur_classes[keep]
+            cur_masks = cur_masks[keep]
+            cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
+            cur_masks = (cur_masks.sigmoid() > mask_threshold) * 1
+
+            predictions = {"scores": cur_scores, "labels": cur_classes, "masks": cur_masks}
+            preds.append(predictions)
+        return preds
+
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
-    def post_process_segmentation(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
+    def post_process_instance(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
         """
         Converts the output of :class:`~transformers.DetrForSegmentation` into actual instance segmentation
         predictions. Only supports PyTorch.
