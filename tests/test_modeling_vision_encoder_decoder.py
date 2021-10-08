@@ -17,8 +17,8 @@
 import tempfile
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_modeling_bert import BertModelTester
 from .test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
@@ -41,6 +41,12 @@ if is_torch_available():
     )
     from transformers.modeling_outputs import BaseModelOutput
     from transformers.models.vit.modeling_vit import to_2tuple
+
+
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import TrOCRProcessor
 
 
 @require_torch
@@ -598,3 +604,70 @@ class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
     # there are no published pretrained TrOCR checkpoints for now
     def test_real_model_save_load_from_pretrained(self):
         pass
+
+
+@require_vision
+@require_torch
+class TrOCRModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        # TODO update to microsoft
+        return TrOCRProcessor.from_pretrained("nielsr/trocr-base-handwritten") if is_vision_available() else None
+
+    @slow
+    def test_inference_handwritten(self):
+        # TODO update to microsoft
+        model = VisionEncoderDecoderModel.from_pretrained("nielsr/trocr-base-handwritten").to(torch_device)
+
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/fixtures_ocr", split="test")
+
+        image = Image.open(ds[0]["file"]).convert("RGB")
+
+        processor = self.default_processor
+        pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+
+        # forward pass
+        decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]]).to(torch_device)
+        outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+        logits = outputs.logits
+
+        # verify the logits
+        expected_shape = torch.Size((1, 1, model.decoder.config.vocab_size))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [-1.4502, -4.6683, -0.5347, -2.9291, 9.1435, -3.0571, 8.9764, 1.7560, 8.7358, -1.5311]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_printed(self):
+        # TODO update to microsoft
+        model = VisionEncoderDecoderModel.from_pretrained("nielsr/trocr-base-printed").to(torch_device)
+
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/fixtures_ocr", split="test")
+
+        image = Image.open(ds[1]["file"]).convert("RGB")
+
+        processor = self.default_processor
+        pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+
+        # forward pass
+        decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]]).to(torch_device)
+        outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+        logits = outputs.logits
+
+        # verify the logits
+        expected_shape = torch.Size((1, 1, model.decoder.config.vocab_size))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [-5.6816, -5.8388, 1.1398, -6.9034, 6.8505, -2.4393, 1.2284, -1.0232, -1.9661, -3.9210]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-4))

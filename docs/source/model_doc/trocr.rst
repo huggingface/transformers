@@ -64,8 +64,8 @@ predicted token ids.
         >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-        >>> inputs = processor(image, return_tensors="pt")
-        >>> generated_ids = model.generate(input_ids=inputs["pixel_values"]])
+        >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+        >>> generated_ids = model.generate(pixel_values)
 
         >>> generated_text = processor.batch_decode(generated_ids)
 

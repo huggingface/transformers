@@ -655,8 +655,8 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         # print("Weights of embed tokens:", self.embed_tokens.weight[:3,:3])
 
         if inputs_embeds is None:
-            #y = self.embed_tokens(input_ids)
-            #print("First elements of embeddings before embed_scale:", y[0, :3, :3])
+            # y = self.embed_tokens(input_ids)
+            # print("First elements of embeddings before embed_scale:", y[0, :3, :3])
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # print("First elements of embeddings after embed_scale, before position embeddings:", inputs_embeds[0, :3, :3])
