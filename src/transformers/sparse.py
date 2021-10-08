@@ -170,6 +170,7 @@ def export_model(exporter, dataloader, output_dir, num_exported_samples):
     os.makedirs(sample_outputs, exist_ok=True)
 
     for _, sample_batch in enumerate(dataloader):
+        sample_batch.pop("labels", None)
         if sess is None:
             forward_args_spec = inspect.getfullargspec(exporter._module.__class__.forward)
             one_sample_input = collections.OrderedDict(
