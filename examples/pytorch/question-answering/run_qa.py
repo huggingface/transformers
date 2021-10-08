@@ -65,12 +65,6 @@ class ModelArguments:
     distill_teacher: Optional[str] = field(
         default=None, metadata={"help": "Teacher model which needs to be a trained QA model"}
     )
-    distill_temperature: Optional[float] = field(
-        default=2.0, metadata={"help": "Temperature applied to teacher softmax for distillation."}
-    )
-    distill_hardness: Optional[float] = field(
-        default=0.5, metadata={"help": "Proportion of loss coming from teacher model."}
-    )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
@@ -592,8 +586,6 @@ def main():
         model_args.model_name_or_path,
         [existing_recipe, new_recipe],
         teacher=teacher_model,
-        distill_hardness=model_args.distill_hardness,
-        distill_temperature=model_args.distill_temperature,
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,

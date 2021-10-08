@@ -27,15 +27,13 @@ class SparseMLTrainer(Trainer):
     :param args, kwargs: arguments passed into parent class
     """
 
-    def __init__(
-        self, model_name_or_path, recipes, teacher=None, distill_hardness=0.5, distill_temperature=2.0, *args, **kwargs
-    ):
+    def __init__(self, model_name_or_path, recipes, teacher=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.model_name_or_path = str(model_name_or_path)
         self.recipes = [recipe for recipe in recipes if recipe]
         self.teacher = teacher
-        self.distill_hardness = distill_hardness
-        self.distill_temperature = distill_temperature
+        if self.teacher is not None:
+            self.teacher.eval()
         self.criterion = torch.nn.CrossEntropyLoss()
 
         manager = None
@@ -58,7 +56,7 @@ class SparseMLTrainer(Trainer):
         """
         if self.manager is not None:
             org_state_dict = self.model.state_dict()
-            self.manager.initialize(self.model, epoch=epoch, loggers=self.loggers)
+            self.manager.initialize(self.model, epoch=epoch, distillation_teacher=self.teacher, loggers=self.loggers)
             new_state_dict = self.model.state_dict()
             new_params = [p for p in new_state_dict.keys() if p not in org_state_dict]
 

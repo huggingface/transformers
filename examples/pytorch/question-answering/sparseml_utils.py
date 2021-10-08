@@ -1,8 +1,6 @@
 from typing import Any
 
 import numpy
-import torch
-import torch.nn.functional as F
 
 from sparseml.pytorch.utils import ModuleExporter
 from trainer_qa import QuestionAnsweringTrainer
@@ -28,46 +26,24 @@ class SparseMLQATrainer(SparseMLTrainer, QuestionAnsweringTrainer):
         if not self.recipes or self.teacher is None:
             return super().compute_loss(model, inputs, return_outputs=return_outputs)
 
-        outputs = model(**inputs)
-        if self.teacher is None:
-            loss = outputs["loss"]
-        else:
-            input_device = inputs["input_ids"].device
-            self.teacher = self.teacher.to(input_device)
-            start_logits_student = outputs["start_logits"]
-            end_logits_student = outputs["end_logits"]
-            start_logits_label = inputs["start_positions"]
-            end_logits_label = inputs["end_positions"]
-            with torch.no_grad():
-                teacher_output = self.teacher(
-                    input_ids=inputs["input_ids"],
-                    token_type_ids=inputs["token_type_ids"],
-                    attention_mask=inputs["attention_mask"],
-                )
-            start_logits_teacher = teacher_output["start_logits"]
-            end_logits_teacher = teacher_output["end_logits"]
-            loss_start = (
-                F.kl_div(
-                    input=F.log_softmax(start_logits_student / self.distill_temperature, dim=-1),
-                    target=F.softmax(start_logits_teacher / self.distill_temperature, dim=-1),
-                    reduction="batchmean",
-                )
-                * (self.distill_temperature ** 2)
-            )
-            loss_end = (
-                F.kl_div(
-                    input=F.log_softmax(end_logits_student / self.distill_temperature, dim=-1),
-                    target=F.softmax(end_logits_teacher / self.distill_temperature, dim=-1),
-                    reduction="batchmean",
-                )
-                * (self.distill_temperature ** 2)
-            )
-            teacher_loss = (loss_start + loss_end) / 2.0
-            loss_start = self.criterion(start_logits_student, start_logits_label)
-            loss_end = self.criterion(end_logits_student, end_logits_label)
-            label_loss = (loss_start + loss_end) / 2.0
-            loss = ((1 - self.distill_hardness) * label_loss) + (self.distill_hardness * teacher_loss)
-        return (loss, outputs) if return_outputs else loss
+        student_outputs = model(**inputs)
+        loss = student_outputs["loss"]
+
+        teacher_input_keys = ["input_ids", "token_type_ids", "attention_mask"]
+        teacher_inputs = {k: inputs[k] for k in teacher_input_keys}
+
+        steps_in_epoch = -1  # Unused
+        loss = self.manager.loss_update(
+            loss,
+            model,
+            self.optimizer,
+            self.state.epoch,
+            steps_in_epoch,
+            global_step=self.state.global_step,
+            student_outputs=student_outputs,
+            teacher_inputs=teacher_inputs,
+        )
+        return (loss, student_outputs) if return_outputs else loss
 
 
 class QuestionAnsweringModuleExporter(ModuleExporter):
