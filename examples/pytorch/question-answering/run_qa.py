@@ -69,7 +69,7 @@ class ModelArguments:
         default=2.0, metadata={"help": "Temperature applied to teacher softmax for distillation."}
     )
     distill_hardness: Optional[float] = field(
-        default=1.0, metadata={"help": "Proportion of loss coming from teacher model."}
+        default=0.5, metadata={"help": "Proportion of loss coming from teacher model."}
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -216,7 +216,6 @@ class DataTrainingArguments:
             if self.test_file is not None:
                 extension = self.test_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
-
 
 def main():
     # See all possible arguments in src/transformers/training_args.py
