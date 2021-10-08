@@ -28,11 +28,19 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     import torch
 
-    from transformers import RealmEmbedder, RealmKnowledgeAugEncoder, RealmRetriever, RealmSearcher, RealmReader, RealmForOpenQA
+    from transformers import (
+        RealmEmbedder,
+        RealmForOpenQA,
+        RealmKnowledgeAugEncoder,
+        RealmReader,
+        RealmRetriever,
+        RealmSearcher,
+    )
 
 # Direct download link
 # https://storage.cloud.google.com/orqa-data/enwiki-20181220/blocks.tfr
 BLOCK_RECORDS_PATH = r"/mnt/sda1/REALM/language/language/data/enwiki-20181220/blocks.tfr"
+
 
 class RealmModelTester:
     def __init__(
@@ -63,7 +71,7 @@ class RealmModelTester:
         max_span_width=10,
         reader_layer_norm_eps=1e-3,
         reader_beam_size=4,
-        reader_seq_len=288+32,
+        reader_seq_len=288 + 32,
         num_block_records=13353718,
         searcher_beam_size=8,
         searcher_seq_len=64,
@@ -107,7 +115,7 @@ class RealmModelTester:
         self.num_block_records = num_block_records
         self.searcher_beam_size = searcher_beam_size
         self.searcher_seq_len = searcher_seq_len
-        
+
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.num_candidates = num_candidates
@@ -340,7 +348,6 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         (
             RealmEmbedder,
             RealmKnowledgeAugEncoder,
-            RealmReader,
             # RealmRetriever is excluded from common tests as it is a container model
             # consisting of two RealmEmbedders & simple inner product calculation.
             # RealmRetriever
@@ -405,11 +412,13 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
     def test_encoder_from_pretrained(self):
         model = RealmKnowledgeAugEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
         self.assertIsNotNone(model)
-    
+
     @slow
     def test_open_qa_from_pretrained(self):
-        #TODO: TF record dataset
-        model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader", BLOCK_RECORDS_PATH)
+        # TODO: TF record dataset
+        model = RealmForOpenQA.from_pretrained(
+            "qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader", BLOCK_RECORDS_PATH
+        )
         self.assertIsNotNone(model)
 
     @slow
@@ -421,12 +430,13 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retriever_from_pretrained(self):
         model = RealmRetriever.from_pretrained("qqaatw/realm-cc-news-pretrained-retriever")
         self.assertIsNotNone(model)
-    
+
     @slow
     def test_searcher_from_pretrained(self):
-        #TODO: TF record dataset
+        # TODO: TF record dataset
         model = RealmSearcher.from_pretrained("qqaatw/realm-orqa-nq-searcher", BLOCK_RECORDS_PATH)
         self.assertIsNotNone(model)
+
 
 @require_torch
 class RealmModelIntegrationTest(unittest.TestCase):
@@ -449,7 +459,9 @@ class RealmModelIntegrationTest(unittest.TestCase):
         num_candidates = 2
         vocab_size = 30522
 
-        model = RealmKnowledgeAugEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-bert", num_candidates=num_candidates)
+        model = RealmKnowledgeAugEncoder.from_pretrained(
+            "qqaatw/realm-cc-news-pretrained-bert", num_candidates=num_candidates
+        )
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11]])
         relevance_score = torch.tensor([[0.3, 0.7]], dtype=torch.float32)
         output = model(input_ids, relevance_score=relevance_score)[0]
@@ -463,13 +475,13 @@ class RealmModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_open_qa(self):
-        #TODO: TF record dataset
+        # TODO: TF record dataset
         model = RealmForOpenQA.from_pretrained(
             r"qqaatw/realm-orqa-nq-searcher",
             r"qqaatw/realm-orqa-nq-reader",
             BLOCK_RECORDS_PATH,
         )
-        
+
         question = "Who is the pioneer in modern computer science?"
         searcher_output, reader_output, predicted_answer = model(question)
 
@@ -481,20 +493,12 @@ class RealmModelIntegrationTest(unittest.TestCase):
         model = RealmReader.from_pretrained("qqaatw/realm-orqa-nq-reader", config=config)
 
         concat_input_ids = torch.arange(10).view((2, 5))
-        concat_token_type_ids = torch.tensor(
-            [
-                [0, 0, 1, 1, 1],
-                [0, 0, 1, 1, 1]
-            ],
-            dtype=torch.int64
-        )
+        concat_token_type_ids = torch.tensor([[0, 0, 1, 1, 1], [0, 0, 1, 1, 1]], dtype=torch.int64)
         relevance_score = torch.tensor([0.3, 0.7], dtype=torch.float32)
 
         output = model(
-            concat_input_ids,
-            token_type_ids=concat_token_type_ids,
-            relevance_score=relevance_score,
-            return_dict=True)
+            concat_input_ids, token_type_ids=concat_token_type_ids, relevance_score=relevance_score, return_dict=True
+        )
 
         block_idx_expected_shape = torch.Size(())
         start_pos_expected_shape = torch.Size((1,))
@@ -502,7 +506,6 @@ class RealmModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.block_idx.shape, block_idx_expected_shape)
         self.assertEqual(output.start_pos.shape, start_pos_expected_shape)
         self.assertEqual(output.end_pos.shape, end_pos_expected_shape)
-
 
         expected_block_idx = torch.tensor(1)
         expected_start_pos = torch.tensor(3)
@@ -529,16 +532,12 @@ class RealmModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[0.7410, 0.7170]])
         self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
-    
+
     @slow
     def test_inference_searcher(self):
-        #TODO: TF record dataset
+        # TODO: TF record dataset
         config = RealmConfig(searcher_beam_size=5)
-        model = RealmSearcher.from_pretrained(
-            "qqaatw/realm-orqa-nq-searcher", 
-            BLOCK_RECORDS_PATH,
-            config=config
-        )
+        model = RealmSearcher.from_pretrained("qqaatw/realm-orqa-nq-searcher", BLOCK_RECORDS_PATH, config=config)
 
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
@@ -548,4 +547,3 @@ class RealmModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[5.2747, 4.3768, 5.0444, 5.4152, 5.2922]])
         self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4), output)
-    

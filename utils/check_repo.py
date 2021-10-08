@@ -75,8 +75,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "RealmBertModel",  # Building part of bigger (tested) model.
     "RealmRetriever",  # Not regular model.
     "RealmSearcher",  # Not regular model.
-    "RealmForOpenQA" # Not regular model.
-    "ReformerForMaskedLM",  # Needs to be setup as decoder.
+    "RealmForOpenQA",
+    "ReformerForMaskedLM",  # Not regular model.  # Needs to be setup as decoder.
     "TFDPREncoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
