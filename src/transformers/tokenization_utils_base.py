@@ -1562,7 +1562,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received files. Attempt to resume the download if such a file
                 exists.
-            proxies (:obj:`Dict[str, str], `optional`):
+            proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             use_auth_token (:obj:`str` or `bool`, `optional`):
@@ -1722,7 +1722,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
             msg = (
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
             )
 
@@ -1741,12 +1742,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 logger.info(f"loading file {file_path} from cache at {resolved_vocab_files[file_id]}")
 
         return cls._from_pretrained(
-            resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
+            resolved_vocab_files,
+            pretrained_model_name_or_path,
+            init_configuration,
+            *init_inputs,
+            use_auth_token=use_auth_token,
+            **kwargs,
         )
 
     @classmethod
     def _from_pretrained(
-        cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
+        cls,
+        resolved_vocab_files,
+        pretrained_model_name_or_path,
+        init_configuration,
+        *init_inputs,
+        use_auth_token=None,
+        **kwargs
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
         # file or if `from_slow` is set to True.
@@ -1784,7 +1796,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
             try:
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, use_auth_token=use_auth_token)
                 config_tokenizer_class = config.tokenizer_class
             except (OSError, ValueError, KeyError):
                 # skip if an error occurred.
@@ -2211,6 +2223,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 padding_strategy = PaddingStrategy.MAX_LENGTH
         elif padding is not False:
             if padding is True:
+                if verbose:
+                    if max_length is not None and (truncation is False or truncation == "do_not_truncate"):
+                        warnings.warn(
+                            "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
+                            "To pad to max length, use `padding='max_length'`."
+                        )
+                    if old_pad_to_max_length is not False:
+                        warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
             elif not isinstance(padding, PaddingStrategy):
                 padding_strategy = PaddingStrategy(padding)
@@ -3039,7 +3059,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 pair_ids = pair_ids[:-num_tokens_to_remove]
             else:
                 logger.error(
-                    f"We need to remove {num_tokens_to_remove} to truncate the input"
+                    f"We need to remove {num_tokens_to_remove} to truncate the input "
                     f"but the second sequence has a length {len(pair_ids)}. "
                     f"Please select another truncation strategy than {truncation_strategy}, "
                     f"for instance 'longest_first' or 'only_first'."
@@ -3230,7 +3250,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         assert already_has_special_tokens and token_ids_1 is None, (
             "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
-            "Please use a slow (full python) tokenizer to activate this argument."
+            "Please use a slow (full python) tokenizer to activate this argument. "
             "Or set `return_special_tokens_mask=True` when calling the encoding method "
             "to get the special tokens mask in any tokenizer. "
         )
