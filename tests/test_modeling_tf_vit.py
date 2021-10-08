@@ -20,7 +20,7 @@ import unittest
 
 from transformers import ViTConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
-from transformers.testing_utils import require_tf, require_vision, slow, torch_device
+from transformers.testing_utils import require_tf, require_vision, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -115,10 +115,25 @@ class TFViTModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
+        # Test with an image with different size than the one specified in config.
+        image_size = self.image_size // 2
+        pixel_values = pixel_values[:, :, :image_size, :image_size]
+        result = model(pixel_values, interpolate_pos_encoding=True, training=False)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = to_2tuple(image_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = TFViTForImageClassification(config)
         result = model(pixel_values, labels=labels, training=False)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+        # Test with an image with different size than the one specified in config.
+        image_size = self.image_size // 2
+        pixel_values = pixel_values[:, :, :image_size, :image_size]
+        result = model(pixel_values, interpolate_pos_encoding=True, training=False)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):
@@ -245,7 +260,6 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    # TODO
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -289,7 +303,7 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
 
-        model = TFViTModel.from_pretrained("google/vit-base-patch16-224")
+        model = TFViTModel.from_pretrained("google/vit-base-patch16-224", from_pt=True)
         self.assertIsNotNone(model)
 
 
@@ -307,7 +321,7 @@ class TFViTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
+        model = TFViTForImageClassification.from_pretrained("google/vit-base-patch16-224", from_pt=True)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

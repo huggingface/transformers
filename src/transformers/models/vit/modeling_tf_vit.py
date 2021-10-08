@@ -97,7 +97,7 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
         batch_size, seq_len, dim = shape_list(embeddings)
         npatch = seq_len - 1
 
-        _, N, _ = shape_list(self.position_embedding)
+        _, N, _ = shape_list(self.position_embeddings)
         N -= 1
 
         if npatch == N and height == width:
@@ -106,10 +106,6 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
         patch_pos_embed = self.position_embeddings[:, 1:]
         h0 = height // self.config.patch_size
         w0 = width // self.config.patch_size
-        # # we add a small number to avoid floating point error in the interpolation
-        # # see discussion at https://github.com/facebookresearch/dino/issues/8
-        # TODO: different to PT version
-        # h0, w0 = h0 + 0.1, w0 + 0.1
         patch_pos_embed = tf.image.resize(
             images=tf.reshape(patch_pos_embed, shape=(1, int(math.sqrt(N)), int(math.sqrt(N)), dim)),
             size=(h0, w0),
@@ -221,7 +217,8 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
 
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
-        x = tf.reshape(tensor=projection, shape=(batch_size, self.num_patches, -1))
+        num_patches = (width // self.patch_size[1]) * (height // self.patch_size[0])
+        x = tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
 
         return x
 
@@ -498,7 +495,6 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         self.pooler = TFViTPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
-        # TODO: should it be `patch_embeddings`?
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
