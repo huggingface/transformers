@@ -125,6 +125,7 @@ _import_structure = {
         "is_vision_available",
     ],
     "hf_argparser": ["HfArgumentParser"],
+    "keras_callbacks": [],
     "integrations": [
         "is_comet_available",
         "is_optuna_available",
