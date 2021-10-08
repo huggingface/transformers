@@ -2958,6 +2958,11 @@ class RealmEmbedder:
         requires_backends(self, ["torch"])
 
 
+class RealmForOpenQA:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class RealmKnowledgeAugEncoder:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2972,7 +2977,17 @@ class RealmPreTrainedModel:
         requires_backends(cls, ["torch"])
 
 
+class RealmReader:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class RealmRetriever:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RealmSearcher:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

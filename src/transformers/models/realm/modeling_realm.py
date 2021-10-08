@@ -22,7 +22,6 @@ from typing import Optional, Tuple
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -30,12 +29,7 @@ from torch.nn import CrossEntropyLoss
 from transformers.models.realm.tokenization_realm import RealmTokenizer
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -89,7 +83,6 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
-    is_reader_checkpoint = False
 
     for name, shape in init_vars:
         logger.info(f"Loading TF weight {name} with shape {shape}")
@@ -168,7 +161,7 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
     return model
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings->RealmEmbeddings
+# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->Realm
 class RealmEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -229,7 +222,7 @@ class RealmEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention->RealmSelfAttention
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Realm
 class RealmSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -328,7 +321,7 @@ class RealmSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in RealmModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -355,7 +348,7 @@ class RealmSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput->RealmSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Realm
 class RealmSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -370,7 +363,7 @@ class RealmSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention->RealmAttention
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Realm
 class RealmAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -420,7 +413,7 @@ class RealmAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate->RealmIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Realm
 class RealmIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -436,7 +429,7 @@ class RealmIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput->RealmOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Realm
 class RealmOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -451,7 +444,7 @@ class RealmOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer->RealmLayer
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Realm
 class RealmLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -535,12 +528,13 @@ class RealmLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder->RealmEncoder
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Realm
 class RealmEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([RealmLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -567,12 +561,11 @@ class RealmEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
@@ -633,7 +626,7 @@ class RealmEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler->RealmPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Realm
 class RealmPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1526,7 +1519,7 @@ class RealmSearcher(RealmPreTrainedModel):
         )
         if config.use_scann:
             try:
-                import scann
+                import scann  # noqa: F401
             except ImportError:
                 raise ImportError(
                     "RealmSearcher requires ScaNN to retrieve documents from the corpus."
