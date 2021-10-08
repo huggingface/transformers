@@ -114,7 +114,7 @@ def prepare_img(checkpoint_url):
         # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-10.jpg" # let
         # url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"  #
         # url = "https://fki.tic.heia-fr.ch/static/img/a01-122.jpg"
-    elif "printed" in checkpoint_url:
+    elif "printed" in checkpoint_url or "stage1" in checkpoint_url:
         url = "https://www.researchgate.net/profile/Dinh-Sang/publication/338099565/figure/fig8/AS:840413229350922@1577381536857/An-receipt-example-in-the-SROIE-2019-dataset_Q640.jpg"
     im = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return im
@@ -228,15 +228,10 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         expected_slice = torch.tensor(
             [-6.0162, -7.0959, 4.4155, -5.1063, 7.0468, -3.1631, 2.6466, -0.3081, -0.8106, -1.7535]
         )
-    elif "trocr-base-stage1" in checkpoint_url:
-        expected_slice = torch.tensor()
-    elif "trocr-large-stage1" in checkpoint_url:
-        expected_slice = torch.tensor()
-    else:
-        raise ValueError("Unsupported model!")
 
-    assert logits.shape == expected_shape, "Shape of logits not as expected"
-    assert torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-3), "First elements of logits not as expected"
+    if "stage1" not in checkpoint_url:
+        assert logits.shape == expected_shape, "Shape of logits not as expected"
+        assert torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-3), "First elements of logits not as expected"
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
