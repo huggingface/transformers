@@ -40,6 +40,7 @@ class RealmConfig(PretrainedConfig):
     4. :class:`~transformers.RealmSearcher`
     5. :class:`~transformers.RealmReader`
     6. :class:`~transformers.RealmForOpenQA`
+
     It is used to instantiate an REALM model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the REALM
     `realm-cc-news-pretrained <https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder>`__ architecture.
