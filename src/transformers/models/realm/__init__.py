@@ -48,8 +48,8 @@ if TYPE_CHECKING:
         from .modeling_realm import (
             REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
             RealmEmbedder,
-            RealmKnowledgeAugEncoder,
             RealmForOpenQA,
+            RealmKnowledgeAugEncoder,
             RealmPreTrainedModel,
             RealmReader,
             RealmRetriever,

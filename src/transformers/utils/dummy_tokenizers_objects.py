@@ -47,6 +47,15 @@ class BigBirdTokenizerFast:
         requires_backends(cls, ["tokenizers"])
 
 
+class BlenderbotSmallTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tokenizers"])
+
+
 class CamembertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
@@ -120,6 +129,15 @@ class DPRReaderTokenizerFast:
 
 
 class ElectraTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tokenizers"])
+
+
+class FNetTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
 

@@ -17,57 +17,53 @@
 import torch
 
 
-class BruteForceSearcher():
+class BruteForceSearcher:
     def __init__(self, db, num_neighbors):
         """Build brute force searcher."""
         self.db = db
         self.num_neighbors = num_neighbors
-    
+
     def search_batched(self, question_projection):
         batch_scores = torch.einsum("BD,QD->QB", self.db, question_projection)
         _, retrieved_block_ids = torch.topk(batch_scores, k=self.num_neighbors, dim=-1)
-        # Must return cpu tensor for subsequent numpy operations 
+        # Must return cpu tensor for subsequent numpy operations
         return retrieved_block_ids.cpu()
 
 
-class ScaNNSearcher():
-    def __init__(self, db,
+class ScaNNSearcher:
+    def __init__(
+        self,
+        db,
         num_neighbors,
         dimensions_per_block=2,
         num_leaves=1000,
         num_leaves_to_search=100,
-        training_sample_size=100000):
+        training_sample_size=100000,
+    ):
         """Build scann searcher."""
-        
-        from scann.scann_ops.py.scann_ops_pybind import builder as Builder
-            
 
-        builder = Builder(
-            db=db,
-            num_neighbors=num_neighbors,
-            distance_measure="dot_product")
+        from scann.scann_ops.py.scann_ops_pybind import builder as Builder
+
+        builder = Builder(db=db, num_neighbors=num_neighbors, distance_measure="dot_product")
         builder = builder.tree(
-            num_leaves=num_leaves,
-            num_leaves_to_search=num_leaves_to_search,
-            training_sample_size=training_sample_size)
+            num_leaves=num_leaves, num_leaves_to_search=num_leaves_to_search, training_sample_size=training_sample_size
+        )
         builder = builder.score_ah(dimensions_per_block=dimensions_per_block)
 
         self.searcher = builder.build()
 
     def search_batched(self, question_projection):
         retrieved_block_ids, _ = self.searcher.search_batched(question_projection.detach().cpu())
-        # Must return cpu tensor for subsequent numpy operations 
-        return torch.tensor(retrieved_block_ids.astype('int64'), device=torch.device("cpu"))
+        # Must return cpu tensor for subsequent numpy operations
+        return torch.tensor(retrieved_block_ids.astype("int64"), device=torch.device("cpu"))
 
 
 def convert_tfrecord_to_np(block_records_path, num_block_records):
 
     import tensorflow.compat.v1 as tf
 
-    blocks_dataset = tf.data.TFRecordDataset(
-        block_records_path, buffer_size=512 * 1024 * 1024)
-    blocks_dataset = blocks_dataset.batch(
-        num_block_records, drop_remainder=True)
+    blocks_dataset = tf.data.TFRecordDataset(block_records_path, buffer_size=512 * 1024 * 1024)
+    blocks_dataset = blocks_dataset.batch(num_block_records, drop_remainder=True)
     np_record = next(blocks_dataset.take(1).as_numpy_iterator())
 
     return np_record

@@ -33,7 +33,7 @@ Preparing the datasets
    frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
    picture-in-picture" allowfullscreen></iframe>
 
-We will use the `🤗 Datasets <https:/github.com/huggingface/datasets/>`__ library to download and preprocess the IMDB
+We will use the `🤗 Datasets <https://github.com/huggingface/datasets/>`__ library to download and preprocess the IMDB
 datasets. We will go over this part pretty quickly. Since the focus of this tutorial is on training, you should refer
 to the 🤗 Datasets `documentation <https://huggingface.co/docs/datasets/>`__ or the :doc:`preprocessing` tutorial for
 more information.

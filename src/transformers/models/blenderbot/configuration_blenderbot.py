@@ -78,8 +78,6 @@ class BlenderbotConfig(PretrainedConfig):
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -128,7 +126,6 @@ class BlenderbotConfig(PretrainedConfig):
         decoder_start_token_id=1,
         classifier_dropout=0.0,
         scale_embedding=False,
-        gradient_checkpointing=False,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -155,7 +152,6 @@ class BlenderbotConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         super().__init__(

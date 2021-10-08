@@ -712,7 +712,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if return_offsets_mapping:
             raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers."
+                "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
@@ -981,7 +981,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if return_offsets_mapping:
             raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers."
+                "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
@@ -1159,7 +1159,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if max_length is not None and len(input_ids) > max_length:
             raise ValueError(
-                "Could not encode the query and table header given the maximum length. Encoding the query and table"
+                "Could not encode the query and table header given the maximum length. Encoding the query and table "
                 f"header results in a length of {len(input_ids)} which is higher than the max_length of {max_length}"
             )
 

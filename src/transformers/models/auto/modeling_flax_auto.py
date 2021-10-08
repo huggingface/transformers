@@ -28,10 +28,12 @@ logger = logging.get_logger(__name__)
 FLAX_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("pegasus", "FlaxPegasusModel"),
         ("distilbert", "FlaxDistilBertModel"),
         ("albert", "FlaxAlbertModel"),
         ("roberta", "FlaxRobertaModel"),
         ("bert", "FlaxBertModel"),
+        ("beit", "FlaxBeitModel"),
         ("big_bird", "FlaxBigBirdModel"),
         ("bart", "FlaxBartModel"),
         ("gpt2", "FlaxGPT2Model"),
@@ -80,7 +82,9 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("pegasus", "FlaxPegasusForConditionalGeneration"),
         ("bart", "FlaxBartForConditionalGeneration"),
+        ("mbart", "FlaxMBartForConditionalGeneration"),
         ("t5", "FlaxT5ForConditionalGeneration"),
         ("mt5", "FlaxMT5ForConditionalGeneration"),
         ("marian", "FlaxMarianMTModel"),
@@ -92,6 +96,7 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("vit", "FlaxViTForImageClassification"),
+        ("beit", "FlaxBeitForImageClassification"),
     ]
 )
 

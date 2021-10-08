@@ -18,7 +18,7 @@ import datetime
 import unittest
 
 from transformers import GPTJConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, tooslow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
@@ -92,7 +92,7 @@ class GPTJModelTester:
     def get_large_model_config(self):
         return GPTJConfig.from_pretrained("EleutherAI/gpt-j-6B")
 
-    def prepare_config_and_inputs(self, gradient_checkpointing=False):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -115,7 +115,7 @@ class GPTJModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = self.get_config(gradient_checkpointing=gradient_checkpointing)
+        config = self.get_config()
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
 
@@ -131,7 +131,7 @@ class GPTJModelTester:
             choice_labels,
         )
 
-    def get_config(self, gradient_checkpointing=False):
+    def get_config(self):
         return GPTJConfig(
             vocab_size=self.vocab_size,
             n_embd=self.hidden_size,
@@ -145,11 +145,10 @@ class GPTJModelTester:
             n_ctx=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
-            use_cache=not gradient_checkpointing,
+            use_cache=True,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
-            gradient_checkpointing=gradient_checkpointing,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -318,8 +317,12 @@ class GPTJModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_forward_and_backwards(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_forward_and_backwards(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
+    ):
         model = GPTJForCausalLM(config)
+        if gradient_checkpointing:
+            model.gradient_checkpointing_enable()
         model.to(torch_device)
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -390,14 +393,15 @@ class GPTJModelTest(unittest.TestCase):
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
     def test_gptj_gradient_checkpointing(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
 
-    @slow
+    @tooslow
     def test_batch_generation(self):
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+        # Marked as @tooslow due to GPU OOM
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
         model.to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
 
         tokenizer.padding_side = "left"
 
@@ -455,47 +459,37 @@ class GPTJModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GPTJModel.from_pretrained(model_name)
+            model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
             self.assertIsNotNone(model)
 
 
 @require_torch
 class GPTJModelLanguageGenerationTest(unittest.TestCase):
-    @slow
+    @tooslow
     def test_lm_generate_gptj(self):
+        # Marked as @tooslow due to GPU OOM
         for checkpointing in [True, False]:
-            model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", gradient_checkpointing=checkpointing)
+            model = GPTJForCausalLM.from_pretrained(
+                "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
+            )
+            if checkpointing:
+                model.gradient_checkpointing_enable()
+            else:
+                model.gradient_checkpointing_disable()
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            expected_output_ids = [
-                464,
-                3290,
-                1528,
-                286,
-                3931,
-                389,
-                2402,
-                514,
-                11,
-                290,
-                326,
-                1724,
-                340,
-                447,
-                247,
-                82,
-                640,
-                284,
-                923,
-                3612,
-            ]  # The dog days of summer are upon us, and that means it’s time to start thinking
+            # fmt: off
+            # The dog is a man's best friend. It is a loyal companion, and it is a friend
+            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]
+            # fmt: on
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
-    @slow
+    @tooslow
     def test_gptj_sample(self):
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+        # Marked as @tooslow due to GPU OOM (issue #13676)
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -512,7 +506,13 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
+        if torch_device == "cuda":
+            EXPECTED_OUTPUT_STR = (
+                "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
+            )
+        else:
+            EXPECTED_OUTPUT_STR = "Today is a nice day and one of those days that feels a bit more alive. I am ready"
+
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
@@ -520,8 +520,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gptj_sample_max_time(self):
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+        tokenizer = AutoTokenizer.from_pretrained("anton-l/gpt-j-tiny-random")
+        model = GPTJForCausalLM.from_pretrained("anton-l/gpt-j-tiny-random")
         model.to(torch_device)
 
         torch.manual_seed(0)
