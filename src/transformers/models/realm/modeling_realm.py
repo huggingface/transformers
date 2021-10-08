@@ -1517,12 +1517,7 @@ class RealmSearcher(RealmPreTrainedModel):
                 device=torch.device('cpu')
             )
         )
-        self.init_weights()
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        realm_searcher = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        if realm_searcher.config.use_scann:
+        if config.use_scann:
             try:
                 import scann
             except ImportError:
@@ -1530,7 +1525,7 @@ class RealmSearcher(RealmPreTrainedModel):
                     "RealmSearcher requires ScaNN to retrieve documents from the corpus."
                     "Please install it through `pip install scann`."
                 )
-        return realm_searcher
+        self.init_weights()
 
     @add_start_docstrings_to_model_forward(
         REALM_INPUTS_DOCSTRING.format("1, searcher_seq_len")
@@ -1648,7 +1643,6 @@ class RealmReader(RealmPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         relevance_score=None,
-        retrieved_blocks=None,
         start_positions=None,
         end_positions=None,
         has_answers=None,
@@ -1674,11 +1668,18 @@ class RealmReader(RealmPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if relevance_score is None:
+            raise ValueError(
+                "You have to specify `relevance_score` to calculate logits and loss."
+            )
         if token_type_ids is None:
             raise ValueError(
-                "You have to specify `token_type_ids` for separating question block and evidence block."
+                "You have to specify `token_type_ids` to separate question block and evidence block."
             )
-
+        if token_type_ids.size(1) < self.config.max_span_width:
+            raise ValueError(
+                "The input sequence length must be greater than or equal to config.max_span_width."
+            )
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,

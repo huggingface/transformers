@@ -30,6 +30,9 @@ if is_torch_available():
 
     from transformers import RealmEmbedder, RealmKnowledgeAugEncoder, RealmRetriever, RealmSearcher, RealmReader, RealmForOpenQA
 
+# Direct download link
+# https://storage.cloud.google.com/orqa-data/enwiki-20181220/blocks.tfr
+BLOCK_RECORDS_PATH = r"/mnt/sda1/REALM/language/language/data/enwiki-20181220/blocks.tfr"
 
 class RealmModelTester:
     def __init__(
@@ -54,11 +57,22 @@ class RealmModelTester:
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        use_scann=True,
+        span_hidden_size=50,
+        max_span_width=10,
+        reader_layer_norm_eps=1e-3,
+        reader_beam_size=4,
+        reader_seq_len=288+32,
+        num_block_records=13353718,
+        searcher_beam_size=8,
+        searcher_seq_len=64,
         num_labels=3,
         num_choices=4,
         num_candidates=10,
         scope=None,
     ):
+        # General config
         self.parent = parent
         self.batch_size = batch_size
         self.retriever_proj_size = retriever_proj_size
@@ -79,6 +93,21 @@ class RealmModelTester:
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.use_scann = use_scann
+
+        # Reader config
+        self.span_hidden_size = span_hidden_size
+        self.max_span_width = max_span_width
+        self.reader_layer_norm_eps = reader_layer_norm_eps
+        self.reader_beam_size = reader_beam_size
+        self.reader_seq_len = reader_seq_len
+
+        # Searcher config
+        self.num_block_records = num_block_records
+        self.searcher_beam_size = searcher_beam_size
+        self.searcher_seq_len = searcher_seq_len
+        
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.num_candidates = num_candidates
@@ -87,20 +116,28 @@ class RealmModelTester:
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         candiate_input_ids = ids_tensor([self.batch_size, self.num_candidates, self.seq_length], self.vocab_size)
+        reader_input_ids = ids_tensor([self.reader_beam_size, self.reader_seq_len], self.vocab_size)
+        searcher_input_ids = ids_tensor([1, self.searcher_seq_len], self.vocab_size)
 
         input_mask = None
         candiate_input_mask = None
+        reader_input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
             candiate_input_mask = random_attention_mask([self.batch_size, self.num_candidates, self.seq_length])
+            reader_input_mask = random_attention_mask([self.reader_beam_size, self.reader_seq_len])
+            searcher_input_mask = random_attention_mask([1, self.reader_seq_len])
 
         token_type_ids = None
         candidate_token_type_ids = None
+        reader_token_type_ids = None
         if self.use_token_type_ids:
             token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
             candidate_token_type_ids = ids_tensor(
                 [self.batch_size, self.num_candidates, self.seq_length], self.type_vocab_size
             )
+            reader_token_type_ids = ids_tensor([self.reader_beam_size, self.reader_seq_len], self.type_vocab_size)
+            searcher_token_type_ids = ids_tensor([1, self.searcher_seq_len], self.type_vocab_size)
 
         sequence_labels = None
         token_labels = None
@@ -113,14 +150,19 @@ class RealmModelTester:
         config = self.get_config()
 
         # inputs with additional num_candidates axis.
-        candidate_inputs = (candiate_input_ids, candiate_input_mask, candidate_token_type_ids)
+        retriever_encoder_inputs = (candiate_input_ids, candiate_input_mask, candidate_token_type_ids)
+        # reader inputs
+        reader_inputs = (reader_input_ids, reader_input_mask, reader_token_type_ids)
+        searcher_inputs = (searcher_input_ids, searcher_input_mask, searcher_token_type_ids)
 
         return (
             config,
             input_ids,
             token_type_ids,
             input_mask,
-            candidate_inputs,
+            retriever_encoder_inputs,
+            reader_inputs,
+            searcher_inputs,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -140,7 +182,6 @@ class RealmModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
             initializer_range=self.initializer_range,
         )
 
@@ -150,7 +191,9 @@ class RealmModelTester:
         input_ids,
         token_type_ids,
         input_mask,
-        candidate_inputs,
+        retriever_encoder_inputs,
+        reader_inputs,
+        searcher_inputs,
         sequence_labels,
         token_labels,
         choice_labels,
@@ -167,7 +210,9 @@ class RealmModelTester:
         input_ids,
         token_type_ids,
         input_mask,
-        candidate_inputs,
+        retriever_encoder_inputs,
+        reader_inputs,
+        searcher_inputs,
         sequence_labels,
         token_labels,
         choice_labels,
@@ -177,9 +222,9 @@ class RealmModelTester:
         model.eval()
         relevance_score = floats_tensor([self.batch_size, self.num_candidates])
         result = model(
-            candidate_inputs[0],
-            attention_mask=candidate_inputs[1],
-            token_type_ids=candidate_inputs[2],
+            retriever_encoder_inputs[0],
+            attention_mask=retriever_encoder_inputs[1],
+            token_type_ids=retriever_encoder_inputs[2],
             relevance_score=relevance_score,
             labels=token_labels,
         )
@@ -187,13 +232,43 @@ class RealmModelTester:
             result.logits.shape, (self.batch_size * self.num_candidates, self.seq_length, self.vocab_size)
         )
 
+    def create_and_check_reader(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        retriever_encoder_inputs,
+        reader_inputs,
+        searcher_inputs,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        model = RealmReader(config=config)
+        model.to(torch_device)
+        model.eval()
+        relevance_score = floats_tensor([self.reader_beam_size])
+        result = model(
+            reader_inputs[0],
+            attention_mask=reader_inputs[1],
+            token_type_ids=reader_inputs[2],
+            relevance_score=relevance_score,
+        )
+        self.parent.assertEqual(result.block_idx.shape, ())
+        self.parent.assertEqual(result.candidate.shape, ())
+        self.parent.assertEqual(result.start_pos.shape, ())
+        self.parent.assertEqual(result.end_pos.shape, ())
+
     def create_and_check_retriever(
         self,
         config,
         input_ids,
         token_type_ids,
         input_mask,
-        candidate_inputs,
+        retriever_encoder_inputs,
+        reader_inputs,
+        searcher_inputs,
         sequence_labels,
         token_labels,
         choice_labels,
@@ -205,15 +280,40 @@ class RealmModelTester:
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            candidate_input_ids=candidate_inputs[0],
-            candidate_attention_mask=candidate_inputs[1],
-            candidate_token_type_ids=candidate_inputs[2],
+            candidate_input_ids=retriever_encoder_inputs[0],
+            candidate_attention_mask=retriever_encoder_inputs[1],
+            candidate_token_type_ids=retriever_encoder_inputs[2],
         )
         self.parent.assertEqual(result.relevance_score.shape, (self.batch_size, self.num_candidates))
         self.parent.assertEqual(result.query_score.shape, (self.batch_size, self.retriever_proj_size))
         self.parent.assertEqual(
             result.candidate_score.shape, (self.batch_size, self.num_candidates, self.retriever_proj_size)
         )
+
+    def create_and_check_searcher(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        retriever_encoder_inputs,
+        reader_inputs,
+        searcher_inputs,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        model = RealmSearcher(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            searcher_inputs[0],
+            attention_mask=searcher_inputs[1],
+            token_type_ids=searcher_inputs[2],
+        )
+        self.parent.assertEqual(result.retrieved_logits.shape, (self.searcher_beam_size,))
+        self.parent.assertEqual(result.retrieved_blocks.shape, (self.searcher_beam_size,))
+        self.parent.assertEqual(result.retrieved_block_ids.shape, (self.searcher_beam_size,))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -222,7 +322,9 @@ class RealmModelTester:
             input_ids,
             token_type_ids,
             input_mask,
-            candidate_inputs,
+            retriever_encoder_inputs,
+            reader_inputs,
+            searcher_inputs,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -238,6 +340,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         (
             RealmEmbedder,
             RealmKnowledgeAugEncoder,
+            RealmReader,
             # RealmRetriever is excluded from common tests as it is a container model
             # consisting of two RealmEmbedders & simple inner product calculation.
             # RealmRetriever
@@ -306,12 +409,12 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_open_qa_from_pretrained(self):
         #TODO: TF record dataset
-        model = RealmRetriever.from_pretrained("qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader")
+        model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader", BLOCK_RECORDS_PATH)
         self.assertIsNotNone(model)
 
     @slow
     def test_reader_from_pretrained(self):
-        model = RealmRetriever.from_pretrained("qqaatw/realm-orqa-nq-reader")
+        model = RealmReader.from_pretrained("qqaatw/realm-orqa-nq-reader")
         self.assertIsNotNone(model)
 
     @slow
@@ -322,7 +425,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_searcher_from_pretrained(self):
         #TODO: TF record dataset
-        model = RealmRetriever.from_pretrained("qqaatw/realm-orqa-nq-searcher")
+        model = RealmSearcher.from_pretrained("qqaatw/realm-orqa-nq-searcher", BLOCK_RECORDS_PATH)
         self.assertIsNotNone(model)
 
 @require_torch
@@ -362,9 +465,9 @@ class RealmModelIntegrationTest(unittest.TestCase):
     def test_inference_open_qa(self):
         #TODO: TF record dataset
         model = RealmForOpenQA.from_pretrained(
-            r"/mnt/sda1/testing/pytorch-realm-orqa/export/searcher",
-            r"/mnt/sda1/testing/pytorch-realm-orqa/export/reader",
-            r"/mnt/sda1/REALM/language/language/data/enwiki-20181220/blocks.tfr"
+            r"qqaatw/realm-orqa-nq-searcher",
+            r"qqaatw/realm-orqa-nq-reader",
+            BLOCK_RECORDS_PATH,
         )
         
         question = "Who is the pioneer in modern computer science?"
@@ -374,23 +477,40 @@ class RealmModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_reader(self):
-        config = RealmConfig(searcher_beam_size=5)
-        model = RealmReader.from_pretrained("qqaatw/realm-orqa-nq-reader", config)
+        config = RealmConfig(reader_beam_size=2, max_span_width=3)
+        model = RealmReader.from_pretrained("qqaatw/realm-orqa-nq-reader", config=config)
 
-        concat_inputs = torch.arange(25).view((5, 5))
+        concat_input_ids = torch.arange(10).view((2, 5))
+        concat_token_type_ids = torch.tensor(
+            [
+                [0, 0, 1, 1, 1],
+                [0, 0, 1, 1, 1]
+            ],
+            dtype=torch.int64
+        )
+        relevance_score = torch.tensor([0.3, 0.7], dtype=torch.float32)
+
         output = model(
-            concat_inputs,
+            concat_input_ids,
+            token_type_ids=concat_token_type_ids,
+            relevance_score=relevance_score,
             return_dict=True)
 
         block_idx_expected_shape = torch.Size(())
-        start_pos_expected_shape = torch.Size((1))
-        end_pos_expected_shape = torch.Size((1))
+        start_pos_expected_shape = torch.Size((1,))
+        end_pos_expected_shape = torch.Size((1,))
         self.assertEqual(output.block_idx.shape, block_idx_expected_shape)
         self.assertEqual(output.start_pos.shape, start_pos_expected_shape)
         self.assertEqual(output.end_pos.shape, end_pos_expected_shape)
 
-        expected_slice = torch.tensor([[0.7410, 0.7170]])
-        self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
+
+        expected_block_idx = torch.tensor(1)
+        expected_start_pos = torch.tensor(3)
+        expected_end_pos = torch.tensor(3)
+
+        self.assertTrue(torch.allclose(output.block_idx, expected_block_idx, atol=1e-4))
+        self.assertTrue(torch.allclose(output.start_pos, expected_start_pos, atol=1e-4))
+        self.assertTrue(torch.allclose(output.end_pos, expected_end_pos, atol=1e-4))
 
     @slow
     def test_inference_retriever(self):
@@ -414,14 +534,18 @@ class RealmModelIntegrationTest(unittest.TestCase):
     def test_inference_searcher(self):
         #TODO: TF record dataset
         config = RealmConfig(searcher_beam_size=5)
-        model = RealmSearcher.from_pretrained("qqaatw/realm-orqa-nq-searcher", config=config)
+        model = RealmSearcher.from_pretrained(
+            "qqaatw/realm-orqa-nq-searcher", 
+            BLOCK_RECORDS_PATH,
+            config=config
+        )
 
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        expected_shape = torch.Size((5))
+        expected_shape = torch.Size((5,))
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor([[0.7410, 0.7170]])
-        self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
+        expected_slice = torch.tensor([[5.2747, 4.3768, 5.0444, 5.4152, 5.2922]])
+        self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4), output)
     

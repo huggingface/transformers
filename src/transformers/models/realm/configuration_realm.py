@@ -181,3 +181,5 @@ class RealmConfig(PretrainedConfig):
         self.num_block_records = num_block_records
         self.searcher_beam_size = searcher_beam_size
         self.searcher_seq_len = searcher_seq_len
+
+        # TODO: Remove use_cache
