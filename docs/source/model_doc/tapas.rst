@@ -132,7 +132,7 @@ for your environment):
         >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base', config=config)
 
 In TensorFlow, this can be done as follows (make sure to have installed the `tensorflow_probability dependency
-<https://github.com/tensorflow/probability`>_ for your environment):
+<https://github.com/tensorflow/probability`>__ for your environment):
 
 .. code-block::
 
