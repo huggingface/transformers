@@ -1233,7 +1233,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
 
         # Initialize attention mask if not present.
-        if return_attention_mask and "attention_mask" not in required_input:
+        if return_attention_mask and "attention_mask" not in encoded_inputs:
             encoded_inputs["attention_mask"] = [1] * len(required_input)
 
         if needs_to_be_padded:

@@ -1474,7 +1474,10 @@ class TokenizerTesterMixin:
                     {"input_ids": [1, 2, 3], "attention_mask": [1, 1, 0]},
                 ]
                 padded_features = tokenizer.pad(features)
-                self.assertListEqual(padded_features["attention_mask"], [[1, 1, 1, 1, 1, 0], [1, 1, 0, 0, 0, 0]])
+                if tokenizer.padding_side == "right":
+                    self.assertListEqual(padded_features["attention_mask"], [[1, 1, 1, 1, 1, 0], [1, 1, 0, 0, 0, 0]])
+                else:
+                    self.assertListEqual(padded_features["attention_mask"], [[1, 1, 1, 1, 1, 0], [0, 0, 0, 1, 1, 0]])
 
     def test_encode_plus_with_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

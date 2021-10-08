@@ -1529,11 +1529,6 @@ class LukeTokenizer(RobertaTokenizer):
                         ]
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        else:
-            if return_attention_mask:
-                encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
-                if entities_provided:
-                    encoded_inputs["entity_attention_mask"] = [1] * len(encoded_inputs["entity_ids"])
 
         return encoded_inputs
 
