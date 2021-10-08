@@ -29,6 +29,7 @@ There are two categories of pipeline abstractions to be aware about:
     - :class:`~transformers.FeatureExtractionPipeline`
     - :class:`~transformers.FillMaskPipeline`
     - :class:`~transformers.ImageClassificationPipeline`
+    - :class:`~transformers.ImageSegmentationPipeline`
     - :class:`~transformers.ObjectDetectionPipeline`
     - :class:`~transformers.QuestionAnsweringPipeline`
     - :class:`~transformers.SummarizationPipeline`
@@ -134,6 +135,13 @@ ImageClassificationPipeline
 =======================================================================================================================
 
 .. autoclass:: transformers.ImageClassificationPipeline
+    :special-members: __call__
+    :members:
+
+ImageSegmentationPipeline
+=======================================================================================================================
+
+.. autoclass:: transformers.ImageSegmentationPipeline
     :special-members: __call__
     :members:
 
