@@ -125,7 +125,6 @@ _import_structure = {
         "is_vision_available",
     ],
     "hf_argparser": ["HfArgumentParser"],
-    "keras_callbacks": [],
     "integrations": [
         "is_comet_available",
         "is_optuna_available",
@@ -135,6 +134,7 @@ _import_structure = {
         "is_tensorboard_available",
         "is_wandb_available",
     ],
+    "keras_callbacks": [],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
