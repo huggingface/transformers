@@ -316,6 +316,9 @@ MODEL_FOR_CAUSAL_LM_MAPPING = None
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = None
+
+
 MODEL_FOR_MASKED_LM_MAPPING = None
 
 
@@ -389,6 +392,15 @@ class AutoModelForCTC:
 
 
 class AutoModelForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class AutoModelForImageSegmentation:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
