@@ -131,7 +131,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
-        
+
         # Ensure special tokens directly specified from kwargs (not from tokenizer file) are sanitized.
         self.sanitize_special_tokens()
 
