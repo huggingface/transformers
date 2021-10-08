@@ -20,7 +20,6 @@ from shutil import copyfile
 from typing import List, Optional, Tuple
 
 from ...file_utils import is_sentencepiece_available
-from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
