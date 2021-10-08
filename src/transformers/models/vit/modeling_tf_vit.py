@@ -188,10 +188,11 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
     ) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
         if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-                )
+            if getattr(height, "numpy", None) and getattr(width, "numpy", None):
+                if height != self.image_size[0] or width != self.image_size[1]:
+                    raise ValueError(
+                        f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                    )
 
         # When running on CPU, `tf.nn.conv2d` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
@@ -600,6 +601,25 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
         return {
             "pixel_values": tf.constant(VISION_DUMMY_INPUTS),
         }
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (:obj:`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 VIT_START_DOCSTRING = r"""

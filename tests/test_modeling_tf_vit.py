@@ -16,11 +16,13 @@
 
 
 import inspect
+import os
+import tempfile
 import unittest
 
 from transformers import ViTConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
-from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.testing_utils import require_tf, require_vision, slow, tooslow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -178,6 +180,10 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
         # ViT does not use inputs_embeds
         pass
 
+    def test_graph_mode_with_inputs_embeds(self):
+        # ViT does not use inputs_embeds
+        pass
+
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -202,6 +208,59 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @tooslow
+    def test_saved_model_creation_extended(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = True
+
+        # in ViT, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        image_size = to_2tuple(self.model_tester.image_size)
+        patch_size = to_2tuple(self.model_tester.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        seq_len = num_patches + 1
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(class_inputs_dict))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=True)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
+                model = tf.keras.models.load_model(saved_model_dir)
+                outputs = model(class_inputs_dict)
+
+                if self.is_encoder_decoder:
+                    output_hidden_states = outputs["encoder_hidden_states"]
+                    output_attentions = outputs["encoder_attentions"]
+                else:
+                    output_hidden_states = outputs["hidden_states"]
+                    output_attentions = outputs["attentions"]
+
+                self.assertEqual(len(outputs), num_out)
+
+                expected_num_layers = getattr(
+                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                )
+
+                self.assertEqual(len(output_hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(output_hidden_states[0].shape[-2:]),
+                    [seq_len, self.model_tester.hidden_size],
+                )
+
+                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(output_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                )
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
