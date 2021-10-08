@@ -35,6 +35,7 @@ Models:
 - GPT-2, GPT: @patrickvonplaten, @LysandreJik
 - RAG, DPR: @patrickvonplaten, @lhoestq
 - TensorFlow: @Rocketknight1
+- JAX/Flax: @patil-suraj @patrickvonplaten 
 - Canine, DETR, DEIT, VIT, LayoutLM, LayoutLM-v2, LUKE, TAPAS: @NielsRogge
 - GPT-Neo, GPT-J: @patil-suraj
 
