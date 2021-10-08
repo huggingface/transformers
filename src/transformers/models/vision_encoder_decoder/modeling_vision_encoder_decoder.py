@@ -219,8 +219,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
-        # At the moment fast initialization is not supported
-        # for composite models
+        # At the moment fast initialization is not supported for composite models
         if kwargs.get("_fast_init", False):
             logger.warning(
                 "Fast initialization is currently not supported for VisionEncoderDecoderModel. Falling back to slow intialization..."
@@ -317,7 +316,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         if encoder is None:
             if encoder_pretrained_model_name_or_path is None:
                 raise ValueError(
-                    f"No `encoder_model` is passed to kwargs: {kwargs_encoder}. In this case make sure that `encoder_pretrained_model_name_or_path` defined"
+                    f"No `encoder_model` is passed to kwargs: {kwargs_encoder}. "
+                    f"In this case make sure that `encoder_pretrained_model_name_or_path` defined"
                 )
 
             if "config" not in kwargs_encoder:
@@ -360,7 +360,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder."
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
                     "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config`"
-                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` "
+                    f"to `.from_encoder_decoder_pretrained(...)`"
                 )
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
@@ -445,11 +446,6 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
-        # compute correct encoder attention mask
-        # if attention_mask is not None:
-        #     encoder_attention_mask = self.encoder._get_feature_vector_attention_mask(
-        #         encoder_hidden_states.shape[1], attention_mask
-        #     )
         # else:
         encoder_attention_mask = None
 

@@ -15,7 +15,7 @@ Vision Encoder Decoder Models
 
 The :class:`~transformers.VisionEncoderDecoderModel` can be used to initialize an image-to-text-sequence model with any
 pretrained vision autoencoding model as the encoder (*e.g.* :doc:`ViT <vit>`, :doc:`BEiT <beit>`, :doc:`DeiT <deit>`)
-and any pretrained language model as the decoder (*e.g.* :doc: `RoBERTa <roberta>`, :doc: `GPT2 <gpt2>`, :doc: `BERT
+and any pretrained language model as the decoder (*e.g.* :doc:`RoBERTa <roberta>`, :doc:`GPT2 <gpt2>`, :doc:`BERT
 <bert>`).
 
 The effectiveness of initializing image-to-text-sequence models with pretrained checkpoints has been shown in (for

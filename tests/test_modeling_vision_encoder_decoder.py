@@ -17,6 +17,8 @@
 import tempfile
 import unittest
 
+from datasets import load_dataset
+
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
@@ -459,11 +461,7 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
         deit_model_tester = DeiTModelTester(self)
         encoder_config_and_inputs = deit_model_tester.prepare_config_and_inputs()
         decoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs_for_decoder()
-        (
-            config,
-            pixel_values,
-            _,
-        ) = encoder_config_and_inputs
+        config, pixel_values, _ = encoder_config_and_inputs
         input_mask = None  # TODO add once attention_mask is supported for vision models
         (
             decoder_config,
@@ -580,11 +578,7 @@ class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
         )
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            _,
-        ) = encoder_config_and_inputs
+        config, pixel_values, _ = encoder_config_and_inputs
         input_mask = None  # TODO add once attention_mask is supported for vision models
         (decoder_config, decoder_input_ids, decoder_attention_mask, _) = decoder_config_and_inputs
 
@@ -619,10 +613,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
         # TODO update to microsoft
         model = VisionEncoderDecoderModel.from_pretrained("nielsr/trocr-base-handwritten").to(torch_device)
 
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/fixtures_ocr", split="test")
-
         image = Image.open(ds[0]["file"]).convert("RGB")
 
         processor = self.default_processor
@@ -648,10 +639,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
         # TODO update to microsoft
         model = VisionEncoderDecoderModel.from_pretrained("nielsr/trocr-base-printed").to(torch_device)
 
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/fixtures_ocr", split="test")
-
         image = Image.open(ds[1]["file"]).convert("RGB")
 
         processor = self.default_processor

@@ -178,19 +178,8 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         else:
             state_dict[key] = val
 
-    print("Embed tokens of model before loading state dict:")
-    print(model.decoder.model.decoder.embed_tokens.weight[:3, :3])
-
-    print("Shape of embed tokens in state dict:", state_dict["decoder.model.decoder.embed_tokens.weight"].shape)
-    print("Embed tokens in state dict:")
-    print(state_dict["decoder.model.decoder.embed_tokens.weight"][:3, :3])
-
     # load state dict
     model.load_state_dict(state_dict)
-
-    print("Shape of embed tokens in model:", model.decoder.model.decoder.embed_tokens.weight.shape)
-    print("Embed tokens of model:")
-    print(model.decoder.model.decoder.embed_tokens.weight[:3, :3])
 
     # Check outputs on an image
     feature_extractor = ViTFeatureExtractor(size=encoder_config.image_size)
@@ -199,17 +188,10 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     pixel_values = processor(images=prepare_img(checkpoint_url), return_tensors="pt").pixel_values
 
-    print("First elements of pixel values:", pixel_values[0, 0, :3, :3])
-
-    # generated_ids = model.generate(input_ids=pixel_values, num_beams=5)
-    # print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
-
     # verify logits
     decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
     outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
     logits = outputs.logits
-
-    print("First elements of logits:", logits[0, 0, :10])
 
     expected_shape = torch.Size([1, 1, 50265])
     if "trocr-base-handwritten" in checkpoint_url:

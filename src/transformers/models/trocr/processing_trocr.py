@@ -33,9 +33,9 @@ class TrOCRProcessor:
     :meth:`~transformers.TrOCRProcessor.decode` for more information.
 
     Args:
-        feature_extractor (:obj:`AutoFeatureExtractor`):
+        feature_extractor (:class:`~transformers.AutoFeatureExtractor`):
             An instance of :class:`~transformers.AutoFeatureExtractor`. The feature extractor is a required input.
-        tokenizer (:obj:`RobertaTokenizer`):
+        tokenizer (:class:`~transformers.RobertaTokenizer`):
             An instance of :class:`~transformers.RobertaTokenizer`. The tokenizer is a required input.
     """
 

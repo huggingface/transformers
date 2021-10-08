@@ -108,12 +108,7 @@ class TrOCRStandaloneDecoderModelTester:
             max_position_embeddings=self.max_position_embeddings,
         )
 
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        )
+        return (config, input_ids, attention_mask, lm_labels)
 
     def create_and_check_decoder_model_past(
         self,
@@ -156,17 +151,9 @@ class TrOCRStandaloneDecoderModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = config_and_inputs
+        config, input_ids, attention_mask, lm_labels = config_and_inputs
 
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
 
@@ -176,9 +163,7 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, u
     all_generative_model_classes = (TrOCRForCausalLM,) if is_torch_available() else ()
     test_pruning = False
 
-    def setUp(
-        self,
-    ):
+    def setUp(self):
         self.model_tester = TrOCRStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=TrOCRConfig)
 
