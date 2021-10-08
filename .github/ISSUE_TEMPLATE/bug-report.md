@@ -36,7 +36,7 @@ Models:
 - RAG, DPR: @patrickvonplaten, @lhoestq
 - TensorFlow: @Rocketknight1
 - JAX/Flax: @patil-suraj @patrickvonplaten 
-- Canine, DETR, DEIT, VIT, LayoutLM, LayoutLM-v2, LUKE, TAPAS: @NielsRogge
+- TAPAS, LayoutLM, LayoutLMv2, LUKE, ViT, BEiT, DEiT, DETR, CANINE: @NielsRogge
 - GPT-Neo, GPT-J, CLIP: @patil-suraj
 
 If the model isn't in the list, ping @LysandreJik who will redirect you to the correct contributor.
