@@ -66,14 +66,7 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.patch_embeddings = TFPatchEmbeddings(
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            embed_dim=config.hidden_size,
-            initializer_range=config.initializer_range,
-            name="patch_embeddings",
-        )
+        self.patch_embeddings = TFPatchEmbeddings(config, name="patch_embeddings")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
@@ -159,23 +152,40 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
 
     """
 
-    def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768, initializer_range=0.02, **kwargs):
+    def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
+        image_size = to_2tuple(config.image_size)
+        patch_size = to_2tuple(config.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
+        self.num_channels = config.num_channels
+        self.embed_dim = config.hidden_size
+        self.config = config
 
-        self.projection = tf.keras.layers.Conv2D(
-            filters=embed_dim,
-            kernel_size=patch_size,
-            strides=patch_size,
-            data_format="channels_last",
-            kernel_initializer=get_initializer(initializer_range),
-            name="projection",
-        )
+    def build(self, input_shape):
+
+        with tf.name_scope("projection"):
+
+            # shape = (kernel_size[1], kernel_size[0], in_channels, out_channels)
+            # This is in the inverse order of `torch.nn.Conv2d.weight` format, which is necessary to make weight loading (PT->TF) work.
+            # See `transformers.modeling_tf_pytorch_utils.load_pytorch_weights_in_tf2_model` for more details (places involving `transpose`).
+            # In TensorFlow, `Conv2D.kernel` expects (kernel_size[0], kernel_size[1], in_channels, out_channels),
+            # so we need to perform a transpoe (1st & 2nd axes) before using `tf.nn.conv2d` in `self.call`.
+            self.conv_kernel = self.add_weight(
+                shape=(self.patch_size[1], self.patch_size[0], self.num_channels, self.embed_dim),
+                initializer=get_initializer(self.config.initializer_range),
+                name="kernel",
+            )
+
+            self.conv_bias = self.add_weight(
+                shape=(self.embed_dim,),
+                initializer=tf.zeros_initializer(),
+                name="bias",
+            )
+
+        return super().build(input_shape)
 
     def call(
         self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
@@ -186,10 +196,32 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
                 raise ValueError(
                     f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
                 )
-        x = tf.reshape(
-            tensor=self.projection(inputs=tf.transpose(pixel_values, perm=(0, 2, 3, 1)), training=training),
-            shape=(batch_size, self.num_patches, -1),
+
+        # When running on CPU, `tf.nn.conv2d` doesn't support `NCHW` format.
+        # So change the input format from `NCHW` to `NHWC`.
+        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
+        pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
+
+        # shape = (kernel_size[0], kernel_size[1], in_channels=num_channels, out_channels=embed_dim)
+        # This is the format `tf.nn.conv2d` expects.
+        filters = tf.transpose(self.conv_kernel, perm=(1, 0, 2, 3))
+
+        # Conv2D
+        # shape = (batch_size, out_height, out_width, out_channels=embed_dim)
+        projection = (
+            tf.nn.conv2d(
+                input=pixel_values,
+                filters=filters,
+                strides=self.patch_size,
+                padding="VALID",
+                data_format="NHWC",
+            )
+            + self.conv_bias
         )
+
+        # Change the 2D spatial dimensions to a single temporal dimension.
+        # shape = (batch_size, num_patches, out_channels=embed_dim)
+        x = tf.reshape(tensor=projection, shape=(batch_size, self.num_patches, -1))
 
         return x
 

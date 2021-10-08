@@ -464,6 +464,8 @@ class TFModelTesterMixin:
                     pt_inputs_dict[name] = key
                 elif name == "input_values":
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                elif name == "pixel_values":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
 
@@ -507,6 +509,8 @@ class TFModelTesterMixin:
                     key = np.array(key, dtype=bool)
                     pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
                 elif name == "input_values":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                elif name == "pixel_values":
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)

@@ -20,14 +20,7 @@ import unittest
 
 from transformers import ViTConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
-from transformers.testing_utils import (
-    is_pt_tf_cross_test,
-    require_tf,
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_tf, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -298,12 +291,6 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
 
         model = TFViTModel.from_pretrained("google/vit-base-patch16-224")
         self.assertIsNotNone(model)
-
-    @require_torch
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-
-        pass
 
 
 # We will verify our results on an image of cute cats
