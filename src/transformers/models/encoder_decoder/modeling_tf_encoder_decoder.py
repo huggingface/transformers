@@ -249,8 +249,8 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             >>> _model.encoder.save_pretrained("./encoder")
             >>> _model.decoder.save_pretrained("./decoder")
             >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-            >>>     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
-            >>> )
+            ...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
+            ... )
             >>> # This is only for copying some specific attributes of this particular model.
             >>> model.config = _model.config
 
