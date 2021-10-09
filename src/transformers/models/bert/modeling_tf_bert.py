@@ -1144,7 +1144,7 @@ class TFBertModel(TFBertPreTrainedModel):
     def serving_output(
         self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
     ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
-        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache and self.config.is_decoder else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
         cross_attns = (
@@ -1557,7 +1557,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         )
 
     def serving_output(self, output: TFCausalLMOutputWithCrossAttentions) -> TFCausalLMOutputWithCrossAttentions:
-        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache and self.config.is_decoder else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
         cross_attns = (

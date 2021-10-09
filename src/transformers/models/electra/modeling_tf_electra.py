@@ -1028,7 +1028,7 @@ class TFElectraModel(TFElectraPreTrainedModel):
         return outputs
 
     def serving_output(self, output):
-        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache and self.config.is_decoder else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
         cross_attns = (
