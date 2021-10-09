@@ -84,8 +84,8 @@ class HfArgumentParser(ArgumentParser):
             # it is provided as a third-party extension mechanism.
             if isinstance(field.type, str):
                 raise ImportError(
-                    "This implementation is not compatible with Postponed Evaluation of Annotations (PEP 563),"
-                    "which can be opted in from Python 3.7 with `from __future__ import annotations`."
+                    "This implementation is not compatible with Postponed Evaluation of Annotations (PEP 563), "
+                    "which can be opted in from Python 3.7 with `from __future__ import annotations`. "
                     "We will add compatibility when Python 3.9 is released."
                 )
             typestring = str(field.type)

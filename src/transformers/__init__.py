@@ -295,6 +295,7 @@ _import_structure = {
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
+        "ImageSegmentationPipeline",
         "JsonPipelineDataFormat",
         "NerPipeline",
         "ObjectDetectionPipeline",
@@ -546,6 +547,7 @@ if is_torch_available():
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -563,6 +565,7 @@ if is_torch_available():
             "AutoModelForCausalLM",
             "AutoModelForCTC",
             "AutoModelForImageClassification",
+            "AutoModelForImageSegmentation",
             "AutoModelForMaskedLM",
             "AutoModelForMultipleChoice",
             "AutoModelForNextSentencePrediction",
@@ -1277,6 +1280,7 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
+    _import_structure["keras_callbacks"] = []
     _import_structure["modeling_tf_outputs"] = []
     _import_structure["modeling_tf_utils"] = [
         "TFPreTrainedModel",
@@ -2115,6 +2119,7 @@ if TYPE_CHECKING:
         FeatureExtractionPipeline,
         FillMaskPipeline,
         ImageClassificationPipeline,
+        ImageSegmentationPipeline,
         JsonPipelineDataFormat,
         NerPipeline,
         ObjectDetectionPipeline,
@@ -2323,6 +2328,7 @@ if TYPE_CHECKING:
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+            MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -2340,6 +2346,7 @@ if TYPE_CHECKING:
             AutoModelForCausalLM,
             AutoModelForCTC,
             AutoModelForImageClassification,
+            AutoModelForImageSegmentation,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
             AutoModelForNextSentencePrediction,

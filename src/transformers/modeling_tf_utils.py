@@ -304,7 +304,7 @@ def booleans_processing(config, **kwargs):
             or ("use_cache" in kwargs and kwargs["use_cache"] not in (None, config.use_cache))
         ):
             tf_logger.warning(
-                "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
+                "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model. "
                 "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
             )
 
@@ -651,6 +651,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return {
             "input_ids": tf.constant(DUMMY_INPUTS),
         }
+
+    @property
+    def framework(self) -> str:
+        """
+        :str: Identifies that this is a TensorFlow model.
+        """
+        return "tf"
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
