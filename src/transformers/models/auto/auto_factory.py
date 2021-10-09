@@ -556,7 +556,7 @@ class _LazyAutoMapping(OrderedDict):
         ]
 
     def __iter__(self):
-        return iter(self._mapping.keys())
+        return iter(self._model_mapping.keys())
 
     def __contains__(self, item):
         if not hasattr(item, "__name__") or item.__name__ not in self._reverse_config_mapping:
