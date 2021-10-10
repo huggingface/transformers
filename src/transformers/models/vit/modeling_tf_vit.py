@@ -168,7 +168,7 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
             # This is in the inverse order of `torch.nn.Conv2d.weight` format, which is necessary to make weight loading (PT->TF) work.
             # See `transformers.modeling_tf_pytorch_utils.load_pytorch_weights_in_tf2_model` for more details (places involving `transpose`).
             # In TensorFlow, `Conv2D.kernel` expects (kernel_size[0], kernel_size[1], in_channels, out_channels),
-            # so we need to perform a transpoe (1st & 2nd axes) before using `tf.nn.conv2d` in `self.call`.
+            # so we need to perform a transpose (1st & 2nd axes) before using `tf.nn.conv2d` in `self.call`.
             self.conv_kernel = self.add_weight(
                 shape=(self.patch_size[1], self.patch_size[0], self.num_channels, self.embed_dim),
                 initializer=get_initializer(self.config.initializer_range),

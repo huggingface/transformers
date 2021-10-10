@@ -56,6 +56,8 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
+    # For `Conv2D`, this transpose also swaps the height/width axes. However, both PyTorch and TensorFlow expect
+    # the order (height, width). A manual transpose in the layer's `call` is required to get identical results.
     transpose = bool(
         tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
         or "emb_projs" in tf_name
