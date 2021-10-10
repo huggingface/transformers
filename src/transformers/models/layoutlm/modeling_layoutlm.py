@@ -362,7 +362,8 @@ class LayoutLMLayer(nn.Module):
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            if not self.is_decoder:
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = LayoutLMAttention(config)
         self.intermediate = LayoutLMIntermediate(config)
         self.output = LayoutLMOutput(config)
