@@ -27,8 +27,8 @@ An application of this architecture could be to leverage two pretrained :class:`
 and decoder for a summarization model as was shown in: `Text Summarization with Pretrained Encoders
 <https://arxiv.org/abs/1908.08345>`__ by Yang Liu and Mirella Lapata.
 
-The :method:`~transformers.TFEncoderDecoderModel.from_pretrained` currently doesn't support initializing the model from
-a pytorch checkpoint. Passing ``from_pt=True`` to this method will thrown an exception. If there are only pytorch
+The :meth:`~transformers.TFEncoderDecoderModel.from_pretrained` currently doesn't support initializing the model from a
+pytorch checkpoint. Passing ``from_pt=True`` to this method will thrown an exception. If there are only pytorch
 checkpoints for a particular encoder-decoder model, a workaround is:
 
 .. code-block::
