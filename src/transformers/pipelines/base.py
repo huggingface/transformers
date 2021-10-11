@@ -675,24 +675,27 @@ if is_torch_available():
             self.iterator = iter(self.loader)
             return self
 
+        def unbatch_item(self):
+            if isinstance(self._unbatch_data, torch.Tensor):
+                result = self._unbatch_data[self._unbatch_index]
+            else:
+                result = self._unbatch_data.__class__(
+                    {
+                        k: element[self._unbatch_index].unsqueeze(0)
+                        if isinstance(element[self._unbatch_index], torch.Tensor)
+                        else np.expand_dims(element[self._unbatch_index], 0)
+                        if isinstance(element[self._unbatch_index], np.ndarray)
+                        else element[self._unbatch_index]
+                        for k, element in self._unbatch_data.items()
+                        if k != "past_key_values"
+                    }
+                )
+            self._unbatch_index += 1
+            return result
+
         def __next__(self):
             if self._unbatch_index is not None and self._unbatch_index < self.unbatch_size:
-                if isinstance(self._unbatch_data, torch.Tensor):
-                    result = self._unbatch_data[self._unbatch_index]
-                else:
-                    result = self._unbatch_data.__class__(
-                        {
-                            k: element[self._unbatch_index].unsqueeze(0)
-                            if isinstance(element[self._unbatch_index], torch.Tensor)
-                            else np.expand_dims(element[self._unbatch_index], 0)
-                            if isinstance(element[self._unbatch_index], np.ndarray)
-                            else element[self._unbatch_index]
-                            for k, element in self._unbatch_data.items()
-                            if k != "past_key_values"
-                        }
-                    )
-                self._unbatch_index += 1
-                return result
+                return self.unbatch_item()
 
             item = next(self.iterator)
             processed = self.infer(item, **self.params)
@@ -711,22 +714,7 @@ if is_torch_available():
                     self.unbatch_size = N
                 self._unbatch_data = processed
                 self._unbatch_index = 0
-                if isinstance(self._unbatch_data, torch.Tensor):
-                    result = self._unbatch_data[self._unbatch_index]
-                else:
-                    result = self._unbatch_data.__class__(
-                        {
-                            k: element[self._unbatch_index].unsqueeze(0)
-                            if isinstance(element[self._unbatch_index], torch.Tensor)
-                            else np.expand_dims(element[self._unbatch_index], 0)
-                            if isinstance(element[self._unbatch_index], np.ndarray)
-                            else element[self._unbatch_index]
-                            for k, element in self._unbatch_data.items()
-                            if k != "past_key_values"
-                        }
-                    )
-                self._unbatch_index += 1
-                return result
+                return self.unbatch_item()
             else:
                 return processed
 
