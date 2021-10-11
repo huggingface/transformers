@@ -587,7 +587,7 @@ def main():
                 optimizer.step()
                 optimizer.zero_grad()
 
-                if not optimizer.is_overflow:
+                if not accelerator.optimizer_step_was_skipped:
                     lr_scheduler.step()
                 elif accelerator.is_local_main_process:
                     progress_bar.write(
@@ -640,16 +640,13 @@ def main():
 
             # save model every `args.saving_steps` steps
             if (step + 1) % (args.gradient_accumulation_steps * args.saving_steps) == 0:
-                if args.push_to_hub and epoch < args.num_train_epochs - 1:
+                if (args.push_to_hub and epoch < args.num_train_epochs - 1) or args.output_dir is not None:
                     accelerator.wait_for_everyone()
                     unwrapped_model = accelerator.unwrap_model(model)
                     unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
-                    if accelerator.is_main_process:
-                        repo.push_to_hub(commit_message=f"Training in progress step {completed_steps}", blocking=False)
-                if args.output_dir is not None:
-                    accelerator.wait_for_everyone()
-                    unwrapped_model = accelerator.unwrap_model(model)
-                    unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+
+                if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
+                    repo.push_to_hub(commit_message=f"Training in progress step {completed_steps}", blocking=False)
 
             # if completed steps > `args.max_train_steps` stop
             if completed_steps >= args.max_train_steps:

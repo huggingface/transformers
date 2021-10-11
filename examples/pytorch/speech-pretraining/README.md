@@ -90,4 +90,35 @@ TODO (currently running...)
 
 ### Large
 
-TODO (currently running...)
+To pre-train `"large-sized"` Wav2Vec2 model, *e.g.* [facebook/wav2vec2-large-lv60](https://huggingface.co/facebook/wav2vec2-large-lv60), 
+on [librispeech_asr](https://huggingface.co/datasets/librispeech_asr), the following command can be run:
+
+```bash
+accelerate launch run_pretrain_no_trainer.py \ 
+	--dataset_name=librispeech_asr \
+	--dataset_config_names clean clean other \
+	--dataset_split_names train.100 train.360 train.500 \
+	--output_dir=./test \
+	--max_train_steps=200000 \
+	--num_warmup_steps=32000 \
+	--gradient_accumulation_steps=8 \
+	--learning_rate=0.001 \
+	--weight_decay=0.01 \
+	--max_duration_in_seconds=20.0 \
+	--min_duration_in_seconds=2.0 \
+	--model_name_or_path=./ 
+	--logging_steps=1 \
+	--saving_steps=10000 \
+	--per_device_train_batch_size=2 \
+	--per_device_eval_batch_size=4 \
+	--adam_beta1=0.9 \
+	--adam_beta2=0.98 \
+	--adam_epsilon=1e-06 \
+	--gradient_checkpointing \
+```
+
+The experiment was run on 8 GPU V100 (16 GB RAM each) for 7 days. 
+In case you have more than 8 GPUs available for a higher effective `batch_size`,
+it is recommended to increase the `learning_rate` to `0.005` for faster convergence.
+
+The results of this run can be seen [here](https://wandb.ai/patrickvonplaten/pretraining-wav2vec2/reports/Wav2Vec2-Large--VmlldzoxMTAwODM4?accessToken=wm3qzcnldrwsa31tkvf2pdmilw3f63d4twtffs86ou016xjbyilh55uoi3mo1qzc) and the checkpoint pretrained for 120,000 steps can be accessed [here](https://huggingface.co/patrickvonplaten/wav2vec2-large-repro-960h-libri-120k-steps)
