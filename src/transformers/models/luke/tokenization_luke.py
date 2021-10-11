@@ -1460,17 +1460,23 @@ class LukeTokenizer(RobertaTokenizer):
             or (entities_provided and len(encoded_inputs["entity_ids"]) != max_entity_length)
         )
 
+        # Initialize attention mask if not present.
+        if return_attention_mask and "attention_mask" not in encoded_inputs:
+            encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
+        if entities_provided and return_attention_mask and "entity_attention_mask" not in encoded_inputs:
+            encoded_inputs["entity_attention_mask"] = [1] * len(encoded_inputs["entity_ids"])
+
         if needs_to_be_padded:
             difference = max_length - len(encoded_inputs["input_ids"])
             if entities_provided:
                 entity_difference = max_entity_length - len(encoded_inputs["entity_ids"])
             if self.padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"]) + [0] * difference
+                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                     if entities_provided:
-                        encoded_inputs["entity_attention_mask"] = [1] * len(encoded_inputs["entity_ids"]) + [
-                            0
-                        ] * entity_difference
+                        encoded_inputs["entity_attention_mask"] = (
+                            encoded_inputs["entity_attention_mask"] + [0] * entity_difference
+                        )
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = encoded_inputs["token_type_ids"] + [0] * difference
                     if entities_provided:
@@ -1495,11 +1501,11 @@ class LukeTokenizer(RobertaTokenizer):
 
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + [1] * len(encoded_inputs["input_ids"])
+                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
                     if entities_provided:
-                        encoded_inputs["entity_attention_mask"] = [0] * entity_difference + [1] * len(
-                            encoded_inputs["entity_ids"]
-                        )
+                        encoded_inputs["entity_attention_mask"] = [0] * entity_difference + encoded_inputs[
+                            "entity_attention_mask"
+                        ]
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = [0] * difference + encoded_inputs["token_type_ids"]
                     if entities_provided:
@@ -1523,11 +1529,6 @@ class LukeTokenizer(RobertaTokenizer):
                         ]
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        else:
-            if return_attention_mask:
-                encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
-                if entities_provided:
-                    encoded_inputs["entity_attention_mask"] = [1] * len(encoded_inputs["entity_ids"])
 
         return encoded_inputs
 
