@@ -204,9 +204,9 @@ class TokenClassificationPipeline(Pipeline):
         offset_mapping = model_inputs.pop("offset_mapping", None)
         sentence = model_inputs.pop("sentence")
         if self.framework == "tf":
-            logits = self.model(model_inputs.data)[0][0]
+            logits = self.model(model_inputs.data)[0]
         else:
-            logits = self.model(**model_inputs)[0][0]
+            logits = self.model(**model_inputs)[0]
 
         return {
             "logits": logits,
@@ -217,7 +217,7 @@ class TokenClassificationPipeline(Pipeline):
         }
 
     def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE):
-        logits = model_outputs["logits"].numpy()
+        logits = model_outputs["logits"][0].numpy()
         sentence = model_outputs["sentence"]
         input_ids = model_outputs["input_ids"][0]
         offset_mapping = model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None

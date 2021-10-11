@@ -162,12 +162,7 @@ class TextGenerationPipeline(Pipeline):
         if input_ids.shape[1] == 0:
             input_ids = None
         prompt_text = model_inputs.pop("prompt_text")
-        try:
-            generated_sequence = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
-        except Exception:
-            import ipdb
-
-            ipdb.set_trace()
+        generated_sequence = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
         return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
 
     def postprocess(self, model_outputs, return_type=ReturnType.FULL_TEXT, clean_up_tokenization_spaces=True):
