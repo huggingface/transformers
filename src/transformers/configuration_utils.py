@@ -87,7 +87,8 @@ class PretrainedConfig(PushToHubMixin):
         is_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether the model is used as decoder or not (in which case it's used as an encoder).
         encoder_hidden_size (:obj:`bool`, `optional`):
-            The hidden size of the encoder (in case the model is used as decoder).
+            The hidden size of the cross-attention layer in case the model is used as a decoder in an encoder-decoder
+            setting and the cross-attention hidden dimension differs from `self.config.hidden_size`.
         add_cross_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
             that can be used as decoder models within the `:class:~transformers.EncoderDecoderModel` class, which

@@ -605,13 +605,11 @@ class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
 class TrOCRModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        # TODO update to microsoft
-        return TrOCRProcessor.from_pretrained("nielsr/trocr-base-handwritten") if is_vision_available() else None
+        return TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten") if is_vision_available() else None
 
     @slow
     def test_inference_handwritten(self):
-        # TODO update to microsoft
-        model = VisionEncoderDecoderModel.from_pretrained("nielsr/trocr-base-handwritten").to(torch_device)
+        model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten").to(torch_device)
 
         ds = load_dataset("hf-internal-testing/fixtures_ocr", split="test")
         image = Image.open(ds[0]["file"]).convert("RGB")
@@ -636,8 +634,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_printed(self):
-        # TODO update to microsoft
-        model = VisionEncoderDecoderModel.from_pretrained("nielsr/trocr-base-printed").to(torch_device)
+        model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-printed").to(torch_device)
 
         ds = load_dataset("hf-internal-testing/fixtures_ocr", split="test")
         image = Image.open(ds[1]["file"]).convert("RGB")
