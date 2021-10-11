@@ -916,7 +916,6 @@ class HubertModel(HubertPreTrainedModel):
                 (batch_size, hidden_size),
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
-                attention_mask=attention_mask,
             )
             mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.long)[
                 :, None

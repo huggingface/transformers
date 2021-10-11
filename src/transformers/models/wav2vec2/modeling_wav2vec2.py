@@ -1109,7 +1109,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 (batch_size, hidden_size),
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
-                attention_mask=attention_mask,
             )
             mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.long)[
                 :, None
@@ -1488,7 +1487,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             raise ValueError(
                 f"You are trying to instantiate {self.__class__} with a configuration that "
                 "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `Wav2Vec2ForCTC.from_pretrained(..., vocab_size=vocab_size)`."
+                "instantiate the model as follows: `Wav2Vec2ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)

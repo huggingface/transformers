@@ -280,7 +280,7 @@ HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOIN
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
-TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
+TORCH_FX_REQUIRED_VERSION = version.parse("1.9")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
@@ -1896,10 +1896,10 @@ class ModelOutput(OrderedDict):
         class_fields = fields(self)
 
         # Safety and consistency checks
-        assert len(class_fields), f"{self.__class__.__name__} has no fields."
-        assert all(
-            field.default is None for field in class_fields[1:]
-        ), f"{self.__class__.__name__} should not have more than one required field."
+        if not len(class_fields):
+            raise ValueError(f"{self.__class__.__name__} has no fields.")
+        if not all(field.default is None for field in class_fields[1:]):
+            raise ValueError(f"{self.__class__.__name__} should not have more than one required field.")
 
         first_field = getattr(self, class_fields[0].name)
         other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
