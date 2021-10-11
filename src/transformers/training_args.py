@@ -349,12 +349,13 @@ class TrainingArguments:
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
         hub_model_id (:obj:`str`, `optional`):
-            The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
-            name, for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member
-            of with :obj:`"organization_name/model"`.
+            The name of the repository to keep in sync with the local `output_dir`. It can be a simple model ID in
+            which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
+            for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member of with
+            :obj:`"organization_name/model"`. Will default to :obj:`user_name/output_dir_name` with `output_dir_name`
+            being the name of :obj:`output_dir`.
 
-            Will default to :obj:`user_name/output_dir_name` with `output_dir_name` being the name of
-            :obj:`output_dir`.
+            Will default to to the name of :obj:`output_dir`.
         hub_strategy (:obj:`str` or :class:`~transformers.trainer_utils.HubStrategy`, `optional`, defaults to :obj:`"every_save"`):
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
