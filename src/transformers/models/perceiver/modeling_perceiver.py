@@ -1098,7 +1098,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        logits = outputs.logits
+        logits = outputs.logits if return_dict else outputs[0]
 
         loss = None
         if labels is not None:
@@ -1177,7 +1177,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        logits = outputs.logits
+        logits = outputs.logits if return_dict else outputs[0]
 
         loss = None
         if labels is not None:
@@ -1271,7 +1271,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        logits = outputs.logits
+        logits = outputs.logits if return_dict else outputs[0]
 
         loss = None
         if labels is not None:

@@ -271,24 +271,24 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
 
-        if model_class in [*get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)]:
-            # overwrite inputs_dict
-            inputs_dict["inputs"] = floats_tensor(
-                [
-                    self.model_tester.batch_size,
-                    self.model_tester.num_channels,
-                    self.model_tester.image_size,
-                    self.model_tester.image_size,
-                ]
-            )
-            inputs_dict["attention_mask"] = None
+        # if model_class in [*get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)]:
+        #     # overwrite inputs_dict
+        #     inputs_dict["inputs"] = floats_tensor(
+        #         [
+        #             self.model_tester.batch_size,
+        #             self.model_tester.num_channels,
+        #             self.model_tester.image_size,
+        #             self.model_tester.image_size,
+        #         ]
+        #     )
+        #     inputs_dict["attention_mask"] = None
 
-        elif model_class.__name__ == "PerceiverForOpticalFlow":
-            # overwrite inputs_dict
-            inputs_dict["inputs"] = floats_tensor(
-                [self.model_tester.batch_size, 2, 27, self.model_tester.train_size[0], self.model_tester.train_size[1]]
-            )
-            inputs_dict["attention_mask"] = None
+        # elif model_class.__name__ == "PerceiverForOpticalFlow":
+        #     # overwrite inputs_dict
+        #     inputs_dict["inputs"] = floats_tensor(
+        #         [self.model_tester.batch_size, 2, 27, self.model_tester.train_size[0], self.model_tester.train_size[1]]
+        #     )
+        #     inputs_dict["attention_mask"] = None
 
         if return_labels:
             if model_class in [
@@ -513,21 +513,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
-                # # tuple output
-                # print("Tuple output hidden states:")
-                # print(tuple_output[1])
-
-                # # dict output
-                # print("Dict output hidden states:")
-                # for k, v in dict_output.items():
-                #     if k == "hidden_states":
-                #         print(v)
-
-                # dict_output = dict_output.to_tuple()
-
-                # print("Length of tuple output:", len(tuple_output))
-                # print("Length of dict output:", len(dict_output))
-
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
@@ -553,8 +538,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             if model_class.__name__ == "PerceiverModel":
                 continue
 
-            print("Model class:", model_class)
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
             model = model_class(config)
@@ -565,31 +548,40 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs)
+            if model_class.__name__ != "PerceiverForOpticalFlow":
+                # optical flow model doesn't support training for now
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            if model_class.__name__ != "PerceiverForOpticalFlow":
+                # optical flow model doesn't support training for now
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+            if model_class.__name__ != "PerceiverForOpticalFlow":
+                # optical flow model doesn't support training for now
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(
-                model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
-            )
+            if model_class.__name__ != "PerceiverForOpticalFlow":
+                # optical flow model doesn't support training for now
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(
+                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                )
 
     def test_retain_grad_hidden_states_attentions(self):
         # no need to test all models as different heads yield the same functionality
