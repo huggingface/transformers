@@ -22,7 +22,7 @@ import pytest
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import SEWConfig, is_torch_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, tooslow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -471,10 +471,13 @@ class SEWModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
+        # TODO: investigate significant difference with fairseq (3e-2)
         self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=3e-2))
         self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=3e-2))
 
+    @tooslow
     def test_inference_ctc_batched(self):
+        # TODO: enable this test once the finetuned models are available
         model = SEWForCTC.from_pretrained("../sew/checkpoints/sew-tiny-converted").to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("../sew/checkpoints/sew-tiny-converted", do_lower_case=True)
 

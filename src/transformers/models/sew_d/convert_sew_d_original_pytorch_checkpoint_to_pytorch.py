@@ -105,7 +105,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = "sewd." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
+                mapped_key = "sew_d." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
 
                 if key in name or key.split("w2v_encoder.")[-1] == name.split(".")[0]:
                     is_used = True

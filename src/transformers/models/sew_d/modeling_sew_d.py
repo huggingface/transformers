@@ -221,7 +221,7 @@ class SEWDNoLayerNormConvLayer(nn.Module):
 class SEWDLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
@@ -249,7 +249,7 @@ class SEWDLayerNormConvLayer(nn.Module):
 class SEWDGroupNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
