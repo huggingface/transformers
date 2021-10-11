@@ -534,6 +534,13 @@ class DataCollatorForSeq2Seq:
         # same length to return tensors.
         if labels is not None:
             max_label_length = max(len(l) for l in labels)
+            if self.pad_to_multiple_of is not None:
+                max_label_length = (
+                    (max_label_length + self.pad_to_multiple_of - 1)
+                    // self.pad_to_multiple_of
+                    * self.pad_to_multiple_of
+                )
+
             padding_side = self.tokenizer.padding_side
             for feature in features:
                 remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))
