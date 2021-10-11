@@ -25,7 +25,6 @@ from typing import Dict, List, Optional, Union
 
 import datasets
 import torch
-import torch.distributed as dist
 import torchaudio
 from datasets import DatasetDict, concatenate_datasets, load_dataset
 from torch.utils.data.dataloader import DataLoader
@@ -547,7 +546,10 @@ def main():
         for step, batch in enumerate(train_dataloader):
             # compute num of losses
             num_losses = batch["mask_time_indices"].sum()
-            sub_attention_mask = batch.pop("sub_attention_mask", None) or torch.ones_like(batch["mask_time_indices"])
+            sub_attention_mask = batch.pop("sub_attention_mask", None)
+            sub_attention_mask = (
+                sub_attention_mask if sub_attention_mask is not None else torch.ones_like(batch["mask_time_indices"])
+            )
             percent_masked = num_losses / sub_attention_mask.sum()
 
             # forward
@@ -561,7 +563,7 @@ def main():
             # make sure that `num_losses` is summed for distributed training
             # and average gradients over losses of all devices
             if accelerator.state.num_processes > 1:
-                dist.all_reduce(num_losses)
+                num_losses = accelerator.gather(num_losses).sum()
                 gradient_multiplier = accelerator.state.num_processes / num_losses
                 multiply_grads(model.module.parameters(), gradient_multiplier)
             else:
@@ -612,10 +614,10 @@ def main():
                 outputs.diversity_loss.detach()
 
                 if accelerator.state.num_processes > 1:
-                    dist.all_reduce(loss)
-                    dist.all_reduce(outputs.contrastive_loss)
-                    dist.all_reduce(outputs.diversity_loss)
-                    dist.all_reduce(percent_masked)
+                    loss = accelerator.gather(loss).sum()
+                    outputs.contrastive_loss = accelerator.gather(outputs.contrastive_loss).sum()
+                    outputs.diversity_loss = accelerator.gather(outputs.diversity_loss).sum()
+                    percent_masked = accelerator.gather(percent_masked).sum()
 
                 train_logs = {
                     "loss": (loss * args.gradient_accumulation_steps) / num_losses,
@@ -675,7 +677,7 @@ def main():
 
         # sum over devices in multi-processing
         if accelerator.num_processes > 1:
-            [dist.all_reduce(v) for v in val_logs.values()]
+            val_logs = {k: accelerator.gather(v).sum() for k, v in val_logs.items()}
 
         val_logs = {k: v / val_logs["val_num_losses"] for k, v in val_logs.items()}
 
