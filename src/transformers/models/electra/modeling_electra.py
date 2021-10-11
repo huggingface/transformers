@@ -139,7 +139,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
             elif m_name == "kernel":
                 array = np.transpose(array)
             try:
-                if not pointer.shape == array.shape:
+                if pointer.shape != array.shape:
                     raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
