@@ -39,10 +39,12 @@ class PushToHubCallback(Callback):
         tokenizer (:obj:`PreTrainedTokenizerBase`, `optional`):
             The tokenizer used by the model. If supplied, will be uploaded to the repo alongside the weights.
         hub_model_id (:obj:`str`, `optional`):
-            The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
-            name, for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member
-            of with :obj:`"organization_name/model"`. Will default to :obj:`user_name/output_dir_name` with
-            `output_dir_name` being the name of :obj:`output_dir`.
+            The name of the repository to keep in sync with the local `output_dir`. It can be a simple model ID in
+            which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
+            for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member of with
+            :obj:`"organization_name/model"`.
+
+            Will default to to the name of :obj:`output_dir`.
         hub_token (:obj:`str`, `optional`):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             :obj:`huggingface-cli login`.
@@ -56,11 +58,11 @@ class PushToHubCallback(Callback):
         self.save_steps = save_steps
         output_dir = Path(output_dir)
         if hub_model_id is None:
-            repo_name = get_full_repo_name(output_dir.absolute().name, token=hub_token)
-        else:
-            repo_name = hub_model_id
+            hub_model_id = output_dir.absolute().name
+        if "/" not in hub_model_id:
+            hub_model_id = get_full_repo_name(hub_model_id, token=hub_token)
         self.output_dir = output_dir
-        self.repo = Repository(str(output_dir), clone_from=repo_name)
+        self.repo = Repository(str(output_dir), clone_from=hub_model_id)
         self.tokenizer = tokenizer
         self.last_job = None
 
