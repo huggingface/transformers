@@ -196,12 +196,12 @@ class SingleSentenceClassificationProcessor(DataProcessor):
     def add_examples(
         self, texts_or_text_and_labels, labels=None, ids=None, overwrite_labels=False, overwrite_examples=False
     ):
-        assert labels is None or len(texts_or_text_and_labels) == len(
-            labels
-        ), f"Text and labels have mismatched lengths {len(texts_or_text_and_labels)} and {len(labels)}"
-        assert ids is None or len(texts_or_text_and_labels) == len(
-            ids
-        ), f"Text and ids have mismatched lengths {len(texts_or_text_and_labels)} and {len(ids)}"
+        if labels is not None and len(texts_or_text_and_labels) != len(labels):
+            raise ValueError(
+                f"Text and labels have mismatched lengths {len(texts_or_text_and_labels)} and {len(labels)}"
+            )
+        if ids is not None and len(texts_or_text_and_labels) != len(ids):
+            raise ValueError(f"Text and ids have mismatched lengths {len(texts_or_text_and_labels)} and {len(ids)}")
         if ids is None:
             ids = [None] * len(texts_or_text_and_labels)
         if labels is None:
@@ -293,10 +293,10 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 input_ids = input_ids + ([pad_token] * padding_length)
                 attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
 
-            assert len(input_ids) == batch_length, f"Error with input length {len(input_ids)} vs {batch_length}"
-            assert (
-                len(attention_mask) == batch_length
-            ), f"Error with input length {len(attention_mask)} vs {batch_length}"
+            if len(input_ids) != batch_length:
+                raise ValueError(f"Error with input length {len(input_ids)} vs {batch_length}")
+            if len(attention_mask) != batch_length:
+                raise ValueError(f"Error with input length {len(attention_mask)} vs {batch_length}")
 
             if self.mode == "classification":
                 label = label_map[example.label]
