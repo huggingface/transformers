@@ -116,6 +116,7 @@ class UniSpeechForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
 def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
@@ -188,6 +189,7 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->UniSpeech
 class UniSpeechNoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
@@ -209,6 +211,7 @@ class UniSpeechNoLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->UniSpeech
 class UniSpeechLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
@@ -236,6 +239,7 @@ class UniSpeechLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->UniSpeech
 class UniSpeechGroupNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
@@ -260,6 +264,7 @@ class UniSpeechGroupNormConvLayer(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->UniSpeech
 class UniSpeechPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -295,6 +300,7 @@ class UniSpeechPositionalConvEmbedding(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->UniSpeech
 class UniSpeechSamePadLayer(nn.Module):
     def __init__(self, num_conv_pos_embeddings):
         super().__init__()
@@ -306,6 +312,7 @@ class UniSpeechSamePadLayer(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->UniSpeech
 class UniSpeechFeatureExtractor(nn.Module):
     """Construct the features from raw audio waveform"""
 
@@ -339,6 +346,7 @@ class UniSpeechFeatureExtractor(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->UniSpeech
 class UniSpeechFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -492,6 +500,7 @@ class UniSpeechAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->UniSpeech
 class UniSpeechFeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -516,6 +525,7 @@ class UniSpeechFeedForward(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->UniSpeech
 class UniSpeechEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -550,6 +560,7 @@ class UniSpeechEncoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->UniSpeech
 class UniSpeechEncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -582,6 +593,7 @@ class UniSpeechEncoderLayerStableLayerNorm(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->UniSpeech
 class UniSpeechEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -667,6 +679,7 @@ class UniSpeechEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderStableLayerNorm with Wav2Vec2->UniSpeech
 class UniSpeechEncoderStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -830,6 +843,7 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->UniSpeech, wav2vec2->unispeech
 class UniSpeechPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -953,6 +967,7 @@ UNISPEECH_INPUTS_DOCSTRING = r"""
     "The bare UniSpeech Model transformer outputting raw hidden-states without any specific head on top.",
     UNISPEECH_START_DOCSTRING,
 )
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->UniSpeech, wav2vec2->unispeech
 class UniSpeechModel(UniSpeechPreTrainedModel):
     def __init__(self, config: UniSpeechConfig):
         super().__init__(config)

@@ -692,6 +692,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
         )
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->Hubert, wav2vec2->hubert
 class HubertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
