@@ -118,7 +118,7 @@ def _compute_mask_indices(
 class SEWNoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id-1] if layer_id > 0 else 1
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
@@ -242,7 +242,12 @@ class SEWUpsampling(nn.Module):
 
         # TODO: replace with torch ops after debugging
         from einops.layers.torch import Rearrange
-        self.reshape = Rearrange('b t (s c) -> b (t s) c', s=config.squeeze_factor, c=config.hidden_size, )
+
+        self.reshape = Rearrange(
+            "b t (s c) -> b (t s) c",
+            s=config.squeeze_factor,
+            c=config.hidden_size,
+        )
 
     def forward(self, hidden_states):
         hidden_states = self.projection(hidden_states)
@@ -279,20 +284,7 @@ class SEWFeatureExtractor(nn.Module):
         hidden_states = input_values[:, None]
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
-            print(hidden_states)
 
-        return hidden_states
-
-
-class SEWFeatureProjection(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
-        self.dropout = nn.Dropout(config.feat_proj_dropout)
-
-    def forward(self, hidden_states):
-        hidden_states = self.projection(hidden_states)
-        hidden_states = self.dropout(hidden_states)
         return hidden_states
 
 
@@ -494,39 +486,6 @@ class SEWEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->SEW
-class SEWEncoderLayerStableLayerNorm(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.attention = SEWAttention(
-            embed_dim=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=False,
-        )
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = SEWFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        attn_residual = hidden_states
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
 class SEWEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -553,6 +512,17 @@ class SEWEncoder(nn.Module):
         if attention_mask is not None:
             # make sure padded tokens output 0
             hidden_states[~attention_mask] = 0.0
+
+            input_lengths = (attention_mask.long()).sum(-1)
+            # apply pooling formula to get real output_lengths
+            output_lengths = input_lengths // self.config.squeeze_factor
+            max_encoder_length = hidden_states.shape[1] // self.config.squeeze_factor
+            attention_ids = (
+                torch.arange(0, max_encoder_length, device=output_lengths.device)
+                .view(1, -1)
+                .expand(output_lengths.shape[0], -1)
+            )
+            attention_mask = (attention_ids < output_lengths.view(-1, 1)).long()
 
             # extend attention_mask
             attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
@@ -626,94 +596,6 @@ class SEWEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderStableLayerNorm with Wav2Vec2->SEW
-class SEWEncoderStableLayerNorm(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.pos_conv_embed = SEWPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([SEWEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        if attention_mask is not None:
-            # make sure padded tokens are not attended to
-            hidden_states[~attention_mask] = 0
-
-            # extend attention_mask
-            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
-
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
-        hidden_states = self.dropout(hidden_states)
-
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
-
-        for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
-
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
-                # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        hidden_states = self.layer_norm(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
-
-
 class SEWPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -735,13 +617,23 @@ class SEWPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight.data)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
+                    with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
+                        nn.init.kaiming_normal_(module.weight.data)
+                else:
+                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
+                        nn.init.kaiming_normal_(module.weight.data)
+            else:
+                nn.init.kaiming_normal_(module.weight.data)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (SEWEncoder, SEWEncoderStableLayerNorm)):
+        if isinstance(module, SEWEncoder):
             module.gradient_checkpointing = value
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
@@ -830,14 +722,15 @@ class SEWModel(SEWPreTrainedModel):
         self.config = config
         self.feature_extractor = SEWFeatureExtractor(config)
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
-        #self.feature_projection = SEWFeatureProjection(config)
+        if config.conv_dim[-1] != config.hidden_size:
+            self.feature_projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
+            self.feature_dropout = nn.Dropout(config.feat_proj_dropout)
+        else:
+            self.feature_projection = None
 
         self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
-        if config.do_stable_layer_norm:
-            self.encoder = SEWEncoderStableLayerNorm(config)
-        else:
-            self.encoder = SEWEncoder(config)
+        self.encoder = SEWEncoder(config)
 
         self.init_weights()
 
@@ -936,9 +829,13 @@ class SEWModel(SEWPreTrainedModel):
             # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
-        # hidden_states = self.feature_projection(extract_features)
-        # hidden_states = self._mask_hidden_states(extract_features, mask_time_indices=mask_time_indices)
-        hidden_states = extract_features
+        if self.feature_projection is not None:
+            hidden_states = self.feature_projection(extract_features)
+            hidden_states = self.feature_dropout(hidden_states)
+        else:
+            hidden_states = extract_features
+
+        hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -961,7 +858,7 @@ class SEWModel(SEWPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
+    """SEW Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
     SEW_START_DOCSTRING,
 )
 class SEWForCTC(SEWPreTrainedModel):

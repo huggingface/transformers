@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SEW model configuration """
+""" SEW-D model configuration """
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,17 +20,17 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SEW_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # See all SEW models at https://huggingface.co/models?filter=sew
+SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    # See all SEW-D models at https://huggingface.co/models?filter=sew-d
 }
 
 
-class SEWConfig(PretrainedConfig):
+class SEWDConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.SEWModel`. It is used to
-    instantiate a SEW model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the SEW `asapp/sew-tiny-100k
-    <https://huggingface.co/asapp/sew-tiny-100k>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.SEWDModel`. It is used to
+    instantiate a SEW-D model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the SEW-D `asapp/sew-d-tiny-100k
+    <https://huggingface.co/asapp/sew-d-tiny-100k>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -38,8 +38,8 @@ class SEWConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 32):
-            Vocabulary size of the SEW model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.SEW`.
+            Vocabulary size of the SEW-D model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.SEWD`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -58,7 +58,7 @@ class SEWConfig(PretrainedConfig):
         attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probability for the final projection layer of :class:`SEWForCTC`.
+            The dropout probability for the final projection layer of :class:`SEWDForCTC`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -91,10 +91,6 @@ class SEWConfig(PretrainedConfig):
             embeddings layer.
         num_conv_pos_embedding_groups (:obj:`int`, `optional`, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
-        do_stable_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to apply `stable` layer norm architecture of the Transformer encoder. ``do_stable_layer_norm is
-            True`` corresponds to applying layer norm before the attention layer, whereas ``do_stable_layer_norm is
-            False`` corresponds to applying layer norm after the attention layer.
         apply_spec_augment (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature extractor. For reference see
             `SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition
@@ -129,31 +125,31 @@ class SEWConfig(PretrainedConfig):
             The weight of the codebook diversity loss component.
         ctc_loss_reduction (:obj:`str`, `optional`, defaults to :obj:`"sum"`):
             Specifies the reduction to apply to the output of ``torch.nn.CTCLoss``. Only relevant when training an
-            instance of :class:`~transformers.SEWForCTC`.
+            instance of :class:`~transformers.SEWDForCTC`.
         ctc_zero_infinity (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to zero infinite losses and the associated gradients of ``torch.nn.CTCLoss``. Infinite losses
             mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
-            instance of :class:`~transformers.SEWForCTC`.
+            instance of :class:`~transformers.SEWDForCTC`.
         use_weighted_layer_sum (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
-            instance of :class:`~transformers.SEWForSequenceClassification`.
+            instance of :class:`~transformers.SEWDForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
 
     Example::
 
-        >>> from transformers import SEWModel, SEWConfig
+        >>> from transformers import SEWDModel, SEWDConfig
 
-        >>> # Initializing a SEW asapp/sew-tiny-100k style configuration
-        >>> configuration = SEWConfig()
+        >>> # Initializing a SEW-D asapp/sew-d-tiny-100k style configuration
+        >>> configuration = SEWDConfig()
 
-        >>> # Initializing a model from the asapp/sew-tiny-100k style configuration
-        >>> model = SEWModel(configuration)
+        >>> # Initializing a model from the asapp/sew-d-tiny-100k style configuration
+        >>> model = SEWDModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "sew"
+    model_type = "sew-d"
 
     def __init__(
         self,
@@ -163,6 +159,13 @@ class SEWConfig(PretrainedConfig):
         num_attention_heads=12,
         intermediate_size=3072,
         squeeze_factor=2,
+        max_position_embeddings=512,
+        position_buckets=256,
+        share_att_key=True,
+        relative_attention=True,
+        position_biased_input=False,
+        pos_att_type=("p2c", "c2p"),
+        norm_rel_ebd="layer_norm",
         hidden_act="gelu",
         hidden_dropout=0.1,
         activation_dropout=0.1,
@@ -181,7 +184,6 @@ class SEWConfig(PretrainedConfig):
         conv_bias=False,
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
-        do_stable_layer_norm=False,
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
@@ -217,6 +219,13 @@ class SEWConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
         self.squeeze_factor = squeeze_factor
+        self.max_position_embeddings = max_position_embeddings
+        self.position_buckets = position_buckets
+        self.share_att_key = share_att_key
+        self.relative_attention = relative_attention
+        self.norm_rel_ebd = norm_rel_ebd
+        self.position_biased_input = position_biased_input
+        self.pos_att_type = list(pos_att_type)
         self.hidden_act = hidden_act
         self.num_attention_heads = num_attention_heads
         self.hidden_dropout = hidden_dropout
@@ -228,7 +237,6 @@ class SEWConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
-        self.do_stable_layer_norm = do_stable_layer_norm
         self.use_weighted_layer_sum = use_weighted_layer_sum
         self.classifier_proj_size = classifier_proj_size
 

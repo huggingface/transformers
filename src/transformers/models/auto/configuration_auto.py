@@ -94,6 +94,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rag", "RagConfig"),
         ("tapas", "TapasConfig"),
         ("splinter", "SplinterConfig"),
+        ("sew", "SEWConfig"),
+        ("sew-d", "SEWDConfig"),
     ]
 )
 
@@ -160,6 +162,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
@@ -241,6 +244,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("byt5", "ByT5"),
         ("mbart50", "mBART-50"),
         ("splinter", "Splinter"),
+        ("sew", "SEW"),
+        ("sew-d", "SEWD"),
     ]
 )
 

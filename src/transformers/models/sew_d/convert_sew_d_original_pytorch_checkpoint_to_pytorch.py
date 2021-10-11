@@ -25,9 +25,9 @@ from fairseq.data import Dictionary
 
 from sew_asapp import tasks
 from transformers import (
-    SEWConfig,
-    SEWForCTC,
-    SEWModel,
+    SEWDConfig,
+    SEWDForCTC,
+    SEWDModel,
     Wav2Vec2CTCTokenizer,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
@@ -41,14 +41,16 @@ logger = logging.get_logger(__name__)
 MAPPING = {
     "post_extract_proj": "feature_projection",
     "encoder.pos_conv.0": "encoder.pos_conv_embed.conv",
-    "self_attn.k_proj": "encoder.layers.*.attention.k_proj",
-    "self_attn.v_proj": "encoder.layers.*.attention.v_proj",
-    "self_attn.q_proj": "encoder.layers.*.attention.q_proj",
-    "self_attn.out_proj": "encoder.layers.*.attention.out_proj",
-    "self_attn_layer_norm": "encoder.layers.*.layer_norm",
-    "fc1": "encoder.layers.*.feed_forward.intermediate_dense",
-    "fc2": "encoder.layers.*.feed_forward.output_dense",
-    "final_layer_norm": "encoder.layers.*.final_layer_norm",
+    "attention.self.query_proj": "encoder.encoder.layer.*.attention.self.query_proj",
+    "attention.self.key_proj": "encoder.encoder.layer.*.attention.self.key_proj",
+    "attention.self.value_proj": "encoder.encoder.layer.*.attention.self.value_proj",
+    "attention.output.dense": "encoder.encoder.layer.*.attention.output.dense",
+    "attention.output.LayerNorm": "encoder.encoder.layer.*.attention.output.LayerNorm",
+    "intermediate.dense": "encoder.encoder.layer.*.intermediate.dense",
+    "output.dense": "encoder.encoder.layer.*.output.dense",
+    "output.LayerNorm": "encoder.encoder.layer.*.output.LayerNorm",
+    "encoder.encoder.rel_embeddings": "encoder.encoder.rel_embeddings",
+    "encoder.encoder.LayerNorm": "encoder.encoder.LayerNorm",
     "encoder.upsample.0": "encoder.upsample.projection",
     "encoder.layer_norm": "encoder.layer_norm",
     "w2v_encoder.layer_norm": "layer_norm",
@@ -103,12 +105,14 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = "sew." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
+                mapped_key = "sewd." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
 
                 if key in name or key.split("w2v_encoder.")[-1] == name.split(".")[0]:
                     is_used = True
                     if "*" in mapped_key:
                         layer_index = name.split(key)[0].split(".")[-2]
+                        if not layer_index.isnumeric():
+                            continue
                         mapped_key = mapped_key.replace("*", layer_index)
                     if "weight_g" in name:
                         weight_type = "weight_g"
@@ -172,9 +176,9 @@ def convert_sew_checkpoint(
     Copy/paste/tweak model's weights to transformers design.
     """
     if config_path is not None:
-        config = SEWConfig.from_pretrained(config_path)
+        config = SEWDConfig.from_pretrained(config_path)
     else:
-        config = SEWConfig()
+        config = SEWDConfig()
 
     if is_finetuned:
         if dict_path:
@@ -213,9 +217,9 @@ def convert_sew_checkpoint(
             processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
             processor.save_pretrained(pytorch_dump_folder_path)
 
-        hf_model = SEWForCTC(config)
+        hf_model = SEWDForCTC(config)
     else:
-        hf_model = SEWModel(config)
+        hf_model = SEWDModel(config)
 
     if is_finetuned:
         model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
