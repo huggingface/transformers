@@ -1275,8 +1275,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits, labels)
+            raise NotImplementedError("Optical flow training is not yet supported")
 
         if not return_dict:
             output = (logits,) + outputs[2:]

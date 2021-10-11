@@ -307,10 +307,16 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 )
             elif model_class.__name__ == "PerceiverForOpticalFlow":
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.train_size[0], self.model_tester.train_size[1],
-                    2), dtype=torch.long, device=torch_device
+                    (
+                        self.model_tester.batch_size,
+                        self.model_tester.train_size[0],
+                        self.model_tester.train_size[1],
+                        2,
+                    ),
+                    dtype=torch.long,
+                    device=torch_device,
                 )
-        
+
         return inputs_dict
 
     def test_config(self):
@@ -342,7 +348,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             return
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class in get_values(MODEL_MAPPING) or model_class.__name__ == "PerceiverForOpticalFlow":
                 continue
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -505,22 +511,22 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
-                # tuple output
-                print("Tuple output hidden states:")
-                print(tuple_output[1])
+                # # tuple output
+                # print("Tuple output hidden states:")
+                # print(tuple_output[1])
 
-                # dict output
-                print("Dict output hidden states:")
-                for k, v in dict_output.items():
-                    if k == "hidden_states":
-                        print(v)
+                # # dict output
+                # print("Dict output hidden states:")
+                # for k, v in dict_output.items():
+                #     if k == "hidden_states":
+                #         print(v)
 
-                dict_output = dict_output.to_tuple()
+                # dict_output = dict_output.to_tuple()
 
-                print("Length of tuple output:", len(tuple_output))
-                print("Length of dict output:", len(dict_output))
+                # print("Length of tuple output:", len(tuple_output))
+                # print("Length of dict output:", len(dict_output))
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
@@ -547,19 +553,21 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             if model_class.__name__ == "PerceiverModel":
                 continue
 
+            print("Model class:", model_class)
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
             model = model_class(config)
             model.to(torch_device)
             model.eval()
 
-            # tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            # dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            # check_equivalence(model, tuple_inputs, dict_inputs)
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
 
-            # tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            # dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            # check_equivalence(model, tuple_inputs, dict_inputs)
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
