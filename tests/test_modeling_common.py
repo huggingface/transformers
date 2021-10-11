@@ -200,6 +200,8 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
+            if not model_class.supports_gradient_checkpointing:
+                continue
 
             # at init model should have gradient checkpointing disabled
             model = model_class(config)
