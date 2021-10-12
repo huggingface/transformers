@@ -48,13 +48,13 @@ def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
     mask_length: int,
-    device: torch.device,
-    attention_mask: Optional[torch.tensor] = None,
+    attention_mask: Optional[torch.LongTensor] = None,
     min_masks: int = 0,
-) -> torch.tensor:
+) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement `SpecAugment: A Simple Data Augmentation Method for
-    ASR <https://arxiv.org/abs/1904.08779>`__.
+    ASR <https://arxiv.org/abs/1904.08779>`__. Note that this method is not optimized to run on TPU and should be run
+    on CPU as part of the preprocessing during training.
 
     Args:
         shape: the the shape for which to compute masks.
@@ -64,7 +64,6 @@ def _compute_mask_indices(
             however due to overlaps, the actual number will be smaller (unless no_overlap is True)
         mask_length: size of the mask
         min_masks: minimum number of masked spans
-
     """
     batch_size, sequence_length = shape
 
@@ -76,42 +75,64 @@ def _compute_mask_indices(
             f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
         )
 
-    # compute number of masked spans in batch
-    num_masked_spans = int(mask_prob * sequence_length / mask_length + torch.rand((1,)).item())
-    num_masked_spans = max(num_masked_spans, min_masks)
+    epsilon = np.random.rand(1).item()
 
-    # make sure num masked indices <= sequence_length
-    if num_masked_spans * mask_length > sequence_length:
-        num_masked_spans = sequence_length // mask_length
+    def compute_num_masked_span(input_length):
+        """Given input length, compute how many spans should be masked"""
+        num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
+        num_masked_span = max(num_masked_span, min_masks)
+
+        # make sure num masked indices <= sequence_length
+        if num_masked_span * mask_length > sequence_length:
+            num_masked_span = sequence_length // mask_length
+
+        return num_masked_span
+
+    # compute number of masked spans in batch
+    input_lengths = (
+        attention_mask.sum(-1).detach().tolist()
+        if attention_mask is not None
+        else [sequence_length for _ in range(batch_size)]
+    )
 
     # SpecAugment mask to fill
-    spec_aug_mask = torch.zeros((batch_size, sequence_length), device=device, dtype=torch.bool)
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    spec_aug_mask_idxs = []
 
-    # uniform distribution to sample from, make sure that offset samples are < sequence_length
-    uniform_dist = torch.ones((batch_size, sequence_length - (mask_length - 1)), device=device)
+    max_num_masked_span = compute_num_masked_span(sequence_length)
 
-    # get random indices to mask
-    spec_aug_mask_idxs = torch.multinomial(uniform_dist, num_masked_spans)
+    for input_length in input_lengths:
+        # compute num of masked spans for this input
+        num_masked_span = compute_num_masked_span(input_length)
+        # get random indices to mask
+        spec_aug_mask_idx = np.random.choice(
+            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
+        )
+
+        # pick first sampled index that will serve as a dummy index to pad vector
+        dummy_mask_idx = spec_aug_mask_idx[0]
+
+        spec_aug_mask_idx = np.concatenate(
+            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+        )
+        spec_aug_mask_idxs.append(spec_aug_mask_idx)
+
+    spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
 
     # expand masked indices to masked spans
-    spec_aug_mask_idxs = (
-        spec_aug_mask_idxs.unsqueeze(dim=-1)
-        .expand((batch_size, num_masked_spans, mask_length))
-        .reshape(batch_size, num_masked_spans * mask_length)
+    spec_aug_mask_idxs = np.broadcast_to(
+        spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
     )
-    offsets = (
-        torch.arange(mask_length, device=device)[None, None, :]
-        .expand((batch_size, num_masked_spans, mask_length))
-        .reshape(batch_size, num_masked_spans * mask_length)
+    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
+
+    offsets = np.arange(mask_length)[None, None, :]
+    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
+        batch_size, max_num_masked_span * mask_length
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
 
     # scatter indices to mask
-    spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, True)
-
-    if attention_mask is not None:
-        # make sure padded input ids cannot be masked
-        spec_aug_mask = torch.where(attention_mask.bool(), spec_aug_mask, False)
+    np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
 
     return spec_aug_mask
 
@@ -257,6 +278,7 @@ class HubertFeatureExtractor(nn.Module):
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
         self.conv_layers = nn.ModuleList(conv_layers)
+        self.gradient_checkpointing = False
 
     def _freeze_parameters(self):
         for param in self.parameters():
@@ -264,8 +286,26 @@ class HubertFeatureExtractor(nn.Module):
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
+
+        # make sure hidden_states require grad for gradient_checkpointing
+        if self.training:
+            hidden_states.requires_grad = True
+
         for conv_layer in self.conv_layers:
-            hidden_states = conv_layer(hidden_states)
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs)
+
+                    return custom_forward
+
+                hidden_states = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(conv_layer),
+                    hidden_states,
+                )
+            else:
+                hidden_states = conv_layer(hidden_states)
 
         return hidden_states
 
@@ -525,6 +565,7 @@ class HubertEncoder(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([HubertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -564,7 +605,7 @@ class HubertEncoder(nn.Module):
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if self.gradient_checkpointing and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -612,6 +653,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
         self.layers = nn.ModuleList(
             [HubertEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -651,7 +693,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if self.gradient_checkpointing and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -698,6 +740,7 @@ class HubertPreTrainedModel(PreTrainedModel):
 
     config_class = HubertConfig
     base_model_prefix = "hubert"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -724,6 +767,10 @@ class HubertPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (HubertEncoder, HubertEncoderStableLayerNorm)):
+            module.gradient_checkpointing = value
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
@@ -857,10 +904,10 @@ class HubertModel(HubertPreTrainedModel):
                 (batch_size, sequence_length),
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
-                device=hidden_states.device,
                 attention_mask=attention_mask,
                 min_masks=2,
             )
+            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.long)
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
 
         if self.config.mask_feature_prob > 0 and self.training:
@@ -869,10 +916,11 @@ class HubertModel(HubertPreTrainedModel):
                 (batch_size, hidden_size),
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
-                device=hidden_states.device,
-                attention_mask=attention_mask,
             )
-            hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.long)[
+                :, None
+            ].expand(-1, sequence_length, -1)
+            hidden_states[mask_feature_indices] = 0
 
         return hidden_states
 
@@ -957,6 +1005,14 @@ class HubertForCTC(HubertPreTrainedModel):
 
         self.hubert = HubertModel(config)
         self.dropout = nn.Dropout(config.final_dropout)
+
+        if config.vocab_size is None:
+            raise ValueError(
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `HubertForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
+            )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()

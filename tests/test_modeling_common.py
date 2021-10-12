@@ -17,6 +17,7 @@ import copy
 import gc
 import inspect
 import json
+import os
 import os.path
 import random
 import tempfile
@@ -24,7 +25,7 @@ import unittest
 import warnings
 from typing import Dict, List, Tuple
 
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, Repository
 from requests.exceptions import HTTPError
 from transformers import AutoModel, AutoModelForSequenceClassification, is_torch_available, logging
 from transformers.file_utils import WEIGHTS_NAME, is_torch_fx_available
@@ -91,6 +92,7 @@ class ModelTesterMixin:
     all_model_classes = ()
     all_generative_model_classes = ()
     fx_ready_model_classes = ()
+    fx_dynamic_ready_model_classes = ()
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -194,6 +196,25 @@ class ModelTesterMixin:
                     or set(load_result.missing_keys) == set(model._keys_to_ignore_on_save)
                 )
                 self.assertTrue(len(load_result.unexpected_keys) == 0)
+
+    def test_gradient_checkpointing_enable_disable(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if not model_class.supports_gradient_checkpointing:
+                continue
+
+            # at init model should have gradient checkpointing disabled
+            model = model_class(config)
+            self.assertFalse(model.is_gradient_checkpointing)
+
+            # check enable works
+            model.gradient_checkpointing_enable()
+            self.assertTrue(model.is_gradient_checkpointing)
+
+            # check disable works
+            model.gradient_checkpointing_disable()
+            self.assertFalse(model.is_gradient_checkpointing)
 
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -369,15 +390,14 @@ class ModelTesterMixin:
 
     def test_training_gradient_checkpointing(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.model_tester.is_training or not hasattr(config, "gradient_checkpointing"):
+        if not self.model_tester.is_training:
             return
 
-        config.gradient_checkpointing = True
         config.use_cache = False
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -607,14 +627,19 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+    def test_torch_fx_dynamic_axes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self._create_and_check_torch_fx_tracing(config, inputs_dict, dynamic_axes=True)
+
+    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False, dynamic_axes=False):
         if not is_torch_fx_available():
             return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
 
-        for model_class in self.fx_ready_model_classes:
+        model_classes = self.fx_ready_model_classes if not dynamic_axes else self.fx_dynamic_ready_model_classes
+        for model_class in model_classes:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
@@ -640,12 +665,11 @@ class ModelTesterMixin:
                     traced_model = symbolic_trace(
                         model,
                         input_names,
-                        batch_size=batch_size,
-                        sequence_length=[encoder_sequence_length, decoder_sequence_length],
+                        batch_size=batch_size if not dynamic_axes else -1,
+                        sequence_length=[encoder_sequence_length, decoder_sequence_length] if not dynamic_axes else -1,
                     )
 
                     traced_output = traced_model(**filtered_inputs)
-
                 else:
                     input_names = ["input_ids", "attention_mask", "token_type_ids"]
                     input_ids = inputs["input_ids"]
@@ -679,8 +703,8 @@ class ModelTesterMixin:
                     traced_model = symbolic_trace(
                         model,
                         input_names,
-                        batch_size=batch_size,
-                        sequence_length=sequence_length,
+                        batch_size=batch_size if not dynamic_axes else -1,
+                        sequence_length=sequence_length if not dynamic_axes else -1,
                         num_choices=num_choices,
                     )
                     traced_output = traced_model(**filtered_inputs)
@@ -1792,6 +1816,44 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.dtype, torch.float16)
 
 
+if is_torch_available():
+
+    class FakeModel(PreTrainedModel):
+        config_class = BertConfig
+        base_model_prefix = "fake"
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
+
+        def forward(self, x):
+            return self.linear(x)
+
+        def _init_weights(self, module):
+            pass
+
+
+# Make sure this is synchronized with the model above.
+FAKE_MODEL_CODE = """
+import torch
+from transformers import BertConfig, PreTrainedModel
+
+class FakeModel(PreTrainedModel):
+    config_class = BertConfig
+    base_model_prefix = "fake"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
+
+    def forward(self, x):
+        return self.linear(x)
+
+    def _init_weights(self, module):
+        pass
+"""
+
+
 @require_torch
 @is_staging_test
 class ModelPushToHubTester(unittest.TestCase):
@@ -1809,6 +1871,11 @@ class ModelPushToHubTester(unittest.TestCase):
 
         try:
             cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-dynamic-model")
         except HTTPError:
             pass
 
@@ -1840,3 +1907,23 @@ class ModelPushToHubTester(unittest.TestCase):
             new_model = BertModel.from_pretrained("valid_org/test-model-org")
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
                 self.assertTrue(torch.equal(p1, p2))
+
+    def test_push_to_hub_dynamic_model(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        config.auto_map = {"AutoModel": "modeling.FakeModel"}
+        model = FakeModel(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model", use_auth_token=self._token)
+            model.save_pretrained(tmp_dir)
+            with open(os.path.join(tmp_dir, "modeling.py"), "w") as f:
+                f.write(FAKE_MODEL_CODE)
+
+            repo.push_to_hub()
+            print(os.listdir(tmp_dir))
+
+        new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))

@@ -248,6 +248,8 @@ if (
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(hf_cache_home, "modules"))
+TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
 DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False) in ENV_VARS_TRUE_VALUES
 
@@ -278,7 +280,7 @@ HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOIN
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
-TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
+TORCH_FX_REQUIRED_VERSION = version.parse("1.9")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
@@ -1853,8 +1855,28 @@ def to_py_obj(obj):
         return obj.numpy().tolist()
     elif is_torch_available() and _is_torch(obj):
         return obj.detach().cpu().tolist()
+    elif is_flax_available() and _is_jax(obj):
+        return np.asarray(obj).tolist()
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
+    else:
+        return obj
+
+
+def to_numpy(obj):
+    """
+    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
+    """
+    if isinstance(obj, (dict, UserDict)):
+        return {k: to_numpy(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return np.array(obj)
+    elif is_tf_available() and _is_tensorflow(obj):
+        return obj.numpy()
+    elif is_torch_available() and _is_torch(obj):
+        return obj.detach().cpu().numpy()
+    elif is_flax_available() and _is_jax(obj):
+        return np.asarray(obj)
     else:
         return obj
 
@@ -1874,10 +1896,10 @@ class ModelOutput(OrderedDict):
         class_fields = fields(self)
 
         # Safety and consistency checks
-        assert len(class_fields), f"{self.__class__.__name__} has no fields."
-        assert all(
-            field.default is None for field in class_fields[1:]
-        ), f"{self.__class__.__name__} should not have more than one required field."
+        if not len(class_fields):
+            raise ValueError(f"{self.__class__.__name__} has no fields.")
+        if not all(field.default is None for field in class_fields[1:]):
+            raise ValueError(f"{self.__class__.__name__} should not have more than one required field.")
 
         first_field = getattr(self, class_fields[0].name)
         other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])

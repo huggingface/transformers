@@ -23,6 +23,7 @@ import logging
 import math
 import os
 import random
+from pathlib import Path
 
 import datasets
 import numpy as np
@@ -33,6 +34,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from huggingface_hub import Repository
 from transformers import (
     AdamW,
     DataCollatorWithPadding,
@@ -45,13 +47,14 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
+from transformers.file_utils import get_full_repo_name
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 from utils_qa import postprocess_qa_predictions_with_beam_search
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.11.0.dev0")
+check_min_version("4.12.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -203,7 +206,11 @@ def parse_args():
         default=None,
         help="For debugging purposes or quicker training, truncate the number of prediction examples to this",
     )
-
+    parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
+    parser.add_argument(
+        "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
+    )
+    parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     args = parser.parse_args()
 
     # Sanity checks
@@ -225,8 +232,8 @@ def parse_args():
             extension = args.test_file.split(".")[-1]
             assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
 
-    if args.output_dir is not None:
-        os.makedirs(args.output_dir, exist_ok=True)
+    if args.push_to_hub:
+        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
 
     return args
 
@@ -257,6 +264,18 @@ def main():
     # If passed along, set the training seed now.
     if args.seed is not None:
         set_seed(args.seed)
+
+    # Handle the repository creation
+    if accelerator.is_main_process:
+        if args.push_to_hub:
+            if args.hub_model_id is None:
+                repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
+            else:
+                repo_name = args.hub_model_id
+            repo = Repository(args.output_dir, clone_from=repo_name)
+        elif args.output_dir is not None:
+            os.makedirs(args.output_dir, exist_ok=True)
+    accelerator.wait_for_everyone()
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -421,14 +440,15 @@ def main():
         # We will select sample from whole data if agument is specified
         train_dataset = train_dataset.select(range(args.max_train_samples))
     # Create train feature from dataset
-    train_dataset = train_dataset.map(
-        prepare_train_features,
-        batched=True,
-        num_proc=args.preprocessing_num_workers,
-        remove_columns=column_names,
-        load_from_cache_file=not args.overwrite_cache,
-        desc="Running tokenizer on train dataset",
-    )
+    with accelerator.main_process_first():
+        train_dataset = train_dataset.map(
+            prepare_train_features,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on train dataset",
+        )
     if args.max_train_samples is not None:
         # Number of samples might increase during Feature Creation, We select only specified max samples
         train_dataset = train_dataset.select(range(args.max_train_samples))
@@ -511,14 +531,15 @@ def main():
         # We will select sample from whole data
         eval_examples = eval_examples.select(range(args.max_eval_samples))
     # Validation Feature Creation
-    eval_dataset = eval_examples.map(
-        prepare_validation_features,
-        batched=True,
-        num_proc=args.preprocessing_num_workers,
-        remove_columns=column_names,
-        load_from_cache_file=not args.overwrite_cache,
-        desc="Running tokenizer on validation dataset",
-    )
+    with accelerator.main_process_first():
+        eval_dataset = eval_examples.map(
+            prepare_validation_features,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on validation dataset",
+        )
 
     if args.max_eval_samples is not None:
         # During Feature creation dataset samples might increase, we will select required samples again
@@ -532,17 +553,18 @@ def main():
             # We will select sample from whole data
             predict_examples = predict_examples.select(range(args.max_predict_samples))
         # Predict Feature Creation
-        predict_dataset = predict_examples.map(
-            prepare_validation_features,
-            batched=True,
-            num_proc=args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not args.overwrite_cache,
-            desc="Running tokenizer on prediction dataset",
-        )
-        if args.max_predict_samples is not None:
-            # During Feature creation dataset samples might increase, we will select required samples again
-            predict_dataset = predict_dataset.select(range(args.max_predict_samples))
+        with accelerator.main_process_first():
+            predict_dataset = predict_examples.map(
+                prepare_validation_features,
+                batched=True,
+                num_proc=args.preprocessing_num_workers,
+                remove_columns=column_names,
+                load_from_cache_file=not args.overwrite_cache,
+                desc="Running tokenizer on prediction dataset",
+            )
+            if args.max_predict_samples is not None:
+                # During Feature creation dataset samples might increase, we will select required samples again
+                predict_dataset = predict_dataset.select(range(args.max_predict_samples))
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -703,8 +725,15 @@ def main():
             if completed_steps >= args.max_train_steps:
                 break
 
-        # intialize all lists to collect the batches
+        if args.push_to_hub and epoch < args.num_train_epochs - 1:
+            accelerator.wait_for_everyone()
+            unwrapped_model = accelerator.unwrap_model(model)
+            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            if accelerator.is_main_process:
+                tokenizer.save_pretrained(args.output_dir)
+                repo.push_to_hub(commit_message=f"Training in progress epoch {epoch}", blocking=False)
 
+    # intialize all lists to collect the batches
     all_start_top_log_probs = []
     all_start_top_index = []
     all_end_top_log_probs = []
@@ -821,6 +850,10 @@ def main():
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+        if accelerator.is_main_process:
+            tokenizer.save_pretrained(args.output_dir)
+            if args.push_to_hub:
+                repo.push_to_hub(commit_message="End of training")
 
 
 if __name__ == "__main__":
