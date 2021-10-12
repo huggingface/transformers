@@ -133,6 +133,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         # Model for Causal LM mapping
         ("rembert", "TFRemBertForCausalLM"),
         ("roformer", "TFRoFormerForCausalLM"),
+        ("roberta", "TFRobertaForCausalLM"),
         ("bert", "TFBertLMHeadModel"),
         ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
         ("gpt2", "TFGPT2LMHeadModel"),
@@ -181,6 +182,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "TFBlenderbotForConditionalGeneration"),
         ("blenderbot-small", "TFBlenderbotSmallForConditionalGeneration"),
         ("bart", "TFBartForConditionalGeneration"),
+        ("encoder-decoder", "TFEncoderDecoderModel"),
     ]
 )
 

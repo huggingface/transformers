@@ -673,7 +673,6 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             attentions=transformer_outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.serving_output
     def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None

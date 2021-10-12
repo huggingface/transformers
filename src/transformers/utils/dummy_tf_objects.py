@@ -929,6 +929,15 @@ class TFElectraPreTrainedModel:
         requires_backends(cls, ["tf"])
 
 
+class TFEncoderDecoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1710,6 +1719,15 @@ class TFRemBertPreTrainedModel:
 
 
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFRobertaForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFRobertaForMaskedLM:

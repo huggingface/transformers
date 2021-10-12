@@ -76,6 +76,7 @@ from . import (
     TFLxmertForPreTraining,
     TFLxmertVisualFeatureEncoder,
     TFOpenAIGPTLMHeadModel,
+    TFRobertaForCausalLM,
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
     TFT5ForConditionalGeneration,
@@ -215,6 +216,7 @@ MODEL_CLASSES = {
     ),
     "roberta": (
         RobertaConfig,
+        TFRobertaForCausalLM,
         TFRobertaForMaskedLM,
         RobertaForMaskedLM,
         ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,

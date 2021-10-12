@@ -650,7 +650,11 @@ class TFGenerationMixin:
 
         # current position and vocab size
         cur_len = shape_list(input_ids)[1]  # unused
-        vocab_size = self.config.vocab_size
+        vocab_size = getattr(self.config, "vocab_size", None)
+        if vocab_size is None and self.config.is_encoder_decoder:
+            decoder_config = getattr(self.config, "decoder", None)
+            if decoder_config is not None:
+                vocab_size = getattr(self.config.decoder, "vocab_size", None)
 
         # set effective batch size and effective batch multiplier according to do_sample
         if do_sample:
@@ -678,6 +682,7 @@ class TFGenerationMixin:
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                return_dict=return_dict_in_generate,
             )
             if return_dict_in_generate:
                 if output_attentions:
@@ -911,7 +916,7 @@ class TFGenerationMixin:
             if eos_token_id is not None and cur_len < min_length:
                 # create eos_token_id boolean mask
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
+                    [True if token == eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
 
@@ -1142,7 +1147,7 @@ class TFGenerationMixin:
                 num_batch_hypotheses = batch_size * num_beams
 
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
+                    [True if token == eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [num_batch_hypotheses, vocab_size])
 
@@ -1446,11 +1451,17 @@ class TFGenerationMixin:
         Implement in subclasses of :class:`~transformers.PreTrainedModel` for custom behavior to adjust the logits in
         the generate method.
         """
+        vocab_size = getattr(self.config, "vocab_size", None)
+        if vocab_size is None and self.config.is_encoder_decoder:
+            decoder_config = getattr(self.config, "decoder", None)
+            if decoder_config is not None:
+                vocab_size = getattr(self.config.decoder, "vocab_size", None)
+
         if cur_len == 1 and forced_bos_token_id is not None:
-            vocab_range = tf.constant(range(self.config.vocab_size))
+            vocab_range = tf.constant(range(vocab_size))
             return tf.where(vocab_range != forced_bos_token_id, -1e8, logits)
         elif cur_len == max_length - 1 and forced_eos_token_id is not None:
-            vocab_range = tf.constant(range(self.config.vocab_size))
+            vocab_range = tf.constant(range(vocab_size))
             return tf.where(vocab_range != forced_eos_token_id, -1e8, logits)
         else:
             return logits
