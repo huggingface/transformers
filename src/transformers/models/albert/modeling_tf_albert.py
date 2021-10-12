@@ -165,7 +165,8 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("Need to provide either `input_ids` or `input_embeds`.")
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)

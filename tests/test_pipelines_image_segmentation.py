@@ -112,12 +112,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 {
                     "score": 0.004,
                     "label": "LABEL_0",
-                    "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                    "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
                 },
                 {
                     "score": 0.004,
                     "label": "LABEL_0",
-                    "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                    "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
                 },
             ],
         )
@@ -140,24 +140,24 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                     {
                         "score": 0.004,
                         "label": "LABEL_0",
-                        "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                        "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
                     },
                     {
                         "score": 0.004,
                         "label": "LABEL_0",
-                        "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                        "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
                     },
                 ],
                 [
                     {
                         "score": 0.004,
                         "label": "LABEL_0",
-                        "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                        "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
                     },
                     {
                         "score": 0.004,
                         "label": "LABEL_0",
-                        "mask": "8423ef82b9a8e8790346bc452b557aa78ea997bc",
+                        "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
                     },
                 ],
             ],
@@ -177,12 +177,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9094, "label": "blanket", "mask": "f939d943609821ad27cdb92844f2754ad3735b52"},
-                {"score": 0.9941, "label": "cat", "mask": "32913606de3958812ced0090df7b699abb6e2644"},
-                {"score": 0.9987, "label": "remote", "mask": "f3988d35f3065f591fa6a0a9414614d98a9ca13e"},
-                {"score": 0.9995, "label": "remote", "mask": "ff0d541ace4fe386fc14ced0c546490a8e7001d7"},
-                {"score": 0.9722, "label": "couch", "mask": "543c3244b291c4aec134f1d8f92af553da795529"},
-                {"score": 0.9994, "label": "cat", "mask": "891313e21290200e6169613e6a9cb7aff9e7b22f"},
+                {"score": 0.9094, "label": "blanket", "mask": "36517c16f4356f7af4b298f4eae387f9fe37eaf8"},
+                {"score": 0.9941, "label": "cat", "mask": "d63196cbe08c7655c158dbabbc5e6b413cbb3b2d"},
+                {"score": 0.9987, "label": "remote", "mask": "4e190e0c3934ad852aaa51aa2c54e314b9a1152e"},
+                {"score": 0.9995, "label": "remote", "mask": "39dc07a07238048a06b0c2474de01ba3c09cc44f"},
+                {"score": 0.9722, "label": "couch", "mask": "df5815755b6bcf328f6b6811f8794cad26f79b35"},
+                {"score": 0.9994, "label": "cat", "mask": "88b37bd2202c750cc9dd191518050a9b0ca5228c"},
             ],
         )
 
@@ -201,20 +201,20 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             nested_simplify(outputs, decimals=4),
             [
                 [
-                    {"score": 0.9094, "label": "blanket", "mask": "f939d943609821ad27cdb92844f2754ad3735b52"},
-                    {"score": 0.9941, "label": "cat", "mask": "32913606de3958812ced0090df7b699abb6e2644"},
-                    {"score": 0.9987, "label": "remote", "mask": "f3988d35f3065f591fa6a0a9414614d98a9ca13e"},
-                    {"score": 0.9995, "label": "remote", "mask": "ff0d541ace4fe386fc14ced0c546490a8e7001d7"},
-                    {"score": 0.9722, "label": "couch", "mask": "543c3244b291c4aec134f1d8f92af553da795529"},
-                    {"score": 0.9994, "label": "cat", "mask": "891313e21290200e6169613e6a9cb7aff9e7b22f"},
+                    {"score": 0.9094, "label": "blanket", "mask": "36517c16f4356f7af4b298f4eae387f9fe37eaf8"},
+                    {"score": 0.9941, "label": "cat", "mask": "d63196cbe08c7655c158dbabbc5e6b413cbb3b2d"},
+                    {"score": 0.9987, "label": "remote", "mask": "4e190e0c3934ad852aaa51aa2c54e314b9a1152e"},
+                    {"score": 0.9995, "label": "remote", "mask": "39dc07a07238048a06b0c2474de01ba3c09cc44f"},
+                    {"score": 0.9722, "label": "couch", "mask": "df5815755b6bcf328f6b6811f8794cad26f79b35"},
+                    {"score": 0.9994, "label": "cat", "mask": "88b37bd2202c750cc9dd191518050a9b0ca5228c"},
                 ],
                 [
-                    {"score": 0.9094, "label": "blanket", "mask": "f939d943609821ad27cdb92844f2754ad3735b52"},
-                    {"score": 0.9941, "label": "cat", "mask": "32913606de3958812ced0090df7b699abb6e2644"},
-                    {"score": 0.9987, "label": "remote", "mask": "f3988d35f3065f591fa6a0a9414614d98a9ca13e"},
-                    {"score": 0.9995, "label": "remote", "mask": "ff0d541ace4fe386fc14ced0c546490a8e7001d7"},
-                    {"score": 0.9722, "label": "couch", "mask": "543c3244b291c4aec134f1d8f92af553da795529"},
-                    {"score": 0.9994, "label": "cat", "mask": "891313e21290200e6169613e6a9cb7aff9e7b22f"},
+                    {"score": 0.9094, "label": "blanket", "mask": "36517c16f4356f7af4b298f4eae387f9fe37eaf8"},
+                    {"score": 0.9941, "label": "cat", "mask": "d63196cbe08c7655c158dbabbc5e6b413cbb3b2d"},
+                    {"score": 0.9987, "label": "remote", "mask": "4e190e0c3934ad852aaa51aa2c54e314b9a1152e"},
+                    {"score": 0.9995, "label": "remote", "mask": "39dc07a07238048a06b0c2474de01ba3c09cc44f"},
+                    {"score": 0.9722, "label": "couch", "mask": "df5815755b6bcf328f6b6811f8794cad26f79b35"},
+                    {"score": 0.9994, "label": "cat", "mask": "88b37bd2202c750cc9dd191518050a9b0ca5228c"},
                 ],
             ],
         )
@@ -235,7 +235,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9995, "label": "remote", "mask": "ff0d541ace4fe386fc14ced0c546490a8e7001d7"},
-                {"score": 0.9994, "label": "cat", "mask": "891313e21290200e6169613e6a9cb7aff9e7b22f"},
+                {"score": 0.9995, "label": "remote", "mask": "39dc07a07238048a06b0c2474de01ba3c09cc44f"},
+                {"score": 0.9994, "label": "cat", "mask": "88b37bd2202c750cc9dd191518050a9b0ca5228c"},
             ],
         )
