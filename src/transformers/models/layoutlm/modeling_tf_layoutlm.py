@@ -24,8 +24,8 @@ import tensorflow as tf
 from ...activations_tf import get_tf_activation
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_tf_outputs import (
-    TFBaseModelOutput,
-    TFBaseModelOutputWithPooling,
+    TFBaseModelOutputWithPastAndCrossAttentions,
+    TFBaseModelOutputWithPoolingAndCrossAttentions,
     TFMaskedLMOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
@@ -216,6 +216,8 @@ class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
+        self.is_decoder = config.is_decoder
+
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
@@ -228,16 +230,49 @@ class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: tf.Tensor,
+        encoder_attention_mask: tf.Tensor,
+        past_key_value: Tuple[tf.Tensor],
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
-        mixed_key_layer = self.key(inputs=hidden_states)
-        mixed_value_layer = self.value(inputs=hidden_states)
+
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            key_layer = past_key_value[0]
+            value_layer = past_key_value[1]
+            attention_mask = encoder_attention_mask
+        elif is_cross_attention:
+            key_layer = self.transpose_for_scores(self.key(inputs=encoder_hidden_states), batch_size)
+            value_layer = self.transpose_for_scores(self.value(inputs=encoder_hidden_states), batch_size)
+            attention_mask = encoder_attention_mask
+        elif past_key_value is not None:
+            key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
+            value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
+            key_layer = tf.concatenate([past_key_value[0], key_layer], dim=2)
+            value_layer = tf.concatenate([past_key_value[1], value_layer], dim=2)
+        else:
+            key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
+            value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
+
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
-        key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
-        value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(tf.Tensor, tf.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(tf.Tensor, tf.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
@@ -267,6 +302,8 @@ class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
         attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
 
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -305,6 +342,9 @@ class TFLayoutLMAttention(tf.keras.layers.Layer):
         input_tensor: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: tf.Tensor,
+        encoder_attention_mask: tf.Tensor,
+        past_key_value: Tuple[tf.Tensor],
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -312,13 +352,17 @@ class TFLayoutLMAttention(tf.keras.layers.Layer):
             hidden_states=input_tensor,
             attention_mask=attention_mask,
             head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_value=past_key_value,
             output_attentions=output_attentions,
             training=training,
         )
         attention_output = self.dense_output(
             hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
         )
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        # add attentions (possibly with past_key_value) if we output them
+        outputs = (attention_output,) + self_outputs[1:]
 
         return outputs
 
@@ -369,6 +413,12 @@ class TFLayoutLMLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.attention = TFLayoutLMAttention(config, name="attention")
+        self.is_decoder = config.is_decoder
+        self.add_cross_attention = config.add_cross_attention
+        if self.add_cross_attention:
+            if not self.is_decoder:
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
+            self.crossattention = TFLayoutLMAttention(config, name="crossattention")
         self.intermediate = TFLayoutLMIntermediate(config, name="intermediate")
         self.bert_output = TFLayoutLMOutput(config, name="output")
 
@@ -377,22 +427,69 @@ class TFLayoutLMLayer(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: Optional[tf.Tensor],
+        encoder_attention_mask: Optional[tf.Tensor],
+        past_key_value: Optional[Tuple[tf.Tensor]],
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        attention_outputs = self.attention(
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attention_outputs = self.attention(
             input_tensor=hidden_states,
             attention_mask=attention_mask,
             head_mask=head_mask,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            past_key_value=self_attn_past_key_value,
             output_attentions=output_attentions,
             training=training,
         )
-        attention_output = attention_outputs[0]
+        attention_output = self_attention_outputs[0]
+
+        # if decoder, the last output is tuple of self-attn cache
+        if self.is_decoder:
+            outputs = self_attention_outputs[1:-1]
+            present_key_value = self_attention_outputs[-1]
+        else:
+            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+        cross_attn_present_key_value = None
+        if self.is_decoder and encoder_hidden_states is not None:
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers "
+                    "by setting `config.add_cross_attention=True`"
+                )
+
+            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            cross_attention_outputs = self.crossattention(
+                input_tensor=attention_output,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=cross_attn_past_key_value,
+                output_attentions=output_attentions,
+                training=training,
+            )
+            attention_output = cross_attention_outputs[0]
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+
+            # add cross-attn cache to positions 3,4 of present_key_value tuple
+            cross_attn_present_key_value = cross_attention_outputs[-1]
+            present_key_value = present_key_value + cross_attn_present_key_value
+
         intermediate_output = self.intermediate(hidden_states=attention_output)
         layer_output = self.bert_output(
             hidden_states=intermediate_output, input_tensor=attention_output, training=training
         )
-        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
+        outputs = (layer_output,) + outputs  # add attentions if we output them
+
+        # if decoder, return the attn key/values as the last output
+        if self.is_decoder:
+            outputs = outputs + (present_key_value,)
 
         return outputs
 
@@ -401,7 +498,7 @@ class TFLayoutLMLayer(tf.keras.layers.Layer):
 class TFLayoutLMEncoder(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
-
+        self.config = config
         self.layer = [TFLayoutLMLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
     def call(
@@ -409,39 +506,61 @@ class TFLayoutLMEncoder(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: Optional[tf.Tensor],
+        encoder_attention_mask: Optional[tf.Tensor],
+        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]],
+        use_cache: Optional[bool],
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
+
+            past_key_value = past_key_values[i] if past_key_values is not None else None
 
             layer_outputs = layer_module(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 training=training,
             )
             hidden_states = layer_outputs[0]
 
+            if use_cache:
+                next_decoder_cache += (layer_outputs[-1],)
+
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
+                if self.config.add_cross_attention and encoder_hidden_states is not None:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, all_hidden_states, all_attentions, all_cross_attentions] if v is not None
+            )
 
-        return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        return TFBaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=next_decoder_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -585,12 +704,14 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -665,6 +786,11 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=inputs["head_mask"],
+            # Need to pass these required positional arguments to `Encoder`
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=None,
+            past_key_values=None,
+            use_cache=False,
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
@@ -680,11 +806,12 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
                 pooled_output,
             ) + encoder_outputs[1:]
 
-        return TFBaseModelOutputWithPooling(
+        return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
@@ -802,7 +929,9 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         self.layoutlm = TFLayoutLMMainLayer(config, name="layoutlm")
 
     @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TFBaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC
+    )
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -812,12 +941,14 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
         r"""
         Returns:
 
@@ -859,6 +990,8 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -881,15 +1014,25 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
+    def serving_output(
+        self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
+    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
+        output_cache = self.config.use_cache and self.config.is_decoder
+        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
+        if not (self.config.output_attentions and self.config.add_cross_attention):
+            cross_attns = None
 
-        return TFBaseModelOutputWithPooling(
+        return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
+            past_key_values=pkv,
             hidden_states=hs,
             attentions=attns,
+            cross_attentions=cross_attns,
         )
 
 

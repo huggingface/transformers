@@ -210,10 +210,24 @@ TFBaseModelOutputWithPooling
     :members:
 
 
+TFBaseModelOutputWithPoolingAndCrossAttentions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFBaseModelOutputWithPoolingAndCrossAttentions
+    :members:
+
+
 TFBaseModelOutputWithPast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_tf_outputs.TFBaseModelOutputWithPast
+    :members:
+
+
+TFBaseModelOutputWithPastAndCrossAttentions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFBaseModelOutputWithPastAndCrossAttentions
     :members:
 
 
@@ -228,6 +242,13 @@ TFCausalLMOutput
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_tf_outputs.TFCausalLMOutput
+    :members:
+
+
+TFCausalLMOutputWithCrossAttentions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFCausalLMOutputWithCrossAttentions
     :members:
 
 
