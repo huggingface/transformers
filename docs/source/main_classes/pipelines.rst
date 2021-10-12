@@ -71,6 +71,11 @@ GPU. If it doesn't don't hesitate to create an issue.
 
 .. code-block::
 
+    import datasets
+    from transformers import pipeline
+    from transformers.pipelines.base import KeyDataset
+    import tqdm
+
     pipe = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
     dataset = datasets.load_dataset("superb", name="asr", split="test")
 
@@ -92,6 +97,11 @@ All pipelines (except `zero-shot-classification` and `question-answering` curren
 whenever the pipeline uses its streaming ability (so when passing lists or :obj:`Dataset`).
 
 .. code-block::
+
+    from transformers import pipeline                                                   
+    from transformers.pipelines.base import KeyDataset
+    import datasets
+    import tqdm                                                                         
 
     dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
     pipe = pipeline("text-classification", device=0)
