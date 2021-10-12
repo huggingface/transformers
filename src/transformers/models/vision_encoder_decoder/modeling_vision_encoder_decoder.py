@@ -245,11 +245,10 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
         Params:
             encoder_pretrained_model_name_or_path (:obj: `str`, `optional`):
-                Information necessary to initiate the encoder. Can be either:
+                Information necessary to initiate the image encoder. Can be either:
 
-                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co. An
+                      example is ``google/vit-base-patch16-224-in21k``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `tensorflow index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In
@@ -258,7 +257,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                       a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             decoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
-                Information necessary to initiate the decoder. Can be either:
+                Information necessary to initiate the text decoder. Can be either:
 
                     - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
                       Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
@@ -400,10 +399,10 @@ class VisionEncoderDecoderModel(PreTrainedModel):
             >>> from PIL import Image
             >>> import torch
 
-            >>> processor = TrOCRProcessor.from_pretrained('microsoft/tr-ocr-base-iam')
-            >>> model = VisionEncoderDecoderModel.from_pretrained('microsoft/tr-ocr-base-iam')
+            >>> processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten')
+            >>> model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-handwritten')
 
-            >>> # load image
+            >>> # load image from the IAM dataset
             >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
             >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
@@ -414,7 +413,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
             >>> # inference (generation)
             >>> generated_ids = model.generate(pixel_values)
-            >>> generated_text = processor.batch_decode(generated_ids)
+            >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

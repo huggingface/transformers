@@ -152,10 +152,6 @@ class TrOCRSinusoidalPositionalEmbedding(nn.Module):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
         symbols are ignored. This is modified from fairseq's `utils.make_positions`.
-
-        Args:
-            x: torch.Tensor x:
-        Returns: torch.Tensor
         """
         # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
         mask = input_ids.ne(padding_idx).int()

@@ -31,9 +31,10 @@ The original code can be found `here
 
 Tips:
 
-- TrOCR achieves state-of-the-art results on both printed and handwritten text recognition tasks, such as the `IAM
-  Handwriting dataset <https://fki.tic.heia-fr.ch/databases/iam-handwriting-database>`__. For more information, see the
-  `official models <https://huggingface.co/models?other=trocr>`__.
+- TrOCR is pre-trained in 2 stages before being fine-tuned on downstream datasets. It achieves state-of-the-art results
+  on both printed (e.g. the `SROIE dataset <https://paperswithcode.com/dataset/sroie>`__) and handwritten (e.g. the
+  `IAM Handwriting dataset <https://fki.tic.heia-fr.ch/databases/iam-handwriting-database>`__) text recognition tasks.
+  For more information, see the `official models <https://huggingface.co/models?other=trocr>`__.
 - TrOCR is always used within the :doc:`VisionEncoderDecoder <visionencoderdecoder>` framework.
 
 Inference
@@ -67,7 +68,7 @@ predicted token ids.
         >>> pixel_values = processor(image, return_tensors="pt").pixel_values
         >>> generated_ids = model.generate(pixel_values)
 
-        >>> generated_text = processor.batch_decode(generated_ids)
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
 
 See the `model hub <https://huggingface.co/models?filter=trocr>`__ to look for TrOCR checkpoints.
