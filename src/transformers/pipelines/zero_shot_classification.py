@@ -184,7 +184,7 @@ class ZeroShotClassificationPipeline(Pipeline):
             - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
         """
         if kwargs.get("batch_size", 1) > 1:
-            logger.error("Batch size is deactivated for zero-shot pipeline")
+            logger.error("Batch size > 1 is not supported for zero-shot pipeline, setting batch_size=1.")
             kwargs["batch_size"] = 1
 
         if len(args) == 0:
