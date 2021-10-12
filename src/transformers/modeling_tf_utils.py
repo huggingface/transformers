@@ -296,7 +296,9 @@ def booleans_processing(config, **kwargs):
         )
 
         if "use_cache" in kwargs:
-            final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
+            final_booleans["use_cache"] = (
+                kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
+            )
     else:
         if (
             kwargs["output_attentions"] not in (None, config.output_attentions)
@@ -318,7 +320,7 @@ def booleans_processing(config, **kwargs):
         final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
-            final_booleans["use_cache"] = config.use_cache
+            final_booleans["use_cache"] = getattr(config, "use_cache", None)
 
     return final_booleans
 
@@ -361,6 +363,15 @@ def input_processing(func, config, input_ids, **kwargs):
             FutureWarning,
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
+
+    if "past" in kwargs["kwargs_call"] and "past_key_values" in kwargs:
+        warnings.warn(
+            "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            FutureWarning,
+        )
+        kwargs["past_key_values"] = kwargs["kwargs_call"].pop("past")
+    elif "past_key_values" in kwargs["kwargs_call"] and "past" in kwargs:
+        kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
     if len(kwargs["kwargs_call"]) > 0:
         raise ValueError(
