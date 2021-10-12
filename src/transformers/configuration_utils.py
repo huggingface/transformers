@@ -314,7 +314,7 @@ class PretrainedConfig(PushToHubMixin):
         allowed_problem_types = ("regression", "single_label_classification", "multi_label_classification")
         if self.problem_type is not None and self.problem_type not in allowed_problem_types:
             raise ValueError(
-                f"The config parameter `problem_type` was not understood: received {self.problem_type}"
+                f"The config parameter `problem_type` was not understood: received {self.problem_type} "
                 "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
             )
 
@@ -560,7 +560,8 @@ class PretrainedConfig(PushToHubMixin):
             logger.error(err)
             msg = (
                 f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {CONFIG_NAME} file\n\n"
             )
 

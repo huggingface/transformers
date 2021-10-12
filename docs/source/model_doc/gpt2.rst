@@ -41,6 +41,8 @@ Tips:
   pre-computed values in the context of text generation. For PyTorch, see `past_key_values` argument of the
   :meth:`~transformers.GPT2Model.forward` method, or for TF the `past` argument of the
   :meth:`~transformers.TFGPT2Model.call` method for more information on its usage.
+- Enabling the `scale_attn_by_inverse_layer_idx` and `reorder_and_upcast_attn` flags will apply the training stability
+  improvements from `Mistral <https://github.com/stanford-crfm/mistral/>`__ (for PyTorch only).
 
 `Write With Transformer <https://transformer.huggingface.co/doc/gpt2-large>`__ is a webapp created and hosted by
 Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
