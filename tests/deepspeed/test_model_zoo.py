@@ -41,49 +41,82 @@ with ExtendSysPath(tests_dir):
 
 set_seed(42)
 
-# translation
-FSMT_TINY = "stas/tiny-wmt19-en-de"
-BART_TINY = "sshleifer/bart-tiny-random"
 T5_SMALL = "t5-small"
-T5_TINY = "patrickvonplaten/t5-tiny-random"
-MBART_TINY = "sshleifer/tiny-mbart"
-MARIAN_TINY = "sshleifer/tiny-marian-en-de"
 
-# summarization
-PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
-
-# causal lm
-GPT2_TINY = "sshleifer/tiny-gpt2"
-XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
-
-# question-answering
-ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
+ALBERT_TINY = "hf-internal-testing/tiny-albert"
+BART_TINY = "sshleifer/bart-tiny-random"
+BERT_TINY = "hf-internal-testing/tiny-bert"
+BIGBIRD_PEGASUS_TINY = "hf-internal-testing/tiny-random-bigbird_pegasus"
+BIG_BIRD_TINY = "hf-internal-testing/tiny-random-big_bird"
+BLENDERBOT_TINY = "hf-internal-testing/tiny-random-blenderbot"
 DEBERTA_TINY = "hf-internal-testing/tiny-deberta"
-LONGFORMER_TINY = "hf-internal-testing/tiny-random-longformer"
-
-# masked lm
+DEBERTA_V2_TINY = "hf-internal-testing/tiny-random-deberta-v2"
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
 ELECTRA_TINY = "hf-internal-testing/tiny-electra"
-ALBERT_TINY = "hf-internal-testing/tiny-albert"
-LAYOUTLM_TINY = "hf-internal-testing/tiny-layoutlm"
+FLAUBERT_TINY = "hf-internal-testing/tiny-random-flaubert"
+FSMT_TINY = "stas/tiny-wmt19-en-de"
 FUNNEL_TINY = "hf-internal-testing/tiny-random-funnel"
-DEBERTA_V2_TINY = "hf-internal-testing/tiny-random-deberta-v2"
-
-# classification
+GPT2_TINY = "sshleifer/tiny-gpt2"
+GPTJ_TINY = "hf-internal-testing/tiny-random-gptj"
+GPT_NEO_TINY = "hf-internal-testing/tiny-random-gpt_neo"
+LAYOUTLM_TINY = "hf-internal-testing/tiny-layoutlm"
+LED_TINY = "hf-internal-testing/tiny-random-led"
+LONGFORMER_TINY = "hf-internal-testing/tiny-random-longformer"
+M2M_100_TINY = "hf-internal-testing/tiny-random-m2m_100"
+MARIAN_TINY = "sshleifer/tiny-marian-en-de"
+MBART_TINY = "sshleifer/tiny-mbart"
+MOBILEBERT_TINY = "hf-internal-testing/tiny-random-mobilebert"
+MPNET_TINY = "hf-internal-testing/tiny-random-mpnet"
+PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
+PROPHETNET_TINY = "hf-internal-testing/tiny-random-prophetnet"
+ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
+SQUEEZEBERT_TINY = "hf-internal-testing/tiny-random-squeezebert"
+T5_TINY = "patrickvonplaten/t5-tiny-random"
+VIT_TINY = "hf-internal-testing/tiny-random-vit"
+XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
-BERT_TINY = "hf-internal-testing/tiny-bert"
 
+
+# Issues and missing model files
+CAMEMBERT_TINY = "hf-internal-testing/tiny-random-camembert"
+CLIP_TINY = "hf-internal-testing/tiny-random-clip"
+CONVBERT_TINY = "hf-internal-testing/tiny-random-convbert"
+CTRL_TINY = "hf-internal-testing/tiny-random-ctrl"
+HUBERT_TINY = "hf-internal-testing/tiny-random-hubert"
+IBERT_TINY = "hf-internal-testing/tiny-random-ibert"
+LAYOUTLMV2_TINY = "hf-internal-testing/tiny-random-layoutlmv2"
+LXMERT_TINY = "hf-internal-testing/tiny-random-lxmert"
+MT5_TINY = "hf-internal-testing/tiny-random-mt5"
+OPENAI_GPT_TINY = "hf-internal-testing/tiny-random-openai-gpt"
+RAG_TINY = "hf-internal-testing/tiny-random-rag"
+REFORMER_TINY = "hf-internal-testing/tiny-random-reformer"
+SPEECH_TO_TEXT_TINY = "hf-internal-testing/tiny-random-speech_to_text"
+TAPAS_TINY = "hf-internal-testing/tiny-random-tapas"
+TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl"
+
+
+
+# XXX: m2m_100 still needs work under z3 (works with z2) after PR is merged and this branch is re-based
+# PYTHONPATH=src deepspeed  --master_port 6666 --num_nodes 1 --num_gpus 2 examples/pytorch/translation/run_translation.py --train_file tests/fixtures/tests_samples/wmt_en_ro/train.json --source_lang en --target_lang ro --model_name_or_path hf-internal-testing/tiny-random-m2m_100 --do_train --max_train_samples 4 --per_device_train_batch_size 2 --num_train_epochs 1 --fp16 --report_to none --overwrite_output_dir --deepspeed tests/deepspeed/ds_config_zero3.json --output_dir /tmp/tmpi4k4wz8s --save_steps 1
+# if param.ds_status == ZeroParamStatus.NOT_AVAILABLE:
+# AttributeError: 'Parameter' object has no attribute 'ds_status'
 
 # TODO: to add:
 #
-# dpr
-# gpt_neo
-# camembert
-# m2m_100
-# tapas
-# vit
-# big_bird
 
+# XXX:
+# tapas
+# 1. requires torch_scatter - skip if it's not installed?
+# 2. "Table must be of type pd.DataFrame" failure
+
+#
+# ** No official examples to test with:
+# - "dpr" DPR_TINY ="hf-internal-testing/tiny-random-dpr" examples/research_projects/rag-end2end-retriever/
+# - "rag" research_projects
+# - "luke" Entities classes - no plan to make such example
+# - "lxmert" doesn't work with run_qa.py
+# - "clip" nothing under pytorch examples - XXX: Suraj is working on adding some - check by end of Sep
+# - "speech_to_text", nothing under pytorch examples
 
 def get_launcher(distributed=False):
     # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
@@ -120,6 +153,8 @@ def make_task_cmds():
             "marian",
             "mbart",
             "t5",
+            "m2m_100",
+            # "mt5", missing model files
         ],
         sum=[
             "pegasus",
@@ -127,6 +162,14 @@ def make_task_cmds():
         clm=[
             "gpt2",
             "xlm-roberta",
+            "gpt_neo",
+            # "camembert", missing model files
+            "big_bird",
+            "gptj",
+            "blenderbot",
+            "bigbird_pegasus",
+            "prophetnet",
+
         ],
         mlm=[
             "electra",
@@ -135,15 +178,33 @@ def make_task_cmds():
             "layoutlm",
             "deberta-v2",
             "funnel",
+            "flaubert",
+            # "reformer", # multiple issues with either mlm/qa/clas
         ],
         qa=[
             "roberta",
             "deberta",
             "longformer",
+            "mobilebert",
+            "mpnet",
+            "led",
+            "squeezebert",
+
+            # "convbert", # missing tokenizer files
+            # "layoutlmv2", missing model files
         ],
         clas=[
             "bert",
             "xlnet",
+            # "hubert", # missing tokenizer files
+            # "ibert", # multiple issues with either mlm/qa/clas
+            # "transfo-xl", # tokenizer issues as ctrl
+            # "ctrl", # tokenizer issues
+            # "openai-gpt", missing model files
+            #"tapas", multiple issues
+        ],
+        img_clas=[
+            "vit",
         ],
     )
 
@@ -180,6 +241,13 @@ def make_task_cmds():
         --train_file {data_dir_samples}/MRPC/train.csv
         --max_seq_length 12
         --task_name MRPC
+        """,
+        img_clas=f"""
+        {scripts_dir}/image-classification/run_image_classification.py
+            --dataset_name hf-internal-testing/cats_vs_dogs_sample
+            --remove_unused_columns False
+            --max_steps 10
+            --image_size=30
         """,
     )
 
