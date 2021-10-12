@@ -253,7 +253,7 @@ class QuestionAnsweringPipeline(Pipeline):
         if max_seq_len is None:
             max_seq_len = min(self.tokenizer.model_max_length, 384)
         if doc_stride is None:
-            doc_stride = min(max_seq_len // 4, 128)
+            doc_stride = min(max_seq_len // 2, 128)
 
         if not self.tokenizer.is_fast:
             features = squad_convert_examples_to_features(
