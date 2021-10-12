@@ -551,9 +551,12 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
 
         # text_embeds.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
-        # Verify: Begin
-        pooled_output = sequence_output[tf.range(input_shape[0]), tf.math.argmax(input_ids, axis=-1)]
-        # Verify: End
+        pooled_output = tf.gather_nd(
+            params=sequence_output,
+            indices=tf.stack(
+                values=(tf.range(input_shape[0], dtype=tf.int64), tf.math.argmax(input_ids, axis=-1)), axis=1
+            ),
+        )
 
         if not return_dict:
             return (
