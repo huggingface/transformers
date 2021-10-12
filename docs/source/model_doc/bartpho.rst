@@ -52,6 +52,25 @@ Example of use:
     >>> input_ids = tokenizer(line, return_tensors="tf")
     >>> features = bartpho(**input_ids)
 
+Tips:
+
+- This implementation is only for tokenization. Following mBART, BARTpho uses the "large" architecture of BART with an
+  additional layer-normalization layer on top of both the encoder and decoder. Thus, usage examples in the
+  :doc:`documentation of BART <bart>`, when adapting to use with BARTpho, should be adjusted by replacing the
+  BART-specialized classes with the mBART-specialized counterparts. For example:
+
+.. code-block::
+
+    >>> from transformers import MBartForConditionalGeneration
+    >>> bartpho = MBartForConditionalGeneration.from_pretrained("vinai/bartpho-syllable")
+    >>> TXT = 'Chúng tôi là <mask> nghiên cứu viên.'
+    >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
+    >>> logits = bartpho(input_ids).logits
+    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+    >>> probs = logits[0, masked_index].softmax(dim=0)
+    >>> values, predictions = probs.topk(5)
+    >>> print(tokenizer.decode(predictions).split())
+
 This model was contributed by `dqnguyen <https://huggingface.co/dqnguyen>`__. The original code can be found `here
 <https://github.com/VinAIResearch/BARTpho>`__.
 

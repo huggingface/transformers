@@ -29,13 +29,13 @@ logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "reduced_vocab_file": "dict.txt"}
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "monolingual_vocab_file": "dict.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/sentencepiece.bpe.model",
     },
-    "reduced_vocab_file": {
+    "monolingual_vocab_file": {
         "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/dict.txt",
     },
 }
@@ -53,9 +53,11 @@ class BartphoTokenizer(PreTrainedTokenizer):
 
     Args:
         vocab_file (:obj:`str`):
-            Path to the vocabulary file.
-        reduced_vocab_file (:obj:`str`):
-            Path to the reduced vocabulary file.
+            Path to the vocabulary file. This vocabulary is the pre-trained SentencePiece model available from the
+            multilingual XLM-RoBERTa, also used in mBART, consisting of 250K types.
+        monolingual_vocab_file (:obj:`str`):
+            Path to the monolingual vocabulary file. This monolingual vocabulary consists of Vietnamese-specialized
+            types extracted from the multilingual vocabulary vocab_file of 250K types.
         bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -115,7 +117,7 @@ class BartphoTokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
-        reduced_vocab_file,
+        monolingual_vocab_file,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -144,13 +146,13 @@ class BartphoTokenizer(PreTrainedTokenizer):
         )
 
         self.vocab_file = vocab_file
-        self.reduced_vocab_file = reduced_vocab_file
+        self.monolingual_vocab_file = monolingual_vocab_file
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
 
         # Load the reduced vocab
         self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
-        with open(reduced_vocab_file, "r", encoding="utf-8") as f:
+        with open(monolingual_vocab_file, "r", encoding="utf-8") as f:
             for line in f.readlines():
                 token = line.strip().split()[0]
                 self.fairseq_tokens_to_ids[token] = len(self.fairseq_tokens_to_ids)
@@ -288,15 +290,15 @@ class BartphoTokenizer(PreTrainedTokenizer):
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
-        out_reduced_vocab_file = os.path.join(
+        out_monolingual_vocab_file = os.path.join(
             save_directory,
-            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["reduced_vocab_file"],
+            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["monolingual_vocab_file"],
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
 
-        if os.path.abspath(self.reduced_vocab_file) != os.path.abspath(out_reduced_vocab_file):
-            copyfile(self.reduced_vocab_file, out_reduced_vocab_file)
+        if os.path.abspath(self.monolingual_vocab_file) != os.path.abspath(out_monolingual_vocab_file):
+            copyfile(self.monolingual_vocab_file, out_monolingual_vocab_file)
 
-        return out_vocab_file, out_reduced_vocab_file
+        return out_vocab_file, out_monolingual_vocab_file
