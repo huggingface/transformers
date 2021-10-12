@@ -267,30 +267,31 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) < max_length
 
+        if return_attention_mask and "attention_mask" not in processed_features:
+            processed_features["attention_mask"] = np.ones(len(required_input), dtype=np.int32)
+
         if needs_to_be_padded:
             difference = max_length - len(required_input)
             if self.padding_side == "right":
                 if return_attention_mask:
-                    attention_mask = np.zeros(max_length, dtype=np.int32)
-                    attention_mask[: len(required_input)] = 1
-                    processed_features["attention_mask"] = attention_mask
+                    processed_features["attention_mask"] = np.pad(
+                        processed_features["attention_mask"], (0, difference)
+                    )
                 padding_shape = ((0, difference), (0, 0)) if self.feature_size > 1 else (0, difference)
                 processed_features[self.model_input_names[0]] = np.pad(
                     required_input, padding_shape, "constant", constant_values=self.padding_value
                 )
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    attention_mask = np.zeros(max_length, dtype=np.int32)
-                    attention_mask[-len(required_input) :] = 1
-                    processed_features["attention_mask"] = attention_mask
+                    processed_features["attention_mask"] = np.pad(
+                        processed_features["attention_mask"], (difference, 0)
+                    )
                 padding_shape = ((difference, 0), (0, 0)) if self.feature_size > 1 else (difference, 0)
                 processed_features[self.model_input_names[0]] = np.pad(
                     required_input, padding_shape, "constant", constant_values=self.padding_value
                 )
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        elif return_attention_mask and "attention_mask" not in processed_features:
-            processed_features["attention_mask"] = np.ones(len(required_input), dtype=np.int32)
 
         return processed_features
 

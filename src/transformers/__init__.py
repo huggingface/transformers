@@ -125,7 +125,6 @@ _import_structure = {
         "is_vision_available",
     ],
     "hf_argparser": ["HfArgumentParser"],
-    "keras_callbacks": [],
     "integrations": [
         "is_comet_available",
         "is_optuna_available",
@@ -1279,6 +1278,7 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
+    _import_structure["keras_callbacks"] = []
     _import_structure["modeling_tf_outputs"] = []
     _import_structure["modeling_tf_utils"] = [
         "TFPreTrainedModel",
