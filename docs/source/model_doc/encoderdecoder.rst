@@ -28,7 +28,7 @@ and decoder for a summarization model as was shown in: `Text Summarization with 
 <https://arxiv.org/abs/1908.08345>`__ by Yang Liu and Mirella Lapata.
 
 The :meth:`~transformers.TFEncoderDecoderModel.from_pretrained` currently doesn't support initializing the model from a
-pytorch checkpoint. Passing ``from_pt=True`` to this method will thrown an exception. If there are only pytorch
+pytorch checkpoint. Passing ``from_pt=True`` to this method will throw an exception. If there are only pytorch
 checkpoints for a particular encoder-decoder model, a workaround is:
 
 .. code-block::
