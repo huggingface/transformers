@@ -15,7 +15,6 @@
 """ TF 2.0 CLIP model. """
 
 
-# Changed: Begin
 import math
 from typing import Any, Optional, Tuple, Union
 
@@ -25,8 +24,6 @@ import tensorflow as tf
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     ModelOutput,
-    add_code_sample_docstrings,
-    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -55,13 +52,11 @@ TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openai/clip-vit-base-patch32",
     # See all CLIP models at https://huggingface.co/models?filter=clip
 ]
-# Changed: End
 
 
 LARGE_NEGATIVE = -1e8
 
 
-# OK: Begin
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
 def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
     """
@@ -74,13 +69,16 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     expanded_mask = tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1))
 
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
-# OK: End
 
 
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
+    return tf.keras.metrics.sparse_categorical_crossentropy(
+        y_true=tf.range(shape_list(logits)[0]),
+        y_pred=logits,
+        from_logits=True
+    )
 
 
 def clip_loss(similarity: tf.Tensor) -> tf.Tensor:
@@ -89,7 +87,6 @@ def clip_loss(similarity: tf.Tensor) -> tf.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-# OK: Begin
 class TFCLIPOutput(ModelOutput):
     """
     Args:
@@ -126,32 +123,30 @@ class TFCLIPOutput(ModelOutput):
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
-# OK: End
 
 
-# OK: Begin
 class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
+
     def __init__(self, config: CLIPVisionConfig, **kwargs):
-        # OK: Begin
         super().__init__(**kwargs)
+
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
-        # OK: End
 
-        # OK: Begin
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
 
     def build(self, input_shape: tf.TensorShape):
 
-        # OK: Begin | Q: should we use normal initer?
-        self.class_embedding = self.add_weight(
-            shape=(self.embed_dim,), initializer=tf.random_normal_initializer(mean=0.0, stddev=1.0), trainable=True, name="class_embedding"
-        )
-        # OK: End
+        # Q: should we use normal initializer?
+        # initializer = tf.random_normal_initializer(mean=0.0, stddev=1.0)
+        initializer = get_initializer(self.config.initializer_range)
 
-        # OK: Begin
+        self.class_embedding = self.add_weight(
+            shape=(self.embed_dim,), initializer=initializer, trainable=True, name="class_embedding"
+        )
+
         with tf.name_scope("patch_embedding"):
 
             # shape = (kernel_size[1], kernel_size[0], in_channels, out_channels)
@@ -164,29 +159,20 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(self.config.initializer_range),
                 name="kernel",
             )
-        # OK: End
 
-        # OK: Begin || Q: Should we use `with tf.name_scope("position_embeddings"):` + `name="embeddings"` as in TFBert?
-        # Q: should we use normal initer?
-        self.position_embedding = self.add_weight(
-            shape=(self.num_positions, self.embed_dim),
-            initializer=get_initializer(self.initializer_range),
-            trainable=True,
-            name="position_embedding",
-        )
-        # OK: End
+        with tf.name_scope("position_embedding"):
+            self.position_embedding = self.add_weight(
+                shape=(self.num_positions, self.embed_dim),
+                initializer=get_initializer(self.initializer_range),
+                trainable=True,
+                name="embeddings",
+            )
 
-        # OK: Begin
         super().build(input_shape)
-        # OK: End
 
-    def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
-        # OK: Begin
-        ###atch_size = pixel_values.shape[0]
+    def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
+
         batch_size, num_channels, height, width = shape_list(pixel_values)
-        # OK: End
-        # OK: Begin
-        ###patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
 
         # When running on CPU, `tf.nn.conv2d` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
@@ -207,72 +193,53 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
                 padding="VALID",
                 data_format="NHWC",
             )
-            ###+ self.conv_bias
         )
-        # OK: End
 
-        # OK: Begin
-        ###patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
         patch_embeds = tf.reshape(tensor=patch_embeds, shape=(batch_size, self.num_patches, -1))
-        # OK: End
 
-        # OK: Begin | Q: if `-1` works for `tf.broadcast_to`
-        ###class_embeds = self.class_embedding.expand(batch_size, 1, -1)
-        ###embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
         # add the [CLS] token to the embedded patch tokens
-        ###cls_tokens = tf.repeat(self.cls_token, repeats=batch_size, axis=0)
         class_embeds = tf.broadcast_to(self.class_embedding, shape=(batch_size, 1, -1))
         embeddings = tf.concat((class_embeds, patch_embeds), axis=1)
+
         embeddings = embeddings + self.position_embedding
+
         return embeddings
-        # OK: End
-# OK: End
 
 
-# OK: Begin
 class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: CLIPTextConfig, **kwargs):
-        # OK: Begin
         super().__init__(**kwargs)
+
         self.embed_dim = config.hidden_size
         self.vocab_size = config.vocab_size
-        # OK: End
 
     def build(self, input_shape: tf.TensorShape):
 
-        # OK: Begin || Q: Should we use `with tf.name_scope("position_embeddings"):` + `name="embeddings"` as in TFBert?
-        # Q: should we use normal initer?
-        self.token_embedding = self.add_weight(
-            shape=(self.vocab_size, self.embed_dim),
-            initializer=get_initializer(self.initializer_range),
-            trainable=True,
-            name="token_embedding",
-        )
-        # OK: End
+        with tf.name_scope("token_embedding"):
+            self.token_embedding = self.add_weight(
+                shape=(self.vocab_size, self.embed_dim),
+                initializer=get_initializer(self.initializer_range),
+                trainable=True,
+                name="embeddings",
+            )
 
-        # OK: Begin || Q: Should we use `with tf.name_scope("position_embeddings"):` + `name="embeddings"` as in TFBert?
-        # Q: should we use normal initer?
-        self.position_embedding = self.add_weight(
-            shape=(self.num_positions, self.embed_dim),
-            initializer=get_initializer(self.initializer_range),
-            trainable=True,
-            name="position_embedding",
-        )
-        # OK: End
+        with tf.name_scope("position_embedding"):
+            self.position_embedding = self.add_weight(
+                shape=(self.num_positions, self.embed_dim),
+                initializer=get_initializer(self.initializer_range),
+                trainable=True,
+                name="embeddings",
+            )
 
-        # OK: Begin
         super().build(input_shape)
-        # OK: End
 
-    # OK: Begin
     def call(
         self,
         input_ids: tf.Tensor = None,
         position_ids: tf.Tensor = None,
         inputs_embeds: tf.Tensor = None,
-        training: bool = False
     ) -> tf.Tensor:
         """
         Applies embedding based on inputs tensor.
@@ -282,7 +249,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
         """
         assert not (input_ids is None and inputs_embeds is None)
 
-        if input_ids is not None:
+        if inputs_embeds is None:
             inputs_embeds = tf.gather(params=self.token_embedding, indices=input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
@@ -295,22 +262,20 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
         final_embeddings = inputs_embeds + position_embeds
 
         return final_embeddings
-    # OK: End
-# OK: End
 
 
 class TFCLIPAttention(tf.keras.layers.Layer):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # OK: Begin
     def __init__(self, config: CLIPConfig, **kwargs):
         super().__init__(**kwargs)
+
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        assert (
-            self.head_dim * self.num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads}).")
+
         self.sqrt_att_head_size = math.sqrt(self.head_dim)
 
         self.q_proj = tf.keras.layers.Dense(
@@ -322,24 +287,21 @@ class TFCLIPAttention(tf.keras.layers.Layer):
         self.v_proj = tf.keras.layers.Dense(
             units=self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="v_proj"
         )
+
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_dropout)
+
         self.out_proj = tf.keras.layers.Dense(
             units=self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
-    # OK: End
 
-    # OK: Begin
-    # def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-    #     return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    # copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention.transpose_for_scores
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
         # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
-    # OK: End
 
-    # OK: Begin
     def call(
         self,
         hidden_states: tf.Tensor,
@@ -350,7 +312,6 @@ class TFCLIPAttention(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor]:
         """Input shape: Batch x Time x Channel"""
 
-        # OK: Begin
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.q_proj(inputs=hidden_states)
         mixed_key_layer = self.k_proj(inputs=hidden_states)
@@ -359,17 +320,19 @@ class TFCLIPAttention(tf.keras.layers.Layer):
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
         value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        # (batch size, num_heads, seq_len_q, seq_len_k)
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
         dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
         attention_scores = tf.divide(attention_scores, dk)
 
         # apply the causal_attention_mask first
         if causal_attention_mask is not None:
-            # Apply the causal attention mask is (precomputed for all layers in TFCLIPModel call() function)
+            # Apply the causal attention mask (precomputed for all layers in TFCLIPModel call() function)
             attention_scores = tf.add(attention_scores, causal_attention_mask)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFCLIPModel call() function)
+            # Apply the attention mask (precomputed for all layers in TFCLIPModel call() function)
             attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
@@ -380,26 +343,24 @@ class TFCLIPAttention(tf.keras.layers.Layer):
         attention_probs = self.dropout(inputs=attention_probs, training=training)
 
         attention_output = tf.matmul(attention_probs, value_layer)
-
         attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
 
         # (batch_size, seq_len_q, embed_dim)
         attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.embed_dim))
 
-        attention_output = self.out_proj(attention_output)
+        attention_output = self.out_proj(attention_output, training=training)
+        # In TFBert, attention weights are returned after dropout.
+        # However, in CLIP, they are returned before dropout.
+        # Q: What to do?
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
 
         return outputs
-        # OK: End
-    # OK: End
-# OK: End
 
 
-# OK: Begin
 class TFCLIPMLP(tf.keras.layers.Layer):
     def __init__(self, config: CLIPConfig, **kwargs):
-        # OK: Begin
         super().__init__(**kwargs)
+
         self.activation_fn = get_tf_activation(config.hidden_act)
         self.fc1 = tf.keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="fc1"
@@ -407,29 +368,24 @@ class TFCLIPMLP(tf.keras.layers.Layer):
         self.fc2 = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="fc2"
         )
-        # OK: End
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        # OK: Begin
+
         hidden_states = self.fc1(inputs=hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(inputs=hidden_states)
         return hidden_states
-        # OK: End
-# OK: End
 
 
-# OK: Begin
 class TFCLIPEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: CLIPConfig, **kwargs):
-        # OK: Begin
         super().__init__(**kwargs)
+
         self.embed_dim = config.hidden_size
         self.self_attn = TFCLIPAttention(config, name="self_attn")
         self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
         self.mlp = TFCLIPMLP(config, name="mlp")
         self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
-        # OK: End
 
     def call(
         self,
@@ -439,20 +395,17 @@ class TFCLIPEncoderLayer(tf.keras.layers.Layer):
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        # TODO: Begin
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
-            attention_mask (:obj:`torch.FloatTensor`): attention mask of size
+            hidden_states (:obj:`tf.Tensor`): input to the layer of shape :obj:`(batch, seq_len, embed_dim)`
+            attention_mask (:obj:`tf.Tensor`): attention mask of size
                 :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
-                :obj:`(config.encoder_attention_heads,)`.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+            causal_attention_mask (:obj:`tf.Tensor`): causal attention mask of size
+                :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            output_attentions (:obj:`bool`):
+                Whether or not to return the attentions tensors of all attention layers. See ``outputs`` under
                 returned tensors for more detail.
         """
-        # TODO: End
-        # OK: Begin
         residual = hidden_states
 
         hidden_states = self.layer_norm1(inputs=hidden_states)
@@ -474,148 +427,21 @@ class TFCLIPEncoderLayer(tf.keras.layers.Layer):
         outputs = (hidden_states,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
-        # OK: End
-# OK: End
 
 
-# OK: Begin
-class TFCLIPPreTrainedModel(TFPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = CLIPConfig
-    base_model_prefix = "clip"
-    ###_keys_to_ignore_on_load_missing = [r"position_ids"]
-# OK: End
-
-
-# TODO: Begin
-CLIP_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config (:class:`~transformers.CLIPConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
-"""
-
-CLIP_TEXT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using :class:`~transformers.CLIPTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-
-            `What are position IDs? <../glossary.html#position-ids>`_
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-"""
-
-CLIP_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            :class:`~transformers.CLIPFeatureExtractor`. See :meth:`transformers.CLIPFeatureExtractor.__call__` for
-            details.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-"""
-
-CLIP_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using :class:`~transformers.CLIPTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-
-            `What are position IDs? <../glossary.html#position-ids>`_
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            :class:`~transformers.CLIPFeatureExtractor`. See :meth:`transformers.CLIPFeatureExtractor.__call__` for
-            details.
-        return_loss (:obj:`bool`, `optional`):
-            Whether or not to return the contrastive loss.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-"""
-# TODO: End
-
-
-# OK: Begin
 class TFCLIPEncoder(tf.keras.layers.Layer):
-    # TODO: Begin
     """
     Transformer encoder consisting of :obj:`config.num_hidden_layers` self attention layers. Each layer is a
     :class:`~transformers.TFCLIPEncoderLayer`.
 
     Args:
         config: CLIPConfig
-        embed_tokens (nn.Embedding): output embedding
     """
-    # TODO: End
-
     def __init__(self, config: CLIPConfig, **kwargs):
-        # OK: Begin
         super().__init__(**kwargs)
 
-        self.layer = [TFCLIPEncoderLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
+        self.layers = [TFCLIPEncoderLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
-        # OK: End
-
-    # OK: Begin
     def call(
         self,
         hidden_states: tf.Tensor,
@@ -626,42 +452,10 @@ class TFCLIPEncoder(tf.keras.layers.Layer):
         return_dict: bool,
         training: bool = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-    # OK: End
-        # TODO: Begin
-        r"""
-        Args:
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            causal_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Causal mask for the text model. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        """
-        # TODO: End
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        for i, layer_module in enumerate(self.layer):
+        for i, layer_module in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -687,42 +481,32 @@ class TFCLIPEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
-        # OK: End
-# OK: End
 
 
 class TFCLIPTextTransformer(tf.keras.layers.Layer):
-    # OK: Begin
     def __init__(self, config: CLIPTextConfig, **kwargs):
         super().__init__(**kwargs)
-
-        self.config = config
 
         self.embeddings = TFCLIPTextEmbeddings(config, name="embeddings")
         self.encoder = TFCLIPEncoder(config, name="encoder")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="final_layer_norm")
-    # OK: End
 
-    # OK: Begin
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: TFModelInputType,
+        attention_mask: tf.Tensor,
+        position_ids: tf.Tensor,
+        output_attentions: bool,
+        output_hidden_states: bool,
+        return_dict: bool,
         training: bool = False,
         **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-    # OK: End
-        # OK: Begin
         input_shape = shape_list(input_ids)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
-            training=training,
         )
 
         batch_size, seq_length = input_shape
@@ -767,7 +551,6 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
 
         # text_embeds.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
-        ### pooled_output = last_hidden_state[torch.arange(last_hidden_state.shape[0]), input_ids.argmax(dim=-1)]
         # Verify: Begin
         pooled_output = sequence_output[tf.range(input_shape[0]), tf.math.argmax(input_ids, axis=-1)]
         # Verify: End
@@ -784,47 +567,37 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-        # OK: End
 
-    # OK: Begin
     def _build_causal_attention_mask(self, batch_size, seq_length, dtype=tf.float32):
 
-        # OK: Begin
         # set an additive 2D attention mask with all places being masked
         to_mask = tf.constant(-10000.0, shape=(seq_length, seq_length), dtype=dtype)
+
         # set diagonal & lower triangular parts to 0 (i.e. the places not to be masked)
         # TIP: think the 2D matrix as the space of (query_seq, key_seq)
         to_mask = tf.linalg.band_part(to_mask, -1, 0)
+
         return tf.broadcast_to(input=to_mask, shape=(batch_size, 1, seq_length, seq_length))
-        # OK: End
-    # OK: End
 
 
 @keras_serializable
 class TFCLIPTextMainLayer(tf.keras.layers.Layer):
     config_class = CLIPTextConfig
 
-    # OK: Begin
     def __init__(self, config: CLIPTextConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
 
         self.text_model = TFCLIPTextTransformer(config, name="text_model")
-    # OK: End
 
-    # OK: Begin
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.text_model.embeddings
-    # OK: End
 
-    # OK: Begin
     def set_input_embeddings(self, value: tf.Variable):
         self.text_model.embeddings.token_embedding = value
         self.text_model.embeddings.vocab_size = shape_list(value)[0]
-    # OK: End
 
-    # OK: Begin
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -836,8 +609,6 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
         training: bool = False,
         **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-    # OK: End
-        # OK: Begin
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -872,114 +643,26 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
         return text_model_outputs
 
 
-class TFCLIPTextModel(TFCLIPPreTrainedModel):
-    config_class = CLIPTextConfig
-    base_model_prefix = "clip_text"
-
-    def __init__(self, config: CLIPTextConfig, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        self.clip_text = TFCLIPTextMainLayer(config, name="clip_text")
-
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=CLIPTextConfig)
-    def call(
-        self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-        **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        # TODO: Begin
-        r"""
-        Returns:
-
-        Examples::
-
-            >>> from transformers import CLIPTokenizer, TFCLIPTextModel
-
-            >>> model = TFCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-
-            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="pt")
-
-            >>> outputs = model(**inputs)
-            >>> last_hidden_state = outputs.last_hidden_state
-            >>> pooled_output = outputs.pooled_output # pooled (EOS token) states
-        """
-        # TODO: End
-        # OK: Begin
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.clip_text(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            position_ids=inputs["position_ids"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-
-        return outputs
-        # OK: End
-
-    # OK: Begin
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
-    # OK: End
-
-
 class TFCLIPVisionTransformer(tf.keras.layers.Layer):
-    # OK: Begin
     def __init__(self, config: CLIPVisionConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.config = config
-
         self.embeddings = TFCLIPVisionEmbeddings(config, name="embeddings")
-        self.pre_layrnorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")  ###nn.LayerNorm(embed_dim)
+        self.pre_layrnorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")
         self.encoder = TFCLIPEncoder(config, name="encoder")
-        self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")  ###nn.LayerNorm(embed_dim)
-    # OK: End
+        self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
 
-    # OK: Begin
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: TFModelInputType,
+        output_attentions: bool,
+        output_hidden_states: bool,
+        return_dict: bool,
         training: bool = False,
         **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
 
-        embedding_output = self.embeddings(
-            pixel_values=pixel_values,
-            training=training,
-        )
+        embedding_output = self.embeddings(pixel_values=pixel_values)
         embedding_output = self.pre_layrnorm(inputs=embedding_output)
 
         encoder_outputs = self.encoder(
@@ -1006,27 +689,22 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-    # OK: End
 
 
+@keras_serializable
 class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
     config_class = CLIPVisionConfig
 
-    # OK: Begin
     def __init__(self, config: CLIPVisionConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
 
         self.vision_model = TFCLIPVisionTransformer(config, name="vision_model")
-    # OK: End
 
-    # OK: Begin
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.vision_model.embeddings
-    # OK: End
 
-    # OK: Begin
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -1059,92 +737,12 @@ class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
         )
 
         return vision_model_outputs
-    # OK: End
 
 
-class TFCLIPVisionModel(TFCLIPPreTrainedModel):
-    config_class = CLIPVisionConfig
-    base_model_prefix = "clip_vision"
-
-    def __init__(self, config: CLIPVisionConfig, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        self.clip_vision = TFCLIPVisionMainLayer(config, name="clip_vision")
-
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING.format(...))
-    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=CLIPVisionConfig)
-    def call(
-        self,
-        pixel_values: Optional[TFModelInputType] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-        **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        # TODO: Begin
-        r"""
-        Returns:
-
-        Examples::
-
-            >>> from PIL import Image
-            >>> import requests
-            >>> from transformers import CLIPProcessor, TFCLIPVisionModel
-
-            >>> model = TFCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-            >>> image = Image.open(requests.get(url, stream=True).raw)
-
-            >>> inputs = processor(images=image, return_tensors="pt")
-
-            >>> outputs = model(**inputs)
-            >>> last_hidden_state = outputs.last_hidden_state
-            >>> pooled_output = outputs.pooled_output # pooled CLS states
-        """
-        # TODO: End
-        # OK: Begin
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.clip_vision(
-            pixel_values=inputs["pixel_values"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-
-        return outputs
-        # OK: End
-
-    # OK: Begin
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
-    # OK: End
-
-
+@keras_serializable
 class TFCLIPMainLayer(tf.keras.layers.Layer):
     config_class = CLIPConfig
 
-    # OK: Begin
     def __init__(self, config: CLIPConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -1182,15 +780,17 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
             name="text_projection",
         )
 
+    def build(self, input_shape: tf.TensorShape):
+
         self.logit_scale = self.add_weight(
             shape=(),
             initializer=tf.keras.initializers.Constant(self.config.logit_scale_init_value),
             trainable=True,
             name="logit_scale",
         )
-    # OK: End
 
-    # OK: Begin
+        super().build(input_shape)
+
     def get_text_features(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1201,9 +801,9 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> tf.Tensor:
         inputs = input_processing(
-            func=self.call,
+            func=self.get_text_features,
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1237,9 +837,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         text_features = self.text_projection(inputs=pooled_output)
 
         return text_features
-    # OK: End
 
-    # OK: Begin
     def get_image_features(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -1248,9 +846,9 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> tf.Tensor:
         inputs = input_processing(
-            func=self.call,
+            func=self.get_image_features,
             config=self.config,
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1272,12 +870,10 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
+        image_features = self.visual_projection(inputs=pooled_output)
 
         return image_features
-    # OK: End
 
-    # OK: Begin
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1335,10 +931,10 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         )
 
         image_embeds = vision_outputs[1]
-        image_embeds = self.visual_projection(image_embeds)
+        image_embeds = self.visual_projection(inputs=image_embeds)
 
         text_embeds = text_outputs[1]
-        text_embeds = self.text_projection(text_embeds)
+        text_embeds = self.text_projection(inputs=text_embeds)
 
         # normalized features
         image_embeds = image_embeds / tf.norm(tensor=image_embeds, ord='fro', axis=-1, keepdims=True)
@@ -1367,7 +963,301 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
             vision_model_output=vision_outputs,
         )
 
-    # OK: End
+
+class TFCLIPPreTrainedModel(TFPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = CLIPConfig
+    base_model_prefix = "clip"
+
+
+CLIP_START_DOCSTRING = r"""
+
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
+
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
+
+    .. note::
+
+        TF 2.0 models accepts two formats as inputs:
+
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
+
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(input_ids)`
+        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Args:
+        config (:class:`~transformers.CLIPConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
+            model weights.
+"""
+
+CLIP_TEXT_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        position_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
+
+            `What are position IDs? <../glossary.html#position-ids>`__
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
+"""
+
+CLIP_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using :class:`~transformers.CLIPFeatureExtractor`. See
+            :meth:`transformers.CLIPFeatureExtractor.__call__` for details.
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
+"""
+
+CLIP_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        pixel_values (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using :class:`~transformers.CLIPFeatureExtractor`. See
+            :meth:`transformers.CLIPFeatureExtractor.__call__` for details.
+        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        position_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
+
+            `What are position IDs? <../glossary.html#position-ids>`__
+        return_loss (:obj:`bool`, `optional`):
+            Whether or not to return the contrastive loss.
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
+"""
+
+
+class TFCLIPTextModel(TFCLIPPreTrainedModel):
+    config_class = CLIPTextConfig
+    base_model_prefix = "clip_text"
+
+    def __init__(self, config: CLIPTextConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.clip_text = TFCLIPTextMainLayer(config, name="clip_text")
+
+    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=CLIPTextConfig)
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+        **kwargs,
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+        r"""
+        Returns:
+
+        Examples::
+
+            >>> from transformers import CLIPTokenizer, TFCLIPTextModel
+
+            >>> model = TFCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
+            >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+
+            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="tf")
+
+            >>> outputs = model(**inputs)
+            >>> last_hidden_state = outputs.last_hidden_state
+            >>> pooled_output = outputs.pooled_output # pooled (EOS token) states
+        """
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        outputs = self.clip_text(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            position_ids=inputs["position_ids"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        return outputs
+
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
+
+class TFCLIPVisionModel(TFCLIPPreTrainedModel):
+    config_class = CLIPVisionConfig
+    base_model_prefix = "clip_vision"
+
+    def __init__(self, config: CLIPVisionConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.clip_vision = TFCLIPVisionMainLayer(config, name="clip_vision")
+
+    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=CLIPVisionConfig)
+    def call(
+        self,
+        pixel_values: Optional[TFModelInputType] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+        **kwargs,
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+        r"""
+        Returns:
+
+        Examples::
+
+            >>> from PIL import Image
+            >>> import requests
+            >>> from transformers import CLIPProcessor, TFCLIPVisionModel
+
+            >>> model = TFCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+            >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> inputs = processor(images=image, return_tensors="tf")
+
+            >>> outputs = model(**inputs)
+            >>> last_hidden_state = outputs.last_hidden_state
+            >>> pooled_output = outputs.pooled_output # pooled CLS states
+        """
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        outputs = self.clip_vision(
+            pixel_values=inputs["pixel_values"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        return outputs
+
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns,
+        )
 
 
 @add_start_docstrings(CLIP_START_DOCSTRING)
@@ -1380,7 +1270,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
 
         self.clip = TFCLIPMainLayer(config, name="clip")
 
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def get_text_features(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1391,10 +1281,10 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> tf.Tensor:
         r"""
         Returns:
-            text_features (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, output_dim`): The text embeddings
+            text_features (:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`): The text embeddings
             obtained by applying the projection layer to the pooled output of :class:`~transformers.TFCLIPTextModel`.
 
         Examples::
@@ -1404,7 +1294,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
             >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="pt")
+            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="tf")
             >>> text_features = model.get_text_features(**inputs)
         """
         inputs = input_processing(
@@ -1440,10 +1330,10 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> tf.Tensor:
         r"""
         Returns:
-            image_features (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, output_dim`): The image embeddings
+            image_features (:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`): The image embeddings
             obtained by applying the projection layer to the pooled output of :class:`~transformers.TFCLIPVisionModel`.
 
         Examples::
@@ -1458,7 +1348,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> inputs = processor(images=image, return_tensors="pt")
+            >>> inputs = processor(images=image, return_tensors="tf")
 
             >>> image_features = model.get_image_features(**inputs)
         """
@@ -1482,7 +1372,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
 
         return image_features
 
-    @add_start_docstrings_to_model_forward(CLIP_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLIP_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFCLIPOutput, config_class=CLIPConfig)
     def call(
         self,
@@ -1512,11 +1402,11 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+            >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="tf", padding=True)
 
             >>> outputs = model(**inputs)
             >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
-            >>> probs = logits_per_image.softmax(dim=1) # we can take the softmax to get the label probabilities
+            >>> probs = tf.nn.softmax(logits_per_image, axis=1) # we can take the softmax to get the label probabilities
 
         """
         inputs = input_processing(
