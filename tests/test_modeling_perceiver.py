@@ -17,6 +17,8 @@
 
 import copy
 import inspect
+import os
+import random
 import tempfile
 import unittest
 from typing import Dict, List, Tuple
@@ -46,6 +48,7 @@ if is_torch_available():
         PerceiverForImageClassificationConvProcessing,
         PerceiverForImageClassificationFourier,
         PerceiverForMaskedLM,
+        PerceiverForMultimodalAutoencoding,
         PerceiverForOpticalFlow,
         PerceiverModel,
         PerceiverTokenizer,
@@ -66,8 +69,12 @@ class PerceiverModelTester:
         batch_size=13,
         seq_length=7,
         num_channels=3,
-        image_size=30,
+        image_size=32,
         train_size=[20, 20],
+        num_frames=5,
+        audio_samples_per_frame=200,
+        samples_per_patch=20,
+        nchunks=20,
         num_latents=10,
         d_latents=20,
         num_blocks=1,
@@ -91,6 +98,10 @@ class PerceiverModelTester:
         self.num_channels = num_channels
         self.image_size = image_size
         self.train_size = train_size
+        self.num_frames = num_frames
+        self.audio_samples_per_frame = audio_samples_per_frame
+        self.samples_per_patch = samples_per_patch
+        self.nchunks = nchunks
         self.num_latents = num_latents
         self.d_latents = d_latents
         self.num_blocks = num_blocks
@@ -107,6 +118,14 @@ class PerceiverModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.scope = scope
+        # set subsampling for multimodal model (take first chunk)
+        image_chunk_size = np.prod((self.num_frames, self.image_size, self.image_size)) // self.nchunks
+        audio_chunk_size = self.num_frames * self.audio_samples_per_frame // self.samples_per_patch // self.nchunks
+        self.subsampling = {
+            "image": torch.arange(0, image_chunk_size),
+            "audio": torch.arange(0, audio_chunk_size),
+            "label": None,
+        }
 
     def prepare_config_and_inputs(self, model_class=None):
         config = self.get_config()
@@ -138,6 +157,13 @@ class PerceiverModelTester:
         elif model_class.__name__ == "PerceiverForOpticalFlow":
             config.d_model = 322
             inputs = floats_tensor([self.batch_size, 2, 27, self.train_size[0], self.train_size[1]])
+        elif model_class.__name__ == "PerceiverForMultimodalAutoencoding":
+            config.d_model = 409
+            images = torch.randn(
+                (self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size)
+            )
+            audio = torch.randn((self.batch_size, self.num_frames * self.audio_samples_per_frame, 1))
+            inputs = dict(image=images, audio=audio, label=torch.zeros((self.batch_size, self.num_labels)))
         else:
             raise ValueError(f"Model class {model_class} not supported")
 
@@ -186,6 +212,9 @@ class PerceiverModelTester:
             max_position_embeddings=self.max_position_embeddings,
             image_size=self.image_size,
             train_size=self.train_size,
+            num_frames=self.num_frames,
+            audio_samples_per_frame=self.audio_samples_per_frame,
+            samples_per_patch=self.samples_per_patch,
         )
 
     def create_and_check_for_masked_lm(
@@ -254,6 +283,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             PerceiverForImageClassificationConvProcessing,
             PerceiverForImageClassificationFourier,
             PerceiverForOpticalFlow,
+            PerceiverForMultimodalAutoencoding,
         )
         if is_torch_available()
         else ()
@@ -268,27 +298,15 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = PerceiverModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PerceiverConfig, hidden_size=37)
 
+    def _initialize_model(self, model_class, config):
+        if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
+            model = model_class(config, subsampling=self.model_tester.subsampling)
+        else:
+            model = model_class(config)
+        return model
+
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
-
-        # if model_class in [*get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)]:
-        #     # overwrite inputs_dict
-        #     inputs_dict["inputs"] = floats_tensor(
-        #         [
-        #             self.model_tester.batch_size,
-        #             self.model_tester.num_channels,
-        #             self.model_tester.image_size,
-        #             self.model_tester.image_size,
-        #         ]
-        #     )
-        #     inputs_dict["attention_mask"] = None
-
-        # elif model_class.__name__ == "PerceiverForOpticalFlow":
-        #     # overwrite inputs_dict
-        #     inputs_dict["inputs"] = floats_tensor(
-        #         [self.model_tester.batch_size, 2, 27, self.model_tester.train_size[0], self.model_tester.train_size[1]]
-        #     )
-        #     inputs_dict["attention_mask"] = None
 
         if return_labels:
             if model_class in [
@@ -305,18 +323,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
-            elif model_class.__name__ == "PerceiverForOpticalFlow":
-                inputs_dict["labels"] = torch.zeros(
-                    (
-                        self.model_tester.batch_size,
-                        self.model_tester.train_size[0],
-                        self.model_tester.train_size[1],
-                        2,
-                    ),
-                    dtype=torch.long,
-                    device=torch_device,
-                )
-
         return inputs_dict
 
     def test_config(self):
@@ -338,7 +344,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             # we overwrite this, as the embeddings of Perceiver are an instance of nn.Parameter
             # and Perceiver doesn't support get_output_embeddings
             self.assertIsInstance(model.get_input_embeddings(), (nn.Parameter))
@@ -348,7 +354,11 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             return
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING) or model_class.__name__ == "PerceiverForOpticalFlow":
+            if model_class in [
+                *get_values(MODEL_MAPPING),
+                PerceiverForOpticalFlow,
+                PerceiverForMultimodalAutoencoding,
+            ]:
                 continue
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -365,7 +375,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
@@ -380,7 +390,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -388,12 +398,22 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 first = model(**inputs_dict)[0]
                 second = model(**inputs_dict)[0]
 
-            out_1 = first.cpu().numpy()
-            out_2 = second.cpu().numpy()
-            out_1 = out_1[~np.isnan(out_1)]
-            out_2 = out_2[~np.isnan(out_2)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
+            if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
+                # model outputs a dictionary with logits per modality, let's verify each modality
+                for modality in first.keys():
+                    out_1 = first[modality].cpu().numpy()
+                    out_2 = second[modality].cpu().numpy()
+                    out_1 = out_1[~np.isnan(out_1)]
+                    out_2 = out_2[~np.isnan(out_2)]
+                    max_diff = np.amax(np.abs(out_1 - out_2))
+                    self.assertLessEqual(max_diff, 1e-5)
+            else:
+                out_1 = first.cpu().numpy()
+                out_2 = second.cpu().numpy()
+                out_1 = out_1[~np.isnan(out_1)]
+                out_2 = out_2[~np.isnan(out_2)]
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
 
     def test_attention_outputs(self):
         seq_len = getattr(self.model_tester, "num_latents", None)
@@ -408,7 +428,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -432,7 +452,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -451,7 +471,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -469,7 +489,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             model.to(torch_device)
             model.eval()
 
@@ -540,7 +560,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             model.to(torch_device)
             model.eval()
 
@@ -548,8 +568,8 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            if model_class.__name__ != "PerceiverForOpticalFlow":
-                # optical flow model doesn't support training for now
+            if model_class.__name__ not in ["PerceiverForOpticalFlow", "PerceiverForMultimodalAutoencoding"]:
+                # optical flow + multimodal models don't support training for now
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(model, tuple_inputs, dict_inputs)
@@ -563,20 +583,20 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
-            if model_class.__name__ != "PerceiverForOpticalFlow":
-                # optical flow model doesn't support training for now
+            if model_class.__name__ not in ["PerceiverForOpticalFlow", "PerceiverForMultimodalAutoencoding"]:
+                # optical flow + multimodal models don't support training for now
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-            if model_class.__name__ != "PerceiverForOpticalFlow":
-                # optical flow model doesn't support training for now
+            if model_class.__name__ not in ["PerceiverForOpticalFlow", "PerceiverForMultimodalAutoencoding"]:
+                # optical flow + multimodal models don't support training for now
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
-            if model_class.__name__ != "PerceiverForOpticalFlow":
-                # optical flow model doesn't support training for now
+            if model_class.__name__ not in ["PerceiverForOpticalFlow", "PerceiverForMultimodalAutoencoding"]:
+                # optical flow + multimodal models don't support training for now
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(
@@ -621,7 +641,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             ) = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             model.to(torch_device)
             model.eval()
 
@@ -629,12 +649,19 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             torch.manual_seed(0)
             config.chunk_size_feed_forward = 1
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             model.to(torch_device)
             model.eval()
 
             hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
+            if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
+                # model outputs a dictionary with logits for each modality
+                for modality in hidden_states_no_chunk.keys():
+                    self.assertTrue(
+                        torch.allclose(hidden_states_no_chunk[modality], hidden_states_with_chunk[modality], atol=1e-3)
+                    )
+            else:
+                self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
     def test_save_load(self):
         for model_class in self.all_model_classes:
@@ -643,27 +670,79 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            model = model_class(config)
+            model = self._initialize_model(model_class, config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            out_2 = outputs[0].cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
+            if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
+                for modality in outputs[0].keys():
+                    print("Processing modality:", modality)
+                    out_2 = outputs[0][modality].cpu().numpy()
+                    out_2[np.isnan(out_2)] = 0
 
+                    print("Shape of out 2:", out_2.shape)
+
+                    with tempfile.TemporaryDirectory() as tmpdirname:
+                        model.save_pretrained(tmpdirname)
+                        model = model_class.from_pretrained(tmpdirname, subsampling=self.model_tester.subsampling)
+                        model.to(torch_device)
+                        with torch.no_grad():
+                            after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+                        # Make sure we don't have nans
+                        out_1 = after_outputs[0][modality].cpu().numpy()
+                        out_1[np.isnan(out_1)] = 0
+                        print("Shape of out_1:", out_1.shape)
+                        max_diff = np.amax(np.abs(out_1 - out_2))
+                        self.assertLessEqual(max_diff, 1e-5)
+
+            else:
+                out_2 = outputs[0].cpu().numpy()
+                out_2[np.isnan(out_2)] = 0
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    model = model_class.from_pretrained(tmpdirname)
+                    model.to(torch_device)
+                    with torch.no_grad():
+                        after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+                    # Make sure we don't have nans
+                    out_1 = after_outputs[0].cpu().numpy()
+                    out_1[np.isnan(out_1)] = 0
+                    max_diff = np.amax(np.abs(out_1 - out_2))
+                    self.assertLessEqual(max_diff, 1e-5)
+
+    def test_save_load_keys_to_ignore_on_save(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = self._initialize_model(model_class, config)
+            _keys_to_ignore_on_save = getattr(model, "_keys_to_ignore_on_save", None)
+            if _keys_to_ignore_on_save is None:
+                continue
+
+            # check the keys are in the original state_dict
+            for k in _keys_to_ignore_on_save:
+                self.assertIn(k, model.state_dict().keys(), "\n".join(model.state_dict().keys()))
+
+            # check that certain keys didn't get saved with the model
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-                with torch.no_grad():
-                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                output_model_file = os.path.join(tmpdirname, WEIGHTS_NAME)
+                state_dict_saved = torch.load(output_model_file)
+                for k in _keys_to_ignore_on_save:
+                    self.assertNotIn(k, state_dict_saved.keys(), "\n".join(state_dict_saved.keys()))
 
-                # Make sure we don't have nans
-                out_1 = after_outputs[0].cpu().numpy()
-                out_1[np.isnan(out_1)] = 0
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
+                # Test we can load the state dict in the model, necessary for the checkpointing API in Trainer.
+                load_result = model.load_state_dict(state_dict_saved, strict=False)
+                self.assertTrue(
+                    len(load_result.missing_keys) == 0
+                    or set(load_result.missing_keys) == set(model._keys_to_ignore_on_save)
+                )
+                self.assertTrue(len(load_result.unexpected_keys) == 0)
 
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
@@ -671,9 +750,10 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            # most Perceiver downstream models don't have a typical head like is the case with BERT
+            # most Perceiver models don't have a typical head like is the case with BERT
             if model_class in [
                 PerceiverForOpticalFlow,
+                PerceiverForMultimodalAutoencoding,
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
             ]:
                 continue
@@ -690,6 +770,10 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
+    def test_resize_embeddings_untied(self):
         pass
 
     @unittest.skip(reason="Perceiver doesn't support inputs_embeds")

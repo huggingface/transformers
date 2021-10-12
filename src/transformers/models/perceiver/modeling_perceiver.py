@@ -794,7 +794,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         if inputs.size()[-1] != self.config.d_model:
             raise ValueError(
-                f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}"
+                f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}. "
+                "Please update config.d_model appropriately."
             )
         else:
             input_shape = inputs.size()
@@ -1316,7 +1317,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                         concat_pos=True,
                     ),
                     prep_type="patches",
-                    samples_per_patch=16,
+                    samples_per_patch=config.samples_per_patch,
                 ),
                 "image": PerceiverImagePreprocessor(
                     config,
@@ -1447,17 +1448,11 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        logits = outputs.logits
+        logits = outputs.logits if return_dict else outputs[0]
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
-                loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            raise NotImplementedError("Multimodal autoencoding training is not yet supported")
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -2506,6 +2501,8 @@ class PerceiverAudioPreprocessor(nn.Module):
         return inputs_with_pos, inputs
 
     def forward(self, inputs, pos, network_input_is_1d: bool = True):
+        print("Shape of inputs:", inputs.shape)
+
         inputs = torch.reshape(inputs, [inputs.shape[0], -1, self.samples_per_patch])
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)

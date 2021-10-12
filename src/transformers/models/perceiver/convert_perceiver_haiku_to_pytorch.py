@@ -352,7 +352,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.num_self_attention_heads = 8
         config.num_cross_attention_heads = 1
         config.num_labels = 700
-        # define dummy inputs + subsampling (as each forward pass is only on a chunk of size 128)
+        # define dummy inputs + subsampling (as each forward pass is only on a chunk of image + audio data)
         images = torch.randn((1, 16, 3, 224, 224))
         audio = torch.randn((1, 30720, 1))
         nchunks = 128
