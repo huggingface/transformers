@@ -95,7 +95,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
         for item in items:
             if set(item.keys()) != keys:
                 raise ValueError(
-                    f"The elements of the batch contain different keys `pad_collate_fn` cannot batch them ({set(item.keys())} != {keys})"
+                    f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} != {keys})"
                 )
         padded = {key: pad(items, key, padding_value) for key in keys}
         return padded
@@ -629,6 +629,12 @@ PIPELINE_INIT_ARGS = r"""
             is provided.
         task (:obj:`str`, defaults to :obj:`""`):
             A task-identifier for the pipeline.
+        num_workers (:obj:`int`, `optional`, defaults to 8):
+            When the pipeline will use `DataLoader` (when passing a dataset, on GPU for a Pytorch model), the number
+            of workers to be used.
+        batch_size (:obj:`int`, `optional`, defaults to 1):
+            When the pipeline will use `DataLoader` (when passing a dataset, on GPU for a Pytorch model), the size
+            of the batch to use, for inference this is not always beneficial, please read `Batching with pipelines <https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching>`_ .
         args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`):
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (:obj:`int`, `optional`, defaults to -1):
@@ -656,6 +662,32 @@ if is_torch_available():
 
     class PipelineIterator(IterableDataset):
         def __init__(self, loader, infer, params, unbatch_size=None):
+            """
+            Roughly equivalent to
+
+            .. code-block::
+                for item in loader:
+                    yield infer(item, **params)
+
+            Arguments:
+                loader (:obj:`~torch.utils.data.DataLoader` or any iterator):
+                    The iterator that will be used to apply :obj:`infer` on.
+                infer (any function):
+                    The function to apply of each element of :obj:`loader`.
+                params (:obj:`dict`):
+                    The parameters passed to :obj:`infer` along with every item
+                unbatch_size (:obj:`int`, :obj:`optional`):
+                    If specified, the items of :obj:`loader` are supposed to come
+                    as batch, and are unbatched here making it roughly behave as
+
+
+                    .. code-block::
+
+                        for items in loader:
+                            for i in unbatch_size:
+                                item = items[i]
+                                yield infer(item, **params)
+            """
             self.loader = loader
             self.infer = infer
             self.params = params
@@ -679,17 +711,17 @@ if is_torch_available():
             if isinstance(self._unbatch_data, torch.Tensor):
                 result = self._unbatch_data[self._unbatch_index]
             else:
-                result = self._unbatch_data.__class__(
-                    {
-                        k: element[self._unbatch_index].unsqueeze(0)
-                        if isinstance(element[self._unbatch_index], torch.Tensor)
-                        else np.expand_dims(element[self._unbatch_index], 0)
-                        if isinstance(element[self._unbatch_index], np.ndarray)
-                        else element[self._unbatch_index]
-                        for k, element in self._unbatch_data.items()
-                        if k != "past_key_values"
-                    }
-                )
+                unbatched = {}
+                for k, element in self._unbatch_data.items():
+                    if k == "past_key_values":
+                        continue
+                    if isinstance(element[self._unbatch_index], torch.Tensor):
+                        unbatched[k] = element[self._unbatch_index].unsqueeze(0)
+                    elif isinstance(element[self._unbatch_index], np.ndarray):
+                        unbatched[k] = np.expand_dims(element[self._unbatch_index], 0)
+                    else:
+                        unbatched[k] = element[self._unbatch_index]
+                result = self._unbatch_data.__class__(unbatched)
             self._unbatch_index += 1
             return result
 
@@ -710,7 +742,8 @@ if is_torch_available():
                 else:
                     N = first_tensor.shape[0]
                 if 0 < N < self.unbatch_size:
-                    # Could be last batch
+                    # Could be last batch so we can't unroll as many
+                    # elements.
                     self.unbatch_size = N
                 self._unbatch_data = processed
                 self._unbatch_index = 0

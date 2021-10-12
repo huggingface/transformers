@@ -245,7 +245,7 @@ class QuestionAnsweringPipeline(Pipeline):
             - **answer** (:obj:`str`) -- The answer to the question.
         """
         if kwargs.get("batch_size", 1) > 1:
-            logger.warning("Batch_size is deactivated for question answering pipeline")
+            logger.error("Batch_size is deactivated for question answering pipeline")
             kwargs["batch_size"] = 1
 
         # Convert inputs to features
