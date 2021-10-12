@@ -331,7 +331,7 @@ So the promise is very attractive - it runs a 30min simulation on the cluster of
 
 ## Which Strategy To Use When
 
-Here is a very rough outlook at which parallelism strategy to use when. The first on the list is typically faster.
+Here is a very rough outline at which parallelism strategy to use when. The first on each list is typically faster.
 
 **⇨ Single GPU**
 
@@ -342,7 +342,11 @@ Here is a very rough outlook at which parallelism strategy to use when. The firs
 * Model doesn't fit onto a single GPU:
 
     1. ZeRO + Offload CPU and optionally NVMe
+    2. as above plus Memory Centric Tiling (see below for details) if the largest layer can't fit into a single GPU
 
+* Largest Layer not fitting into a single GPU:
+
+1. ZeRO - Enable [Memory Centric Tiling](https://deepspeed.readthedocs.io/en/latest/zero3.html#memory-centric-tiling) (MCT). It allows you to run arbitrarily large layers by automatically splitting them and executing them sequentially. MCT reduces the number of parameters that are live on a GPU, but it does not affect the activation memory. As this need is very rare as of this writing a manual override of `torch.nn.Linear` needs to be done by the user.
 
 **⇨ Single Node / Multi-GPU**
 
@@ -357,7 +361,14 @@ Here is a very rough outlook at which parallelism strategy to use when. The firs
     2. ZeRO
     3. TP
 
-    With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP and ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
+    With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP or ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
+
+    TP is almost always used within a single node. That is TP size <= gpus per node.
+
+* Largest Layer not fitting into a single GPU:
+
+    1. If not using ZeRO - must use TP, as PP alone won't be able to fit.
+    2. With ZeRO see the same entry for "Single GPU" above
 
 
 **⇨ Multi-Node / Multi-GPU**
