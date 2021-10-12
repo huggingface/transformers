@@ -79,6 +79,7 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
     @cached_property
     @tf_required
     def _setup_tpu(self) -> Tuple["tf.distribute.cluster_resolver.TPUClusterResolver"]:
+        tpu = None
         if self.tpu:
             try:
                 if self.tpu_name:
