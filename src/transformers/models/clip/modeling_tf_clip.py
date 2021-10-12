@@ -16,7 +16,7 @@
 
 
 import math
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -75,9 +75,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
     return tf.keras.metrics.sparse_categorical_crossentropy(
-        y_true=tf.range(shape_list(logits)[0]),
-        y_pred=logits,
-        from_logits=True
+        y_true=tf.range(shape_list(logits)[0]), y_pred=logits, from_logits=True
     )
 
 
@@ -126,7 +124,6 @@ class TFCLIPOutput(ModelOutput):
 
 
 class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
-
     def __init__(self, config: CLIPVisionConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -185,14 +182,12 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
 
         # Conv2D
         # shape = (batch_size, out_height, out_width, out_channels=embed_dim)
-        patch_embeds = (
-            tf.nn.conv2d(
-                input=pixel_values,
-                filters=filters,
-                strides=self.patch_size,
-                padding="VALID",
-                data_format="NHWC",
-            )
+        patch_embeds = tf.nn.conv2d(
+            input=pixel_values,
+            filters=filters,
+            strides=self.patch_size,
+            padding="VALID",
+            data_format="NHWC",
         )
 
         # Change the 2D spatial dimensions to a single temporal dimension.
@@ -275,7 +270,9 @@ class TFCLIPAttention(tf.keras.layers.Layer):
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads}).")
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+            )
 
         self.sqrt_att_head_size = math.sqrt(self.head_dim)
 
@@ -404,8 +401,8 @@ class TFCLIPEncoderLayer(tf.keras.layers.Layer):
             causal_attention_mask (:obj:`tf.Tensor`): causal attention mask of size
                 :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             output_attentions (:obj:`bool`):
-                Whether or not to return the attentions tensors of all attention layers. See ``outputs`` under
-                returned tensors for more detail.
+                Whether or not to return the attentions tensors of all attention layers. See ``outputs`` under returned
+                tensors for more detail.
         """
         residual = hidden_states
 
@@ -438,6 +435,7 @@ class TFCLIPEncoder(tf.keras.layers.Layer):
     Args:
         config: CLIPConfig
     """
+
     def __init__(self, config: CLIPConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -490,7 +488,9 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
 
         self.embeddings = TFCLIPTextEmbeddings(config, name="embeddings")
         self.encoder = TFCLIPEncoder(config, name="encoder")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="final_layer_norm")
+        self.final_layer_norm = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="final_layer_norm"
+        )
 
     def call(
         self,
@@ -941,8 +941,8 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         text_embeds = self.text_projection(inputs=text_embeds)
 
         # normalized features
-        image_embeds = image_embeds / tf.norm(tensor=image_embeds, ord='fro', axis=-1, keepdims=True)
-        text_embeds = text_embeds / tf.norm(tensor=text_embeds, ord='fro', axis=-1, keepdims=True)
+        image_embeds = image_embeds / tf.norm(tensor=image_embeds, ord="fro", axis=-1, keepdims=True)
+        text_embeds = text_embeds / tf.norm(tensor=text_embeds, ord="fro", axis=-1, keepdims=True)
 
         # cosine similarity as logits
         logit_scale = tf.math.exp(self.logit_scale)
@@ -1200,6 +1200,40 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
 
         self.clip_vision = TFCLIPVisionMainLayer(config, name="clip_vision")
 
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(3, len(DUMMY_INPUTS), self.config.image_size, self.config.image_size), dtype=tf.float32
+        )
+        return {
+            "pixel_values": VISION_DUMMY_INPUTS,
+        }
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (:obj:`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=CLIPVisionConfig)
     def call(
@@ -1274,6 +1308,43 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
 
         self.clip = TFCLIPMainLayer(config, name="clip")
 
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(3, len(DUMMY_INPUTS), self.config.image_size, self.config.image_size), dtype=tf.float32
+        )
+        return {
+            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
+            "pixel_values": VISION_DUMMY_INPUTS,
+        }
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (:obj:`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def get_text_features(
         self,
@@ -1288,8 +1359,8 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
     ) -> tf.Tensor:
         r"""
         Returns:
-            text_features (:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`): The text embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.TFCLIPTextModel`.
+            text_features (:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of :class:`~transformers.TFCLIPTextModel`.
 
         Examples::
 
@@ -1337,8 +1408,8 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
     ) -> tf.Tensor:
         r"""
         Returns:
-            image_features (:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`): The image embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.TFCLIPVisionModel`.
+            image_features (:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of :class:`~transformers.TFCLIPVisionModel`.
 
         Examples::
 
