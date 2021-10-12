@@ -107,9 +107,9 @@ class ImageSegmentationPipeline(Pipeline):
 
             - **label** (:obj:`str`) -- The class label identified by the model.
             - **score** (:obj:`float`) -- The score attributed by the model for that label.
-            - **mask** (:obj:`str`) -- base64 string of a single-channel PNG image that contain masks information. The
-              PNG image has size (heigth, width) of the original image. Pixel values in the image are either 0 or 255
-              (i.e. mask is absent VS mask is present).
+            - **mask** (:obj:`str`) -- base64 string of a grayscale (single-channel) PNG image that contain masks
+              information. The PNG image has size (heigth, width) of the original image. Pixel values in the image are
+              either 0 or 255 (i.e. mask is absent VS mask is present).
         """
 
         return super().__call__(*args, **kwargs)
@@ -158,7 +158,7 @@ class ImageSegmentationPipeline(Pipeline):
         Returns:
             A base64 string of a single-channel PNG image that contain masks information.
         """
-        img = Image.fromarray(mask.astype(np.int8))
+        img = Image.fromarray(mask.astype(np.int8), mode="L")
         with io.BytesIO() as out:
             img.save(out, format="PNG")
             png_string = out.getvalue()
