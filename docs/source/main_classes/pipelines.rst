@@ -143,7 +143,7 @@ whenever the pipeline uses its streaming ability (so when passing lists or :obj:
     for batch_size in [1, 8, 64, 256]:
         print("-" * 30)                                                                     
         print(f"Streaming batch_size={batch_size}")    
-        for out in tqdm.tqdm(pipe(dataset, batch_size=8), total=len(dataset)):              
+        for out in tqdm.tqdm(pipe(dataset, batch_size=batch_size), total=len(dataset)):              
             pass
 
 
