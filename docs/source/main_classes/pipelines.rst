@@ -85,11 +85,11 @@ GPU. If it doesn't don't hesitate to create an issue.
 
 .. autofunction:: transformers.pipeline
 
-Pipeline batching 
+Pipeline batching
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-All pipelines (except `zero-shot-classification` and `question-answering` currently) can use batching.
-This will work whenever the pipeline uses its streaming ability (so when passing lists or `Dataset`).
+All pipelines (except `zero-shot-classification` and `question-answering` currently) can use batching. This will work
+whenever the pipeline uses its streaming ability (so when passing lists or `Dataset`).
 
 .. code-block::
 
@@ -104,9 +104,8 @@ This will work whenever the pipeline uses its streaming ability (so when passing
 
 .. warning::
 
-    However, this is not automatically a win for performance. It can be either
-    a 10x speedup or 5x slowdown depending on hardware, data and the actual model
-    being used.
+    However, this is not automatically a win for performance. It can be either a 10x speedup or 5x slowdown depending
+    on hardware, data and the actual model being used.
 
     Example where it's most a speedup:
 
@@ -116,19 +115,19 @@ This will work whenever the pipeline uses its streaming ability (so when passing
     from transformers import pipeline                                                   
     from torch.utils.data import Dataset                                                
     import tqdm                                                                         
-                                                                                        
-                                                                                        
+
+
     pipe = pipeline("text-classification", device=0)                                    
-                                                                                        
-                                                                                        
+
+
     class MyDataset(Dataset):                                                           
         def __len__(self):                                                              
             return 5000                                                                 
-                                                                                        
+
         def __getitem__(self, i):                                                       
             return "This is a test"                                                     
-                                                                                        
-                                                                                        
+
+
     dataset = MyDataset()   
 
     for batch_size in [1, 8, 64, 256]:
@@ -155,7 +154,7 @@ This will work whenever the pipeline uses its streaming ability (so when passing
     100%|█████████████████████████████████████████████████████████████████████| 5000/5000 [00:01<00:00, 2554.43it/s]
     (diminishing returns, saturated the GPU)
 
-    
+
 Example where it's most a slowdown:
 
 .. code-block::
@@ -163,7 +162,7 @@ Example where it's most a slowdown:
     class MyDataset(Dataset):                                                           
         def __len__(self):                                                              
             return 5000                                                                 
-                                                                                        
+
         def __getitem__(self, i):                                                       
             if i % 64 == 0:                                                          
                 n = 100                                                              
@@ -171,10 +170,9 @@ Example where it's most a slowdown:
                 n = 1                                                                
             return "This is a test" * n
 
-This is a occasional very long sentence compared to the other. In that case, 
-the **whole** batch will need to be 400 tokens long, so the whole batch will be
-[64, 400] instead of [64, 4], leading to the high slowdown. Even worse, on bigger
-batches, the program simply crashes.
+This is a occasional very long sentence compared to the other. In that case, the **whole** batch will need to be 400
+tokens long, so the whole batch will be [64, 400] instead of [64, 4], leading to the high slowdown. Even worse, on
+bigger batches, the program simply crashes.
 
 
 .. code-block::
@@ -199,17 +197,22 @@ batches, the program simply crashes.
     RuntimeError: CUDA out of memory. Tried to allocate 376.00 MiB (GPU 0; 3.95 GiB total capacity; 1.72 GiB already allocated; 354.88 MiB free; 2.46 GiB reserved in total by PyTorch)
 
 
-There are no good (general) solutions for this problem, and your mileage may vary depending on your use cases.
-Rule of thumb:
+There are no good (general) solutions for this problem, and your mileage may vary depending on your use cases. Rule of
+thumb:
 
 For users, a rule of thumb is:
 
-- **Measure performance on your load, with your hardware. Measure, measure, and keep measuring. Real numbers are the only way to go.**
+- **Measure performance on your load, with your hardware. Measure, measure, and keep measuring. Real numbers are the
+  only way to go.**
 - If you are latency constrained (live product doing inference), don't batch
 - If you are using CPU, don't batch.
 - If you are using throughput (you want to run your model on a bunch of static data), on GPU, then:
-      - If you have no clue about the size of the sequence_length ("natural" data), by default don't batch, measure and try tentatively to add it, add OOM checks to recover when it will fail (and it will at some point if you don't control the sequence_length.)
-      - If your sequence_length is super regular, then batching is more likely to be VERY interesting, measure and push it until you get OOMs.
+
+      - If you have no clue about the size of the sequence_length ("natural" data), by default don't batch, measure and
+        try tentatively to add it, add OOM checks to recover when it will fail (and it will at some point if you don't
+        control the sequence_length.)
+      - If your sequence_length is super regular, then batching is more likely to be VERY interesting, measure and push
+        it until you get OOMs.
       - The larger the GPU the more likely batching is going to be more interesting
 - As soon as you enable batching, make sure you can handle OOMs nicely.
 

@@ -630,11 +630,12 @@ PIPELINE_INIT_ARGS = r"""
         task (:obj:`str`, defaults to :obj:`""`):
             A task-identifier for the pipeline.
         num_workers (:obj:`int`, `optional`, defaults to 8):
-            When the pipeline will use `DataLoader` (when passing a dataset, on GPU for a Pytorch model), the number
-            of workers to be used.
+            When the pipeline will use `DataLoader` (when passing a dataset, on GPU for a Pytorch model), the number of
+            workers to be used.
         batch_size (:obj:`int`, `optional`, defaults to 1):
-            When the pipeline will use `DataLoader` (when passing a dataset, on GPU for a Pytorch model), the size
-            of the batch to use, for inference this is not always beneficial, please read `Batching with pipelines <https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching>`_ .
+            When the pipeline will use `DataLoader` (when passing a dataset, on GPU for a Pytorch model), the size of
+            the batch to use, for inference this is not always beneficial, please read `Batching with pipelines
+            <https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching>`_ .
         args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`):
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (:obj:`int`, `optional`, defaults to -1):
@@ -677,8 +678,8 @@ if is_torch_available():
                 params (:obj:`dict`):
                     The parameters passed to :obj:`infer` along with every item
                 unbatch_size (:obj:`int`, :obj:`optional`):
-                    If specified, the items of :obj:`loader` are supposed to come
-                    as batch, and are unbatched here making it roughly behave as
+                    If specified, the items of :obj:`loader` are supposed to come as batch, and are unbatched here
+                    making it roughly behave as
 
 
                     .. code-block::
