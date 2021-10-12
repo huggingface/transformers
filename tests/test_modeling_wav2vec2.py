@@ -738,6 +738,33 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertEqual(logits.shape, (4, 1498, 32))
 
+    def test_mask_time_feature_prob_ctc_single_batch(self):
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2",
+            mask_time_prob=0.2,
+            mask_feature_prob=0.2,
+            mask_time_length=2,
+            mask_feature_length=2,
+        )
+        model.to(torch_device).train()
+        processor = Wav2Vec2Processor.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
+        )
+
+        batch_duration_in_seconds = [6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+
+        batch = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
+
+        logits = model(
+            input_values=batch["input_values"].to(torch_device),
+            attention_mask=batch["attention_mask"].to(torch_device),
+        ).logits
+
+        self.assertEqual(logits.shape, (1, 1498, 32))
+
     @slow
     def test_model_from_pretrained(self):
         model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
