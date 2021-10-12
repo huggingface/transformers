@@ -89,7 +89,7 @@ Pipeline batching
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 All pipelines (except `zero-shot-classification` and `question-answering` currently) can use batching. This will work
-whenever the pipeline uses its streaming ability (so when passing lists or `Dataset`).
+whenever the pipeline uses its streaming ability (so when passing lists or :obj:`Dataset`).
 
 .. code-block::
 
