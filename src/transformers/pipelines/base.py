@@ -739,13 +739,13 @@ if is_torch_available():
                     key = list(processed.keys())[0]
                     first_tensor = processed[key]
                 if isinstance(first_tensor, list):
-                    N = len(first_tensor)
+                    observed_batch_size = len(first_tensor)
                 else:
-                    N = first_tensor.shape[0]
-                if 0 < N < self.unbatch_size:
+                    observed_batch_size = first_tensor.shape[0]
+                if 0 < observed_batch_size < self.unbatch_size:
                     # Could be last batch so we can't unroll as many
                     # elements.
-                    self.unbatch_size = N
+                    self.unbatch_size = observed_batch_size
                 self._unbatch_data = processed
                 self._unbatch_index = 0
                 return self.unbatch_item()
