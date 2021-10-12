@@ -95,7 +95,6 @@ TAPAS_TINY = "hf-internal-testing/tiny-random-tapas"
 TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl"
 
 
-
 # XXX: m2m_100 still needs work under z3 (works with z2) after PR is merged and this branch is re-based
 # PYTHONPATH=src deepspeed  --master_port 6666 --num_nodes 1 --num_gpus 2 examples/pytorch/translation/run_translation.py --train_file tests/fixtures/tests_samples/wmt_en_ro/train.json --source_lang en --target_lang ro --model_name_or_path hf-internal-testing/tiny-random-m2m_100 --do_train --max_train_samples 4 --per_device_train_batch_size 2 --num_train_epochs 1 --fp16 --report_to none --overwrite_output_dir --deepspeed tests/deepspeed/ds_config_zero3.json --output_dir /tmp/tmpi4k4wz8s --save_steps 1
 # if param.ds_status == ZeroParamStatus.NOT_AVAILABLE:
@@ -117,6 +116,7 @@ TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl"
 # - "lxmert" doesn't work with run_qa.py
 # - "clip" nothing under pytorch examples - XXX: Suraj is working on adding some - check by end of Sep
 # - "speech_to_text", nothing under pytorch examples
+
 
 def get_launcher(distributed=False):
     # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
@@ -169,7 +169,6 @@ def make_task_cmds():
             "blenderbot",
             "bigbird_pegasus",
             "prophetnet",
-
         ],
         mlm=[
             "electra",
@@ -189,7 +188,6 @@ def make_task_cmds():
             "mpnet",
             "led",
             "squeezebert",
-
             # "convbert", # missing tokenizer files
             # "layoutlmv2", missing model files
         ],
@@ -201,7 +199,7 @@ def make_task_cmds():
             # "transfo-xl", # tokenizer issues as ctrl
             # "ctrl", # tokenizer issues
             # "openai-gpt", missing model files
-            #"tapas", multiple issues
+            # "tapas", multiple issues
         ],
         img_clas=[
             "vit",
