@@ -463,7 +463,7 @@ if __name__ == "__main__":
         "--task",
         default="MLM",
         type=str,
-        help="Task, provided as a string. One of 'MLM', 'image_classification'.",
+        help="Task, provided as a string. One of 'MLM', 'image_classification', 'optical_flow' or 'multimodal_autoencoding'.",
     )
 
     args = parser.parse_args()

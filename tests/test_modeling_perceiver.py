@@ -665,6 +665,29 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
+    def test_correct_missing_keys(self):
+        if not self.test_missing_keys:
+            return
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # most Perceiver downstream models don't have a typical head like is the case with BERT
+            if model_class in [
+                PerceiverForOpticalFlow,
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            ]:
+                continue
+
+            model = model_class(config)
+            base_model_prefix = model.base_model_prefix
+
+            if hasattr(model, base_model_prefix):
+                with tempfile.TemporaryDirectory() as temp_dir_name:
+                    model.base_model.save_pretrained(temp_dir_name)
+                    model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
+                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
+                        self.assertGreater(len(loading_info["missing_keys"]), 0)
+
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):
         pass
