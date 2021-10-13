@@ -44,6 +44,7 @@ from . import dependency_versions_check
 from .file_utils import (
     _LazyModule,
     is_flax_available,
+    is_ov_available,
     is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
@@ -112,6 +113,7 @@ _import_structure = {
         "is_datasets_available",
         "is_faiss_available",
         "is_flax_available",
+        "is_ov_available",
         "is_psutil_available",
         "is_py3nvml_available",
         "is_scipy_available",
@@ -1960,6 +1962,14 @@ else:
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
 
+# OpenVINO-backed objects
+if is_ov_available():
+    _import_structure["models.auto"].extend(
+        [
+            "OVAutoModel",
+        ]
+    )
+
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # Configuration
@@ -2020,6 +2030,7 @@ if TYPE_CHECKING:
         is_datasets_available,
         is_faiss_available,
         is_flax_available,
+        is_ov_available,
         is_psutil_available,
         is_py3nvml_available,
         is_scipy_available,
@@ -3574,6 +3585,11 @@ if TYPE_CHECKING:
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_flax_objects import *
 
+    if is_ov_available():
+        from .models.auto import (
+            OVAutoModel,
+        )
+
 else:
     import sys
 
@@ -3586,9 +3602,9 @@ else:
     )
 
 
-if not is_tf_available() and not is_torch_available() and not is_flax_available():
+if not is_tf_available() and not is_torch_available() and not is_flax_available() and not is_ov_available():
     logger.warning(
-        "None of PyTorch, TensorFlow >= 2.0, or Flax have been found. "
+        "None of PyTorch, TensorFlow >= 2.0, Flax or OpenVINO have been found. "
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
     )

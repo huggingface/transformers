@@ -35,6 +35,7 @@ from .file_utils import (
     FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
+    OV_WEIGHTS_NAME,
     WEIGHTS_NAME,
     ModelOutput,
     PushToHubMixin,
@@ -1217,6 +1218,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         cache_dir = kwargs.pop("cache_dir", None)
         from_tf = kwargs.pop("from_tf", False)
         from_flax = kwargs.pop("from_flax", False)
+        from_ov = kwargs.pop("from_ov", False)
         ignore_mismatched_sizes = kwargs.pop("ignore_mismatched_sizes", False)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
@@ -1232,7 +1234,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         torch_dtype = kwargs.pop("torch_dtype", None)
         low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", False)
 
-        from_pt = not (from_tf | from_flax)
+        from_pt = not (from_tf | from_flax | from_ov)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1275,13 +1277,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 elif from_flax and os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)):
                     # Load from a Flax checkpoint in priority if from_flax
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
+                elif from_ov and os.path.isfile(os.path.join(pretrained_model_name_or_path, OV_WEIGHTS_NAME)):
+                    archive_file = os.path.join(pretrained_model_name_or_path, OV_WEIGHTS_NAME)
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
-                        f"Error no file named {[WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + '.index', FLAX_WEIGHTS_NAME]} found in "
-                        f"directory {pretrained_model_name_or_path} or `from_tf` and `from_flax` set to False."
+                        f"Error no file named {[WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + '.index', FLAX_WEIGHTS_NAME, OV_WEIGHTS_NAME]} found in "
+                        f"directory {pretrained_model_name_or_path} or `from_tf` and `from_flax` or `from_ov` set to False."
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
@@ -1432,6 +1436,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see "
                     "https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation instructions."
                 )
+                raise
+        elif from_ov:
+            try:
+                from .modeling_ov_utils import load_ov_model
+
+                model = load_ov_model(resolved_archive_file)
+            except ImportError:
+                # logger.error(
+                #     "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see "
+                #     "https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation instructions."
+                # )
                 raise
         elif from_pt:
 

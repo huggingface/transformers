@@ -145,6 +145,14 @@ except importlib_metadata.PackageNotFoundError:
     _detectron2_available = False
 
 
+_ov_available = importlib.util.find_spec("openvino.inference_engine") is not None
+try:
+    _ov_version = importlib_metadata.version("openvino")
+    logger.debug(f"Successfully imported OpenVINO version {_ov_version}")
+except importlib_metadata.PackageNotFoundError:
+    _ov_available = False
+
+
 _faiss_available = importlib.util.find_spec("faiss") is not None
 try:
     _faiss_version = importlib_metadata.version("faiss")
@@ -257,6 +265,7 @@ WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF_WEIGHTS_NAME = "model.ckpt"
 FLAX_WEIGHTS_NAME = "flax_model.msgpack"
+OV_WEIGHTS_NAME = "ov_model.xml"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 MODEL_CARD_NAME = "modelcard.json"
@@ -340,6 +349,10 @@ def is_onnx_available():
 
 def is_flax_available():
     return _flax_available
+
+
+def is_ov_available():
+    return _ov_available
 
 
 def is_torch_tpu_available():
@@ -603,6 +616,10 @@ FLAX_IMPORT_ERROR = """
 installation page: https://github.com/google/flax and follow the ones that match your environment.
 """
 
+# docstyle-ignore
+OV_IMPORT_ERROR = """
+"""
+
 
 # docstyle-ignore
 SCATTER_IMPORT_ERROR = """
@@ -657,6 +674,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
+        ("ov", (is_ov_available, OV_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
