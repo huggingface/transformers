@@ -17,12 +17,13 @@ import unittest
 import numpy as np
 
 from transformers import AlbertConfig, is_ov_available
-from transformers.testing_utils import require_ov, slow
+from transformers.testing_utils import require_ov, require_torch
 
 if is_ov_available():
     from transformers import OVAutoModel
 
 @require_ov
+@require_torch
 class OVAlbertModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head_absolute_embedding(self):
         model = OVAutoModel.from_pretrained("albert-base-v2", from_pt=True)
