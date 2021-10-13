@@ -400,7 +400,6 @@ class TFCLIPModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            "return_loss": True,
         }
         return config, inputs_dict
 

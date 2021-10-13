@@ -16,6 +16,7 @@
 
 
 import math
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -85,6 +86,7 @@ def clip_loss(similarity: tf.Tensor) -> tf.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
+@dataclass
 class TFCLIPOutput(ModelOutput):
     """
     Args:
@@ -134,6 +136,8 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
 
+        self.config = config
+
     def build(self, input_shape: tf.TensorShape):
 
         # Q: should we use normal initializer?
@@ -160,7 +164,7 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("position_embedding"):
             self.position_embedding = self.add_weight(
                 shape=(self.num_positions, self.embed_dim),
-                initializer=get_initializer(self.initializer_range),
+                initializer=get_initializer(self.config.initializer_range),
                 trainable=True,
                 name="embeddings",
             )
@@ -195,7 +199,7 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
         patch_embeds = tf.reshape(tensor=patch_embeds, shape=(batch_size, self.num_patches, -1))
 
         # add the [CLS] token to the embedded patch tokens
-        class_embeds = tf.broadcast_to(self.class_embedding, shape=(batch_size, 1, -1))
+        class_embeds = tf.broadcast_to(self.class_embedding, shape=(batch_size, 1, self.embed_dim))
         embeddings = tf.concat((class_embeds, patch_embeds), axis=1)
 
         embeddings = embeddings + self.position_embedding
@@ -210,20 +214,22 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
         self.embed_dim = config.hidden_size
         self.vocab_size = config.vocab_size
 
+        self.config = config
+
     def build(self, input_shape: tf.TensorShape):
 
         with tf.name_scope("token_embedding"):
-            self.token_embedding = self.add_weight(
+            self.weight = self.add_weight(
                 shape=(self.vocab_size, self.embed_dim),
-                initializer=get_initializer(self.initializer_range),
+                initializer=get_initializer(self.config.initializer_range),
                 trainable=True,
-                name="embeddings",
+                name="weight",
             )
 
         with tf.name_scope("position_embedding"):
             self.position_embedding = self.add_weight(
-                shape=(self.num_positions, self.embed_dim),
-                initializer=get_initializer(self.initializer_range),
+                shape=(self.config.max_position_embeddings, self.embed_dim),
+                initializer=get_initializer(self.config.initializer_range),
                 trainable=True,
                 name="embeddings",
             )
@@ -246,7 +252,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = tf.gather(params=self.token_embedding, indices=input_ids)
+            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
 
@@ -267,14 +273,14 @@ class TFCLIPAttention(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = self.embed_dim // self.num_attention_heads
+        if self.attention_head_size * self.num_attention_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_attention_heads})."
             )
 
-        self.sqrt_att_head_size = math.sqrt(self.head_dim)
+        self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
         self.q_proj = tf.keras.layers.Dense(
             units=self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="q_proj"
@@ -599,7 +605,7 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
         return self.text_model.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
-        self.text_model.embeddings.token_embedding = value
+        self.text_model.embeddings.weight = value
         self.text_model.embeddings.vocab_size = shape_list(value)[0]
 
     def call(
@@ -671,6 +677,8 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
+            attention_mask=None,
+            causal_attention_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -721,13 +729,16 @@ class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
         inputs = input_processing(
             func=self.call,
             config=self.config,
-            pixel_values=pixel_values,
+            input_ids=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
             kwargs_call=kwargs,
         )
+
+        if "input_ids" in inputs:
+            inputs["pixel_values"] = inputs.pop("input_ids")
 
         if inputs["pixel_values"] is None:
             raise ValueError("You have to specify pixel_values")
@@ -772,14 +783,14 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
 
         self.visual_projection = tf.keras.layers.Dense(
             units=self.projection_dim,
-            kernel_initializer=get_initializer(config.initializer_range),
+            kernel_initializer=get_initializer(vision_config.initializer_range),
             use_bias=False,
             name="visual_projection",
         )
 
         self.text_projection = tf.keras.layers.Dense(
             units=self.projection_dim,
-            kernel_initializer=get_initializer(config.initializer_range),
+            kernel_initializer=get_initializer(text_config.initializer_range),
             use_bias=False,
             name="text_projection",
         )
@@ -854,13 +865,16 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         inputs = input_processing(
             func=self.get_image_features,
             config=self.config,
-            pixel_values=pixel_values,
+            input_ids=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
             kwargs_call=kwargs,
         )
+
+        if "input_ids" in inputs:
+            inputs["pixel_values"] = inputs.pop("input_ids")
 
         if inputs["pixel_values"] is None:
             raise ValueError("You have to specify pixel_values")
@@ -941,8 +955,8 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         text_embeds = self.text_projection(inputs=text_embeds)
 
         # normalized features
-        image_embeds = image_embeds / tf.norm(tensor=image_embeds, ord="fro", axis=-1, keepdims=True)
-        text_embeds = text_embeds / tf.norm(tensor=text_embeds, ord="fro", axis=-1, keepdims=True)
+        image_embeds = image_embeds / tf.norm(tensor=image_embeds, ord="euclidean", axis=-1, keepdims=True)
+        text_embeds = text_embeds / tf.norm(tensor=text_embeds, ord="euclidean", axis=-1, keepdims=True)
 
         # cosine similarity as logits
         logit_scale = tf.math.exp(self.logit_scale)
@@ -1209,7 +1223,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
             :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, len(DUMMY_INPUTS), self.config.image_size, self.config.image_size), dtype=tf.float32
+            shape=(len(DUMMY_INPUTS), 3, self.config.image_size, self.config.image_size), dtype=tf.float32
         )
         return {
             "pixel_values": VISION_DUMMY_INPUTS,
@@ -1269,13 +1283,17 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         inputs = input_processing(
             func=self.call,
             config=self.config,
-            pixel_values=pixel_values,
+            input_ids=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
             kwargs_call=kwargs,
         )
+
+        if "input_ids" in inputs:
+            inputs["pixel_values"] = inputs.pop("input_ids")
+
         outputs = self.clip_vision(
             pixel_values=inputs["pixel_values"],
             output_attentions=inputs["output_attentions"],
@@ -1317,7 +1335,8 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, len(DUMMY_INPUTS), self.config.image_size, self.config.image_size), dtype=tf.float32
+            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
+            dtype=tf.float32,
         )
         return {
             "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
@@ -1430,13 +1449,16 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         inputs = input_processing(
             func=self.get_image_features,
             config=self.config,
-            pixel_values=pixel_values,
+            input_ids=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
             kwargs_call=kwargs,
         )
+
+        if "input_ids" in inputs:
+            inputs["pixel_values"] = inputs.pop("input_ids")
 
         image_features = self.clip.get_image_features(
             pixel_values=inputs["pixel_values"],
