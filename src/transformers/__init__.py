@@ -1967,6 +1967,7 @@ if is_ov_available():
     _import_structure["models.auto"].extend(
         [
             "OVAutoModel",
+            "OVAutoModelForMaskedLM",
         ]
     )
 
@@ -3588,6 +3589,7 @@ if TYPE_CHECKING:
     if is_ov_available():
         from .models.auto import (
             OVAutoModel,
+            OVAutoModelForMaskedLM,
         )
 
 else:

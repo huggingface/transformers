@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 
-from transformers import AlbertConfig, is_ov_available
+from transformers import is_ov_available
 from transformers.testing_utils import require_ov, require_torch
 
 if is_ov_available():
