@@ -22,6 +22,7 @@ from transformers.testing_utils import require_ov, require_torch
 if is_ov_available():
     from transformers import OVAutoModel
 
+
 @require_ov
 @require_torch
 class OVAlbertModelIntegrationTest(unittest.TestCase):

@@ -30,14 +30,13 @@ from openvino.inference_engine import IECore
 
 ie = IECore()
 
+
 class OpenVINOModel(object):
     def __init__(self, net):
         self.net = net
 
-
     def _load_network(self):
-        self.exec_net = ie.load_network(self.net, 'CPU')
-
+        self.exec_net = ie.load_network(self.net, "CPU")
 
     def __call__(self, input_ids, attention_mask=None):
         if attention_mask is None:
@@ -58,8 +57,8 @@ class OpenVINOModel(object):
 
         outs = self.exec_net.infer(
             {
-                'input_ids': input_ids,
-                'attention_mask': attention_mask,
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
             }
         )
         return [next(iter(outs.values()))]
@@ -67,17 +66,16 @@ class OpenVINOModel(object):
 
 def load_ov_model_from_pytorch(model):
     import io, torch
+
     buf = io.BytesIO()
     dummy_input_ids = torch.randint(0, 255, (1, 11))
     dummy_mask = torch.randint(0, 255, (1, 11))
     with torch.no_grad():
-        torch.onnx.export(model,
-                          (dummy_input_ids, dummy_mask),
-                          buf,
-                          input_names=['input_ids', 'attention_mask'],
-                          opset_version=11)
+        torch.onnx.export(
+            model, (dummy_input_ids, dummy_mask), buf, input_names=["input_ids", "attention_mask"], opset_version=11
+        )
 
-    net = ie.read_network(buf.getvalue(), b'', init_from_buffer=True)
+    net = ie.read_network(buf.getvalue(), b"", init_from_buffer=True)
     return OpenVINOModel(net)
 
 
@@ -100,13 +98,14 @@ def load_ov_model_from_tf(model):
         ],
         check=True,
     )
-    net = ie.read_network('model.xml')
+    net = ie.read_network("model.xml")
     return OpenVINOModel(net)
 
 
 def load_ov_model_from_ir(xml_path, bin_path):
-    if not xml_path.endswith('.xml'):
+    if not xml_path.endswith(".xml"):
         import shutil
+
         shutil.copyfile(xml_path, xml_path + ".xml")
         xml_path += ".xml"
 
@@ -118,7 +117,6 @@ class OVPreTrainedModel(object):
     def __init__(self, xml_path):
         super().__init__()
         self.net = None
-
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -151,10 +149,16 @@ class OVPreTrainedModel(object):
         OV_BIN_NAME = OV_WEIGHTS_NAME.replace(".xml", ".bin")
         if pretrained_model_name_or_path is not None:
             if os.path.isdir(pretrained_model_name_or_path):
-                if from_ov and os.path.isfile(os.path.join(pretrained_model_name_or_path, OV_WEIGHTS_NAME)) and \
-                   os.path.isfile(os.path.join(pretrained_model_name_or_path, OV_BIN_NAME)):
+                if (
+                    from_ov
+                    and os.path.isfile(os.path.join(pretrained_model_name_or_path, OV_WEIGHTS_NAME))
+                    and os.path.isfile(os.path.join(pretrained_model_name_or_path, OV_BIN_NAME))
+                ):
                     # Load from an OpenVINO IR
-                    archive_files = [os.path.join(pretrained_model_name_or_path, OV_WEIGHTS_NAME) for name in [OV_WEIGHTS_NAME, OV_BIN_NAME]]
+                    archive_files = [
+                        os.path.join(pretrained_model_name_or_path, OV_WEIGHTS_NAME)
+                        for name in [OV_WEIGHTS_NAME, OV_BIN_NAME]
+                    ]
                 else:
                     raise EnvironmentError(
                         f"Error no files named {[OV_WEIGHTS_NAME, OV_BIN_NAME]} found in directory "
@@ -164,24 +168,30 @@ class OVPreTrainedModel(object):
             #     archive_file = pretrained_model_name_or_path
             else:
                 names = [OV_WEIGHTS_NAME, OV_BIN_NAME]
-                archive_files = [hf_bucket_url(
-                    pretrained_model_name_or_path,
-                    filename=name,
-                    revision=revision,
-                ) for name in names]
+                archive_files = [
+                    hf_bucket_url(
+                        pretrained_model_name_or_path,
+                        filename=name,
+                        revision=revision,
+                    )
+                    for name in names
+                ]
 
             # redirect to the cache, if necessary
             try:
-                resolved_archive_files = [cached_path(
-                    archive_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
-                    user_agent=user_agent,
-                ) for archive_file in archive_files]
+                resolved_archive_files = [
+                    cached_path(
+                        archive_file,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        use_auth_token=use_auth_token,
+                        user_agent=user_agent,
+                    )
+                    for archive_file in archive_files
+                ]
             except EnvironmentError as err:
                 logger.error(err)
                 msg = (
