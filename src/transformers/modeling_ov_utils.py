@@ -3,6 +3,7 @@ from functools import partial
 from pickle import UnpicklingError
 from typing import Dict, Set, Tuple, Union
 
+from transformers import AutoModel
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
     OV_WEIGHTS_NAME,
@@ -25,15 +26,40 @@ from openvino.inference_engine import IECore
 ie = IECore()
 
 class OpenVINOModel(object):
-    def __init__(self, xml_path, bin_path):
-        if not xml_path.endswith('.xml'):
-            import shutil
-            shutil.copyfile(xml_path, xml_path + ".xml")
-            xml_path += ".xml"
+    def __init__(self, net):
+        self.net = net
+        self.exec_net = ie.load_network(net, 'CPU')
 
-        print(xml_path)
-        print(bin_path)
-        self.net = ie.read_network(xml_path, bin_path)
+    def __call__(self, input_ids, attention_mask):
+        outs = self.exec_net.infer({'input_ids': input_ids,
+                                    'attention_mask': attention_mask})
+        return [next(iter(outs.values()))]
+
+
+def load_ov_model_from_pytorch(model):
+    import io, torch
+    buf = io.BytesIO()
+    dummy_input_ids = torch.randint(0, 255, (1, 11))
+    dummy_mask = torch.randint(0, 255, (1, 11))
+    with torch.no_grad():
+        torch.onnx.export(model,
+                          (dummy_input_ids, dummy_mask),
+                          buf,
+                          input_names=['input_ids', 'attention_mask'],
+                          opset_version=11)
+
+    net = ie.read_network(buf.getvalue(), b'', init_from_buffer=True)
+    return OpenVINOModel(net)
+
+
+def load_ov_model_from_ir(xml_path, bin_path):
+    if not xml_path.endswith('.xml'):
+        import shutil
+        shutil.copyfile(xml_path, xml_path + ".xml")
+        xml_path += ".xml"
+
+    net = ie.read_network(xml_path, bin_path)
+    return OpenVINOModel(net)
 
 
 class OVPreTrainedModel(object):
@@ -44,9 +70,10 @@ class OVPreTrainedModel(object):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        # config = kwargs.pop("config", None)
+        config = kwargs.pop("config", None)
         cache_dir = kwargs.pop("cache_dir", None)
-        from_ov = kwargs.pop("from_ov", True)
+        from_pt = kwargs.pop("from_pt", False)
+        from_ov = kwargs.pop("from_ov", not (from_pt))
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -55,6 +82,10 @@ class OVPreTrainedModel(object):
         revision = kwargs.pop("revision", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+
+        if from_pt:
+            model = AutoModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+            return load_ov_model_from_pytorch(model)
 
         user_agent = {"file_type": "model", "framework": "openvino", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -68,9 +99,6 @@ class OVPreTrainedModel(object):
                    os.path.isfile(os.path.join(pretrained_model_name_or_path, OV_BIN_NAME)):
                     # Load from an OpenVINO IR
                     archive_files = [os.path.join(pretrained_model_name_or_path, OV_WEIGHTS_NAME) for name in [OV_WEIGHTS_NAME, OV_BIN_NAME]]
-                # elif from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
-                #     # Load from a PyTorch checkpoint
-                #     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
                         f"Error no files named {[OV_WEIGHTS_NAME, OV_BIN_NAME]} found in directory "
@@ -79,11 +107,12 @@ class OVPreTrainedModel(object):
             # elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             #     archive_file = pretrained_model_name_or_path
             else:
+                names = [OV_WEIGHTS_NAME, OV_BIN_NAME]
                 archive_files = [hf_bucket_url(
                     pretrained_model_name_or_path,
                     filename=name,
                     revision=revision,
-                ) for name in [OV_WEIGHTS_NAME, OV_BIN_NAME]]
+                ) for name in names]
 
             # redirect to the cache, if necessary
             try:
@@ -114,4 +143,4 @@ class OVPreTrainedModel(object):
         else:
             resolved_archive_files = None
 
-        return OpenVINOModel(*resolved_archive_files)
+        return load_ov_model_from_ir(*resolved_archive_files)
