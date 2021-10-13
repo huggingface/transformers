@@ -161,7 +161,7 @@ python3 run_qa.py \
   --tokenizer_name bert-base-uncased
 ```
 
-## Evaluate the FP32 ONNX model inference with TensorRT
+### Evaluate the FP32 ONNX model inference with TensorRT
 
 ```
 python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
@@ -175,7 +175,7 @@ python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
   --seed 42
 ```
 
-## Evaluate the FP32 ONNX model inference in FP16 with TensorRT
+### Evaluate the FP32 ONNX model inference in FP16 with TensorRT
 
 ```
 python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
@@ -187,6 +187,54 @@ python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
   --dataset_name squad \
   --tokenizer_name bert-base-uncased \
   --fp16 \
+  --seed 42
+```
+
+## PTQ by calibrating and evaluating the finetuned FP32 model:
+
+```
+python3 run_qa.py \
+  --model_name_or_path ./finetuned_fp32/bert-base-uncased \
+  --dataset_name squad \
+  --calibrator percentile \
+  --percentile 99.99 \
+  --max_seq_length 128 \
+  --doc_stride 32 \
+  --output_dir ./calib/bert-base-uncased \
+  --save_steps 0 \
+  --do_calib \
+  --do_eval \
+  --fp16
+```
+
+### Export to ONNX
+
+```
+python3 QAT-qdqbert/run_qat_qa.py \
+  --model_name_or_path ./calib/bert-base-uncased \
+  --output_dir ./ \
+  --save_onnx \
+  --per_device_eval_batch_size 1 \
+  --max_seq_length 128 \
+  --doc_stride 32 \
+  --dataset_name squad \
+  --tokenizer_name bert-base-uncased \
+  --fp16
+```
+
+### Evaluate the PTQ ONNX model inference with TensorRT
+
+```
+python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
+  --onnx_model_path=./model.onnx \
+  --output_dir ./ \
+  --per_device_eval_batch_size 64 \
+  --max_seq_length 128 \
+  --doc_stride 32 \
+  --dataset_name squad \
+  --tokenizer_name bert-base-uncased \
+  --fp16 \
+  --int8 \
   --seed 42
 ```
 
