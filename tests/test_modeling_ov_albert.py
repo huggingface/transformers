@@ -19,24 +19,20 @@ import numpy as np
 from transformers import AlbertConfig, is_ov_available
 from transformers.testing_utils import require_ov, slow
 
-# from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
-
-
 if is_ov_available():
     from transformers import OVAutoModel
 
 @require_ov
 class OVAlbertModelIntegrationTest(unittest.TestCase):
-    # @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = OVAutoModel.from_pretrained("albert-base-v2")
-        # input_ids = np.array([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        # attention_mask = np.array([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        # output = model(input_ids, attention_mask=attention_mask)[0]
-        # expected_shape = (1, 11, 768)
-        # self.assertEqual(output.shape, expected_shape)
-        # expected_slice = np.array(
-        #     [[[-0.6513, 1.5035, -0.2766], [-0.6515, 1.5046, -0.2780], [-0.6512, 1.5049, -0.2784]]]
-        # )
+        model = OVAutoModel.from_pretrained("albert-base-v2", from_pt=True)
+        input_ids = np.array([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        attention_mask = np.array([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        output = model(input_ids, attention_mask=attention_mask)[0]
+        expected_shape = (1, 11, 768)
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = np.array(
+            [[[-0.6513, 1.5035, -0.2766], [-0.6515, 1.5046, -0.2780], [-0.6512, 1.5049, -0.2784]]]
+        )
 
-        # self.assertTrue(jnp.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+        self.assertTrue(np.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
