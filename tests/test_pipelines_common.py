@@ -111,7 +111,12 @@ class PipelineTestCaseMeta(type):
                     tiny_config.is_encoder_decoder = False
                 if ModelClass.__name__.endswith("WithLMHead"):
                     tiny_config.is_decoder = True
-                model = ModelClass(tiny_config)
+                try:
+                    model = ModelClass(tiny_config)
+                except ImportError as e:
+                    self.skipTest(
+                        f"Cannot run with {tiny_config} as the model requires a library that isn't installed: {e}"
+                    )
                 if hasattr(model, "eval"):
                     model = model.eval()
                 if tokenizer_class is not None:
