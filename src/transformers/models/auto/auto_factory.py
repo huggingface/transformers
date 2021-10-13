@@ -424,6 +424,15 @@ class _BaseAutoModelClass:
 
     @classmethod
     def register(cls, config_class, model_class):
+        """
+        Register a new model for this class.
+
+        Args:
+            config_class (:class:`~transformers.PretrainedConfig`):
+                The configuration corresponding to the model to register.
+            model_class (:class:`~transformers.PretrainedConfig`):
+                The model to register.
+        """
         if hasattr(model_class, "config_class") and model_class.config_class != config_class:
             raise ValueError(
                 "The model class you are passing has a `config_class` attribute that is not consistent with the "

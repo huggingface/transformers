@@ -562,7 +562,7 @@ class AutoConfig:
 
         Args:
             model_type (:obj:`str`): The model type like "bert" or "gpt".
-            value (:class:`~transformers.PretrainedConfig): The custom config to register.
+            config (:class:`~transformers.PretrainedConfig`): The config to register.
         """
         if issubclass(config, PretrainedConfig) and config.model_type != model_type:
             raise ValueError(
