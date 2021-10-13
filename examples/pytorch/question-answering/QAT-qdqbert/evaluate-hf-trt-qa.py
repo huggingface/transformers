@@ -22,18 +22,10 @@ TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 
 from transformers import (
     AutoTokenizer,
-    squad_convert_examples_to_features,
-    DataCollatorWithPadding,
     default_data_collator,
     set_seed,
     EvalPrediction,
 )
-from transformers.data.metrics.squad_metrics import (
-    compute_predictions_logits,
-    squad_evaluate,
-)
-from transformers.data.processors.squad import SquadResult, SquadV1Processor, SquadV2Processor
-
 from transformers.trainer_pt_utils import (
     nested_concat,
     nested_truncate,
@@ -119,9 +111,7 @@ parser.add_argument(
     "and end predictions are not conditioned on one another.",
 )
 
-parser.add_argument("--no_cuda", action="store_true", help="Whether not to use CUDA when available")
 parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
-parser.add_argument("--local_rank", type=int, default=-1, help="local_rank for distributed training on gpus")
 
 import transformers
 import datasets
@@ -141,14 +131,6 @@ parser.add_argument(
     type=str,
     default=None,
     help="The configuration name of the dataset to use (via the datasets library).",
-)
-parser.add_argument(
-    "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
-)
-parser.add_argument(
-    "--pad_to_max_length",
-    action="store_true",
-    help="If passed, pad all samples to `max_seq_length`. Otherwise, dynamic padding is used.",
 )
 parser.add_argument(
     "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
@@ -226,7 +208,8 @@ with trt.Builder(TRT_LOGGER) as builder, \
         profile = builder.create_optimization_profile()
         config.add_optimization_profile(profile)
         for i in range(len(input_names)):
-            profile.set_shape(input_names[i], INPUT_SHAPE, INPUT_SHAPE, INPUT_SHAPE)     
+            profile.set_shape(input_names[i], INPUT_SHAPE, INPUT_SHAPE, INPUT_SHAPE)
+            #profile.set_shape(input_names[i], (1, 128), (8, 128), (256, 128)) 
         engine = builder.build_engine(network, config)
 
         #serialize_engine and store in file (can be directly loaded and deserialized):
@@ -339,7 +322,7 @@ def prepare_validation_features(examples):
         stride=args.doc_stride,
         return_overflowing_tokens=True,
         return_offsets_mapping=True,
-        padding="max_length" if args.pad_to_max_length else False,
+        padding="max_length",
     )
 
     # Since one example might give us several features if it has a long context, we need a map from a feature to
@@ -381,16 +364,7 @@ eval_dataset = eval_examples.map(
     desc="Running tokenizer on validation dataset",
 )
 
-# DataLoaders creation:
-if args.pad_to_max_length:
-    # If padding was already done ot max length, we use the default data collator that will just convert everything
-    # to tensors.
-    data_collator = default_data_collator
-else:
-    # Otherwise, `DataCollatorWithPadding` will apply dynamic padding for us (by padding to the maximum length of
-    # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
-    # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-    data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if args.fp16 else None))
+data_collator = default_data_collator
 
 eval_dataset_for_model = eval_dataset.remove_columns(["example_id", "offset_mapping"])
 eval_dataloader = DataLoader(
@@ -472,9 +446,9 @@ with open(engine_name, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime, \
         start_logits = torch.tensor(start_logits)
         end_logits = torch.tensor(end_logits)
 
-        if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
-            start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
-            end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
+        # necessary to pad predictions and labels for being gathered
+        start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
+        end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
 
         logits = (accelerator.gather(start_logits).cpu().numpy(), accelerator.gather(end_logits).cpu().numpy())
         all_preds = logits if all_preds is None else nested_concat(all_preds, logits, padding_index=-100)
