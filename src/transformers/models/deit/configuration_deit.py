@@ -64,6 +64,8 @@ class DeiTConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (:obj:`int`, `optional`, defaults to :obj:`3`):
             The number of input channels.
+        qkv_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to add a bias to the queries, keys and values.
 
 
     Example::
@@ -96,6 +98,7 @@ class DeiTConfig(PretrainedConfig):
         image_size=224,
         patch_size=16,
         num_channels=3,
+        qkv_bias=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -113,3 +116,4 @@ class DeiTConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        self.qkv_bias = qkv_bias
