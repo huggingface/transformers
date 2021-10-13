@@ -264,7 +264,7 @@ class ConversationalPipeline(Pipeline):
         return {"input_ids": input_ids, "conversation": conversation}
 
     def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):
-        max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+        max_length = generate_kwargs.pop("max_length", self.model.config.max_length)
 
         n = model_inputs["input_ids"].shape[1]
         if max_length - minimum_tokens < n:
