@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available, is_ov_available
 
 
 _import_structure = {
@@ -119,6 +119,10 @@ if is_flax_available():
         "FlaxAutoModelForTokenClassification",
     ]
 
+if is_ov_available():
+    _import_structure["modeling_ov_auto"] = [
+        "OVAutoModel",
+    ]
 
 if TYPE_CHECKING:
     from .auto_factory import get_values
@@ -215,6 +219,11 @@ if TYPE_CHECKING:
             FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
+        )
+
+    if is_ov_available():
+        from .modeling_ov_auto import (
+            OVAutoModel,
         )
 
 else:

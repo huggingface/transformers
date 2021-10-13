@@ -35,6 +35,7 @@ from .file_utils import (
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
+    is_ov_available,
     is_keras2onnx_available,
     is_onnx_available,
     is_pandas_available,
@@ -317,6 +318,12 @@ def require_flax(test_case):
     """
     if not is_flax_available():
         test_case = unittest.skip("test requires JAX & Flax")(test_case)
+    return test_case
+
+
+def require_ov(test_case):
+    if not is_ov_available():
+        test_case = unittest.skip("test requires OpenVINO")(test_case)
     return test_case
 
 
