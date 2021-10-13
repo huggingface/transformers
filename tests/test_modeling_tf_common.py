@@ -1244,6 +1244,14 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     return output
 
 
+def random_attention_mask(shape, rng=None, name=None, dtype=None):
+    attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None, dtype=dtype)
+    # make sure that at least one token is attended to for each batch
+    attn_mask[:, -1] = 1
+    attn_mask = tf.concat(attn_mask[:, :-1], tf.constant(shape=(shape[0], 1), dtype=dtype), axis=1)
+    return attn_mask
+
+
 def floats_tensor(shape, scale=1.0, rng=None, name=None, dtype=None):
     """Creates a random float32 tensor"""
     if rng is None:
