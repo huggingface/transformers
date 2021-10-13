@@ -401,9 +401,13 @@ class SegformerEncoder(nn.Module):
                 hidden_states = layer_outputs[0]
                 if output_attentions:
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
-            # third, apply layer norm and reshape back to (batch_size, num_channels, height, width)
+            # third, apply layer norm
             hidden_states = norm_layer(hidden_states)
-            hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
+            # fourth, optionally reshape back to (batch_size, num_channels, height, width)
+            if idx != len(self.patch_embeddings) - 1 or (
+                idx == len(self.patch_embeddings) - 1 and self.config.reshape_last_stage
+            ):
+                hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -631,7 +635,7 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
 
         print("Shape of sequence output:", sequence_output.shape)
 
-        # global pooling
+        # global average pooling
         sequence_output = sequence_output.mean(dim=1)
 
         logits = self.classifier(sequence_output)

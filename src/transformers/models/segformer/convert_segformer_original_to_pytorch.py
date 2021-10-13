@@ -207,6 +207,7 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     # create HuggingFace model and load state dict
     if encoder_only:
+        config.reshape_last_stage = False
         model = SegformerForImageClassification(config)
     else:
         model = SegformerForImageSegmentation(config)
@@ -358,7 +359,6 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     # verify logits
     assert logits.shape == expected_shape
-    print("Actual slice:", logits[0, :3, :3, :3])
     assert torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-2)
 
     # finally, save model and feature extractor

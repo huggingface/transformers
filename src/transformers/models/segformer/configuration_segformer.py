@@ -78,6 +78,8 @@ class SegformerConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         decoder_hidden_size (:obj:`int`, `optional`, defaults to 256):
             The dimension of the all-MLP decode head.
+        reshape_last_stage (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to reshape the features of the last stage.
 
         Example::
 
@@ -116,6 +118,7 @@ class SegformerConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         decoder_hidden_size=256,
         is_encoder_decoder=False,
+        reshape_last_stage=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -139,3 +142,4 @@ class SegformerConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.decoder_hidden_size = decoder_hidden_size
+        self.reshape_last_stage = reshape_last_stage
