@@ -16,14 +16,16 @@ import unittest
 
 import numpy as np
 
-from transformers import AlbertConfig, is_ov_available
-from transformers.testing_utils import require_ov, slow
+from transformers import is_ov_available
+from transformers.testing_utils import require_ov, require_tf, require_torch
 
 if is_ov_available():
     from transformers import OVAutoModel
 
+
 @require_ov
-class OVDistilBertModelIntegrationTest(unittest.TestCase):
+@require_tf
+class OVTFDistilBertModelIntegrationTest(unittest.TestCase):
     def test_inference_masked_lm(self):
         model = OVAutoModel.from_pretrained("distilbert-base-uncased", from_tf=True)
         input_ids = np.array([[0, 1, 2, 3, 4, 5]])
@@ -42,3 +44,20 @@ class OVDistilBertModelIntegrationTest(unittest.TestCase):
             ]
         )
         self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+
+@require_ov
+@require_torch
+class OVDistilBertModelIntegrationTest(unittest.TestCase):
+    def test_inference_no_head_absolute_embedding(self):
+        model = OVAutoModel.from_pretrained("distilbert-base-uncased", from_pt=True)
+        input_ids = np.array([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        attention_mask = np.array([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        output = model(input_ids, attention_mask=attention_mask)[0]
+        expected_shape = (1, 11, 768)
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = np.array(
+            [[[-0.1639, 0.3299, 0.1648], [-0.1746, 0.3289, 0.1710], [-0.1884, 0.3357, 0.1810]]]
+        )
+
+        self.assertTrue(np.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
