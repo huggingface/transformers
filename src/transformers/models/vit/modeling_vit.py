@@ -169,9 +169,9 @@ class ViTSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -505,6 +505,7 @@ class ViTModel(ViTPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
+        attention_mask=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
