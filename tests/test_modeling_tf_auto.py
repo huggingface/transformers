@@ -20,6 +20,8 @@ import unittest
 from transformers import is_tf_available
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_tf, slow
 
+from .test_modeling_bert import BertModelTester
+
 
 if is_tf_available():
     from transformers import (
@@ -34,6 +36,7 @@ if is_tf_available():
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
+        TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
         TFBertForMaskedLM,
         TFBertForPreTraining,
@@ -60,6 +63,16 @@ if is_tf_available():
     from transformers.models.bert.modeling_tf_bert import TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.gpt2.modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.t5.modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST
+
+
+class NewModelConfig(BertConfig):
+    model_type = "new-model"
+
+
+if is_tf_available():
+
+    class TFNewModel(TFBertModel):
+        config_class = NewModelConfig
 
 
 @require_tf
@@ -224,3 +237,37 @@ class TFAutoModelTest(unittest.TestCase):
 
                     for child, parent in [(a, b) for a in child_model for b in parent_model]:
                         assert not issubclass(child, parent), f"{child.__name__} is child of {parent.__name__}"
+
+    def test_new_model_registration(self):
+        AutoConfig.register("new-model", NewModelConfig)
+
+        auto_classes = [
+            TFAutoModel,
+            TFAutoModelForCausalLM,
+            TFAutoModelForMaskedLM,
+            TFAutoModelForPreTraining,
+            TFAutoModelForQuestionAnswering,
+            TFAutoModelForSequenceClassification,
+            TFAutoModelForTokenClassification,
+        ]
+
+        for auto_class in auto_classes:
+            with self.subTest(auto_class.__name__):
+                # Wrong config class will raise an error
+                with self.assertRaises(ValueError):
+                    auto_class.register(BertConfig, TFNewModel)
+                auto_class.register(NewModelConfig, TFNewModel)
+                # Trying to register something existing in the Transformers library will raise an error
+                with self.assertRaises(ValueError):
+                    auto_class.register(BertConfig, TFBertModel)
+
+                # Now that the config is registered, it can be used as any other config with the auto-API
+                tiny_config = BertModelTester(self).get_config()
+                config = NewModelConfig(**tiny_config.to_dict())
+                model = auto_class.from_config(config)
+                self.assertIsInstance(model, TFNewModel)
+
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    model.save_pretrained(tmp_dir)
+                    new_model = auto_class.from_pretrained(tmp_dir)
+                    self.assertIsInstance(new_model, TFNewModel)
