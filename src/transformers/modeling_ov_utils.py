@@ -3,7 +3,12 @@ from functools import partial
 from pickle import UnpicklingError
 from typing import Dict, Set, Tuple, Union
 
-from transformers import AutoModel
+import numpy as np
+
+from transformers import (
+    AutoModel,
+    TFAutoModel,
+)
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
     OV_WEIGHTS_NAME,
@@ -28,11 +33,35 @@ ie = IECore()
 class OpenVINOModel(object):
     def __init__(self, net):
         self.net = net
-        self.exec_net = ie.load_network(net, 'CPU')
 
-    def __call__(self, input_ids, attention_mask):
-        outs = self.exec_net.infer({'input_ids': input_ids,
-                                    'attention_mask': attention_mask})
+
+    def _load_network(self):
+        self.exec_net = ie.load_network(self.net, 'CPU')
+
+
+    def __call__(self, input_ids, attention_mask=None):
+        if attention_mask is None:
+            attention_mask = np.ones_like(input_ids)
+
+        inputs_info = self.net.input_info
+        if inputs_info["input_ids"].input_data.shape != input_ids.shape:
+            self.net.reshape(
+                {
+                    "input_ids": input_ids.shape,
+                    "attention_mask": attention_mask.shape,
+                }
+            )
+            self.exec_net = None
+
+        if self.exec_net is None:
+            self._load_network()
+
+        outs = self.exec_net.infer(
+            {
+                'input_ids': input_ids,
+                'attention_mask': attention_mask,
+            }
+        )
         return [next(iter(outs.values()))]
 
 
@@ -49,6 +78,29 @@ def load_ov_model_from_pytorch(model):
                           opset_version=11)
 
     net = ie.read_network(buf.getvalue(), b'', init_from_buffer=True)
+    return OpenVINOModel(net)
+
+
+def load_ov_model_from_tf(model):
+    import sys, subprocess
+
+    model.save("keras_model", signatures=model.serving)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mo",
+            "--saved_model_dir=keras_model",
+            "--model_name=model",
+            "--input",
+            "input_ids,attention_mask",
+            "--input_shape",
+            "[1, 11], [1, 11]",
+            "--disable_nhwc_to_nchw",
+        ],
+        check=True,
+    )
+    net = ie.read_network('model.xml')
     return OpenVINOModel(net)
 
 
@@ -73,7 +125,8 @@ class OVPreTrainedModel(object):
         config = kwargs.pop("config", None)
         cache_dir = kwargs.pop("cache_dir", None)
         from_pt = kwargs.pop("from_pt", False)
-        from_ov = kwargs.pop("from_ov", not (from_pt))
+        from_tf = kwargs.pop("from_tf", False)
+        from_ov = kwargs.pop("from_ov", not (from_pt | from_tf))
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -86,6 +139,9 @@ class OVPreTrainedModel(object):
         if from_pt:
             model = AutoModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
             return load_ov_model_from_pytorch(model)
+        elif from_tf:
+            model = TFAutoModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+            return load_ov_model_from_tf(model)
 
         user_agent = {"file_type": "model", "framework": "openvino", "from_auto_class": from_auto_class}
         if from_pipeline is not None:

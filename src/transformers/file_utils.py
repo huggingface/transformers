@@ -145,7 +145,7 @@ except importlib_metadata.PackageNotFoundError:
     _detectron2_available = False
 
 
-_ov_available = importlib.util.find_spec("openvino.inference_engine") is not None
+_ov_available = importlib.util.find_spec("openvino") is not None
 try:
     _ov_version = importlib_metadata.version("openvino")
     logger.debug(f"Successfully imported OpenVINO version {_ov_version}")

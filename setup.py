@@ -108,6 +108,7 @@ _deps = [
     "jaxlib>=0.1.65",
     "jieba",
     "keras2onnx",
+    "openvino==2021.4.1",
     "nltk",
     "numpy>=1.17",
     "onnxconverter-common",
@@ -244,6 +245,8 @@ extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
+extras["openvino"] = deps_list("openvino")
+
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed")
 extras["fairscale"] = deps_list("fairscale")
@@ -285,6 +288,7 @@ extras["all"] = (
     + extras["integrations"]
     + extras["timm"]
     + extras["codecarbon"]
+    + extras["openvino"]
 )
 
 extras["docs_specific"] = deps_list(
