@@ -40,9 +40,9 @@ In the container:
 cd transformers/examples/pytorch/question-answering/
 ```
 
-## Quantization Aware Fine-tuning
+## Quantization Aware Training (QAT)
 
-We recommend to calibrate the pretrained model and finetune with quantization in one pass to avoid overfitting:
+Calibrate the pretrained model and finetune with quantization awared:
 
 ```
 python3 QAT-qdqbert/run_qat_qa.py \
@@ -74,9 +74,9 @@ python3 QAT-qdqbert/run_qat_qa.py \
   --fp16
 ```
 
-## Export to ONNX
+### Export QAT model to ONNX
 
-This branch builds a container with upstream pytorch to get opset 13. To export the model finetuned above:
+To export the QAT model finetuned above:
 
 ```
 python3 QAT-qdqbert/run_qat_qa.py \
@@ -94,13 +94,13 @@ python3 QAT-qdqbert/run_qat_qa.py \
 Use `--recalibrate-weights` to calibrate the weight ranges according to the quantizer axis. Use `--quant-per-tensor` for per tensor quantization (default is per channel).
 Recalibrating will affect the accuracy of the model, but the change should be minimal (< 0.5 F1).
 
-## Benchmark the INT8 ONNX model inference with TensorRT using dummy input
+### Benchmark the INT8 QAT ONNX model inference with TensorRT using dummy input
 
 ```
 trtexec --onnx=QAT-qdqbert/model.onnx --explicitBatch --workspace=16384 --int8 --fp16 --shapes=input_ids:64x128,attention_mask:64x128,token_type_ids:64x128 --verbose
 ```
 
-## Evaluate the INT8 ONNX model inference with TensorRT
+### Evaluate the INT8 QAT ONNX model inference with TensorRT
 
 ```
 python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
@@ -116,7 +116,7 @@ python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
   --seed 42
 ```
 
-## Quantization options
+### Quantization options
 
 Some useful options to support different implementations and optimizations. These should be specified for both calibration and finetuning.
 
@@ -128,7 +128,7 @@ Some useful options to support different implementations and optimizations. Thes
 |`--disable-dropout` | disable dropout for consistent activation ranges |
 
 
-## FP32 Fine-tuning for comparison
+## Fine-tuning of FP32 model for comparison
 
 Finetune a fp32 precision model with:
 
@@ -147,7 +147,7 @@ python3 run_qa.py \
   --do_eval
 ```
 
-### Export to ONNX
+### Export the FP32 model to ONNX
 
 ```
 python3 run_qa.py \
@@ -190,7 +190,9 @@ python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
   --seed 42
 ```
 
-## PTQ by calibrating and evaluating the finetuned FP32 model:
+## Post Training Quantization (PTQ)
+
+### PTQ by calibrating and evaluating the finetuned FP32 model above:
 
 ```
 python3 run_qa.py \
@@ -207,7 +209,7 @@ python3 run_qa.py \
   --fp16
 ```
 
-### Export to ONNX
+### Export the INT8 PTQ model to ONNX
 
 ```
 python3 QAT-qdqbert/run_qat_qa.py \
@@ -222,7 +224,7 @@ python3 QAT-qdqbert/run_qat_qa.py \
   --fp16
 ```
 
-### Evaluate the PTQ ONNX model inference with TensorRT
+### Evaluate the INT8 PTQ ONNX model inference with TensorRT
 
 ```
 python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
