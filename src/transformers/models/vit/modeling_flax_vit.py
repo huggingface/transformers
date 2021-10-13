@@ -139,16 +139,19 @@ class FlaxViTSelfAttention(nn.Module):
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            use_bias=self.config.qkv_bias,
         )
         self.key = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            use_bias=self.config.qkv_bias,
         )
         self.value = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            use_bias=self.config.qkv_bias,
         )
 
     def __call__(self, hidden_states, deterministic: bool = True, output_attentions: bool = False):
