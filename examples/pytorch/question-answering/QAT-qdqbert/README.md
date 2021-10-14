@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Huggingface BERT Quantization Example
+# Huggingface QDQBERT Quantization Example
 
 Add fake quantization (pair of QuantizeLinear/DequantizeLinear ops) to:
  * linear layer inputs and weights
