@@ -290,6 +290,22 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     ),
                 )
 
+    def test_decode_single_bytes(self):
+        tokenizer_list = []
+        if self.test_slow_tokenizer:
+            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
+
+        if self.test_rust_tokenizer:
+            tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
+
+        for tokenizer_class, tokenizer_utils in tokenizer_list:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tokenizer_utils.save_pretrained(tmp_dir)
+
+                tokenizer = tokenizer_class.from_pretrained(tmp_dir)
+
+                self.assertTrue(tokenizer.decode([255]) == "")
+
     # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
     def test_pretrained_model_lists(self):
         pass
