@@ -19,7 +19,7 @@ Before you begin, make sure you have the 🤗 Datasets library installed. For mo
 
 .. code-block:: bash
 
-    >>> pip install datasets
+    pip install datasets
 
 Learn how to fine-tune a model for:
 
@@ -36,7 +36,7 @@ Sequence classification refers to the task of classifying sequences of text acco
 
 .. note::
 
-    For a more in-depth example of how to fine-tune a model for text classification, take a look at this `notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb>`_.
+    For a more in-depth example of how to fine-tune a model for text classification, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb>`_ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification-tf.ipynb>`_.
 
 Load IMDb dataset
 ~~~~~~~~~~~~~~~~~
@@ -45,17 +45,17 @@ The 🤗 Datasets library makes it simple to load a dataset:
 
 .. code-block:: python
 
-    >>> from datasets import load_dataset
-    >>> imdb = load_dataset("imdb")
+    from datasets import load_dataset
+    imdb = load_dataset("imdb")
 
 This loads a ``DatasetDict`` object which you can index into to view an example:
 
 .. code-block:: python
 
-    >>> imdb["train"][0]
-    >>> {'label': 1,
-         'text': 'Bromwell High is a cartoon comedy. It ran at the same time as some other programs about school life, such as "Teachers". My 35 years in the teaching profession lead me to believe that Bromwell High\'s satire is much closer to reality than is "Teachers". The scramble to survive financially, the insightful students who can see right through their pathetic teachers\' pomp, the pettiness of the whole situation, all remind me of the schools I knew and their students. When I saw the episode in which a student repeatedly tried to burn down the school, I immediately recalled ......... at .......... High. A classic line: INSPECTOR: I\'m here to sack one of your teachers. STUDENT: Welcome to Bromwell High. I expect that many adults of my age think that Bromwell High is far fetched. What a pity that it isn\'t!'
-        }
+    imdb["train"][0]
+    {'label': 1,
+     'text': 'Bromwell High is a cartoon comedy. It ran at the same time as some other programs about school life, such as "Teachers". My 35 years in the teaching profession lead me to believe that Bromwell High\'s satire is much closer to reality than is "Teachers". The scramble to survive financially, the insightful students who can see right through their pathetic teachers\' pomp, the pettiness of the whole situation, all remind me of the schools I knew and their students. When I saw the episode in which a student repeatedly tried to burn down the school, I immediately recalled ......... at .......... High. A classic line: INSPECTOR: I\'m here to sack one of your teachers. STUDENT: Welcome to Bromwell High. I expect that many adults of my age think that Bromwell High is far fetched. What a pity that it isn\'t!'
+    }
 
 Preprocess
 ~~~~~~~~~~~
@@ -64,28 +64,28 @@ The next step is to tokenize the text into a readable format by the model. It is
 
 .. code-block:: python
 
-    >>> from transformers import AutoTokenizer
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 
 Now that you have instantiated a tokenizer, create a function that will tokenize the text. You should also truncate longer sequences in the text to be no longer than the model's maximum input length:
 
 .. code-block:: python
 
-    >>> def preprocess_function(examples):
-            return tokenizer(examples["text"], truncation=True)
+    def preprocess_function(examples):
+        return tokenizer(examples["text"], truncation=True)
 
 Use 🤗 Datasets ``map`` function to apply the preprocessing function to the entire dataset. You can also set ``batched=True`` to apply the preprocessing function to multiple elements of the dataset at once for faster preprocessing:
 
 .. code-block:: python
 
-    >>> tokenized_imdb = imdb.map(preprocess_function, batched=True)
+    tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 Lastly, pad your text so they are a uniform length. While it is possible to pad your text in the ``tokenizer`` function by setting ``padding=True``, it is more efficient to only pad the text to the length of the longest element in its batch. This is known as **dynamic padding**. You can do this with the ``DataCollatorWithPadding`` function:
 
 .. code-block:: python
 
-    >>> from transformers import DataCollatorWithPadding
-    >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    from transformers import DataCollatorWithPadding
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
 Fine-tune with the Trainer API
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -94,119 +94,120 @@ Now load your model with the :class:`~transformers.AutoModel` class along with t
 
 .. code-block:: python
 
-    >>> from transformers import AutoModelForSequenceClassification
-    >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+    from transformers import AutoModelForSequenceClassification
+    model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
 
 At this point, only three steps remain:
 
 1. Define your training hyperparameters in :class:`~transformers.TrainingArguments`.
-2. Pass the training arguments to a :class:`~transformers.Trainer` along with the model, dataset, tokenizer, and data collator. 
+2. Pass the training arguments to a :class:`~transformers.Trainer` along with the model, dataset, tokenizer, and data collator.
 3. Call ``trainer.train`` to fine-tune your model.
 
 .. code-block:: python
 
-    >>> from transformers import TrainingArguments, Trainer
+    from transformers import TrainingArguments, Trainer
 
-    >>> training_args = TrainingArguments(
-            output_dir='./results',
-            learning_rate=2e-5,
-            per_device_train_batch_size=16,
-            per_device_eval_batch_size=16,
-            num_train_epochs=5,
-            weight_decay=0.01,
-        )
+    training_args = TrainingArguments(
+        output_dir='./results',
+        learning_rate=2e-5,
+        per_device_train_batch_size=16,
+        per_device_eval_batch_size=16,
+        num_train_epochs=5,
+        weight_decay=0.01,
+    )
 
-    >>> trainer = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=tokenized_imdb["train"],
-            eval_dataset=tokenized_imdb["test"],
-            tokenizer=tokenizer,
-            data_collator=data_collator,
-        )
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=tokenized_imdb["train"],
+        eval_dataset=tokenized_imdb["test"],
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+    )
 
-    >>> trainer.train()
+    trainer.train()
 
 Fine-tune with TensorFlow
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Fine-tuning with TensorFlow is just as easy as using a :class:`~transformers.Trainer`.
+Fine-tuning with TensorFlow is just as easy, with only a few differences.
 
 Start by batching the processed examples together with dynamic padding using the ``DataCollatorWithPadding`` function. Make sure you set ``return_tensors="tf"`` to return ``tf.Tensor`` outputs instead of PyTorch tensors!
 
 .. code-block:: python
 
-    >>> from transformers import DataCollatorWithPadding
-    >>> data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
+    from transformers import DataCollatorWithPadding
+    data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
 
 Next, convert your datasets to the ``tf.data.Dataset`` format with ``to_tf_dataset``. Specify inputs and labels in the ``columns`` argument:
 
 .. code-block:: python
 
-    >>> tf_train_dataset = tokenized_imdb["train"].to_tf_dataset(
-            columns=['attention_mask', 'input_ids', 'label'],
-            shuffle=True,
-            batch_size=16,
-            collate_fn=data_collator,
-        )
-    >>> tf_validation_dataset = tokenized_imdb["train"].to_tf_dataset(
-            columns=['attention_mask', 'input_ids', 'label'],
-            shuffle=False,
-            batch_size=16,
-            collate_fn=data_collator,
-        )
+    tf_train_dataset = tokenized_imdb["train"].to_tf_dataset(
+        columns=['attention_mask', 'input_ids', 'label'],
+        shuffle=True,
+        batch_size=16,
+        collate_fn=data_collator,
+    )
+
+    tf_validation_dataset = tokenized_imdb["train"].to_tf_dataset(
+        columns=['attention_mask', 'input_ids', 'label'],
+        shuffle=False,
+        batch_size=16,
+        collate_fn=data_collator,
+    )
 
 Set up an optimizer function, learning rate schedule, and some training hyperparameters:
 
 .. code-block:: python
 
-    >>> from transformers import create_optimizer
-    >>> import tensorflow as tf
+    from transformers import create_optimizer
+    import tensorflow as tf
 
-    >>> batch_size = 16
-    >>> num_epochs = 5
-    >>> batches_per_epoch = len(tokenized_imdb["train"]) // batch_size
-    >>> total_train_steps = int(batches_per_epoch * num_epochs)
-    >>> optimizer, schedule = create_optimizer(
-            init_lr=2e-5, 
-            num_warmup_steps=0, 
-            num_train_steps=total_train_steps
-        )
+    batch_size = 16
+    num_epochs = 5
+    batches_per_epoch = len(tokenized_imdb["train"]) // batch_size
+    total_train_steps = int(batches_per_epoch * num_epochs)
+    optimizer, schedule = create_optimizer(
+        init_lr=2e-5, 
+        num_warmup_steps=0, 
+        num_train_steps=total_train_steps
+    )
 
 Load your model with the :class:`~transformers.TFAutoModel` class along with the number of expected labels:
 
 .. code-block:: python
 
-    >>> from transformers import TFAutoModelForSequenceClassification
-    >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+    from transformers import TFAutoModelForSequenceClassification
+    model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
 
 Compile the model:
 
 .. code-block:: python
 
-    >>> import tensorflow as tf
-    >>> model.compile(optimizer=optimizer)
+    import tensorflow as tf
+    model.compile(optimizer=optimizer)
 
 Finally, fine-tune the model by calling ``model.fit``:
 
 .. code-block:: python
 
-    >>> model.fit(
-            tf_train_set,
-            validation_data=tf_validation_set,
-            epochs=num_train_epochs,
-        )
+    model.fit(
+        tf_train_set,
+        validation_data=tf_validation_set,
+        epochs=num_train_epochs,
+    )
 
 .. _tok_ner:
 
-Token Classification with WNUT Emerging Entities
+Token classification with WNUT emerging entities
 -----------------------------------------------------------------------------------------------------------------------
 
 Token classification refers to the task of classifying individual tokens in a sentence. One of the most common token classification tasks is Named Entity Recognition (NER). NER attempts to find a label for each entity in a sentence, such as a person, location, or organization. In this example, learn how to fine-tune a model on the `WNUT 17 <https://huggingface.co/datasets/wnut_17>`_ dataset to detect new entities.
 
 .. note::
 
-    For a more in-depth example of how to fine-tune a model for token classification, take a look at this `notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb>`_.
+    For a more in-depth example of how to fine-tune a model for token classification, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb>`_ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification-tf.ipynb>`_.
 
 Load WNUT 17 dataset
 ~~~~~~~~~~~~~~~~~~~~
@@ -215,43 +216,43 @@ Load the WNUT 17 dataset from the 🤗 Datasets library:
 
 .. code-block:: python
 
-    >>> from datasets import load_dataset
-    >>> wnut = load_dataset("wnut_17")
+    from datasets import load_dataset
+    wnut = load_dataset("wnut_17")
 
 A quick look at the dataset shows the labels associated with each word in the sentence:
 
 .. code-block:: python
 
-    >>> wnut["train"][0]
-    >>> {'id': '0',
-         'ner_tags': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0],
-         'tokens': ['@paulwalk', 'It', "'s", 'the', 'view', 'from', 'where', 'I', "'m", 'living', 'for', 'two', 'weeks', '.', 'Empire', 'State', 'Building', '=', 'ESB', '.', 'Pretty', 'bad', 'storm', 'here', 'last', 'evening', '.']
-        }
+    wnut["train"][0]
+    {'id': '0',
+     'ner_tags': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0],
+     'tokens': ['@paulwalk', 'It', "'s", 'the', 'view', 'from', 'where', 'I', "'m", 'living', 'for', 'two', 'weeks', '.', 'Empire', 'State', 'Building', '=', 'ESB', '.', 'Pretty', 'bad', 'storm', 'here', 'last', 'evening', '.']
+    }
 
 View the specific NER tags by:
 
 .. code-block:: python
 
-    >>> label_list = wnut["train"].features[f"ner_tags"].feature.names
-    >>> label_list
-    >>> ['O',
-         'B-corporation',
-         'I-corporation',
-         'B-creative-work',
-         'I-creative-work',
-         'B-group',
-         'I-group',
-         'B-location',
-         'I-location',
-         'B-person',
-         'I-person',
-         'B-product',
-         'I-product'
-        ]
+    label_list = wnut["train"].features[f"ner_tags"].feature.names
+    label_list
+    ['O',
+     'B-corporation',
+     'I-corporation',
+     'B-creative-work',
+     'I-creative-work',
+     'B-group',
+     'I-group',
+     'B-location',
+     'I-location',
+     'B-person',
+     'I-person',
+     'B-product',
+     'I-product'
+    ]
 
 A letter prefixes each NER tag which can mean:
 
-* ``B-`` indicates the beginning of a token.
+* ``B-`` indicates the beginning of an entity.
 * ``I-`` indicates a token is contained inside the same entity (e.g., the ``State`` token is a part of an entity like ``Empire State Building``).
 * ``0`` indicates the token doesn't correspond to any entity.
 
@@ -262,17 +263,17 @@ Now you need to tokenize the text. Load the DistilBERT tokenizer with an :class:
 
 .. code-block:: python
 
-    >>> from transformers import AutoTokenizer
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 
 Since the input has already been split into words, set ``is_split_into_words=True`` to tokenize the words into subwords:
 
 .. code-block:: python
 
-    >>> tokenized_input = tokenizer(example["tokens"], is_split_into_words=True)
-    >>> tokens = tokenizer.convert_ids_to_tokens(tokenized_input["input_ids"])
-    >>> tokens
-    >>> ['[CLS]', '@', 'paul', '##walk', 'it', "'", 's', 'the', 'view', 'from', 'where', 'i', "'", 'm', 'living', 'for', 'two', 'weeks', '.', 'empire', 'state', 'building', '=', 'es', '##b', '.', 'pretty', 'bad', 'storm', 'here', 'last', 'evening', '.', '[SEP]']
+    tokenized_input = tokenizer(example["tokens"], is_split_into_words=True)
+    tokens = tokenizer.convert_ids_to_tokens(tokenized_input["input_ids"])
+    tokens
+    ['[CLS]', '@', 'paul', '##walk', 'it', "'", 's', 'the', 'view', 'from', 'where', 'i', "'", 'm', 'living', 'for', 'two', 'weeks', '.', 'empire', 'state', 'building', '=', 'es', '##b', '.', 'pretty', 'bad', 'storm', 'here', 'last', 'evening', '.', '[SEP]']
 
 The addition of the special tokens ``[CLS]`` and ``[SEP]`` and subword tokenization creates a mismatch between the input and labels. Realign the labels and tokens by:
 
@@ -284,11 +285,11 @@ Here is how you can create a function that will realign the labels and tokens:
 
 .. code-block:: python
 
-    >>> def tokenize_and_align_labels(examples):
-    >>> tokenized_inputs = tokenizer(examples["tokens"], truncation=True, is_split_into_words=True)
+    def tokenize_and_align_labels(examples):
+        tokenized_inputs = tokenizer(examples["tokens"], truncation=True, is_split_into_words=True)
 
-    >>> labels = []
-    >>> for i, label in enumerate(examples[f"ner_tags"]):
+        labels = []
+        for i, label in enumerate(examples[f"ner_tags"]):
             word_ids = tokenized_inputs.word_ids(batch_index=i)  # Map tokens to their respective word.
             previous_word_idx = None
             label_ids = []
@@ -297,9 +298,9 @@ Here is how you can create a function that will realign the labels and tokens:
                     label_ids.append(-100)
                 elif word_idx != previous_word_idx:              # Only label the first token of a given word.
                     label_ids.append(label[word_idx])
-    
+
             labels.append(label_ids)
-    
+
         tokenized_inputs["labels"] = labels
         return tokenized_inputs
 
@@ -307,57 +308,57 @@ Now tokenize and align the labels over the entire dataset with 🤗 Datasets ``m
 
 .. code-block:: python
 
-    >>> tokenized_wnut = wnut.map(tokenize_and_align_labels, batched=True)
+    tokenized_wnut = wnut.map(tokenize_and_align_labels, batched=True)
 
 Finally, pad your text and labels, so they are a uniform length:
 
 .. code-block:: python
 
-    >>> from transformers import DataCollatorForTokenClassification
-    >>> data_collator = DataCollatorForTokenClassification(tokenizer)
+    from transformers import DataCollatorForTokenClassification
+    data_collator = DataCollatorForTokenClassification(tokenizer)
 
 Fine-tune with the Trainer API
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Load your model with the :class:`~transformers.AutoModel` class, along with the number of expected labels:
+Load your model with the :class:`~transformers.AutoModel` class along with the number of expected labels:
 
 .. code-block:: python
 
-    >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
-    >>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=len(label_list))
+    from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
+    model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=len(label_list))
 
 Gather your training arguments in :class:`~transformers.TrainingArguments`:
 
 .. code-block:: python
 
-    >>> training_args = TrainingArguments(
-            output_dir='./results',
-            evaluation_strategy="epoch",
-            learning_rate=2e-5,
-            per_device_train_batch_size=16,
-            per_device_eval_batch_size=16,
-            num_train_epochs=3,
-            weight_decay=0.01,
-        )
+    training_args = TrainingArguments(
+        output_dir='./results',
+        evaluation_strategy="epoch",
+        learning_rate=2e-5,
+        per_device_train_batch_size=16,
+        per_device_eval_batch_size=16,
+        num_train_epochs=3,
+        weight_decay=0.01,
+    )
 
 Collect your model, training arguments, dataset, data collator, and tokenizer in :class:`~transformers.Trainer`:
 
 .. code-block:: python
 
-    >>> trainer = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=tokenized_wnut["train"],
-            eval_dataset=tokenized_wnut["test"],
-            data_collator=data_collator,
-            tokenizer=tokenizer,
-        )
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=tokenized_wnut["train"],
+        eval_dataset=tokenized_wnut["test"],
+        data_collator=data_collator,
+        tokenizer=tokenizer,
+    )
 
 Fine-tune your model:
 
 .. code-block:: python
 
-    >>> trainer.train()
+    trainer.train()
 
 Fine-tune with TensorFlow
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -366,98 +367,99 @@ Batch your examples together and pad your text and labels, so they are a uniform
 
 .. code-block:: python
 
-    >>> from transformers import DataCollatorForTokenClassification
-    >>> data_collator = DataCollatorForTokenClassification(tokenizer, return_tensors="tf")
+    from transformers import DataCollatorForTokenClassification
+    data_collator = DataCollatorForTokenClassification(tokenizer, return_tensors="tf")
 
 Convert your datasets to the ``tf.data.Dataset`` format with ``to_tf_dataset``:
 
 .. code-block:: python
 
-    >>> tf_train_set = tokenized_wnut["train"].to_tf_dataset(
-            columns=["attention_mask", "input_ids", "labels"],
-            shuffle=True,
-            batch_size=16,
-            collate_fn=data_collator,
-        )
-    >>> tf_validation_set = tokenized_wnut["validation"].to_tf_dataset(
-            columns=["attention_mask", "input_ids", "labels"],
-            shuffle=False,
-            batch_size=16,
-            collate_fn=data_collator,
-        )
+    tf_train_set = tokenized_wnut["train"].to_tf_dataset(
+        columns=["attention_mask", "input_ids", "labels"],
+        shuffle=True,
+        batch_size=16,
+        collate_fn=data_collator,
+    )
+    
+    tf_validation_set = tokenized_wnut["validation"].to_tf_dataset(
+        columns=["attention_mask", "input_ids", "labels"],
+        shuffle=False,
+        batch_size=16,
+        collate_fn=data_collator,
+    )
 
 Load the model with the :class:`~transformers.TFAutoModel` class along with the number of expected labels:
 
 .. code-block:: python
 
-    >>> from transformers import TFAutoModelForTokenClassification
-    >>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=len(label_list))
+    from transformers import TFAutoModelForTokenClassification
+    model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=len(label_list))
 
 Set up an optimizer function, learning rate schedule, and some training hyperparameters:
 
 .. code-block:: python
 
-    >>> from transformers import create_optimizer
+    from transformers import create_optimizer
 
-    >>> batch_size = 16
-    >>> num_train_epochs = 3
-    >>> num_train_steps = (len(tokenized_datasets["train"]) // batch_size) * num_train_epochs
-    >>> optimizer, lr_schedule = create_optimizer(
-            init_lr=2e-5,
-            num_train_steps=num_train_steps,
-            weight_decay_rate=0.01,
-            num_warmup_steps=0,
-        )
+    batch_size = 16
+    num_train_epochs = 3
+    num_train_steps = (len(tokenized_datasets["train"]) // batch_size) * num_train_epochs
+    optimizer, lr_schedule = create_optimizer(
+        init_lr=2e-5,
+        num_train_steps=num_train_steps,
+        weight_decay_rate=0.01,
+        num_warmup_steps=0,
+    )
 
 Compile the model:
 
 .. code-block:: python
 
-    >>> import tensorflow as tf
-    >>> model.compile(optimizer=optimizer)
+    import tensorflow as tf
+    model.compile(optimizer=optimizer)
 
 Call ``model.fit`` to fine-tune your model:
 
 .. code-block:: python
 
-    >>> model.fit(
-            tf_train_set,
-            validation_data=tf_validation_set,
-            epochs=num_train_epochs,
-        )
+    model.fit(
+        tf_train_set,
+        validation_data=tf_validation_set,
+        epochs=num_train_epochs,
+    )
 
 .. _qa_squad:
 
-Question Answering with SQuAD 2.0
+Question Answering with SQuAD
 -----------------------------------------------------------------------------------------------------------------------
 
-There are many types of question answering (QA) tasks. Extractive QA focuses on identifying the answer from the text given a question. In this example, learn how to fine-tune a model on the `SQuAD 2.0 <https://huggingface.co/datasets/squad_v2>`_ dataset.
+There are many types of question answering (QA) tasks. Extractive QA focuses on identifying the answer from the text given a question. In this example, learn how to fine-tune a model on the `SQuAD <https://huggingface.co/datasets/squad>`_ dataset.
 
 .. note::
 
-    For a more in-depth example of how to fine-tune a model for question answering, take a look at this `notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb>`_.
+    For a more in-depth example of how to fine-tune a model for question answering, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb>`_ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering-tf.ipynb>`_.
 
-Load SQuAD 2.0
-~~~~~~~~~~~~~~
+Load SQuAD dataset
+~~~~~~~~~~~~~~~~~~
 
-Load the SQuAD 2.0 dataset from the 🤗 Datasets library:
+Load the SQuAD dataset from the 🤗 Datasets library:
 
 .. code-block:: python
 
-    >>> from datasets import load_dataset
-    >>> squad = load_dataset("squad_v2")
+    from datasets import load_dataset
+    squad = load_dataset("squad")
 
 Take a look at an example from the dataset:
 
 .. code-block:: python
 
-    >>> squad["train"][0]
-    >>> {'answers': {'answer_start': [269], 'text': ['in the late 1990s']},
-         'context': 'Beyoncé Giselle Knowles-Carter (/biːˈjɒnseɪ/ bee-YON-say) (born September 4, 1981) is an American singer, songwriter, record producer and actress. Born and raised in Houston, Texas, she performed in various singing and dancing competitions as a child, and rose to fame in the late 1990s as lead singer of R&B girl-group Destiny\'s Child. Managed by her father, Mathew Knowles, the group became one of the world\'s best-selling girl groups of all time. Their hiatus saw the release of Beyoncé\'s debut album, Dangerously in Love (2003), which established her as a solo artist worldwide, earned five Grammy Awards and featured the Billboard Hot 100 number-one singles "Crazy in Love" and "Baby Boy".',
-         'id': '56be85543aeaaa14008c9063',
-         'question': 'When did Beyonce start becoming popular?',
-         'title': 'Beyoncé'
-        }
+    squad["train"][0]
+    {'answers': {'answer_start': [515], 'text': ['Saint Bernadette Soubirous']},
+     'context': 'Architecturally, the school has a Catholic character. Atop the Main Building\'s gold dome is a golden statue of the Virgin Mary. Immediately in front of the Main Building and facing it, is a copper statue of Christ with arms upraised with the legend "Venite Ad Me Omnes". Next to the Main Building is the Basilica of the Sacred Heart. Immediately behind the basilica is the Grotto, a Marian place of prayer and reflection. It is a replica of the grotto at Lourdes, France where the Virgin Mary reputedly appeared to Saint Bernadette Soubirous in 1858. At the end of the main drive (and in a direct line that connects through 3 statues and the Gold Dome), is a simple, modern stone statue of Mary.',
+     'id': '5733be284776f41900661182',
+     'question': 'To whom did the Virgin Mary allegedly appear in 1858 in Lourdes France?',
+     'title': 'University_of_Notre_Dame'
+    }
 
 Preprocess
 ~~~~~~~~~~~
@@ -466,88 +468,82 @@ Load the DistilBERT tokenizer with an :class:`~transformers.AutoTokenizer`:
 
 .. code-block:: python
 
-    >>> from transformers import AutoTokenizer
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 
 There are a few things to be aware of when preprocessing text for question answering:
 
-1. Some examples in a dataset may have a very long ``context`` that exceeds the maximum input length of the model. For DistilBERT, the maximum length is 384. You can deal with this by truncating the ``context`` by setting ``truncation="only_second"``.
-2. However, the answer may not always be in the truncated ``context``. To ensure the model can find the answer, split the ``context`` into a few smaller chunks of the maximum input length. Then you can create some overlap between the chunks to make sure you don't split exactly on the answer. The ``stride`` parameter controls the overlap width. Set ``return_over_flowing_tokens=True`` to keep the overlapping tokens from the truncated ``context``.
-3. Now, you need to find the answer from among the overlapping sequences. More specifically, you need to map the start and end positions of the answer to the original context. Set ``return_offset_mapping=True`` to handle this.
-4. With the mapping in hand, you can find the start and end tokens of the answer. Use the ``sequence_ids`` method to find which part of the offset corresponds to the question, and which part of the offset corresponds to the context.
+1. Some examples in a dataset may have a very long ``context`` that exceeds the maximum input length of the model. You can deal with this by truncating the ``context`` and set ``truncation="only_second"``.
+2. Next, you need to map the start and end positions of the answer to the original context. Set ``return_offset_mapping=True`` to handle this.
+3. With the mapping in hand, you can find the start and end tokens of the answer. Use the ``sequence_ids`` method to find which part of the offset corresponds to the question, and which part of the offset corresponds to the context.
 
 Assemble everything in a preprocessing function as shown below:
 
 .. code-block:: python
 
-    >>> def prepare_train_features(examples):
-            examples["question"] = [q.lstrip() for q in examples["question"]]
+    def preprocess_function(examples):
+        questions = [q.strip() for q in examples["question"]]
+        inputs = tokenizer(
+            questions,
+            examples["context"],
+            max_length=384,
+            truncation="only_second",
+            return_offsets_mapping=True,
+            padding="max_length",
+        )
 
-            tokenized_squad = tokenizer(
-                examples["question" if pad_on_right else "context"],
-                examples["context" if pad_on_right else "question"],
-                truncation="only_second" if pad_on_right else "only_first",
-                max_length=384,
-                stride=128,
-                return_overflowing_tokens=True,
-                return_offsets_mapping=True,
-                padding="max_length",
-            )
-            
-            sample_mapping = tokenized_squad.pop("overflow_to_sample_mapping")
-            offset_mapping = tokenized_squad.pop("offset_mapping")
+        offset_mapping = inputs.pop("offset_mapping")
+        answers = examples["answers"]
+        start_positions = []
+        end_positions = []
 
-            tokenized_squad["start_positions"] = []
-            tokenized_squad["end_positions"] = []
+        for i, offset in enumerate(offset_mapping):
+            answer = answers[i]
+            start_char = answer["answer_start"][0]
+            end_char = answer["answer_start"][0] + len(answer["text"][0])
+            sequence_ids = inputs.sequence_ids(i)
 
-            for i, offsets in enumerate(offset_mapping):
-                input_ids = tokenized_squad["input_ids"][i]
-                cls_index = input_ids.index(tokenizer.cls_token_id)
+            # Find the start and end of the context
+            idx = 0
+            while sequence_ids[idx] != 1:
+                idx += 1
+            context_start = idx
+            while sequence_ids[idx] == 1:
+                idx += 1
+            context_end = idx - 1
 
-            sequence_ids = tokenized_squad.sequence_ids(i)
-
-            sample_index = sample_mapping[i]
-            answers = examples["answers"][sample_index]
-            if len(answers["answer_start"]) == 0:
-                tokenized_squad["start_positions"].append(cls_index)
-                tokenized_squad["end_positions"].append(cls_index)
+            # If the answer is not fully inside the context, label it (0, 0)
+            if offset[context_start][0] > end_char or offset[context_end][1] < start_char:
+                start_positions.append(0)
+                end_positions.append(0)
             else:
-                start_char = answers["answer_start"][0]
-                end_char = start_char + len(answers["text"][0])
+                # Otherwise it's the start and end token positions
+                idx = context_start
+                while idx <= context_end and offset[idx][0] <= start_char:
+                    idx += 1
+                start_positions.append(idx - 1)
 
-                token_start_index = 0
-                while sequence_ids[token_start_index] != (1 if pad_on_right else 0):
-                    token_start_index += 1
+                idx = context_end
+                while idx >= context_start and offset[idx][1] >= end_char:
+                    idx -= 1
+                end_positions.append(idx + 1)
 
-                token_end_index = len(input_ids) - 1
-                while sequence_ids[token_end_index] != (1 if pad_on_right else 0):
-                    token_end_index -= 1
-
-                if not (offsets[token_start_index][0] <= start_char and offsets[token_end_index][1] >= end_char):
-                    tokenized_squad["start_positions"].append(cls_index)
-                    tokenized_squad["end_positions"].append(cls_index)
-                else:
-                    while token_start_index < len(offsets) and offsets[token_start_index][0] <= start_char:
-                        token_start_index += 1
-                    tokenized_squad["start_positions"].append(token_start_index - 1)
-                    while offsets[token_end_index][1] >= end_char:
-                        token_end_index -= 1
-                    tokenized_squad["end_positions"].append(token_end_index + 1)
-
-        return tokenized_squad
+        inputs["start_positions"] = start_positions
+        inputs["end_positions"] = end_positions
+        return inputs
 
 Apply the preprocessing function over the entire dataset with 🤗 Datasets ``map`` function:
 
 .. code-block:: python
 
-    >>> tokenized_squad = squad.map(prepare_train_features, batched=True, remove_columns=squad["train"].column_names)
+    tokenized_squad = squad.map(preprocess_function, batched=True, remove_columns=squad["train"].column_names)
 
 Batch the processed examples together:
 
 .. code-block:: python
 
-    >>> from transformers import default_data_collator
-    >>> data_collator = data_collator
+    from transformers import default_data_collator
+    data_collator = default_data_collator
 
 Fine-tune with the Trainer API
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -556,41 +552,41 @@ Load your model with the :class:`~transformers.AutoModel` class:
 
 .. code-block:: python
 
-    >>> from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
-    >>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+    from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
+    model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased")
 
 Gather your training arguments in :class:`~transformers.TrainingArguments`:
 
 .. code-block:: python
 
-    >>> training_args = TrainingArguments(
-            output_dir='./results',
-            evaluation_strategy="epoch",
-            learning_rate=2e-5,
-            per_device_train_batch_size=16,
-            per_device_eval_batch_size=16,
-            num_train_epochs=3,
-            weight_decay=0.01,
-        )
+    training_args = TrainingArguments(
+        output_dir='./results',
+        evaluation_strategy="epoch",
+        learning_rate=2e-5,
+        per_device_train_batch_size=16,
+        per_device_eval_batch_size=16,
+        num_train_epochs=3,
+        weight_decay=0.01,
+    )
 
 Collect your model, training arguments, dataset, data collator, and tokenizer in :class:`~transformers.Trainer`:
 
 .. code-block:: python
 
-    >>> trainer = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=tokenized_squad["train"],
-            eval_dataset=tokenized_squad["validation"],
-            data_collator=data_collator,
-            tokenizer=tokenizer,
-        )
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=tokenized_squad["train"],
+        eval_dataset=tokenized_squad["validation"],
+        data_collator=data_collator,
+        tokenizer=tokenizer,
+    )
 
 Fine-tune your model:
 
 .. code-block:: python
 
-    >>> trainer.train()
+    trainer.train()
 
 Fine-tune with TensorFlow
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -599,63 +595,64 @@ Batch the processed examples together with a TensorFlow default data collator:
 
 .. code-block:: python
 
-    >>> from transformers.data.data_collator import tf_default_collator
-    >>> data_collator = tf_default_collator
+    from transformers.data.data_collator import tf_default_collator
+    data_collator = tf_default_collator
 
 Convert your datasets to the ``tf.data.Dataset`` format with the ``to_tf_dataset`` function:
 
 .. code-block:: python
 
-    >>> tf_train_set = tokenized_squad["train"].to_tf_dataset(
-            columns=["attention_mask", "input_ids", "start_positions", "end_positions"],
-            dummy_labels=True,
-            shuffle=True,
-            batch_size=16,
-            collate_fn=data_collator,
-        )
-    >>> tf_validation_set = tokenized_squad["validation"].to_tf_dataset(
-            columns=["attention_mask", "input_ids", "start_positions", "end_positions"],
-            dummy_labels=True,
-            shuffle=False,
-            batch_size=16,
-            collate_fn=data_collator,
-        )
+    tf_train_set = tokenized_squad["train"].to_tf_dataset(
+        columns=["attention_mask", "input_ids", "start_positions", "end_positions"],
+        dummy_labels=True,
+        shuffle=True,
+        batch_size=16,
+        collate_fn=data_collator,
+    )
+    
+    tf_validation_set = tokenized_squad["validation"].to_tf_dataset(
+        columns=["attention_mask", "input_ids", "start_positions", "end_positions"],
+        dummy_labels=True,
+        shuffle=False,
+        batch_size=16,
+        collate_fn=data_collator,
+    )
 
 Set up an optimizer function, learning rate schedule, and some training hyperparameters:
 
 .. code-block:: python
 
-    >>> from transformers import create_optimizer
+    from transformers import create_optimizer
 
-    >>> batch_size = 16
-    >>> num_epochs = 2
-    >>> total_train_steps = (len(tokenized_squad["train"]) // batch_size) * num_epochs
-    >>> optimizer, schedule = create_optimizer(
-            init_lr=2e-5, 
-            num_warmup_steps=0, 
-            num_train_steps=total_train_steps,
-        )
+    batch_size = 16
+    num_epochs = 2
+    total_train_steps = (len(tokenized_squad["train"]) // batch_size) * num_epochs
+    optimizer, schedule = create_optimizer(
+        init_lr=2e-5, 
+        num_warmup_steps=0, 
+        num_train_steps=total_train_steps,
+    )
 
 Load your model with the :class:`~transformers.TFAutoModel` class:
 
 .. code-block:: python
 
-    >>> from transformers import TFAutoModelForQuestionAnswering
-    >>> model = TFAutoModelForQuestionAnswering("distilbert-base-uncased")
+    from transformers import TFAutoModelForQuestionAnswering
+    model = TFAutoModelForQuestionAnswering("distilbert-base-uncased")
 
 Compile the model:
 
 .. code-block:: python
 
-    >>> import tensorflow as tf
-    >>> model.compile(optimizer=optimizer)
+    import tensorflow as tf
+    model.compile(optimizer=optimizer)
 
 Call ``model.fit`` to fine-tune the model:
 
 .. code-block:: python
 
-    >>> model.fit(
-            tf_train_set,
-            validation_data=tf_validation_set,
-            epochs=num_train_epochs,
-        )
+    model.fit(
+        tf_train_set,
+        validation_data=tf_validation_set,
+        epochs=num_train_epochs,
+    )
