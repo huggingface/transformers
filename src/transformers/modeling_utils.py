@@ -201,6 +201,7 @@ class ModuleUtilsMixin:
         :obj:`torch.device`: The device on which the module is (assuming that all the module parameters are on the same
         device).
         """
+        _ = self.device
         return get_parameter_device(self)
 
     @property
