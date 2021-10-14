@@ -70,6 +70,7 @@ def no_init_weights(_enable=True):
         yield
     finally:
         _init_weights = True
+        _init_weights = True
 
 
 try:
@@ -201,7 +202,6 @@ class ModuleUtilsMixin:
         :obj:`torch.device`: The device on which the module is (assuming that all the module parameters are on the same
         device).
         """
-        _ = self.device
         return get_parameter_device(self)
 
     @property
