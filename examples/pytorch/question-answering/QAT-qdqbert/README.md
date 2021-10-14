@@ -115,18 +115,6 @@ python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
   --seed 42
 ```
 
-### Quantization options
-
-Some useful options to support different implementations and optimizations. These should be specified for both calibration and finetuning.
-
-|argument|description|
-|--------|-----------|
-|`--quant-per-tensor`| quantize weights with one quantization range per tensor |
-|`--fuse-qkv` | use a single range (the max) for quantizing QKV weights and output activations  |
-|`--clip-gelu N` | clip the output of GELU to a maximum of N when quantizing (e.g. 10) |
-|`--disable-dropout` | disable dropout for consistent activation ranges |
-
-
 ## Fine-tuning of FP32 model for comparison
 
 Finetune a fp32 precision model with:
@@ -238,6 +226,17 @@ python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
   --int8 \
   --seed 42
 ```
+
+### Quantization options
+
+Some useful options to support different implementations and optimizations. These should be specified for both calibration and finetuning.
+
+|argument|description|
+|--------|-----------|
+|`--quant-per-tensor`| quantize weights with one quantization range per tensor |
+|`--fuse-qkv` | use a single range (the max) for quantizing QKV weights and output activations  |
+|`--clip-gelu N` | clip the output of GELU to a maximum of N when quantizing (e.g. 10) |
+|`--disable-dropout` | disable dropout for consistent activation ranges |
 
 <!---
 ## FP16 Fine-tuning for comparison
