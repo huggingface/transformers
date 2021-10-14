@@ -391,7 +391,7 @@ class ExamplesTests(TestCasePlus):
             run_speech_recognition_ctc.py
             --output_dir {tmp_dir}
             --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
-            --dataset_name patrickvonplaten/librispeech_asr_dummy
+            --dataset_name hf-internal-testing/librispeech_asr_dummy
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
@@ -460,7 +460,7 @@ class ExamplesTests(TestCasePlus):
             run_wav2vec2_pretraining_no_trainer.py
             --output_dir {tmp_dir}
             --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
-            --dataset_name patrickvonplaten/librispeech_asr_dummy
+            --dataset_name hf-internal-testing/librispeech_asr_dummy
             --dataset_config_names clean
             --dataset_split_names validation
             --learning_rate 1e-4

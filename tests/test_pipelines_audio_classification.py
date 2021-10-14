@@ -62,7 +62,7 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
         # test with a local file
-        dataset = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        dataset = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         filename = dataset[0]["file"]
         output = audio_classifier(filename)
         self.assertEqual(
