@@ -28,8 +28,8 @@ UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class UniSpeechSatConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.UniSpeechSatModel`. It is used
-    to instantiate an UniSpeechSat model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.UniSpeechSatModel`. It is
+    used to instantiate an UniSpeechSat model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the UniSpeechSat
     `facebook/unispeech_sat-base-960h <https://huggingface.co/facebook/unispeech_sat-base-960h>`__ architecture.
 
@@ -39,8 +39,8 @@ class UniSpeechSatConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 32):
-            Vocabulary size of the UniSpeechSat model. Defines the number of different tokens that can be represented by
-            the :obj:`inputs_ids` passed when calling :class:`~transformers.UniSpeechSatModel` or
+            Vocabulary size of the UniSpeechSat model. Defines the number of different tokens that can be represented
+            by the :obj:`inputs_ids` passed when calling :class:`~transformers.UniSpeechSatModel` or
             :class:`~transformers.TFUniSpeechSatModel`. Vocabulary size of the model. Defines the different tokens that
             can be represented by the `inputs_ids` passed to the forward method of
             :class:`~transformers.UniSpeechSatModel`.

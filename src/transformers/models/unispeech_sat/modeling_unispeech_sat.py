@@ -82,7 +82,8 @@ class UniSpeechSatBaseModelOutput(ModelOutput):
 @dataclass
 class UniSpeechSatForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.UniSpeechSatForPreTrainingOutput`, with potential hidden states and attentions.
+    Output type of :class:`~transformers.UniSpeechSatForPreTrainingOutput`, with potential hidden states and
+    attentions.
 
     Args:
         loss (`optional`, returned when model is in train mode, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -121,13 +122,13 @@ def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
     mask_length: int,
-    device: torch.device,
-    attention_mask: Optional[torch.tensor] = None,
+    attention_mask: Optional[torch.LongTensor] = None,
     min_masks: int = 0,
-) -> torch.tensor:
+) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement `SpecAugment: A Simple Data Augmentation Method for
-    ASR <https://arxiv.org/abs/1904.08779>`__.
+    ASR <https://arxiv.org/abs/1904.08779>`__. Note that this method is not optimized to run on TPU and should be run
+    on CPU as part of the preprocessing during training.
 
     Args:
         shape: the the shape for which to compute masks.
@@ -137,7 +138,6 @@ def _compute_mask_indices(
             however due to overlaps, the actual number will be smaller (unless no_overlap is True)
         mask_length: size of the mask
         min_masks: minimum number of masked spans
-
     """
     batch_size, sequence_length = shape
 
@@ -149,42 +149,64 @@ def _compute_mask_indices(
             f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
         )
 
-    # compute number of masked spans in batch
-    num_masked_spans = int(mask_prob * sequence_length / mask_length + torch.rand((1,)).item())
-    num_masked_spans = max(num_masked_spans, min_masks)
+    epsilon = np.random.rand(1).item()
 
-    # make sure num masked indices <= sequence_length
-    if num_masked_spans * mask_length > sequence_length:
-        num_masked_spans = sequence_length // mask_length
+    def compute_num_masked_span(input_length):
+        """Given input length, compute how many spans should be masked"""
+        num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
+        num_masked_span = max(num_masked_span, min_masks)
+
+        # make sure num masked indices <= sequence_length
+        if num_masked_span * mask_length > sequence_length:
+            num_masked_span = sequence_length // mask_length
+
+        return num_masked_span
+
+    # compute number of masked spans in batch
+    input_lengths = (
+        attention_mask.sum(-1).detach().tolist()
+        if attention_mask is not None
+        else [sequence_length for _ in range(batch_size)]
+    )
 
     # SpecAugment mask to fill
-    spec_aug_mask = torch.zeros((batch_size, sequence_length), device=device, dtype=torch.bool)
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    spec_aug_mask_idxs = []
 
-    # uniform distribution to sample from, make sure that offset samples are < sequence_length
-    uniform_dist = torch.ones((batch_size, sequence_length - (mask_length - 1)), device=device)
+    max_num_masked_span = compute_num_masked_span(sequence_length)
 
-    # get random indices to mask
-    spec_aug_mask_idxs = torch.multinomial(uniform_dist, num_masked_spans)
+    for input_length in input_lengths:
+        # compute num of masked spans for this input
+        num_masked_span = compute_num_masked_span(input_length)
+        # get random indices to mask
+        spec_aug_mask_idx = np.random.choice(
+            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
+        )
+
+        # pick first sampled index that will serve as a dummy index to pad vector
+        dummy_mask_idx = spec_aug_mask_idx[0]
+
+        spec_aug_mask_idx = np.concatenate(
+            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+        )
+        spec_aug_mask_idxs.append(spec_aug_mask_idx)
+
+    spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
 
     # expand masked indices to masked spans
-    spec_aug_mask_idxs = (
-        spec_aug_mask_idxs.unsqueeze(dim=-1)
-        .expand((batch_size, num_masked_spans, mask_length))
-        .reshape(batch_size, num_masked_spans * mask_length)
+    spec_aug_mask_idxs = np.broadcast_to(
+        spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
     )
-    offsets = (
-        torch.arange(mask_length, device=device)[None, None, :]
-        .expand((batch_size, num_masked_spans, mask_length))
-        .reshape(batch_size, num_masked_spans * mask_length)
+    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
+
+    offsets = np.arange(mask_length)[None, None, :]
+    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
+        batch_size, max_num_masked_span * mask_length
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
 
     # scatter indices to mask
-    spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, True)
-
-    if attention_mask is not None:
-        # make sure padded input ids cannot be masked
-        spec_aug_mask = torch.where(attention_mask.bool(), spec_aug_mask, False)
+    np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
 
     return spec_aug_mask
 
@@ -333,6 +355,7 @@ class UniSpeechSatFeatureExtractor(nn.Module):
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
         self.conv_layers = nn.ModuleList(conv_layers)
+        self.gradient_checkpointing = False
 
     def _freeze_parameters(self):
         for param in self.parameters():
@@ -340,8 +363,26 @@ class UniSpeechSatFeatureExtractor(nn.Module):
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
+
+        # make sure hidden_states require grad for gradient_checkpointing
+        if self.training:
+            hidden_states.requires_grad = True
+
         for conv_layer in self.conv_layers:
-            hidden_states = conv_layer(hidden_states)
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs)
+
+                    return custom_forward
+
+                hidden_states = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(conv_layer),
+                    hidden_states,
+                )
+            else:
+                hidden_states = conv_layer(hidden_states)
 
         return hidden_states
 
@@ -852,8 +893,8 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
 
     config_class = UniSpeechSatConfig
     base_model_prefix = "unispeech_sat"
-    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -862,22 +903,31 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
             module.weight_proj.weight.data.normal_(mean=0.0, std=1)
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
+        elif isinstance(module, UniSpeechSatPositionalConvEmbedding):
+            nn.init.normal_(
+                module.conv.weight,
+                mean=0,
+                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
+            )
+            nn.init.constant_(module.conv.bias, 0)
+        elif isinstance(module, UniSpeechSatFeatureProjection):
+            k = math.sqrt(1 / module.projection.in_features)
+            nn.init.uniform_(module.projection.weight, a=-k, b=k)
+            nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight.data)
+            nn.init.kaiming_normal_(module.weight)
 
-        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
-            module.bias.data.zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (UniSpeechSatEncoder, UniSpeechSatEncoderStableLayerNorm)):
-            module.gradient_checkpointing = value
+            if module.bias is not None:
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                nn.init.uniform_(module.bias, a=-k, b=k)
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
@@ -906,6 +956,10 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (UniSpeechSatEncoder, UniSpeechSatEncoderStableLayerNorm, UniSpeechSatFeatureExtractor)):
+            module.gradient_checkpointing = value
+
 
 UNISPEECH_SAT_START_DOCSTRING = r"""
     UniSpeechSat was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
@@ -931,8 +985,8 @@ UNISPEECH_SAT_INPUTS_DOCSTRING = r"""
         input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.UniSpeechSatProcessor` should
-            be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
+            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.UniSpeechSatProcessor`
+            should be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
             :meth:`transformers.UniSpeechSatProcessor.__call__` for details.
         attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
@@ -994,6 +1048,7 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
         Masks extracted features along time axis and/or along feature axis according to `SpecAugment
         <https://arxiv.org/abs/1904.08779>`__ .
         """
+
         # `config.apply_spec_augment` can set masking to False
         if not getattr(self.config, "apply_spec_augment", True):
             return hidden_states
@@ -1009,10 +1064,10 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
                 (batch_size, sequence_length),
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
-                device=hidden_states.device,
                 attention_mask=attention_mask,
                 min_masks=2,
             )
+            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
 
         if self.config.mask_feature_prob > 0 and self.training:
@@ -1021,9 +1076,11 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
                 (batch_size, hidden_size),
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
-                device=hidden_states.device,
             )
-            hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)[
+                :, None
+            ].expand(-1, sequence_length, -1)
+            hidden_states[mask_feature_indices] = 0
 
         return hidden_states
 

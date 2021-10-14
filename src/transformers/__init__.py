@@ -271,6 +271,11 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.trocr": [
+        "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TrOCRConfig",
+        "TrOCRProcessor",
+    ],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",
@@ -279,6 +284,7 @@ _import_structure = {
         "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechSatConfig",
     ],
+    "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
@@ -1181,6 +1187,9 @@ if is_torch_available():
             "load_tf_weights_in_transfo_xl",
         ]
     )
+    _import_structure["models.trocr"].extend(
+        ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
+    )
     _import_structure["models.unispeech"].extend(
         [
             "UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1197,6 +1206,7 @@ if is_torch_available():
             "UniSpeechSatPreTrainedModel",
         ]
     )
+    _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
     _import_structure["models.visual_bert"].extend(
         [
             "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1468,6 +1478,7 @@ if is_tf_available():
             "TFElectraPreTrainedModel",
         ]
     )
+    _import_structure["models.encoder_decoder"].append("TFEncoderDecoderModel")
     _import_structure["models.flaubert"].extend(
         [
             "TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1620,6 +1631,7 @@ if is_tf_available():
     _import_structure["models.roberta"].extend(
         [
             "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRobertaForCausalLM",
             "TFRobertaForMaskedLM",
             "TFRobertaForMultipleChoice",
             "TFRobertaForQuestionAnswering",
@@ -2116,6 +2128,8 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
+    from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
@@ -2875,6 +2889,7 @@ if TYPE_CHECKING:
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
         )
+        from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
             UniSpeechForPreTraining,
@@ -2887,7 +2902,8 @@ if TYPE_CHECKING:
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
-        from .models.visual_bert import (  # load_tf_weights_in_visual_bert,
+        from .models.vision_encoder_decoder import VisionEncoderDecoderModel
+        from .models.visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VisualBertForMultipleChoice,
             VisualBertForPreTraining,
@@ -3132,6 +3148,7 @@ if TYPE_CHECKING:
             TFElectraModel,
             TFElectraPreTrainedModel,
         )
+        from .models.encoder_decoder import TFEncoderDecoderModel
         from .models.flaubert import (
             TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFFlaubertForMultipleChoice,
@@ -3241,6 +3258,7 @@ if TYPE_CHECKING:
         )
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRobertaForCausalLM,
             TFRobertaForMaskedLM,
             TFRobertaForMultipleChoice,
             TFRobertaForQuestionAnswering,

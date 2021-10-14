@@ -3587,6 +3587,27 @@ def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
 
 
+TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TrOCRForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class TrOCRPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3605,6 +3626,41 @@ class UniSpeechModel:
 
 
 class UniSpeechPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class UniSpeechSatForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class UniSpeechSatModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class UniSpeechSatPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class VisionEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
