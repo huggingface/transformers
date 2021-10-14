@@ -184,7 +184,7 @@ python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
 ### PTQ by calibrating and evaluating the finetuned FP32 model above:
 
 ```
-python3 run_qa.py \
+python3 QAT-qdqbert/run_qat_qa.py \
   --model_name_or_path ./finetuned_fp32/bert-base-uncased \
   --dataset_name squad \
   --calibrator percentile \
