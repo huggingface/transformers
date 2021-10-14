@@ -68,7 +68,7 @@ predicted token ids.
         ...     batch["speech"] = speech
         ...     return batch
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
@@ -86,7 +86,7 @@ predicted token ids.
         >>> from datasets import load_dataset
         >>> from transformers import pipeline
 
-        >>> librispeech_en = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> librispeech_en = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> asr = pipeline("automatic-speech-recognition", model="facebook/s2t-wav2vec2-large-en-de", feature_extractor="facebook/s2t-wav2vec2-large-en-de")
 
         >>> translation_de = asr(librispeech_en[0]["file"])
