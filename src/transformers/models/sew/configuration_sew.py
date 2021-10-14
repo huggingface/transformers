@@ -72,10 +72,9 @@ class SEWConfig(PretrainedConfig):
         feat_extract_activation (:obj:`str, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
-        conv_dim (:obj:`Tuple[int]`, `optional`, defaults to
-            :obj:`(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`): A tuple of integers defining the
-            number of input and output channels of each 1D convolutional layer in the feature extractor. The length of
-            `conv_dim` defines the number of 1D convolutional layers.
+        conv_dim (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
+            A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
+            feature extractor. The length of `conv_dim` defines the number of 1D convolutional layers.
         conv_stride (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature extractor. The length
             of `conv_stride` defines the number of convolutional layers and has to match the the length of `conv_dim`.
