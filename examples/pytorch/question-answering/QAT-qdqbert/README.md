@@ -20,7 +20,7 @@ The QDQBERT model adds fake quantization (pair of QuantizeLinear/DequantizeLinea
  * matmul inputs
  * residual add inputs
 
-In this example, we use QDQBERT model to do quantization on SQuAD task, including Quantization Aware Training (QAT), Post Training Quantization (PTQ) and inference using TensorRT.
+In this example, we use QDQBERT model to do quantization on SQuAD task, including Quantization Aware Training (QAT), Post Training Quantization (PTQ) and inferencing using TensorRT.
 
 ## Setup
 
