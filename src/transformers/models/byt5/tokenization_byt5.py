@@ -237,7 +237,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             else:
                 tok_string = bytes([ord(token)])
             bstring += tok_string
-        string = bstring.decode("utf-8")
+        string = bstring.decode("utf-8", errors="ignore")
         return string
 
     # ByT5Tokenizer has no vocab file
