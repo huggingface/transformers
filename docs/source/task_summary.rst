@@ -14,7 +14,7 @@ Summary of the tasks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This page shows the most frequent use-cases when using the library. The models available allow for many different
-configurations and a great versatility in use-cases. The most simple ones are presented here, showcasing usage for
+configurations and a great versatility in use-cases. The simplest ones are presented here, showcasing usage for
 tasks such as question answering, sequence classification, named entity recognition and others.
 
 These examples leverage auto-models, which are classes that will instantiate a model according to a given checkpoint,
