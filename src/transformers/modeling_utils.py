@@ -1247,7 +1247,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
-                *model_args,
                 cache_dir=cache_dir,
                 return_unused_kwargs=True,
                 force_download=force_download,
