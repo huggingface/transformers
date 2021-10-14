@@ -74,7 +74,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         from datasets import load_dataset
 
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
@@ -92,7 +92,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         from datasets import load_dataset
 
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": 'Ein Mann sagte zum Universum : " Sir, ich existiert! "'})
@@ -114,7 +114,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = asr(waveform)
         self.assertEqual(output, {"text": ""})
 
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = asr(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
@@ -144,7 +144,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = asr(waveform)
         self.assertEqual(output, {"text": "(Applausi)"})
 
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = asr(filename)
         self.assertEqual(output, {"text": "Un uomo disse all'universo: \"Signore, io esisto."})
