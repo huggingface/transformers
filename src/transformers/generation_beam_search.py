@@ -194,9 +194,9 @@ class BeamSearchScorer(BeamScorer):
 
         if "max_length" in kwargs:
             warnings.warn(
-                "Passing `max_length` to BeamSearchScorer is deprecated and has no effect."
+                "Passing `max_length` to BeamSearchScorer is deprecated and has no effect. "
                 "`max_length` should be passed directly to `beam_search(...)`, `beam_sample(...)`"
-                ",or `group_beam_search(...)`."
+                ", or `group_beam_search(...)`."
             )
 
     @property

@@ -385,7 +385,7 @@ class Trainer:
         self.optimizer, self.lr_scheduler = optimizers
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
-                "Passing a `model_init` is incompatible with providing the `optimizers` argument."
+                "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
@@ -996,7 +996,7 @@ class Trainer:
             elif isinstance(model, PreTrainedModel):
                 # find_unused_parameters breaks checkpointing as per
                 # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-                find_unused_parameters = not getattr(model.config, "_gradient_checkpointing", False)
+                find_unused_parameters = not model.is_gradient_checkpointing
             else:
                 find_unused_parameters = True
             model = nn.parallel.DistributedDataParallel(
@@ -1238,7 +1238,11 @@ class Trainer:
         self.callback_handler.lr_scheduler = self.lr_scheduler
         self.callback_handler.train_dataloader = train_dataloader
         self.state.trial_name = self.hp_name(trial) if self.hp_name is not None else None
-        self.state.trial_params = hp_params(trial.assignments) if trial is not None else None
+        if trial is not None:
+            assignments = trial.assignments if self.hp_search_backend == HPSearchBackend.SIGOPT else trial
+            self.state.trial_params = hp_params(assignments)
+        else:
+            self.state.trial_params = None
         # This should be the same if the state has been saved but in case the training arguments changed, it's safer
         # to set this after the load.
         self.state.max_steps = max_steps
@@ -1311,7 +1315,11 @@ class Trainer:
                 else:
                     tr_loss_step = self.training_step(model, inputs)
 
-                if args.logging_nan_inf_filter and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step)):
+                if (
+                    args.logging_nan_inf_filter
+                    and not is_torch_tpu_available()
+                    and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
+                ):
                     # if loss is nan or inf simply add the average of previous logged losses
                     tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
                 else:
@@ -1729,8 +1737,8 @@ class Trainer:
             if backend is None:
                 raise RuntimeError(
                     "At least one of optuna or ray should be installed. "
-                    "To install optuna run `pip install optuna`."
-                    "To install ray run `pip install ray[tune]`."
+                    "To install optuna run `pip install optuna`. "
+                    "To install ray run `pip install ray[tune]`. "
                     "To install sigopt run `pip install sigopt`."
                 )
         backend = HPSearchBackend(backend)
@@ -2534,9 +2542,11 @@ class Trainer:
             return
         use_auth_token = True if self.args.hub_token is None else self.args.hub_token
         if self.args.hub_model_id is None:
-            repo_name = get_full_repo_name(Path(self.args.output_dir).name, token=self.args.hub_token)
+            repo_name = Path(self.args.output_dir).absolute().name
         else:
             repo_name = self.args.hub_model_id
+        if "/" not in repo_name:
+            repo_name = get_full_repo_name(repo_name, token=self.args.hub_token)
 
         try:
             self.repo = Repository(
