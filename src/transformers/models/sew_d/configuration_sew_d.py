@@ -61,9 +61,9 @@ class SEWDConfig(PretrainedConfig):
             Whether to use relative position encoding.
         position_biased_input (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to add absolute position embedding to content embedding.
-        pos_att_type (:obj:`List[str]`, `optional`, defaults to :obj:`["p2c", "c2p"]`):
-            The type of relative position attention, it can be a combination of :obj:`["p2c", "c2p", "p2p"]`, e.g.
-            :obj:`["p2c"]`, :obj:`["p2c", "c2p"]`, :obj:`["p2c", "c2p", 'p2p"]`.
+        pos_att_type (:obj:`Tuple[str]`, `optional`, defaults to :obj:`("p2c", "c2p")`):
+            The type of relative position attention, it can be a combination of :obj:`("p2c", "c2p", "p2p")`, e.g.
+            :obj:`("p2c")`, :obj:`("p2c", "c2p")`, :obj:`("p2c", "c2p", 'p2p")`.
         norm_rel_ebd (:obj:`str`, `optional`, defaults to :obj:`"layer_norm"`):
             Whether to use layer norm in relative embedding (:obj:`"layer_norm"` if yes)
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
