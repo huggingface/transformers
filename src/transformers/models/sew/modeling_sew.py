@@ -261,20 +261,19 @@ class SEWUpsampling(nn.Module):
         super().__init__()
         self.projection = nn.Linear(config.hidden_size, config.hidden_size * config.squeeze_factor)
         self.activation = ACT2FN[config.feat_extract_activation]
-
-        # TODO: replace with torch ops after debugging
-        from einops.layers.torch import Rearrange
-
-        self.reshape = Rearrange(
-            "b t (s c) -> b (t s) c",
-            s=config.squeeze_factor,
-            c=config.hidden_size,
-        )
+        self.squeeze_factor = config.squeeze_factor
 
     def forward(self, hidden_states):
         hidden_states = self.projection(hidden_states)
         hidden_states = self.activation(hidden_states)
-        hidden_states = self.reshape(hidden_states)
+
+        if self.squeeze_factor > 1:
+            # transform embedding channels to sequence length
+            bsz, src_len, src_embed_dim = hidden_states.size()
+            tgt_len = src_len * self.squeeze_factor
+            tgt_embed_dim = src_embed_dim // self.squeeze_factor
+            hidden_states = hidden_states.view(bsz, src_len, self.squeeze_factor, tgt_embed_dim)
+            hidden_states = hidden_states.view(bsz, tgt_len, tgt_embed_dim).contiguous()
 
         return hidden_states
 
@@ -623,7 +622,6 @@ class SEWEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        # TODO: append to all hidden states?
         hidden_states = self.upsample(hidden_states)
         if hidden_states.shape[1] < n_input_timesteps:
             hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, n_input_timesteps - hidden_states.shape[1]))

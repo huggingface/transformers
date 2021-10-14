@@ -17,8 +17,8 @@ Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 SEW (Squeezed and Efficient Wav2Vec) was proposed in `Performance-Efficiency Trade-offs in Unsupervised Pre-training
-for Speech Recognition <https://arxiv.org/abs/2109.06870>`__ by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han,
-Kilian Q. Weinberger, Yoav Artzi.
+for Speech Recognition <https://arxiv.org/abs/2109.06870>`__ by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q.
+Weinberger, Yoav Artzi.
 
 The abstract from the paper is the following:
 
@@ -33,8 +33,8 @@ time, SEW reduces word error rate by 25-50% across different model sizes.*
 Tips:
 
 - SEW is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
-- SEWForCTC is fine-tuned using connectionist temporal classification (CTC) so the model output has to be decoded
-  using :class:`~transformers.Wav2Vec2CTCTokenizer`.
+- SEWForCTC is fine-tuned using connectionist temporal classification (CTC) so the model output has to be decoded using
+  :class:`~transformers.Wav2Vec2CTCTokenizer`.
 
 This model was contributed by `anton-l <https://huggingface.co/anton-l>`__.
 
