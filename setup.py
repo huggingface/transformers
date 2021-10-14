@@ -89,7 +89,7 @@ _deps = [
     "black==21.4b0",
     "cookiecutter==1.7.2",
     "dataclasses",
-    "datasets",
+    "datasets<1.13.0",
     "deepspeed>=0.3.16",
     "docutils==0.16.0",
     "fairscale>0.3",
