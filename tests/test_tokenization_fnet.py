@@ -17,7 +17,7 @@ import os
 import unittest
 
 from transformers import FNetTokenizer, FNetTokenizerFast
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow, tooslow
 from transformers.tokenization_utils import AddedToken
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -172,7 +172,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
 
-    @slow
+    @tooslow
     def test_special_tokens_initialization_from_slow(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -439,5 +439,5 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
             model_name="google/fnet-base",
-            revision="58e0d1f96af163dc8d0a84a2fddf4bd403e4e802",
+            revision="34219a71ca20e280cc6000b89673a169c65d605c",
         )
