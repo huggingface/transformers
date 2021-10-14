@@ -15,10 +15,12 @@ limitations under the License.
 
 # Huggingface QDQBERT Quantization Example
 
-Add fake quantization (pair of QuantizeLinear/DequantizeLinear ops) to:
+The QDQBERT model adds fake quantization (pair of QuantizeLinear/DequantizeLinear ops) to:
  * linear layer inputs and weights
  * matmul inputs
  * residual add inputs
+
+In this example, we use QDQBERT model to do quantization on SQuAD task, including Quantization Aware Training (QAT), Post Training Quantization (PTQ) and inference using TensorRT.
 
 ## Setup
 
