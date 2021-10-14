@@ -15,13 +15,10 @@ limitations under the License.
 
 # Huggingface BERT Quantization Example
 
-
-Quantized tensors:
- <!---* embedding weights-->
- * encoder
-   * linear layer inputs and weights
-   * matmul inputs
-   * residual add inputs
+Add fake quantization (pair of QuantizeLinear/DequantizeLinear ops) to:
+ * linear layer inputs and weights
+ * matmul inputs
+ * residual add inputs
 
 ## Setup
 
