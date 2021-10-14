@@ -2,6 +2,7 @@ import os
 from functools import partial
 from pickle import UnpicklingError
 from typing import Dict, Set, Tuple, Union
+from collections import namedtuple
 
 import numpy as np
 
@@ -22,58 +23,18 @@ from .file_utils import (
     is_remote_url,
     replace_return_docstrings,
 )
+from .generation_utils import GenerationMixin
 from .utils import logging
 
+import torch
 
 logger = logging.get_logger(__name__)
 from openvino.inference_engine import IECore
 
 ie = IECore()
 
-
-class OpenVINOModel(object):
-    def __init__(self, net):
-        self.net = net
-        self.config = {}
-        self.device = "CPU"
-
-    def to(self, device):
-        self.device = device
-
-    def set_config(self, config):
-        self.config = config
-
-    def _load_network(self):
-        self.exec_net = ie.load_network(self.net, self.device, self.config)
-
-    def __call__(self, input_ids, attention_mask=None):
-        if attention_mask is None:
-            attention_mask = np.ones_like(input_ids)
-
-        inputs_info = self.net.input_info
-        if inputs_info["input_ids"].input_data.shape != input_ids.shape:
-            self.net.reshape(
-                {
-                    "input_ids": input_ids.shape,
-                    "attention_mask": attention_mask.shape,
-                }
-            )
-            self.exec_net = None
-
-        if self.exec_net is None:
-            self._load_network()
-
-        outs = self.exec_net.infer(
-            {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-            }
-        )
-        return [outs["output"] if "output" in outs else next(iter(outs.values()))]
-
-
 def load_ov_model_from_pytorch(model):
-    import io, torch
+    import io
 
     buf = io.BytesIO()
     dummy_input_ids = torch.randint(0, 255, (1, 11))
@@ -88,7 +49,9 @@ def load_ov_model_from_pytorch(model):
         )
 
     net = ie.read_network(buf.getvalue(), b"", init_from_buffer=True)
-    return OpenVINOModel(net)
+    ov_model = OVPreTrainedModel(net)
+    ov_model.config = model.config
+    return ov_model
 
 
 def load_ov_model_from_tf(model):
@@ -111,7 +74,9 @@ def load_ov_model_from_tf(model):
         check=True,
     )
     net = ie.read_network("model.xml")
-    return OpenVINOModel(net)
+    ov_model = OVPreTrainedModel(net)
+    ov_model.config = model.config
+    return ov_model
 
 
 def load_ov_model_from_ir(xml_path, bin_path):
@@ -122,13 +87,16 @@ def load_ov_model_from_ir(xml_path, bin_path):
         xml_path += ".xml"
 
     net = ie.read_network(xml_path, bin_path)
-    return OpenVINOModel(net)
+    return OVPreTrainedModel(net)
 
 
-class OVPreTrainedModel(object):
-    def __init__(self, xml_path):
+class OVPreTrainedModel(GenerationMixin):
+    def __init__(self, net):
         super().__init__()
-        self.net = None
+        self.net = net
+        self.config = None
+        self.ov_config = {}
+        self.device = "CPU"
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -222,3 +190,57 @@ class OVPreTrainedModel(object):
             resolved_archive_files = None
 
         return load_ov_model_from_ir(*resolved_archive_files)
+
+    def to(self, device):
+        self.device = device
+
+    def set_config(self, config):
+        self.ov_config = config
+
+    def _load_network(self):
+        self.exec_net = ie.load_network(self.net, self.device, self.ov_config)
+
+    def __call__(self,
+                 input_ids,
+                 attention_mask=None,
+                 return_dict=False,
+                 output_attentions=False,
+                 output_hidden_states=False):
+        if attention_mask is None:
+            attention_mask = np.ones_like(input_ids)
+
+        inputs_info = self.net.input_info
+        if inputs_info["input_ids"].input_data.shape != input_ids.shape:
+            self.net.reshape(
+                {
+                    "input_ids": input_ids.shape,
+                    "attention_mask": attention_mask.shape,
+                }
+            )
+            self.exec_net = None
+
+        if self.exec_net is None:
+            self._load_network()
+
+        outs = self.exec_net.infer(
+            {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+            }
+        )
+
+        logits = outs["output"] if "output" in outs else next(iter(outs.values()))
+        if return_dict:
+            Result = namedtuple('Result', ['logits'])
+            result = Result(
+                logits=torch.tensor(logits),
+            )
+        else:
+            result = [logits]
+        return result
+
+    def generate(self, *args, **kwargs):
+        args = list(args)
+        if len(args) > 0:
+            args[0] = torch.tensor(args[0])
+        return super().generate(*args, **kwargs)

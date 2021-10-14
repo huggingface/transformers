@@ -123,6 +123,7 @@ if is_ov_available():
     _import_structure["modeling_ov_auto"] = [
         "OVAutoModel",
         "OVAutoModelForMaskedLM",
+        "OVAutoModelWithLMHead",
     ]
 
 if TYPE_CHECKING:
@@ -226,6 +227,7 @@ if TYPE_CHECKING:
         from .modeling_ov_auto import (
             OVAutoModel,
             OVAutoModelForMaskedLM,
+            OVAutoModelWithLMHead,
         )
 
 else:

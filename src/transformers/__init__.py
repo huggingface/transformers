@@ -1968,6 +1968,7 @@ if is_ov_available():
         [
             "OVAutoModel",
             "OVAutoModelForMaskedLM",
+            "OVAutoModelWithLMHead",
         ]
     )
 
@@ -3590,6 +3591,7 @@ if TYPE_CHECKING:
         from .models.auto import (
             OVAutoModel,
             OVAutoModelForMaskedLM,
+            OVAutoModelWithLMHead,
         )
 
 else:
