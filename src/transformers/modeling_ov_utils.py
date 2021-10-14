@@ -34,9 +34,17 @@ ie = IECore()
 class OpenVINOModel(object):
     def __init__(self, net):
         self.net = net
+        self.config = {}
+        self.device = "CPU"
+
+    def to(self, device):
+        self.device = device
+
+    def set_config(self, config):
+        self.config = config
 
     def _load_network(self):
-        self.exec_net = ie.load_network(self.net, "CPU")
+        self.exec_net = ie.load_network(self.net, self.device, self.config)
 
     def __call__(self, input_ids, attention_mask=None):
         if attention_mask is None:

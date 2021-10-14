@@ -51,6 +51,9 @@ class OVTFDistilBertModelIntegrationTest(unittest.TestCase):
 class OVDistilBertModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head_absolute_embedding(self):
         model = OVAutoModel.from_pretrained("distilbert-base-uncased", from_pt=True)
+        model.to(device="CPU")
+        model.set_config(config={'CPU_BIND_THREAD': 'YES'})
+
         input_ids = np.array([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = np.array([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         output = model(input_ids, attention_mask=attention_mask)[0]

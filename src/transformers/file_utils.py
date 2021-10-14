@@ -618,6 +618,8 @@ installation page: https://github.com/google/flax and follow the ones that match
 
 # docstyle-ignore
 OV_IMPORT_ERROR = """
+{0} requires the OpenVINO library but it was not found in your environment. You can install it with pip as
+explained here: https://github.com/openvinotoolkit/openvino/blob/master/docs/install_guides/installing-openvino-pip.md
 """
 
 
