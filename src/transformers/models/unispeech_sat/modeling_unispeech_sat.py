@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch UniSpeechSat model. """
 
+import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
