@@ -131,7 +131,6 @@ class LxmertConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        pad_token_id=0,
         l_layers=9,
         x_layers=5,
         r_layers=5,
@@ -145,8 +144,6 @@ class LxmertConfig(PretrainedConfig):
         visual_obj_loss=True,
         visual_attr_loss=True,
         visual_feat_loss=True,
-        output_attentions=False,
-        output_hidden_states=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -176,7 +173,5 @@ class LxmertConfig(PretrainedConfig):
         self.visual_obj_loss = visual_obj_loss
         self.visual_attr_loss = visual_attr_loss
         self.visual_feat_loss = visual_feat_loss
-        self.output_hidden_states = output_hidden_states
-        self.output_attentions = output_attentions
         self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
         super().__init__(**kwargs)
