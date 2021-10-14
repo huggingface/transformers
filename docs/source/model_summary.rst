@@ -195,7 +195,7 @@ include:
 
 With those tricks, the model can be fed much larger sentences than traditional transformer autoregressive models.
 
-**Note:** This model could be very well be used in an autoencoding setting, there is no checkpoint for such a
+**Note:** This model could very well be used in an autoencoding setting, there is no checkpoint for such a
 pretraining yet, though.
 
 The library provides a version of the model for language modeling only.
@@ -529,7 +529,7 @@ what are the two tokens left and right?) is enough to take action for a given to
 still given global attention, but the attention matrix has way less parameters, resulting in a speed-up. See the
 :ref:`local attention section <local-attention>` for more information.
 
-It is pretrained the same way a RoBERTa otherwise.
+It is pretrained the same way as RoBERTa otherwise.
 
 **Note:** This model could be very well be used in an autoregressive setting, there is no checkpoint for such a
 pretraining yet, though.
