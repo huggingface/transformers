@@ -239,6 +239,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             # calculate new size
             new_size = rescale_size((w, h), scale=size, return_scale=False)
             image = self.resize(image=image, size=new_size, resample=resample)
+            # align
             if self.align:
                 image = self._align(image, self.size_divisor)
         else:
@@ -283,17 +284,19 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         return image
 
-    # def pad_images(self, images):
-    #     """Pad images to ``self.crop_size``."""
-    #     padded_images = nn.functional.pad(images, pad=self.crop_size, value=self.padding_value)
+    def pad_images(self, images):
+        """Pad images to ``self.crop_size``."""
+        padded_images = nn.functional.pad(images, pad=self.crop_size, value=self.padding_value)
 
-    #     return padded_images
+        return padded_images
 
-    # def pad_segmentation_maps(self, segmentation_maps):
-    #     """Pad masks to ``self.crop_size``."""
-    #     padded_segmentation_maps = nn.functional.pad(segmentation_maps, pad=self.crop_size, value=self.segmentation_padding_value)
+    def pad_segmentation_maps(self, segmentation_maps):
+        """Pad masks to ``self.crop_size``."""
+        padded_segmentation_maps = nn.functional.pad(
+            segmentation_maps, pad=self.crop_size, value=self.segmentation_padding_value
+        )
 
-    #     return padded_segmentation_maps
+        return padded_segmentation_maps
 
     def __call__(
         self,
@@ -416,64 +419,48 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
-        # # TODO make padding not dependent on PyTorch
-        # if self.do_pad:
-        #     encoded_inputs["pixel_values"] = self.pad_images(encoded_inputs["pixel_values"])
-        #     if segmentation_maps is not None:
-        #          encoded_inputs["labels"] = self.pad_segmentation_maps(encoded_inputs["labels"])
+        # # TODO make padding not depend on PyTorch
+        if self.do_pad:
+            encoded_inputs["pixel_values"] = self.pad_images(encoded_inputs["pixel_values"])
+            if segmentation_maps is not None:
+                encoded_inputs["labels"] = self.pad_segmentation_maps(encoded_inputs["labels"])
 
         return encoded_inputs
 
-    def whole_inference(self, model, pixel_values, size, mode="bilinear", align_corners=False):
-        """Inference with a full image."""
+    def post_process_semantic(self, outputs, target_sizes):
+        """
+        Converts the output of :class:`~transformers.SegformerForImageSegmentation` into actual semantic segmentation
+        maps. Based on mmseg's whole inference method. Only supports PyTorch.
 
-        # forward pass
-        outputs = model(pixel_values=pixel_values)
+        Args:
+            outputs (:class:`~transformers.SegformerForImageSegmentation`):
+                Raw outputs of the model.
+            target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`):
+                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
+                image size (before any data augmentation). For visualization, this should be the image size after data
+                augment, but before padding.
+
+        Returns:
+            :obj:`List[torch.Tensor]`: A list of semantic segmentation maps, for every image in the batch.
+        """
         logits = outputs.logits
-        # resize logits to given size
-        logits = nn.functional.interpolate(logits, size=size, mode=mode, align_corners=align_corners)
-        # apply softmax on class dimension to get probabilities
-        probs = nn.functional.softmax(logits, dim=1)
+        assert len(logits) == len(
+            target_sizes
+        ), "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+        assert (
+            target_sizes.shape[1] == 2
+        ), "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+        segmentation_map_probs = []
+        for idx in range(logits.shape[0]):
+            # resize logits to given size
+            logits_example = nn.functional.interpolate(
+                logits[idx].unsqueeze(0),
+                size=tuple(target_sizes[idx].tolist()),
+                mode="bilinear",
+                align_corners=False,
+            )
+            # apply softmax on class dimension to get probabilities
+            probs = logits_example.softmax(dim=1)
+            segmentation_map_probs.append(probs)
 
-        return probs
-
-    def slide_inference(self, model, pixel_values, stride, crop_size, size, mode="bilinear", align_corners=False):
-        """
-        Inference by sliding-window with overlap. If h_crop > height or w_crop > width, the small patch will be used to
-        decode without padding.
-        """
-
-        h_stride, w_stride = stride
-        h_crop, w_crop = crop_size
-        batch_size, _, height, width = pixel_values.size()
-        num_classes = model.config.num_labels
-        h_grids = max(height - h_crop + h_stride - 1, 0) // h_stride + 1
-        w_grids = max(width - w_crop + w_stride - 1, 0) // w_stride + 1
-        preds = pixel_values.new_zeros((batch_size, num_classes, height, width))
-        count_mat = pixel_values.new_zeros((batch_size, 1, height, width))
-        for h_idx in range(h_grids):
-            for w_idx in range(w_grids):
-                y1 = h_idx * h_stride
-                x1 = w_idx * w_stride
-                y2 = min(y1 + h_crop, height)
-                x2 = min(x1 + w_crop, width)
-                y1 = max(y2 - h_crop, 0)
-                x1 = max(x2 - w_crop, 0)
-                cropped_pixel_values = pixel_values[:, :, y1:y2, x1:x2]
-                # forward pass to get the logits
-                outputs = model(pixel_values=cropped_pixel_values)
-                cropped_logits = outputs.logits
-                logits += nn.functional.pad(
-                    cropped_logits, (int(x1), int(logits.shape[3] - x2), int(y1), int(logits.shape[2] - y2))
-                )
-
-                count_mat[:, :, y1:y2, x1:x2] += 1
-        assert (count_mat == 0).sum() == 0
-
-        logits = logits / count_mat
-        # resize logits to given size
-        logits = nn.functional.interpolate(logits, size=size, mode=mode, align_corners=align_corners)
-        # apply softmax on class dimension to get probabilities
-        probs = nn.functional.softmax(logits, dim=1)
-
-        return probs
+        return segmentation_map_probs
