@@ -166,7 +166,6 @@ class FSMTConfig(PretrainedConfig):
         self.src_vocab_size = src_vocab_size
         self.tgt_vocab_size = tgt_vocab_size
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
-        self.max_length = max_length
 
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = self.num_hidden_layers = encoder_layers
@@ -179,10 +178,6 @@ class FSMTConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
-
-        self.num_beams = num_beams
-        self.length_penalty = length_penalty
-        self.early_stopping = early_stopping
 
         self.decoder = DecoderConfig(vocab_size=tgt_vocab_size, bos_token_id=eos_token_id)
         if "decoder" in common_kwargs:
@@ -204,6 +199,10 @@ class FSMTConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             tie_word_embeddings=tie_word_embeddings,
             forced_eos_token_id=forced_eos_token_id,
+            max_length=max_length,
+            num_beams=num_beams,
+            length_penalty=length_penalty,
+            early_stopping=early_stopping,
             **common_kwargs,
         )
 
