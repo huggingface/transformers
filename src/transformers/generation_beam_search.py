@@ -218,9 +218,9 @@ class BeamSearchScorer(BeamScorer):
             if self.num_beam_groups > 1:
                 raise ValueError(f"A group beam size of {input_ids.shape[0]} is used as the input, but a group beam "
                                  f"size of {self.group_size} is expected by the beam scorer.")
-        else:
-            raise ValueError(f"A beam size of {input_ids.shape[0]} is used as the input, but a beam size of "
-                             f"{self.group_size} is expected by the beam scorer.")
+            else:
+                raise ValueError(f"A beam size of {input_ids.shape[0]} is used as the input, but a beam size of "
+                                 f"{self.group_size} is expected by the beam scorer.")
 
         device = input_ids.device
         next_beam_scores = torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
