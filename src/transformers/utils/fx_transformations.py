@@ -4,8 +4,7 @@ import operator
 from inspect import signature
 from typing import Any, Callable, Dict, Optional, Union
 
-import torch
-from torch.fx import Graph, GraphModule, Node
+from torch.fx import GraphModule, Node
 
 
 # Torch FX transformation convention:
@@ -40,21 +39,11 @@ def deepcopy_graph(gm: GraphModule) -> GraphModule:
     traced with dynamic axes, and what were the values if that is the case.
     """
 
-    # First, create a copy of the module without the graph.
-    graph = gm.__dict__.pop("_graph")
-    fake_mod = torch.nn.Module()
-    fake_mod.__dict__ = copy.deepcopy(gm.__dict__)
-    gm.__dict__["_graph"] = graph
-
-    # Then, copy the graph.
-    val_map = {}
-    graph_clone = Graph()
-    output_val = graph_clone.graph_copy(graph, val_map=val_map)
-    graph_clone.output(output_val)
-
-    # Finally create a new GraphModule (or a subclass of GraphModule) from the module and the graph copies.
-    # gm.__class__ is used to take into account that gm can be an instance of a subclass of GraphModule.
-    clone = gm.__class__(fake_mod, graph_clone)
+    clone = copy.deepcopy(gm)
+    # Putting a dummy value because Graph.__deepcopy__ checks for the truthness of memo, so an empty memo would end up
+    # overwritten by the method.
+    val_map = {"dummy_value": 0}
+    clone._graph = copy.deepcopy(gm.graph, memo=val_map)
 
     # Restore the dynamic axes related attributes to the clone.
     attributes = _cache_attributes(gm)
@@ -171,7 +160,12 @@ def _insert_encoder_sequence_length_node_(gm: GraphModule, lint_and_recompile: b
     input_names = set(gm.dummy_inputs.keys())
     encoder_sequence_length_node = None
     for node in graph.nodes:
-        if node.op == "placeholder" and node.name in input_names and "decoder" not in node.name:
+        if (
+            node.op == "placeholder"
+            and node.name != "labels"
+            and "decoder" not in node.name
+            and node.name in input_names
+        ):
             with graph.inserting_after(node):
                 # There are two cases to handle:
                 #   1. num_choices < 0, meaning that the model is not performing a "multiple choice" task, in this case the

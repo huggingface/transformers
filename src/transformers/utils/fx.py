@@ -122,7 +122,7 @@ _SUPPORTED_MODELS_FOR_DYNAMIC_AXES = tuple(
 )
 
 
-def model_is_supported_for_symbolic_tracing(model: PreTrainedModel) -> Tuple[bool]:
+def is_model_supported_for_symbolic_tracing(model: PreTrainedModel) -> Tuple[bool]:
     """
     Returns a tuple of booleans specifying:
 
@@ -360,7 +360,7 @@ class HFTracer(Tracer):
                     if n not in parameter_proxy_cache:
                         parameter_proxy_cache[n] = self.create_proxy("get_attr", n, (), {})
                     return parameter_proxy_cache[n]
-        # TODO: condition this on wether dynamic axes were requested.
+        # TODO: condition this on whether dynamic axes were requested.
         if isinstance(attr_val, torch.Tensor):
             for n, p in self.root.named_buffers():
                 if attr_val is p:
@@ -474,24 +474,29 @@ def restore_after_retracing_(gm: GraphModule, attributes: Dict[str, Any]):
     return gm
 
 
-def retrace_graph_with(
-    gm: GraphModule, tracer: Tracer = None, func: Callable[[GraphModule], GraphModule] = None
-) -> GraphModule:
+def tracing_func(func: Callable[..., GraphModule]) -> Callable[..., GraphModule]:
     """
-    Retraces a GraphModule by either using a tracer or a function using a tracer (for instance
-    torch.quantization.quantize_fx.prepare_fx). It takes care of preparing the model for retracing, retracing it and
-    restoring anything necessary after the retrace.
+    Decorates a function that performs symbolic tracing to make it ready to retrace an already traced module by
+    HFTracer.
     """
-    if tracer is None and func is None:
-        raise ValueError("Either a tracer or a function using a tracer must be provided.")
-    elif tracer is not None and func is not None:
-        raise ValueError("Either provide a tracer or a function using a tracer, but not both.")
-    else:
-        gm, attributes = prepare_for_retracing(gm)
-        tracing_func = tracer.trace if tracer else func
-        traced = tracing_func(gm)
-        restore_after_retracing_(traced, attributes)
-        return traced
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        found_gm_arg = False
+        for idx, arg in enumerate(args):
+            if isinstance(arg, GraphModule):
+                found_gm_arg = True
+                break
+        if not found_gm_arg:
+            raise ValueError("Could not find a GraphModule in the tracing func to make retracing ready.")
+
+        gm, attributes = prepare_for_retracing(args[idx])
+        prepared_args = args[:idx] + (gm,) + args[idx + 1 :]
+        retraced = func(*prepared_args, **kwargs)
+        restore_after_retracing_(retraced, attributes)
+        return retraced
+
+    return wrapper
 
 
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
@@ -569,7 +574,7 @@ def symbolic_trace(
             decoder_sequence_length = _generate_random_int(forbidden_values=forbidden_values)
             sequence_length = [encoder_sequence_length, decoder_sequence_length]
 
-    tracing_is_supported, dynamic_axes_are_supported = model_is_supported_for_symbolic_tracing(model)
+    tracing_is_supported, dynamic_axes_are_supported = is_model_supported_for_symbolic_tracing(model)
     if not tracing_is_supported:
         supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
         raise NotImplementedError(
