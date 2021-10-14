@@ -35,7 +35,6 @@ config_common_kwargs = {
     "use_bfloat16": True,
     "pruned_heads": {"a": 1},
     "tie_word_embeddings": False,
-    "is_encoder_decoder": True,
     "is_decoder": True,
     "cross_attention_hidden_size": 128,
     "add_cross_attention": True,
@@ -262,7 +261,7 @@ class ConfigTestUtils(unittest.TestCase):
         base_config = PretrainedConfig()
         missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
         # If this part of the test fails, you have arguments to addin config_common_kwargs above.
-        self.assertListEqual(missing_keys, ["_name_or_path", "transformers_version"])
+        self.assertListEqual(missing_keys, ["is_encoder_decoder", "_name_or_path", "transformers_version"])
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
         if len(keys_with_defaults) > 0:
             raise ValueError(
