@@ -420,10 +420,10 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         # # TODO make padding not depend on PyTorch
-        if self.do_pad:
-            encoded_inputs["pixel_values"] = self.pad_images(encoded_inputs["pixel_values"])
-            if segmentation_maps is not None:
-                encoded_inputs["labels"] = self.pad_segmentation_maps(encoded_inputs["labels"])
+        # if self.do_pad:
+        #     encoded_inputs["pixel_values"] = self.pad_images(encoded_inputs["pixel_values"])
+        #     if segmentation_maps is not None:
+        #         encoded_inputs["labels"] = self.pad_segmentation_maps(encoded_inputs["labels"])
 
         return encoded_inputs
 
