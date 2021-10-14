@@ -70,7 +70,6 @@ def no_init_weights(_enable=True):
         yield
     finally:
         _init_weights = True
-        _init_weights = True
 
 
 try:
