@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import sys
-import unittest
 from unittest.mock import patch
 
 import torch
@@ -217,7 +216,6 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertLess(result["eval_loss"], 0.5)
 
-    @unittest.skip("squad_v2 metric is broken on Datasets apparently, skipping until it's fixed.")
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
