@@ -435,13 +435,14 @@ class SEWModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
 
+        # expected outputs taken from the original SEW implementation
         expected_outputs_first = torch.tensor(
             [
                 [
-                    [0.0382, 0.5582, 0.6167, -0.1684],
-                    [-0.1655, 0.7000, 0.6083, -0.0957],
-                    [0.0525, 0.8483, 0.4858, -0.1573],
-                    [-0.1697, 0.8229, 0.4918, -0.1017],
+                    [0.0373, 0.5522, 0.6186, -0.1686],
+                    [-0.1658, 0.6962, 0.6115, -0.0962],
+                    [0.0499, 0.8240, 0.4881, -0.1585],
+                    [-0.1697, 0.8095, 0.4967, -0.1022],
                 ],
                 [
                     [0.0408, 1.4355, 0.8605, -0.0968],
@@ -452,14 +453,13 @@ class SEWModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
-
         expected_outputs_last = torch.tensor(
             [
                 [
-                    [0.5949, -0.0666, -0.0940, -0.0690],
-                    [0.5534, -0.1668, -0.1483, -0.1097],
-                    [0.5949, -0.0666, -0.0940, -0.0690],
-                    [0.5534, -0.1668, -0.1483, -0.1097],
+                    [0.5935, -0.0649, -0.0974, -0.0709],
+                    [0.5365, -0.1670, -0.1518, -0.1130],
+                    [0.5935, -0.0649, -0.0974, -0.0709],
+                    [0.5365, -0.1670, -0.1518, -0.1130],
                 ],
                 [
                     [0.6959, -0.0861, -0.1235, -0.0861],
@@ -470,10 +470,11 @@ class SEWModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
+        expected_output_sum = 66396.2656
 
-        # TODO: investigate significant difference with fairseq (3e-2)
-        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=3e-2))
-        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=3e-2))
+        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
+        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
+        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 1)
 
     @tooslow
     def test_inference_ctc_batched(self):

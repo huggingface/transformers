@@ -456,6 +456,7 @@ class SEWDModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
 
+        # expected outputs taken from the original SEW-D implementation
         expected_outputs_first = torch.tensor(
             [
                 [
@@ -473,7 +474,6 @@ class SEWDModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
-
         expected_outputs_last = torch.tensor(
             [
                 [
@@ -491,9 +491,11 @@ class SEWDModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
+        expected_output_sum = 59279.3984
 
-        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=1e-2))
-        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=1e-2))
+        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
+        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
+        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 5)
 
     @tooslow
     def test_inference_ctc_batched(self):
