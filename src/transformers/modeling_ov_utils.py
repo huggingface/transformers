@@ -61,7 +61,7 @@ class OpenVINOModel(object):
                 "attention_mask": attention_mask,
             }
         )
-        return [next(iter(outs.values()))]
+        return [outs["output"] if "output" in outs else next(iter(outs.values()))]
 
 
 def load_ov_model_from_pytorch(model):
@@ -70,9 +70,13 @@ def load_ov_model_from_pytorch(model):
     buf = io.BytesIO()
     dummy_input_ids = torch.randint(0, 255, (1, 11))
     dummy_mask = torch.randint(0, 255, (1, 11))
+    if model.config.model_type == "gpt2":
+        inputs = (dummy_input_ids, None, dummy_mask)
+    else:
+        inputs = (dummy_input_ids, dummy_mask)
     with torch.no_grad():
         torch.onnx.export(
-            model, (dummy_input_ids, dummy_mask), buf, input_names=["input_ids", "attention_mask"], opset_version=11
+            model, inputs, buf, input_names=["input_ids", "attention_mask"], output_names=["output"], opset_version=11
         )
 
     net = ie.read_network(buf.getvalue(), b"", init_from_buffer=True)

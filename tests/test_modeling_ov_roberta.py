@@ -56,9 +56,7 @@ class RobertaModelIntegrationTest(unittest.TestCase):
         input_ids = np.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
         # compare the actual values for a slice.
-        expected_slice = np.array(
-            [[[-0.0231, 0.0782, 0.0074], [-0.1854, 0.0540, -0.0175], [0.0548, 0.0799, 0.1687]]]
-        )
+        expected_slice = np.array([[[-0.0231, 0.0782, 0.0074], [-0.1854, 0.0540, -0.0175], [0.0548, 0.0799, 0.1687]]])
 
         # roberta = torch.hub.load('pytorch/fairseq', 'roberta.base')
         # roberta.eval()
@@ -91,7 +89,5 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
         input_ids = np.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
         # compare the actual values for a slice.
-        expected_slice = np.array(
-            [[[-0.0231, 0.0782, 0.0074], [-0.1854, 0.0540, -0.0175], [0.0548, 0.0799, 0.1687]]]
-        )
+        expected_slice = np.array([[[-0.0231, 0.0782, 0.0074], [-0.1854, 0.0540, -0.0175], [0.0548, 0.0799, 0.1687]]])
         self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

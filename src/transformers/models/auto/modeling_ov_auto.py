@@ -9,13 +9,13 @@ from transformers import (
     TFAutoModelForMaskedLM,
 )
 
+
 class OVAutoModel(object):
     def __init__(self):
         raise EnvironmentError(
             f"{self.__class__.__name__} is designed to be instantiated "
             f"using the `{self.__class__.__name__}.from_pretrained(pretrained_model_name_or_path)` method."
         )
-
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -28,7 +28,6 @@ class OVAutoModelForMaskedLM(object):
             f"{self.__class__.__name__} is designed to be instantiated "
             f"using the `{self.__class__.__name__}.from_pretrained(pretrained_model_name_or_path)` method."
         )
-
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
