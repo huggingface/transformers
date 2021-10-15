@@ -16,18 +16,11 @@
 
 
 import argparse
-import json
-import os
 
 import fairseq
 import torch
-from fairseq.data import Dictionary
 
-from transformers import (  # UniSpeechCTCTokenizer,; UniSpeechFeatureExtractor,; UniSpeechProcessor,
-    UniSpeechConfig,
-    UniSpeechForPreTraining,
-    logging,
-)
+from transformers import UniSpeechConfig, UniSpeechForPreTraining, logging
 
 
 logging.set_verbosity_info()
@@ -50,11 +43,11 @@ MAPPING = {
     "quantizer.vars": "quantizer.codevectors",
     "project_q": "project_q",
     "final_proj": "project_hid",
-    "w2v_encoder.proj": "lm_head",
+    "w2v_encoder.proj": "ctc_proj",
     "mask_emb": "masked_spec_embed",
 }
 TOP_LEVEL_KEYS = [
-    "lm_head",
+    "ctc_proj",
     "quantizer.weight_proj",
     "quantizer.codevectors",
     "project_q",
@@ -170,7 +163,7 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 
 @torch.no_grad()
-def convert_unispeech_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None):
+def convert_unispeech_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
@@ -179,61 +172,20 @@ def convert_unispeech_checkpoint(checkpoint_path, pytorch_dump_folder_path, conf
     else:
         config = UniSpeechConfig()
 
-    if dict_path:
-        target_dict = Dictionary.load(dict_path)
+    hf_unispeech = UniSpeechForPreTraining(config)
 
-        # important change bos & pad token id since CTC symbol is <pad> and
-        # not <s> as in fairseq
-        config.bos_token_id = target_dict.pad_index
-        config.pad_token_id = target_dict.bos_index
-        config.eos_token_id = target_dict.eos_index
-        config.vocab_size = len(target_dict.symbols)
-        vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
-        if not os.path.isdir(pytorch_dump_folder_path):
-            logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
-            return
-        os.makedirs(pytorch_dump_folder_path, exist_ok=True)
-        with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
-            json.dump(target_dict.indices, vocab_handle)
-        tokenizer = UniSpeechCTCTokenizer(
-            vocab_path,
-            unk_token=target_dict.unk_word,
-            pad_token=target_dict.pad_word,
-            bos_token=target_dict.bos_word,
-            eos_token=target_dict.eos_word,
-            word_delimiter_token="|",
-            do_lower_case=False,
-        )
-        return_attention_mask = True if config.feat_extract_norm == "layer" else False
-        feature_extractor = UniSpeechFeatureExtractor(
-            feature_size=1,
-            sampling_rate=16000,
-            padding_value=0,
-            do_normalize=True,
-            return_attention_mask=return_attention_mask,
-        )
-        processor = UniSpeechProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-        processor.save_pretrained(pytorch_dump_folder_path)
-    else:
-        dict_path = ""
-
-    hf_wav2vec = UniSpeechForPreTraining(config)
-
-    model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-        [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
-    )
+    model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
     model = model[0].eval()
 
-    recursively_load_weights(model, hf_wav2vec)
+    recursively_load_weights(model, hf_unispeech)
 
-    hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
+    hf_unispeech.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     args = parser.parse_args()
-    convert_unispeech_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path)
+    convert_unispeech_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path)

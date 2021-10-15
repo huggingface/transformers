@@ -27,7 +27,9 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_unispeech"] = [
         "UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "UniSpeechForCTC",
         "UniSpeechForPreTraining",
+        "UniSpeechForSequenceClassification",
         "UniSpeechModel",
         "UniSpeechPreTrainedModel",
     ]
@@ -38,7 +40,9 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechForCTC,
             UniSpeechForPreTraining,
+            UniSpeechForSequenceClassification,
             UniSpeechModel,
             UniSpeechPreTrainedModel,
         )

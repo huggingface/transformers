@@ -199,6 +199,7 @@ class UniSpeechConfig(PretrainedConfig):
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
         classifier_proj_size=256,
+        num_ctc_classes=80,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -228,6 +229,7 @@ class UniSpeechConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        self.num_ctc_classes = num_ctc_classes
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
         self.use_weighted_layer_sum = use_weighted_layer_sum

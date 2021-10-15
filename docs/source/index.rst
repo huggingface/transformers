@@ -631,6 +631,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/tapas
     model_doc/transformerxl
     model_doc/trocr
+    model_doc/unispeech
     model_doc/visionencoderdecoder
     model_doc/vit
     model_doc/visual_bert

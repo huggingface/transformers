@@ -1193,7 +1193,9 @@ if is_torch_available():
     _import_structure["models.unispeech"].extend(
         [
             "UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UniSpeechForCTC",
             "UniSpeechForPreTraining",
+            "UniSpeechForSequenceClassification",
             "UniSpeechModel",
             "UniSpeechPreTrainedModel",
         ]
@@ -1201,7 +1203,9 @@ if is_torch_available():
     _import_structure["models.unispeech_sat"].extend(
         [
             "UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UniSpeechSatForCTC",
             "UniSpeechSatForPreTraining",
+            "UniSpeechSatForSequenceClassification",
             "UniSpeechSatModel",
             "UniSpeechSatPreTrainedModel",
         ]
@@ -2892,13 +2896,17 @@ if TYPE_CHECKING:
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechForCTC,
             UniSpeechForPreTraining,
+            UniSpeechForSequenceClassification,
             UniSpeechModel,
             UniSpeechPreTrainedModel,
         )
         from .models.unispeech_sat import (
             UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechSatForCTC,
             UniSpeechSatForPreTraining,
+            UniSpeechSatForSequenceClassification,
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )

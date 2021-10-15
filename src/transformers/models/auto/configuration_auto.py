@@ -96,6 +96,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rag", "RagConfig"),
         ("tapas", "TapasConfig"),
         ("splinter", "SplinterConfig"),
+        ("unispeech", "UniSpeechConfig"),
+        ("unispeech-sat", "UniSpeechSatConfig"),
     ]
 )
 
@@ -162,6 +164,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
@@ -245,6 +249,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("byt5", "ByT5"),
         ("mbart50", "mBART-50"),
         ("splinter", "Splinter"),
+        ("unispeech", "UniSpeech"),
+        ("unispeech-sat", "UniSpeechSat"),
     ]
 )
 
