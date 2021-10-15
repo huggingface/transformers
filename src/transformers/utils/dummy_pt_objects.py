@@ -3281,6 +3281,58 @@ def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
 
 
+SEW_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SEWForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SEWModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SEWPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SEWDForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SEWDModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SEWDPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class SpeechEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

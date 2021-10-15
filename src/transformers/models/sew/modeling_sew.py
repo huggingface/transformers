@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 ASAPP Inc. and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,34 +12,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Hubert model. """
+""" PyTorch SEW model. """
 
+import math
 from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from transformers.deepspeed import is_deepspeed_zero3_enabled
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_hubert import HubertConfig
+from .configuration_sew import SEWConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "HubertConfig"
-_CHECKPOINT_FOR_DOC = "facebook/hubert-base-ls960"
+_CONFIG_FOR_DOC = "SEWConfig"
+_CHECKPOINT_FOR_DOC = "asapp/sew-tiny-100k"
 
-HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/hubert-base-ls960",
-    # See all Hubert models at https://huggingface.co/models?filter=hubert
+SEW_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "asapp/sew-tiny-100k",
+    "asapp/sew-small-100k",
+    "asapp/sew-mid-100k",
+    # See all SEW models at https://huggingface.co/models?filter=sew
 ]
 
 
@@ -137,8 +139,8 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->Hubert
-class HubertNoLayerNormConvLayer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SEW
+class SEWNoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -159,8 +161,8 @@ class HubertNoLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->Hubert
-class HubertLayerNormConvLayer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->SEW
+class SEWLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -187,8 +189,8 @@ class HubertLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->Hubert
-class HubertGroupNormConvLayer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->SEW
+class SEWGroupNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -212,8 +214,7 @@ class HubertGroupNormConvLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->Hubert
-class HubertPositionalConvEmbedding(nn.Module):
+class SEWPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv = nn.Conv1d(
@@ -222,6 +223,7 @@ class HubertPositionalConvEmbedding(nn.Module):
             kernel_size=config.num_conv_pos_embeddings,
             padding=config.num_conv_pos_embeddings // 2,
             groups=config.num_conv_pos_embedding_groups,
+            stride=config.squeeze_factor,
         )
 
         if is_deepspeed_zero3_enabled():
@@ -234,22 +236,19 @@ class HubertPositionalConvEmbedding(nn.Module):
         else:
             self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
 
-        self.padding = HubertSamePadLayer(config.num_conv_pos_embeddings)
+        self.padding = SEWSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.transpose(1, 2)
-
         hidden_states = self.conv(hidden_states)
         hidden_states = self.padding(hidden_states)
         hidden_states = self.activation(hidden_states)
 
-        hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->Hubert
-class HubertSamePadLayer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->SEW
+class SEWSamePadLayer(nn.Module):
     def __init__(self, num_conv_pos_embeddings):
         super().__init__()
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
@@ -260,19 +259,41 @@ class HubertSamePadLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->Hubert
-class HubertFeatureExtractor(nn.Module):
+class SEWUpsampling(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.projection = nn.Linear(config.hidden_size, config.hidden_size * config.squeeze_factor)
+        self.activation = ACT2FN[config.feat_extract_activation]
+        self.squeeze_factor = config.squeeze_factor
+
+    def forward(self, hidden_states):
+        hidden_states = self.projection(hidden_states)
+        hidden_states = self.activation(hidden_states)
+
+        if self.squeeze_factor > 1:
+            # transform embedding channels to sequence length
+            bsz, src_len, src_embed_dim = hidden_states.size()
+            tgt_len = src_len * self.squeeze_factor
+            tgt_embed_dim = src_embed_dim // self.squeeze_factor
+            hidden_states = hidden_states.reshape(bsz, src_len, self.squeeze_factor, tgt_embed_dim)
+            hidden_states = hidden_states.reshape(bsz, tgt_len, tgt_embed_dim)
+
+        return hidden_states
+
+
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->SEW
+class SEWFeatureExtractor(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
         super().__init__()
 
         if config.feat_extract_norm == "group":
-            conv_layers = [HubertGroupNormConvLayer(config, layer_id=0)] + [
-                HubertNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
+            conv_layers = [SEWGroupNormConvLayer(config, layer_id=0)] + [
+                SEWNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
-            conv_layers = [HubertLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
+            conv_layers = [SEWLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
         else:
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
@@ -310,23 +331,8 @@ class HubertFeatureExtractor(nn.Module):
         return hidden_states
 
 
-class HubertFeatureProjection(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
-        self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
-        self.dropout = nn.Dropout(config.feat_proj_dropout)
-
-    def forward(self, hidden_states):
-        # non-projected hidden states are needed for quantization
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.projection(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Hubert
-class HubertAttention(nn.Module):
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->SEW
+class SEWAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -463,8 +469,8 @@ class HubertAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->Hubert
-class HubertFeedForward(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->SEW
+class SEWFeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
@@ -488,11 +494,11 @@ class HubertFeedForward(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->Hubert
-class HubertEncoderLayer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->SEW
+class SEWEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = HubertAttention(
+        self.attention = SEWAttention(
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
@@ -500,7 +506,7 @@ class HubertEncoderLayer(nn.Module):
         )
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = HubertFeedForward(config)
+        self.feed_forward = SEWFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
@@ -523,48 +529,16 @@ class HubertEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->Hubert
-class HubertEncoderLayerStableLayerNorm(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.attention = HubertAttention(
-            embed_dim=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=False,
-        )
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = HubertFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        attn_residual = hidden_states
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->Hubert
-class HubertEncoder(nn.Module):
+class SEWEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.pos_conv_embed = HubertPositionalConvEmbedding(config)
+        self.pos_conv_embed = SEWPositionalConvEmbedding(config)
+        self.pool = nn.AvgPool1d(config.squeeze_factor, config.squeeze_factor)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([HubertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([SEWEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.upsample = SEWUpsampling(config)
         self.gradient_checkpointing = False
 
     def forward(
@@ -582,14 +556,32 @@ class HubertEncoder(nn.Module):
             # make sure padded tokens output 0
             hidden_states[~attention_mask] = 0.0
 
+            input_lengths = (attention_mask.long()).sum(-1)
+            # apply pooling formula to get real output_lengths
+            output_lengths = input_lengths // self.config.squeeze_factor
+            max_encoder_length = hidden_states.shape[1] // self.config.squeeze_factor
+            attention_ids = (
+                torch.arange(0, max_encoder_length, device=output_lengths.device)
+                .view(1, -1)
+                .expand(output_lengths.shape[0], -1)
+            )
+            attention_mask = (attention_ids < output_lengths.view(-1, 1)).long()
+
             # extend attention_mask
             attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
             attention_mask = attention_mask.expand(
                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
             )
 
+        n_input_timesteps = hidden_states.shape[1]
+
+        hidden_states = hidden_states.transpose(1, 2)
         position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
+        pooled_hidden_states = self.pool(hidden_states)
+        min_length = min(position_embeddings.size(-1), pooled_hidden_states.size(-1))
+        hidden_states = pooled_hidden_states[..., :min_length] + position_embeddings[..., :min_length]
+        hidden_states = hidden_states.transpose(1, 2)
+
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -633,95 +625,9 @@ class HubertEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
-
-
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderStableLayerNorm with Wav2Vec2->Hubert
-class HubertEncoderStableLayerNorm(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.pos_conv_embed = HubertPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList(
-            [HubertEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
-        )
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        if attention_mask is not None:
-            # make sure padded tokens are not attended to
-            hidden_states[~attention_mask] = 0
-
-            # extend attention_mask
-            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
-
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
-        hidden_states = self.dropout(hidden_states)
-
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
-
-        for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
-
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
-                # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        hidden_states = self.layer_norm(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+        hidden_states = self.upsample(hidden_states)
+        if hidden_states.shape[1] < n_input_timesteps:
+            hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, n_input_timesteps - hidden_states.shape[1]))
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
@@ -732,20 +638,27 @@ class HubertEncoderStableLayerNorm(nn.Module):
         )
 
 
-class HubertPreTrainedModel(PreTrainedModel):
+class SEWPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = HubertConfig
-    base_model_prefix = "hubert"
+    config_class = SEWConfig
+    base_model_prefix = "sew"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+        if isinstance(module, SEWPositionalConvEmbedding):
+            nn.init.normal_(
+                module.conv.weight,
+                mean=0,
+                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
+            )
+            nn.init.constant_(module.conv.bias, 0)
+        elif isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -769,7 +682,7 @@ class HubertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (HubertEncoder, HubertEncoderStableLayerNorm)):
+        if isinstance(module, (SEWEncoder, SEWFeatureExtractor)):
             module.gradient_checkpointing = value
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
@@ -800,10 +713,10 @@ class HubertPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-HUBERT_START_DOCSTRING = r"""
-    Hubert was proposed in `HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units
-    <https://arxiv.org/abs/2106.07447>`__ by Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia,
-    Ruslan Salakhutdinov, Abdelrahman Mohamed.
+SEW_START_DOCSTRING = r"""
+    SEW was proposed in `Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech Recognition
+    <https://arxiv.org/abs/2109.06870>`__ by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger, Yoav
+    Artzi.
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving etc.).
@@ -813,14 +726,14 @@ HUBERT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config (:class:`~transformers.HubertConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.SEWConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
 """
 
 
-HUBERT_INPUTS_DOCSTRING = r"""
+SEW_INPUTS_DOCSTRING = r"""
     Args:
         input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
@@ -837,15 +750,6 @@ HUBERT_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
 
-            .. warning::
-                :obj:`attention_mask` should only be passed if the corresponding processor has
-                ``config.return_attention_mask == True``. For all models whose processor has
-                ``config.return_attention_mask == False``, such as `hubert-base
-                <https://huggingface.co/facebook/hubert-base-ls960>`__, :obj:`attention_mask` should **not** be passed
-                to avoid degraded performance when doing batched inference. For such models :obj:`input_values` should
-                simply be padded with 0 and passed without :obj:`attention_mask`. Be aware that these models also yield
-                slightly different results depending on whether :obj:`input_values` is padded or not.
-
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -858,22 +762,19 @@ HUBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Hubert Model transformer outputting raw hidden-states without any specific head on top.",
-    HUBERT_START_DOCSTRING,
+    "The bare SEW Model transformer outputting raw hidden-states without any specific head on top.",
+    SEW_START_DOCSTRING,
 )
-class HubertModel(HubertPreTrainedModel):
-    def __init__(self, config: HubertConfig):
+class SEWModel(SEWPreTrainedModel):
+    def __init__(self, config: SEWConfig):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = HubertFeatureExtractor(config)
-        self.feature_projection = HubertFeatureProjection(config)
+        self.feature_extractor = SEWFeatureExtractor(config)
+        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
 
         self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
-        if config.do_stable_layer_norm:
-            self.encoder = HubertEncoderStableLayerNorm(config)
-        else:
-            self.encoder = HubertEncoder(config)
+        self.encoder = SEWEncoder(config)
 
         self.init_weights()
 
@@ -924,7 +825,7 @@ class HubertModel(HubertPreTrainedModel):
 
         return hidden_states
 
-    @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -941,19 +842,19 @@ class HubertModel(HubertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import Wav2Vec2Processor, HubertModel
+            >>> from transformers import Wav2Vec2Processor, SEWModel
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
-            >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
+            >>> processor = Wav2Vec2Processor.from_pretrained("asapp/sew-tiny-100k")
+            >>> model = SEWModel.from_pretrained("asapp/sew-tiny-100k")
 
             >>> def map_to_array(batch):
             ...     speech, _ = sf.read(batch["file"])
             ...     batch["speech"] = speech
             ...     return batch
 
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
             >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
@@ -967,13 +868,13 @@ class HubertModel(HubertPreTrainedModel):
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
+        extract_features = self.layer_norm(extract_features)
 
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
-        hidden_states = self.feature_projection(extract_features)
-        hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
+        hidden_states = self._mask_hidden_states(extract_features, mask_time_indices=mask_time_indices)
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -996,21 +897,21 @@ class HubertModel(HubertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
-    HUBERT_START_DOCSTRING,
+    """SEW Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
+    SEW_START_DOCSTRING,
 )
-class HubertForCTC(HubertPreTrainedModel):
+class SEWForCTC(SEWPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.hubert = HubertModel(config)
+        self.sew = SEWModel(config)
         self.dropout = nn.Dropout(config.final_dropout)
 
         if config.vocab_size is None:
             raise ValueError(
                 f"You are trying to instantiate {self.__class__} with a configuration that "
                 "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `HubertForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "instantiate the model as follows: `SEWForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
@@ -1022,9 +923,9 @@ class HubertForCTC(HubertPreTrainedModel):
         Calling this function will disable the gradient computation for the feature extractor so that its parameter
         will not be updated during training.
         """
-        self.hubert.feature_extractor._freeze_parameters()
+        self.sew.feature_extractor._freeze_parameters()
 
-    @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1047,19 +948,19 @@ class HubertForCTC(HubertPreTrainedModel):
         Example::
 
             >>> import torch
-            >>> from transformers import Wav2Vec2Processor, HubertForCTC
+            >>> from transformers import Wav2Vec2Processor, SEWForCTC
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
-            >>> model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
+            >>> processor = Wav2Vec2Processor.from_pretrained("asapp/sew-tiny-100k")
+            >>> model = SEWForCTC.from_pretrained("asapp/sew-tiny-100k")
 
             >>> def map_to_array(batch):
             ...     speech, _ = sf.read(batch["file"])
             ...     batch["speech"] = speech
             ...     return batch
 
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
             >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
@@ -1080,7 +981,7 @@ class HubertForCTC(HubertPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.hubert(
+        outputs = self.sew(
             input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -1131,129 +1032,4 @@ class HubertForCTC(HubertPreTrainedModel):
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-        )
-
-
-@add_start_docstrings(
-    """
-    Hubert Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
-    """,
-    HUBERT_START_DOCSTRING,
-)
-class HubertForSequenceClassification(HubertPreTrainedModel):
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.__init__ with Wav2Vec2->Hubert, wav2vec2->hubert
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.hubert = HubertModel(config)
-        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
-        if config.use_weighted_layer_sum:
-            self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
-        self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
-        self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
-
-        self.init_weights()
-
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_feature_extractor with wav2vec2->hubert
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
-        """
-        self.hubert.feature_extractor._freeze_parameters()
-
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_base_model with wav2vec2->hubert
-    def freeze_base_model(self):
-        """
-        Calling this function will disable the gradient computation for the base model so that its parameters will not
-        be updated during training. Only the classification head will be updated.
-        """
-        for param in self.hubert.parameters():
-            param.requires_grad = False
-
-    @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Example::
-
-            >>> import torch
-            >>> from transformers import Wav2Vec2FeatureExtractor, HubertForSequenceClassification
-            >>> from datasets import load_dataset
-
-            >>> processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ks")
-            >>> model = HubertForSequenceClassification.from_pretrained("superb/hubert-base-superb-ks")
-
-            >>> ds = load_dataset("anton-l/superb_dummy", "ks", split="test")
-
-            >>> input_values = processor(ds["speech"][4], return_tensors="pt").input_values  # Batch size 1
-            >>> logits = model(input_values).logits
-            >>> predicted_class_ids = torch.argmax(logits, dim=-1)
-
-            >>> # compute loss
-            >>> target_label = "down"
-            >>> labels = torch.tensor([model.config.label2id[target_label]])
-
-            >>> loss = model(input_values, labels=labels).loss
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
-
-        outputs = self.hubert(
-            input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[1]
-            hidden_states = torch.stack(hidden_states, dim=1)
-            norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
-            hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
-        else:
-            hidden_states = outputs[0]
-
-        hidden_states = self.projector(hidden_states)
-        if attention_mask is None:
-            pooled_output = hidden_states.mean(dim=1)
-        else:
-            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            hidden_states[~padding_mask] = 0.0
-            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
-
-        logits = self.classifier(pooled_output)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
