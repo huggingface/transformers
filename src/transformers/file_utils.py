@@ -910,6 +910,76 @@ PT_CAUSAL_LM_SAMPLE = r"""
         >>> logits = outputs.logits
 """
 
+PT_SPEECH_BASE_MODEL_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> from datasets import load_dataset
+
+        >>> librispeech_demo = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+
+        >>> processor = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = processor(librispeech_demo[0]["audio"]["array"], return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+"""
+
+PT_SPEECH_CTC_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> from datasets import load_dataset
+
+        >>> librispeech_demo = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+
+        >>> processor = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = processor(librispeech_demo[0]["audio"]["array"], return_tensors="pt")
+        >>> logits = model(**inputs).logits
+
+        >>> # transcribe speech
+        >>> transcription = processor.batch_decode(logits)
+
+        >>> # compute loss
+        >>> with processor.as_target_processor():
+        ...     labels = processor(librispeech_demo[0]["text"], return_tensors="pt").input_ids
+
+        >>> loss = model(**inputs, labels=labels).loss
+"""
+
+PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+
+        >>> processor = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = processor(librispeech_demo[0]["audio"]["array"], return_tensors="pt")
+        >>> logits = model(**inputs).logits
+        >>> predicted_class_ids = torch.argmax(logts, dim=-1)
+
+        >>> # transcribe speech
+        >>> transcription = processor.batch_decode(logits)
+
+        >>> # compute loss - target_label is e.g. "down"
+        >>> target_label = model.config.id2label[0]
+        >>> labels = torch.tensor([model.config.label2id[target_label])
+        >>> loss = model(**inputs, labels=labels).loss
+"""
+
+
 PT_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": PT_SEQUENCE_CLASSIFICATION_SAMPLE,
     "QuestionAnswering": PT_QUESTION_ANSWERING_SAMPLE,
@@ -918,6 +988,9 @@ PT_SAMPLE_DOCSTRINGS = {
     "MaskedLM": PT_MASKED_LM_SAMPLE,
     "LMHead": PT_CAUSAL_LM_SAMPLE,
     "BaseModel": PT_BASE_MODEL_SAMPLE,
+    "SpeechBase": PT_SPEECH_BASE_MODEL_SAMPLE,
+    "SpeechCTC": PT_SPEECH_CTC_SAMPLE,
+    "SpeechSeqClass": PT_SPEECH_SEQ_CLASS_SAMPLE,
 }
 
 
@@ -1170,7 +1243,7 @@ FLAX_SAMPLE_DOCSTRINGS = {
 
 
 def add_code_sample_docstrings(
-    *docstr, tokenizer_class=None, checkpoint=None, output_type=None, config_class=None, mask=None, model_cls=None
+    *docstr, preprocessor_class=None, checkpoint=None, output_type=None, config_class=None, mask=None, model_cls=None
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1183,7 +1256,7 @@ def add_code_sample_docstrings(
         else:
             sample_docstrings = PT_SAMPLE_DOCSTRINGS
 
-        doc_kwargs = dict(model_class=model_class, tokenizer_class=tokenizer_class, checkpoint=checkpoint)
+        doc_kwargs = dict(model_class=model_class, preprocessor_class=tokenizer_class, checkpoint=checkpoint)
 
         if "SequenceClassification" in model_class:
             code_sample = sample_docstrings["SequenceClassification"]
@@ -1200,6 +1273,12 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["LMHead"]
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = sample_docstrings["BaseModel"]
+        elif "SpeechBase" in model_class:
+            code_sample = sample_docstrings["SpeechBase"]
+        elif "SpeechCTC" in model_class:
+            code_sample = sample_docstrings["SpeechCTC"]
+        elif "SpeechSeqClass" in model_class:
+            code_sample = sample_docstrings["SpeechSeqClass"]
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
