@@ -92,6 +92,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("tapas", "TapasModel"),
         ("ibert", "IBertModel"),
         ("splinter", "SplinterModel"),
+        ("sew", "SEWModel"),
+        ("sew-d", "SEWDModel"),
     ]
 )
 
@@ -482,6 +484,8 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         # Model for Connectionist temporal classification (CTC) mapping
         ("wav2vec2", "Wav2Vec2ForCTC"),
         ("hubert", "HubertForCTC"),
+        ("sew", "SEWForCTC"),
+        ("sew-d", "SEWDForCTC"),
     ]
 )
 
