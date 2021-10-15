@@ -15,6 +15,8 @@
 """
 Processor class for LayoutLMv2.
 """
+
+
 from typing import List, Optional, Union
 
 from ...file_utils import TensorType
