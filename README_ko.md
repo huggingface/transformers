@@ -40,10 +40,10 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <b>English</b> |
+        <a href="https://github.com/huggingface/transformers/">English</a> |
         <a href="https://github.com/huggingface/transformers/blob/master/README_zh-hans.md">简体中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/master/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/master/README_ko.md">한국어</a>
+        <b>한국어</b>
     <p>
 </h4>
 
