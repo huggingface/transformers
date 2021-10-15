@@ -88,6 +88,7 @@ class BlenderbotModelTester:
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        encoder_no_repeat_ngram_size=0,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -106,6 +107,7 @@ class BlenderbotModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.encoder_no_repeat_ngram_size = encoder_no_repeat_ngram_size
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -131,6 +133,7 @@ class BlenderbotModelTester:
             decoder_ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
+            encoder_no_repeat_ngram_size=self.encoder_no_repeat_ngram_size,
             max_position_embeddings=self.max_position_embeddings,
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
