@@ -377,7 +377,8 @@ class AutoModelTest(unittest.TestCase):
                         self.assertIsInstance(new_model, NewModel)
 
         finally:
-            del CONFIG_MAPPING._extra_content["new_model"]
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
             for mapping in (
                 MODEL_MAPPING,
                 MODEL_FOR_PRETRAINING_MAPPING,
@@ -387,4 +388,5 @@ class AutoModelTest(unittest.TestCase):
                 MODEL_FOR_CAUSAL_LM_MAPPING,
                 MODEL_FOR_MASKED_LM_MAPPING,
             ):
-                del mapping._extra_content[NewModelConfig]
+                if NewModelConfig in mapping._extra_content:
+                    del mapping._extra_content[NewModelConfig]

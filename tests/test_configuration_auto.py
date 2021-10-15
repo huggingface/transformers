@@ -75,4 +75,5 @@ class AutoConfigTest(unittest.TestCase):
                 self.assertIsInstance(new_config, NewModelConfig)
 
         finally:
-            del CONFIG_MAPPING._extra_content["new-model"]
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]

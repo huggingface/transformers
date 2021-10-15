@@ -261,8 +261,10 @@ class AutoTokenizerTest(unittest.TestCase):
                 self.assertIsInstance(new_tokenizer, NewTokenizer)
 
         finally:
-            del CONFIG_MAPPING._extra_content["new-model"]
-            del TOKENIZER_MAPPING._extra_content[NewConfig]
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
+            if NewConfig in TOKENIZER_MAPPING._extra_content:
+                del TOKENIZER_MAPPING._extra_content[NewConfig]
 
     @require_tokenizers
     def test_new_tokenizer_fast_registration(self):
@@ -301,5 +303,7 @@ class AutoTokenizerTest(unittest.TestCase):
                 self.assertIsInstance(new_tokenizer, NewTokenizer)
 
         finally:
-            del CONFIG_MAPPING._extra_content["new-model"]
-            del TOKENIZER_MAPPING._extra_content[NewConfig]
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
+            if NewConfig in TOKENIZER_MAPPING._extra_content:
+                del TOKENIZER_MAPPING._extra_content[NewConfig]
