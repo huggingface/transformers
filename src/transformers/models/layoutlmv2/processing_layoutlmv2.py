@@ -22,6 +22,8 @@ from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokeni
 from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
 from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
+from .tokenization_layoutxlm import LayoutXLMTokenizer
+from .tokenization_layoutxlm_fast import LayoutXLMTokenizerFast
 
 
 class LayoutLMv2Processor:
@@ -33,18 +35,20 @@ class LayoutLMv2Processor:
 
     It first uses :class:`~transformers.LayoutLMv2FeatureExtractor` to resize document images to a fixed size, and
     optionally applies OCR to get words and normalized bounding boxes. These are then provided to
-    :class:`~transformers.LayoutLMv2Tokenizer` or :class:`~transformers.LayoutLMv2TokenizerFast`, which turns the words
-    and bounding boxes into token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`.
-    Optionally, one can provide integer :obj:`word_labels`, which are turned into token-level :obj:`labels` for token
-    classification tasks (such as FUNSD, CORD).
+    :class:`~transformers.LayoutLMv2Tokenizer`, :class:`~transformers.LayoutLMv2TokenizerFast`,
+    :class:`LayoutXLMTokenizer` or :class:`LayoutXLMTokenizerFast`which turns the words and bounding boxes into
+    token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`. Optionally, one can
+    provide integer :obj:`word_labels`, which are turned into token-level :obj:`labels` for token classification tasks
+    (such as FUNSD, CORD).
 
     Args:
         feature_extractor (:obj:`LayoutLMv2FeatureExtractor`):
             An instance of :class:`~transformers.LayoutLMv2FeatureExtractor`. The feature extractor is a required
             input.
-        tokenizer (:obj:`LayoutLMv2Tokenizer` or :obj:`LayoutLMv2TokenizerFast`):
-            An instance of :class:`~transformers.LayoutLMv2Tokenizer` or
-            :class:`~transformers.LayoutLMv2TokenizerFast`. The tokenizer is a required input.
+        tokenizer (:obj:`LayoutLMv2Tokenizer`, :obj:`LayoutLMv2TokenizerFast`, :obj:`LayoutXLMTokenizer`, or
+            :obj:`LayoutXLMTokenizerFast`):
+            An instance of :class:`~transformers.LayoutLMv2Tokenizer`, :class:`~transformers.LayoutLMv2TokenizerFast`,
+            :class:`LayoutXLMTokenizer` or :class:`LayoutXLMTokenizerFast`. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -52,9 +56,12 @@ class LayoutLMv2Processor:
             raise ValueError(
                 f"`feature_extractor` has to be of type {LayoutLMv2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
             )
-        if not isinstance(tokenizer, (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast)):
+        if not isinstance(
+            tokenizer, (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast, LayoutXLMTokenizer, LayoutXLMTokenizerFast)
+        ):
             raise ValueError(
-                f"`tokenizer` has to be of type {LayoutLMv2Tokenizer.__class__} or {LayoutLMv2TokenizerFast.__class__}, but is {type(tokenizer)}"
+                f"`tokenizer` has to be of type {LayoutLMv2Tokenizer.__class__}, {LayoutLMv2TokenizerFast.__class__}, "
+                f"{LayoutXLMTokenizer.__class__}, or {LayoutXLMTokenizerFast.__class__}, but is {type(tokenizer)}"
             )
 
         self.feature_extractor = feature_extractor

@@ -24,10 +24,12 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 _import_structure = {
     "configuration_layoutlmv2": ["LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config"],
     "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
+    "tokenization_layoutxlm": ["LayoutXLMTokenizer"],
 }
 
 if is_tokenizers_available():
     _import_structure["tokenization_layoutlmv2_fast"] = ["LayoutLMv2TokenizerFast"]
+    _import_structure["tokenization_layoutxlm_fast"] = ["LayoutXLMTokenizerFast"]
 
 if is_vision_available():
     _import_structure["feature_extraction_layoutlmv2"] = ["LayoutLMv2FeatureExtractor"]
@@ -47,9 +49,11 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
     from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
+    from .tokenization_layoutxlm import LayoutXLMTokenizer
 
     if is_tokenizers_available():
         from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
+        from .tokenization_layoutxlm_fast import LayoutXLMTokenizerFast
 
     if is_vision_available():
         from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
