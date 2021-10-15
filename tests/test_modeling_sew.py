@@ -368,7 +368,7 @@ class SEWModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = SEWModel.from_pretrained("anton-l/sew-tiny-100k")
+        model = SEWModel.from_pretrained("asapp/sew-tiny-100k")
         self.assertIsNotNone(model)
 
 
@@ -424,8 +424,8 @@ class SEWModelIntegrationTest(unittest.TestCase):
         return ds["speech"][:num_samples]
 
     def test_inference_pretrained_batched(self):
-        model = SEWModel.from_pretrained("anton-l/sew-tiny-100k").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/sew-tiny-100k")
+        model = SEWModel.from_pretrained("asapp/sew-tiny-100k").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("asapp/sew-tiny-100k")
 
         input_speech = self._load_datasamples(2)
 
@@ -480,8 +480,8 @@ class SEWModelIntegrationTest(unittest.TestCase):
     @tooslow
     def test_inference_ctc_batched(self):
         # TODO: enable this test once the finetuned models are available
-        model = SEWForCTC.from_pretrained("anton-l/sew-tiny-100k-ft-100h").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("anton-l/sew-tiny-100k-ft-100h", do_lower_case=True)
+        model = SEWForCTC.from_pretrained("asapp/sew-tiny-100k-ft-100h").to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained("asapp/sew-tiny-100k-ft-100h", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 

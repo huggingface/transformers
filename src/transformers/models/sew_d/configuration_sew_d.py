@@ -21,6 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "asapp/sew-d-tiny-100k": "https://huggingface.co/asapp/sew-d-tiny-100k/resolve/main/config.json",
     # See all SEW-D models at https://huggingface.co/models?filter=sew-d
 }
 

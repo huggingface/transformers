@@ -40,6 +40,15 @@ _CONFIG_FOR_DOC = "SEWDConfig"
 _CHECKPOINT_FOR_DOC = "asapp/sew-d-tiny-100k"
 
 SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "asapp/sew-d-tiny-100k",
+    "asapp/sew-d-small-100k",
+    "asapp/sew-d-mid-100k",
+    "asapp/sew-d-mid-k127-100k",
+    "asapp/sew-d-base-100k",
+    "asapp/sew-d-base-plus-100k",
+    "asapp/sew-d-mid-400k",
+    "asapp/sew-d-mid-k127-400k",
+    "asapp/sew-d-base-plus-400k",
     # See all SEW models at https://huggingface.co/models?filter=sew-d
 ]
 
