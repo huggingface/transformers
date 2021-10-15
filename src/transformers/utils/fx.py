@@ -156,7 +156,6 @@ def _wrap_method_for_model_recording(model, method_name, cache_name):
             setattr(model, cache_name, [])
         cache = getattr(model, cache_name)
         res = method(*args, **kwargs)
-        print(f"{method_name} {res}")
         cache.append(res)
         return res
 
@@ -191,13 +190,15 @@ def _wrap_method_for_model_tracing(model, method_name, cache_name):
     def method(*args, **kwargs):
         cache = getattr(model, cache_name)
         res = cache.pop(0)
+        print(f"Extracting {res} from the cache {cache_name}")
         return res
 
     setattr(torch.Tensor, method_name, method)
+    setattr(Proxy, method_name, method)
 
     if method_name == "size":
         setattr(torch.Tensor, "shape", property(getattr(torch.Tensor, method_name)))
-
+        setattr(Proxy, "shape", property(getattr(torch.Tensor, method_name)))
 
 def _monkey_patch_tensor_methods_for_model_recording(model, method_names):
     """
@@ -230,7 +231,7 @@ def _reset_tensor_methods(original_methods):
 class DynamicTracer(Tracer):
     default_methods_to_record = {"__bool__", "size", "dim"}
 
-    def record(self, model, dummy_inputs: Dict[str, Any], method_names=None):
+    def record(self, model, dummy_inputs: Union[Dict[str, Any], Tuple], method_names=None):
         """
         Records torch.Tensor method outputs (specified by the method_names list) that will then be used during symbolic
         tracing.
@@ -242,7 +243,11 @@ class DynamicTracer(Tracer):
         self.original_methods = original_methods
 
         with torch.no_grad():
-            model(**dummy_inputs)
+            if isinstance(dummy_inputs, tuple):
+                model(*dummy_inputs)
+            else:
+                assert isinstance(dummy_inputs, dict)
+                model(**dummy_inputs)
 
         _reset_tensor_methods(original_methods)
 
@@ -250,13 +255,9 @@ class DynamicTracer(Tracer):
             method_name: cache_name for method_name, cache_name in cache_names.items() if hasattr(model, cache_name)
         }
 
-        # DEBUG
-        print(self.recorded_methods)
-        for cache_name in self.recorded_methods.values():
-            print(f"{cache_name} {getattr(model, cache_name)}")
-
-    def trace_with_dummy_inputs(self, root: nn.Module, dummy_inputs: Dict[str, Any], concrete_args: Optional[Dict[str, Any]] = None, method_names=None) -> Graph:
+    def trace_with_dummy_inputs(self, root: nn.Module, dummy_inputs: Union[Dict[str, Any], Tuple], concrete_args: Optional[Dict[str, Any]] = None, method_names=None) -> Graph:
         """Smart way to get some dynamic values that really are static ... size(), shape ..."""
+        print("------------------ NEW TRACE -------------------")
         sig = inspect.signature(root.forward)
         input_names = sig.parameters.keys() - concrete_args.keys()
 
@@ -265,7 +266,7 @@ class DynamicTracer(Tracer):
         for method_name, cache_name in self.recorded_methods.items():
             _wrap_method_for_model_tracing(root, method_name, cache_name)
 
-        graph = super().trace(root, concrete_args=concrete_args)
+        graph = self.trace(root, concrete_args=concrete_args)
 
         _reset_tensor_methods(self.original_methods)
 

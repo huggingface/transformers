@@ -1745,20 +1745,7 @@ class Conv1D(nn.Module):
         self.bias = nn.Parameter(torch.zeros(nf))
 
     def forward(self, x):
-        # # print("hello")
-        # # FIXME: WTF Calling size multiple times changes it's values ...
-        # print("hello", x.size(), x.size(), x.size(), x.size())
-        # # print(x, x.shape, x.size(), x.size()[:-1], (self.nf,), x.size()[:-1] + (self.nf,))
-        # x = x + 1
         size_out = x.size()[:-1] + (self.nf,)
-        # print(
-        #     "tensor" if isinstance(x, torch.Tensor) else x,
-        #     "tensor" if isinstance(x, torch.Tensor) else x.node,
-        #     "tensor" if isinstance(x, torch.Tensor) else x.node.op,
-        #     "tensor" if isinstance(x, torch.Tensor) else x.node.target,
-        #     x.size(),
-        #     self.nf,
-        #     size_out)
         x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
         x = x.view(*size_out)
         return x
