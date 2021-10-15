@@ -996,7 +996,7 @@ class Trainer:
             elif isinstance(model, PreTrainedModel):
                 # find_unused_parameters breaks checkpointing as per
                 # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-                find_unused_parameters = not getattr(model.config, "_gradient_checkpointing", False)
+                find_unused_parameters = not model.is_gradient_checkpointing
             else:
                 find_unused_parameters = True
             model = nn.parallel.DistributedDataParallel(
@@ -2542,9 +2542,11 @@ class Trainer:
             return
         use_auth_token = True if self.args.hub_token is None else self.args.hub_token
         if self.args.hub_model_id is None:
-            repo_name = get_full_repo_name(Path(self.args.output_dir).name, token=self.args.hub_token)
+            repo_name = Path(self.args.output_dir).absolute().name
         else:
             repo_name = self.args.hub_model_id
+        if "/" not in repo_name:
+            repo_name = get_full_repo_name(repo_name, token=self.args.hub_token)
 
         try:
             self.repo = Repository(

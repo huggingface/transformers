@@ -26,6 +26,8 @@ from ...file_utils import CONFIG_NAME
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
+        ("trocr", "TrOCRConfig"),
         ("fnet", "FNetConfig"),
         ("gptj", "GPTJConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
@@ -166,6 +168,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("vision-encoder-decoder", "Vision Encoder decoder"),
+        ("trocr", "TrOCR"),
         ("fnet", "FNet"),
         ("gptj", "GPT-J"),
         ("beit", "BeiT"),
