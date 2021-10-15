@@ -200,6 +200,12 @@ class DataTrainingArguments:
         default=20,
         metadata={"help": "The total number of n-best predictions to generate when looking for an answer."},
     )
+    ignore_pad_token_for_loss: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to ignore the tokens corresponding to padded labels in the loss computation or not."
+        },
+    )
 
     def __post_init__(self):
         if (
