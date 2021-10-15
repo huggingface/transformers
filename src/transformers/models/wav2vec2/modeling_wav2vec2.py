@@ -1121,7 +1121,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        preprocessor_class=_PROCESSOR_FOR_DOC,
+        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1487,7 +1487,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        preprocessor_class=_PROCESSOR_FOR_DOC,
+        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1602,7 +1602,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        preprocessor_class="Wav2Vec2FeatureExtractor",
+        processor_class="Wav2Vec2FeatureExtractor",
         checkpoint="superb/wav2vec2-base-superb-ks",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
