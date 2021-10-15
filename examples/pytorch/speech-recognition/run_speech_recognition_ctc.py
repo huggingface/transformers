@@ -24,9 +24,9 @@ import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
+import datasets
 import numpy as np
 import torch
-import torchaudio
 from datasets import DatasetDict, load_dataset, load_metric
 
 import transformers
@@ -49,8 +49,7 @@ from transformers.utils.versions import require_version
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.12.0.dev0")
 
-# TODO(Patrick) Bump up as soon as audio features are merged
-require_version("datasets>=1.12.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
+require_version("datasets>=1.13.3", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
 
 logger = logging.getLogger(__name__)
@@ -450,40 +449,28 @@ def main():
     if model_args.freeze_feature_extractor:
         model.freeze_feature_extractor()
 
-    # 5. Now we preprocess the datasets which includes loading the audio, resampling and padding
+    # 5. Now we preprocess the datasets including loading the audio, resampling and normalization
+    # Thankfully, `datasets` takes care of automatically loading and resampling the audio,
+    # so that we just need to set the correct target sampling rate and normalize the input
+    # via the `feature_extractor`
+    source_sampling_rate = raw_datasets["train"].features["audio"].sampling_rate
+    target_sampling_rate = processor.feature_extractor.sampling_rate
 
-    # The following code should be cleaned up as soon as
-    # https://github.com/huggingface/datasets/pull/2324 is merged
-
-    # Preprocessing the datasets.
-    # We need to read the audio files as arrays and tokenize the targets.
+    if source_sampling_rate != target_sampling_rate:
+        raw_datasets = raw_datasets.cast_column("audio", datasets.features.Audio(sampling_rate=target_sampling_rate))
 
     # derive max & min input length for sample rate & max duration
     max_input_length = data_args.max_duration_in_seconds * processor.feature_extractor.sampling_rate
     min_input_length = data_args.min_duration_in_seconds * processor.feature_extractor.sampling_rate
 
-    resampler = None
-    if raw_datasets["train"][data_args.audio_column_name][0].split(".")[-1] == "mp3":
-        # TODO(PVP) - remove hard-coded 48_000 after audio feature is merged
-        resampler = torchaudio.transforms.Resample(48_000, processor.feature_extractor.sampling_rate)
-
     # Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
     def prepare_dataset(batch):
         # load audio
-        speech_array, sampling_rate = torchaudio.load(batch[data_args.audio_column_name])
-        speech_array = speech_array.squeeze()
-
-        # if necessary resample audio
-        if resampler is not None:
-            # TODO(PVP) - remove hard-coded 48_000 after audio feature is merged
-            speech_array = resampler(speech_array)
-            sampling_rate = resampler.new_freq
-
-        speech_array = speech_array.numpy()
+        sample = batch[data_args.audio_column_name]
 
         batch["input_values"] = processor(
-            speech_array, sampling_rate=sampling_rate, truncate=True, max_length=max_input_length
+            sample["array"], sampling_rate=sample["sampling_rate"], truncate=True, max_length=max_input_length
         ).input_values[0]
 
         # Setup the processor for targets

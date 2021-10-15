@@ -25,7 +25,6 @@ from typing import Dict, List, Optional, Union
 
 import datasets
 import torch
-import torchaudio
 from datasets import DatasetDict, concatenate_datasets, load_dataset
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
@@ -113,7 +112,7 @@ def parse_args():
     parser.add_argument(
         "--audio_column_name",
         type=str,
-        default="file",
+        default="audio",
         help="Column in the dataset that contains speech file path. Defaults to 'file'",
     )
     parser.add_argument(
@@ -414,8 +413,17 @@ def main():
     raw_datasets["validation"] = raw_datasets["train"].select(range(num_validation_samples))
     raw_datasets["train"] = raw_datasets["train"].select(range(num_validation_samples, raw_datasets["train"].num_rows))
 
-    # 2. Preprocess audio: load, resample, normalize and truncate
+    # 2. Now we preprocess the datasets including loading the audio, resampling and normalization
+    # Thankfully, `datasets` takes care of automatically loading and resampling the audio,
+    # so that we just need to set the correct target sampling rate and normalize the input
+    # via the `feature_extractor`
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(args.model_name_or_path)
+
+    source_sampling_rate = raw_datasets["train"].features["audio"].sampling_rate
+    target_sampling_rate = feature_extractor.sampling_rate
+
+    if source_sampling_rate != target_sampling_rate:
+        raw_datasets = raw_datasets.cast_column("audio", datasets.features.Audio(sampling_rate=target_sampling_rate))
 
     # only normalized-inputs-training is supported
     if not feature_extractor.do_normalize:
@@ -427,23 +435,12 @@ def main():
     max_length = int(args.max_duration_in_seconds * feature_extractor.sampling_rate)
     min_length = int(args.min_duration_in_seconds * feature_extractor.sampling_rate)
 
-    resampler = None
-    if raw_datasets["train"][args.audio_column_name][0].split(".")[-1] == "mp3":
-        # TODO(PVP) - remove hard-coded 48_000 after audio feature is merged
-        resampler = torchaudio.transforms.Resample(48_000, feature_extractor.sampling_rate)
-
     def prepare_dataset(batch):
-        speech_array, sampling_rate = torchaudio.load(batch[args.audio_column_name])
-        speech_array = speech_array.squeeze()
+        sample = batch[args.audio_column_name]
 
-        # if necessary resample audio
-        if resampler is not None:
-            # TODO(PVP) - remove hard-coded 48_000 after audio feature is merged
-            speech_array = resampler(speech_array)
-            sampling_rate = resampler.new_freq
-
-        speech_array = speech_array.numpy()
-        inputs = feature_extractor(speech_array, sampling_rate=sampling_rate, max_length=max_length, truncation=True)
+        inputs = feature_extractor(
+            sample["array"], sampling_rate=sample["sampling_rate"], max_length=max_length, truncation=True
+        )
         batch["input_values"] = inputs.input_values[0]
         return batch
 
