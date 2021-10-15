@@ -948,11 +948,11 @@ PT_SPEECH_CTC_SAMPLE = r"""
         >>> predicted_ids = torch.argmax(logits, dim=-1)
 
         >>> # transcribe speech
-        >>> transcription = processor.batch_decode(predicted_class_ids)
+        >>> transcription = processor.batch_decode(predicted_ids)
 
         >>> # compute loss
         >>> with processor.as_target_processor():
-        ...     inputs["labels"] = processor(librispeech_demo[0]["text"], return_tensors="pt").input_ids
+        ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="pt").input_ids
 
         >>> loss = model(**inputs).loss
 """

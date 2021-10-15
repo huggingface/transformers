@@ -82,7 +82,7 @@ class MT5Config(PretrainedConfig):
         feed_forward_proj="gated-gelu",
         is_encoder_decoder=True,
         use_cache=True,
-        preprocessor_class="T5Tokenizer",
+        tokenizer_class="T5Tokenizer",
         tie_word_embeddings=False,
         pad_token_id=0,
         eos_token_id=1,
@@ -91,7 +91,7 @@ class MT5Config(PretrainedConfig):
     ):
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
-            preprocessor_class=tokenizer_class,
+            tokenizer_class=tokenizer_class,
             tie_word_embeddings=tie_word_embeddings,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
