@@ -468,18 +468,20 @@ def main():
     if args.max_train_samples is not None:
         # We will select sample from whole data if agument is specified
         train_dataset = train_dataset.select(range(args.max_train_samples))
+
     # Create train feature from dataset
-    train_dataset = train_dataset.map(
-        prepare_train_features,
-        batched=True,
-        num_proc=args.preprocessing_num_workers,
-        remove_columns=column_names,
-        load_from_cache_file=not args.overwrite_cache,
-        desc="Running tokenizer on train dataset",
-    )
-    if args.max_train_samples is not None:
-        # Number of samples might increase during Feature Creation, We select only specified max samples
-        train_dataset = train_dataset.select(range(args.max_train_samples))
+    with accelerator.main_process_first():
+        train_dataset = train_dataset.map(
+            prepare_train_features,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on train dataset",
+        )
+        if args.max_train_samples is not None:
+            # Number of samples might increase during Feature Creation, We select only specified max samples
+            train_dataset = train_dataset.select(range(args.max_train_samples))
 
     # Validation preprocessing
     def prepare_validation_features(examples):
@@ -535,14 +537,15 @@ def main():
         # We will select sample from whole data
         eval_examples = eval_examples.select(range(args.max_eval_samples))
     # Validation Feature Creation
-    eval_dataset = eval_examples.map(
-        prepare_validation_features,
-        batched=True,
-        num_proc=args.preprocessing_num_workers,
-        remove_columns=column_names,
-        load_from_cache_file=not args.overwrite_cache,
-        desc="Running tokenizer on validation dataset",
-    )
+    with accelerator.main_process_first():
+        eval_dataset = eval_examples.map(
+            prepare_validation_features,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on validation dataset",
+        )
 
     if args.max_eval_samples is not None:
         # During Feature creation dataset samples might increase, we will select required samples again
@@ -556,17 +559,18 @@ def main():
             # We will select sample from whole data
             predict_examples = predict_examples.select(range(args.max_predict_samples))
         # Predict Feature Creation
-        predict_dataset = predict_examples.map(
-            prepare_validation_features,
-            batched=True,
-            num_proc=args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not args.overwrite_cache,
-            desc="Running tokenizer on prediction dataset",
-        )
-        if args.max_predict_samples is not None:
-            # During Feature creation dataset samples might increase, we will select required samples again
-            predict_dataset = predict_dataset.select(range(args.max_predict_samples))
+        with accelerator.main_process_first():
+            predict_dataset = predict_examples.map(
+                prepare_validation_features,
+                batched=True,
+                num_proc=args.preprocessing_num_workers,
+                remove_columns=column_names,
+                load_from_cache_file=not args.overwrite_cache,
+                desc="Running tokenizer on prediction dataset",
+            )
+            if args.max_predict_samples is not None:
+                # During Feature creation dataset samples might increase, we will select required samples again
+                predict_dataset = predict_dataset.select(range(args.max_predict_samples))
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):

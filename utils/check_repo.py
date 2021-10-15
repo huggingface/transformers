@@ -160,6 +160,7 @@ def get_model_modules():
         "modeling_flax_utils",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
+        "modeling_tf_encoder_decoder",
         "modeling_tf_outputs",
         "modeling_tf_pytorch_utils",
         "modeling_tf_utils",
@@ -231,6 +232,7 @@ def get_model_test_files():
         "test_modeling_flax_encoder_decoder",
         "test_modeling_marian",
         "test_modeling_tf_common",
+        "test_modeling_tf_encoder_decoder",
     ]
     test_files = []
     for filename in os.listdir(PATH_TO_TESTS):

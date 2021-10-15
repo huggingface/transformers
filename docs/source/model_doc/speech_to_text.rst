@@ -66,7 +66,7 @@ be installed as follows: ``apt install libsndfile1-dev``
         ...     batch["speech"] = speech
         ...     return batch
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
@@ -98,7 +98,7 @@ be installed as follows: ``apt install libsndfile1-dev``
         ...     batch["speech"] = speech
         ...     return batch
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
