@@ -489,7 +489,7 @@ class TFHubertModelIntegrationTest(unittest.TestCase):
             batch["speech"] = speech
             return batch
 
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
 

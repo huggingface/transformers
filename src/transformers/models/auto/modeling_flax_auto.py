@@ -33,6 +33,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("albert", "FlaxAlbertModel"),
         ("roberta", "FlaxRobertaModel"),
         ("bert", "FlaxBertModel"),
+        ("beit", "FlaxBeitModel"),
         ("big_bird", "FlaxBigBirdModel"),
         ("bart", "FlaxBartModel"),
         ("gpt2", "FlaxGPT2Model"),
@@ -95,6 +96,7 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("vit", "FlaxViTForImageClassification"),
+        ("beit", "FlaxBeitForImageClassification"),
     ]
 )
 

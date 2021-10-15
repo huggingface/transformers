@@ -74,10 +74,21 @@ line, 🤗 Trainer supports resuming from a checkpoint via `trainer.train(resume
 2. If `resume_from_checkpoint` is a path to a specific checkpoint it will use that saved checkpoint folder to resume the training from.
 
 
+### Upload the trained/fine-tuned model to the Hub
+
+All the example scripts support automatic upload of your final model to the [Model Hub](https://huggingface.co/models) by adding a `--push_to_hub` argument. It will then create a repository with your username slash the name of the folder you are using as `output_dir`. For instance, `"sgugger/test-mrpc"` if your username is `sgugger` and you are working in the folder `~/tmp/test-mrpc`.
+
+To specify a given repository name, use the `--hub_model_id` argument. You will need to specify the whole repository name (including your username), for instance `--hub_model_id sgugger/finetuned-bert-mrpc`. To upload to an organization you are a member of, just use the name of that organization instead of your username: `--hub_model_id huggingface/finetuned-bert-mrpc`.
+
+A few notes on this integration:
+
+- you will need to be logged in to the Hugging Face website locally for it to work, the easiest way to achieve this is to run `huggingface-cli login` and then type your username and password when prompted. You can also pass along your authentication token with the `--hub_token` argument.
+- the `output_dir` you pick will either need to be a new folder or a local clone of the distant repository you are using.
+
 ## Distributed training and mixed precision
 
 All the PyTorch scripts mentioned above work out of the box with distributed training and mixed precision, thanks to
-the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html). To launch one of them on _n_ GPUS,
+the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html). To launch one of them on _n_ GPUs,
 use the following command:
 
 ```bash
@@ -169,7 +180,7 @@ and reply to the questions asked. Then
 accelerate test
 ```
 
-that will check everything is ready for training. Finally, you cam launch training with
+that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
 accelerate launch path_to_script.py --args_to_script
@@ -212,7 +223,7 @@ Advanced configuration is possible by setting environment variables:
 
 | Environment Variable | Value |
 |---|---|
-| WANDB_LOG_MODEL | Log the model as artifact (log the model as artifact at the end of training (`false` by default) |
+| WANDB_LOG_MODEL | Log the model as artifact (log the model as artifact at the end of training) (`false` by default) |
 | WANDB_WATCH | one of `gradients` (default) to log histograms of gradients, `all` to log histograms of both gradients and parameters, or `false` for no histogram logging |
 | WANDB_PROJECT | Organize runs by project |
 

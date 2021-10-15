@@ -37,6 +37,10 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
         outputs = classifier("Who are you voting for in 2020?", candidate_labels="politics")
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
 
+        # No kwarg
+        outputs = classifier("Who are you voting for in 2020?", ["politics"])
+        self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
+
         outputs = classifier("Who are you voting for in 2020?", candidate_labels=["politics"])
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
 
@@ -56,6 +60,24 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             "Who are you voting for in 2020?", candidate_labels="politics", hypothesis_template="This text is about {}"
         )
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
+
+        # https://github.com/huggingface/transformers/issues/13846
+        outputs = classifier(["I am happy"], ["positive", "negative"])
+        self.assertEqual(
+            outputs,
+            [
+                {"sequence": ANY(str), "labels": [ANY(str), ANY(str)], "scores": [ANY(float), ANY(float)]}
+                for i in range(1)
+            ],
+        )
+        outputs = classifier(["I am happy", "I am sad"], ["positive", "negative"])
+        self.assertEqual(
+            outputs,
+            [
+                {"sequence": ANY(str), "labels": [ANY(str), ANY(str)], "scores": [ANY(float), ANY(float)]}
+                for i in range(2)
+            ],
+        )
 
         with self.assertRaises(ValueError):
             classifier("", candidate_labels="politics")

@@ -557,8 +557,9 @@ jobs:
                   keys:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,sentencepiece,testing]
+            - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
@@ -591,8 +592,9 @@ jobs:
                   keys:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,sentencepiece,testing]
+            - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
@@ -751,6 +753,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install ."[docs]"
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html
             - save_cache:
                   key: v0.4-build_doc-{{ checksum "setup.py" }}
                   paths:

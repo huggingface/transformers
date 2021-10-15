@@ -44,6 +44,7 @@ from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
+from .image_segmentation import ImageSegmentationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
@@ -90,12 +91,15 @@ if is_torch_available():
         AutoModel,
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
+        AutoModelForCTC,
         AutoModelForImageClassification,
+        AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
         AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
     )
@@ -121,9 +125,7 @@ SUPPORTED_TASKS = {
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
-        # Only load from `config.architectures`, AutoModelForCTC and AutoModelForConditionalGeneration
-        # do not exist yet.
-        "pt": () if is_torch_available() else (),
+        "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
         "default": {"model": {"pt": "facebook/wav2vec2-base-960h"}},
     },
     "feature-extraction": {
@@ -230,6 +232,12 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {"model": {"pt": "google/vit-base-patch16-224"}},
+    },
+    "image-segmentation": {
+        "impl": ImageSegmentationPipeline,
+        "tf": (),
+        "pt": (AutoModelForImageSegmentation,) if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/detr-resnet-50-panoptic"}},
     },
     "object-detection": {
         "impl": ObjectDetectionPipeline,

@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.11.0.dev0")
+check_min_version("4.12.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
 
@@ -379,7 +379,7 @@ def main():
     ):
         if model_args.resize_position_embeddings is None:
             logger.warning(
-                f"Increasing the model's number of position embedding vectors from {model.config.max_position_embedding} "
+                f"Increasing the model's number of position embedding vectors from {model.config.max_position_embeddings} "
                 f"to {data_args.max_source_length}."
             )
             model.resize_position_embeddings(data_args.max_source_length)
@@ -622,17 +622,19 @@ def main():
                 with open(output_prediction_file, "w") as writer:
                     writer.write("\n".join(predictions))
 
-    if training_args.push_to_hub:
-        kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
-        if data_args.dataset_name is not None:
-            kwargs["dataset_tags"] = data_args.dataset_name
-            if data_args.dataset_config_name is not None:
-                kwargs["dataset_args"] = data_args.dataset_config_name
-                kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
-            else:
-                kwargs["dataset"] = data_args.dataset_name
+    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
+    if data_args.dataset_name is not None:
+        kwargs["dataset_tags"] = data_args.dataset_name
+        if data_args.dataset_config_name is not None:
+            kwargs["dataset_args"] = data_args.dataset_config_name
+            kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+        else:
+            kwargs["dataset"] = data_args.dataset_name
 
+    if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)
+    else:
+        trainer.create_model_card(**kwargs)
 
     return results
 
