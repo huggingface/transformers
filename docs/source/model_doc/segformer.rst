@@ -33,8 +33,7 @@ show that this simple and lightweight design is the key to efficient segmentatio
 approach up to obtain a series of models from SegFormer-B0 to SegFormer-B5, reaching significantly better performance
 and efficiency than previous counterparts. For example, SegFormer-B4 achieves 50.3% mIoU on ADE20K with 64M parameters,
 being 5x smaller and 2.2% better than the previous best method. Our best model, SegFormer-B5, achieves 84.0% mIoU on
-Cityscapes validation set and shows excellent zero-shot robustness on Cityscapes-C. Code will be released at: `this
-http URL <https://github.com/NVlabs/SegFormer>`__.*
+Cityscapes validation set and shows excellent zero-shot robustness on Cityscapes-C.*
 
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
 <https://github.com/NVlabs/SegFormer>`__.
@@ -60,8 +59,15 @@ SegformerModel
     :members: forward
 
 
-SegformerForImageSegmentation
+SegformerForImageClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.SegformerForImageSegmentation
+.. autoclass:: transformers.SegformerForImageClassification
+    :members: forward
+
+
+SegformerForSemanticSegmentation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.SegformerForSemanticSegmentation
     :members: forward

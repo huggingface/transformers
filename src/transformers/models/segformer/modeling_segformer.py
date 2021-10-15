@@ -599,6 +599,7 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         Returns:
 
         Examples::
+
             >>> from transformers import SegformerFeatureExtractor, SegformerForImageClassification
             >>> from PIL import Image
             >>> import requests
@@ -627,13 +628,9 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        print("Shape of sequence output:", sequence_output.shape)
-
         # reshape last hidden states to (batch_size, height*width, hidden_size)
         batch_size = sequence_output.shape[0]
         sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
-
-        print("Shape of sequence output:", sequence_output.shape)
 
         # global average pooling
         sequence_output = sequence_output.mean(dim=1)
