@@ -935,8 +935,10 @@ class LxmertModel(LxmertPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        assert visual_feats is not None, "`visual_feats` cannot be `None`"
-        assert visual_pos is not None, "`visual_pos` cannot be `None`"
+        if visual_feats is None:
+            raise ValueError("`visual_feats` cannot be `None`")
+        if visual_pos is None:
+            raise ValueError("`visual_pos` cannot be `None`")
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
