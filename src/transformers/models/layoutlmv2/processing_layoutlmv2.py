@@ -46,9 +46,9 @@ class LayoutLMv2Processor:
             An instance of :class:`~transformers.LayoutLMv2FeatureExtractor`. The feature extractor is a required
             input.
         tokenizer (:obj:`LayoutLMv2Tokenizer`, :obj:`LayoutLMv2TokenizerFast`, :obj:`LayoutXLMTokenizer`, or
-            :obj:`LayoutXLMTokenizerFast`):
-            An instance of :class:`~transformers.LayoutLMv2Tokenizer`, :class:`~transformers.LayoutLMv2TokenizerFast`,
-            :class:`LayoutXLMTokenizer` or :class:`LayoutXLMTokenizerFast`. The tokenizer is a required input.
+            :obj:`LayoutXLMTokenizerFast`): An instance of :class:`~transformers.LayoutLMv2Tokenizer`,
+            :class:`~transformers.LayoutLMv2TokenizerFast`, :class:`LayoutXLMTokenizer` or
+            :class:`LayoutXLMTokenizerFast`. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):

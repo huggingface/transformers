@@ -34,8 +34,8 @@ from ...tokenization_utils_base import (
 )
 from ...utils import logging
 from ..xlm_roberta.tokenization_xlm_roberta import (
-    PRETRAINED_VOCAB_FILES_MAP,
     PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
+    PRETRAINED_VOCAB_FILES_MAP,
     SPIECE_UNDERLINE,
     VOCAB_FILES_NAMES,
 )
