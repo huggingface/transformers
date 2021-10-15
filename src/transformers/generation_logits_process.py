@@ -383,7 +383,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         self.static_bad_words_mask: Optional[torch.LongTensor] = None
 
         for banned_token_seq in self.bad_words_id_length_greater_than_1:
-            if not banned_token_seq:
+            if len(banned_token_seq) == 0:
                 raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
