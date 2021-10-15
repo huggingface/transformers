@@ -156,6 +156,7 @@ def _wrap_method_for_model_recording(model, method_name, cache_name):
             setattr(model, cache_name, [])
         cache = getattr(model, cache_name)
         res = method(*args, **kwargs)
+        print(f"{method_name} {res}")
         cache.append(res)
         return res
 
@@ -226,6 +227,62 @@ def _reset_tensor_methods(original_methods):
     for name, method in original_methods.items():
         setattr(torch.Tensor, name, method)
 
+class DynamicTracer(Tracer):
+    default_methods_to_record = {"__bool__", "size", "dim"}
+
+    def record(self, model, dummy_inputs: Dict[str, Any], method_names=None):
+        """
+        Records torch.Tensor method outputs (specified by the method_names list) that will then be used during symbolic
+        tracing.
+        """
+        if method_names is None:
+            method_names = self.default_methods_to_record
+
+        cache_names, original_methods = _monkey_patch_tensor_methods_for_model_recording(model, method_names)
+        self.original_methods = original_methods
+
+        with torch.no_grad():
+            model(**dummy_inputs)
+
+        _reset_tensor_methods(original_methods)
+
+        self.recorded_methods = {
+            method_name: cache_name for method_name, cache_name in cache_names.items() if hasattr(model, cache_name)
+        }
+
+        # DEBUG
+        print(self.recorded_methods)
+        for cache_name in self.recorded_methods.values():
+            print(f"{cache_name} {getattr(model, cache_name)}")
+
+    def trace_with_dummy_inputs(self, root: nn.Module, dummy_inputs: Dict[str, Any], concrete_args: Optional[Dict[str, Any]] = None, method_names=None) -> Graph:
+        """Smart way to get some dynamic values that really are static ... size(), shape ..."""
+        sig = inspect.signature(root.forward)
+        input_names = sig.parameters.keys() - concrete_args.keys()
+
+        self.record(root, dummy_inputs, method_names=method_names)
+
+        for method_name, cache_name in self.recorded_methods.items():
+            _wrap_method_for_model_tracing(root, method_name, cache_name)
+
+        graph = super().trace(root, concrete_args=concrete_args)
+
+        _reset_tensor_methods(self.original_methods)
+
+        # TODO: keep this until necessary.
+        # This is necessary because concrete args are added as input to the traced module since
+        # https://github.com/pytorch/pytorch/pull/55888.
+        # A PR that solves this was posted: https://github.com/pytorch/pytorch/pull/59569 but it was not merged yet.
+        for node in graph.nodes:
+            if node.op == "placeholder":
+                # Removing default values for inputs as the forward pass will fail with them.
+                if node.target in input_names:
+                    node.args = ()
+                # It is a concrete arg so it is not used and should be removed.
+                else:
+                    graph.erase_node(node)
+
+        return graph
 
 class HFTracer(Tracer):
     """
