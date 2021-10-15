@@ -23,6 +23,7 @@ from unittest.mock import patch
 
 import torch
 
+from transformers import Wav2Vec2ForPreTraining
 from transformers.file_utils import is_apex_available
 from transformers.testing_utils import TestCasePlus, get_gpu_count, slow, torch_device
 
@@ -40,12 +41,15 @@ SRC_DIRS = [
         "translation",
         "image-classification",
         "speech-recognition",
+        "audio-classification",
+        "speech-pretraining",
     ]
 ]
 sys.path.extend(SRC_DIRS)
 
 
 if SRC_DIRS is not None:
+    import run_audio_classification
     import run_clm
     import run_generation
     import run_glue
@@ -57,6 +61,7 @@ if SRC_DIRS is not None:
     import run_summarization
     import run_swag
     import run_translation
+    import run_wav2vec2_pretraining_no_trainer
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -386,7 +391,7 @@ class ExamplesTests(TestCasePlus):
             run_speech_recognition_ctc.py
             --output_dir {tmp_dir}
             --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
-            --dataset_name patrickvonplaten/librispeech_asr_dummy
+            --dataset_name hf-internal-testing/librispeech_asr_dummy
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
@@ -410,3 +415,67 @@ class ExamplesTests(TestCasePlus):
             run_speech_recognition_ctc.main()
             result = get_results(tmp_dir)
             self.assertLess(result["eval_loss"], result["train_loss"])
+
+    def test_run_audio_classification(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_audio_classification.py
+            --output_dir {tmp_dir}
+            --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
+            --dataset_name anton-l/superb_demo
+            --dataset_config_name ks
+            --train_split_name test
+            --eval_split_name test
+            --audio_column_name file
+            --label_column_name label
+            --do_train
+            --do_eval
+            --learning_rate 1e-4
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 1
+            --remove_unused_columns False
+            --overwrite_output_dir True
+            --num_train_epochs 10
+            --max_steps 50
+            --seed 42
+        """.split()
+
+        if is_cuda_and_apex_available():
+            testargs.append("--fp16")
+
+        with patch.object(sys, "argv", testargs):
+            run_audio_classification.main()
+            result = get_results(tmp_dir)
+            self.assertLess(result["eval_loss"], result["train_loss"])
+
+    def test_run_wav2vec2_pretraining(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_wav2vec2_pretraining_no_trainer.py
+            --output_dir {tmp_dir}
+            --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
+            --dataset_name hf-internal-testing/librispeech_asr_dummy
+            --dataset_config_names clean
+            --dataset_split_names validation
+            --learning_rate 1e-4
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 2
+            --preprocessing_num_workers 16
+            --max_train_steps 5
+            --validation_split_percentage 5
+            --seed 42
+        """.split()
+
+        if is_cuda_and_apex_available():
+            testargs.append("--fp16")
+
+        with patch.object(sys, "argv", testargs):
+            run_wav2vec2_pretraining_no_trainer.main()
+            model = Wav2Vec2ForPreTraining.from_pretrained(tmp_dir)
+            self.assertIsNotNone(model)

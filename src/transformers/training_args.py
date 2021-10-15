@@ -349,12 +349,13 @@ class TrainingArguments:
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
         hub_model_id (:obj:`str`, `optional`):
-            The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
-            name, for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member
-            of with :obj:`"organization_name/model"`.
+            The name of the repository to keep in sync with the local `output_dir`. It can be a simple model ID in
+            which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
+            for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member of with
+            :obj:`"organization_name/model"`. Will default to :obj:`user_name/output_dir_name` with `output_dir_name`
+            being the name of :obj:`output_dir`.
 
-            Will default to :obj:`user_name/output_dir_name` with `output_dir_name` being the name of
-            :obj:`output_dir`.
+            Will default to to the name of :obj:`output_dir`.
         hub_strategy (:obj:`str` or :class:`~transformers.trainer_utils.HubStrategy`, `optional`, defaults to :obj:`"every_save"`):
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
@@ -385,7 +386,7 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Overwrite the content of the output directory."
+                "Overwrite the content of the output directory. "
                 "Use this to continue training if output_dir points to a checkpoint directory."
             )
         },
@@ -420,7 +421,7 @@ class TrainingArguments:
     per_gpu_eval_batch_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred."
+            "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred. "
             "Batch size per GPU/TPU core/CPU for evaluation."
         },
     )
@@ -492,7 +493,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Limit the total amount of checkpoints."
+                "Limit the total amount of checkpoints. "
                 "Deletes the older checkpoints in the output_dir. Default is unlimited checkpoints"
             )
         },
@@ -514,7 +515,7 @@ class TrainingArguments:
         default="O1",
         metadata={
             "help": (
-                "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+                "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
                 "See details at https://nvidia.github.io/apex/amp.html"
             )
         },

@@ -88,7 +88,7 @@ A few notes on this integration:
 ## Distributed training and mixed precision
 
 All the PyTorch scripts mentioned above work out of the box with distributed training and mixed precision, thanks to
-the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html). To launch one of them on _n_ GPUS,
+the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html). To launch one of them on _n_ GPUs,
 use the following command:
 
 ```bash
@@ -180,7 +180,7 @@ and reply to the questions asked. Then
 accelerate test
 ```
 
-that will check everything is ready for training. Finally, you cam launch training with
+that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
 accelerate launch path_to_script.py --args_to_script
@@ -223,7 +223,7 @@ Advanced configuration is possible by setting environment variables:
 
 | Environment Variable | Value |
 |---|---|
-| WANDB_LOG_MODEL | Log the model as artifact (log the model as artifact at the end of training (`false` by default) |
+| WANDB_LOG_MODEL | Log the model as artifact (log the model as artifact at the end of training) (`false` by default) |
 | WANDB_WATCH | one of `gradients` (default) to log histograms of gradients, `all` to log histograms of both gradients and parameters, or `false` for no histogram logging |
 | WANDB_PROJECT | Organize runs by project |
 

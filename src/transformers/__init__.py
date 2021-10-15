@@ -44,6 +44,7 @@ from . import dependency_versions_check
 from .file_utils import (
     _LazyModule,
     is_flax_available,
+    is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
     is_tf_available,
@@ -271,6 +272,12 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.trocr": [
+        "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TrOCRConfig",
+        "TrOCRProcessor",
+    ],
+    "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
@@ -294,6 +301,7 @@ _import_structure = {
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
+        "ImageSegmentationPipeline",
         "JsonPipelineDataFormat",
         "NerPipeline",
         "ObjectDetectionPipeline",
@@ -481,6 +489,25 @@ else:
         name for name in dir(dummy_timm_objects) if not name.startswith("_")
     ]
 
+if is_scatter_available():
+    _import_structure["models.tapas"].extend(
+        [
+            "TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TapasForMaskedLM",
+            "TapasForQuestionAnswering",
+            "TapasForSequenceClassification",
+            "TapasModel",
+            "TapasPreTrainedModel",
+            "load_tf_weights_in_tapas",
+        ]
+    )
+else:
+    from .utils import dummy_scatter_objects
+
+    _import_structure["utils.dummy_scatter_objects"] = [
+        name for name in dir(dummy_scatter_objects) if not name.startswith("_")
+    ]
+
 # PyTorch-backed objects
 if is_torch_available():
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
@@ -544,6 +571,7 @@ if is_torch_available():
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -561,6 +589,7 @@ if is_torch_available():
             "AutoModelForCausalLM",
             "AutoModelForCTC",
             "AutoModelForImageClassification",
+            "AutoModelForImageSegmentation",
             "AutoModelForMaskedLM",
             "AutoModelForMultipleChoice",
             "AutoModelForNextSentencePrediction",
@@ -773,6 +802,7 @@ if is_torch_available():
             "DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DPRContextEncoder",
             "DPRPretrainedContextEncoder",
+            "DPRPreTrainedModel",
             "DPRPretrainedQuestionEncoder",
             "DPRPretrainedReader",
             "DPRQuestionEncoder",
@@ -1147,17 +1177,6 @@ if is_torch_available():
             "load_tf_weights_in_t5",
         ]
     )
-    _import_structure["models.tapas"].extend(
-        [
-            "TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TapasForMaskedLM",
-            "TapasForQuestionAnswering",
-            "TapasForSequenceClassification",
-            "TapasModel",
-            "TapasPreTrainedModel",
-            "load_tf_weights_in_tapas",
-        ]
-    )
     _import_structure["models.transfo_xl"].extend(
         [
             "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1169,6 +1188,10 @@ if is_torch_available():
             "load_tf_weights_in_transfo_xl",
         ]
     )
+    _import_structure["models.trocr"].extend(
+        ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
+    )
+    _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
     _import_structure["models.visual_bert"].extend(
         [
             "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1274,6 +1297,7 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
+    _import_structure["keras_callbacks"] = []
     _import_structure["modeling_tf_outputs"] = []
     _import_structure["modeling_tf_utils"] = [
         "TFPreTrainedModel",
@@ -1439,6 +1463,7 @@ if is_tf_available():
             "TFElectraPreTrainedModel",
         ]
     )
+    _import_structure["models.encoder_decoder"].append("TFEncoderDecoderModel")
     _import_structure["models.flaubert"].extend(
         [
             "TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1591,6 +1616,7 @@ if is_tf_available():
     _import_structure["models.roberta"].extend(
         [
             "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRobertaForCausalLM",
             "TFRobertaForMaskedLM",
             "TFRobertaForMultipleChoice",
             "TFRobertaForQuestionAnswering",
@@ -2090,6 +2116,8 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
+    from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
@@ -2115,6 +2143,7 @@ if TYPE_CHECKING:
         FeatureExtractionPipeline,
         FillMaskPipeline,
         ImageClassificationPipeline,
+        ImageSegmentationPipeline,
         JsonPipelineDataFormat,
         NerPipeline,
         ObjectDetectionPipeline,
@@ -2265,6 +2294,19 @@ if TYPE_CHECKING:
     else:
         from .utils.dummy_timm_objects import *
 
+    if is_scatter_available():
+        from .models.tapas import (
+            TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TapasForMaskedLM,
+            TapasForQuestionAnswering,
+            TapasForSequenceClassification,
+            TapasModel,
+            TapasPreTrainedModel,
+            load_tf_weights_in_tapas,
+        )
+    else:
+        from .utils.dummy_scatter_objects import *
+
     if is_torch_available():
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -2322,6 +2364,7 @@ if TYPE_CHECKING:
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+            MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -2339,6 +2382,7 @@ if TYPE_CHECKING:
             AutoModelForCausalLM,
             AutoModelForCTC,
             AutoModelForImageClassification,
+            AutoModelForImageSegmentation,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
             AutoModelForNextSentencePrediction,
@@ -2515,6 +2559,7 @@ if TYPE_CHECKING:
             DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPRContextEncoder,
             DPRPretrainedContextEncoder,
+            DPRPreTrainedModel,
             DPRPretrainedQuestionEncoder,
             DPRPretrainedReader,
             DPRQuestionEncoder,
@@ -2827,15 +2872,6 @@ if TYPE_CHECKING:
             T5PreTrainedModel,
             load_tf_weights_in_t5,
         )
-        from .models.tapas import (
-            TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TapasForMaskedLM,
-            TapasForQuestionAnswering,
-            TapasForSequenceClassification,
-            TapasModel,
-            TapasPreTrainedModel,
-            load_tf_weights_in_tapas,
-        )
         from .models.transfo_xl import (
             TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             AdaptiveEmbedding,
@@ -2845,7 +2881,9 @@ if TYPE_CHECKING:
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
         )
-        from .models.visual_bert import (  # load_tf_weights_in_visual_bert,
+        from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
+        from .models.vision_encoder_decoder import VisionEncoderDecoderModel
+        from .models.visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VisualBertForMultipleChoice,
             VisualBertForPreTraining,
@@ -3090,6 +3128,7 @@ if TYPE_CHECKING:
             TFElectraModel,
             TFElectraPreTrainedModel,
         )
+        from .models.encoder_decoder import TFEncoderDecoderModel
         from .models.flaubert import (
             TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFFlaubertForMultipleChoice,
@@ -3199,6 +3238,7 @@ if TYPE_CHECKING:
         )
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRobertaForCausalLM,
             TFRobertaForMaskedLM,
             TFRobertaForMultipleChoice,
             TFRobertaForQuestionAnswering,

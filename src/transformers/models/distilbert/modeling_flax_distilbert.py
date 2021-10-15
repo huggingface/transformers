@@ -172,7 +172,8 @@ class FlaxMultiHeadSelfAttention(nn.Module):
         self.dim = self.config.dim
         self.dropout = nn.Dropout(rate=self.config.attention_dropout)
 
-        assert self.dim % self.n_heads == 0, f"Hidden size {self.dim} not dividable by number of heads {self.n_heads}"
+        if not (self.dim % self.n_heads == 0):
+            raise ValueError(f"Hidden size {self.dim} not dividable by number of heads {self.n_heads}")
 
         self.q_lin = nn.Dense(
             self.dim,

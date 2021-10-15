@@ -95,7 +95,7 @@ class CpmTokenizerFast(XLNetTokenizerFast):
             import jieba
         except ModuleNotFoundError as error:
             raise error.__class__(
-                "You need to install jieba to use CpmTokenizer or CpmTokenizerFast."
+                "You need to install jieba to use CpmTokenizer or CpmTokenizerFast. "
                 "See https://pypi.org/project/jieba/ for installation."
             )
         self.jieba = jieba
