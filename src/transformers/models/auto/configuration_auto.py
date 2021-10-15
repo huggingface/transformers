@@ -26,6 +26,8 @@ from ...file_utils import CONFIG_NAME
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
+        ("trocr", "TrOCRConfig"),
         ("fnet", "FNetConfig"),
         ("gptj", "GPTJConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
@@ -94,6 +96,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rag", "RagConfig"),
         ("tapas", "TapasConfig"),
         ("splinter", "SplinterConfig"),
+        ("sew-d", "SEWDConfig"),
+        ("sew", "SEWConfig"),
     ]
 )
 
@@ -160,12 +164,16 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("vision-encoder-decoder", "Vision Encoder decoder"),
+        ("trocr", "TrOCR"),
         ("fnet", "FNet"),
         ("gptj", "GPT-J"),
         ("beit", "BeiT"),
@@ -241,6 +249,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("byt5", "ByT5"),
         ("mbart50", "mBART-50"),
         ("splinter", "Splinter"),
+        ("sew-d", "SEW-D"),
+        ("sew", "SEW"),
     ]
 )
 
