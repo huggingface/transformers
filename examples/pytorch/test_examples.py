@@ -255,7 +255,7 @@ class ExamplesTests(TestCasePlus):
             --model_name_or_path t5-small
             --context_column context
             --question_column question
-            --answer_column answer
+            --answer_column answers
             --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
