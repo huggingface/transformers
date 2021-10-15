@@ -228,6 +228,7 @@ _import_structure = {
         "LayoutLMv2FeatureExtractor",
         "LayoutLMv2Processor",
         "LayoutLMv2Tokenizer",
+        "LayoutXLMTokenizer",
     ],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
@@ -410,7 +411,7 @@ if is_tokenizers_available():
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
-    _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
+    _import_structure["models.layoutlmv2"].extend(["LayoutLMv2TokenizerFast", "LayoutXLMTokenizerFast"])
     _import_structure["models.led"].append("LEDTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
@@ -2139,6 +2140,7 @@ if TYPE_CHECKING:
         LayoutLMv2FeatureExtractor,
         LayoutLMv2Processor,
         LayoutLMv2Tokenizer,
+        LayoutXLMTokenizer,
     )
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
@@ -2301,7 +2303,7 @@ if TYPE_CHECKING:
         from .models.gpt2 import GPT2TokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
-        from .models.layoutlmv2 import LayoutLMv2TokenizerFast
+        from .models.layoutlmv2 import LayoutLMv2TokenizerFast, LayoutXLMTokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
