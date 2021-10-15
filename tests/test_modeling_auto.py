@@ -18,7 +18,7 @@ import os
 import tempfile
 import unittest
 
-from transformers import is_torch_available, BertConfig
+from transformers import BertConfig, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
