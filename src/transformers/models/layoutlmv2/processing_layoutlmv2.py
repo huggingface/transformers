@@ -89,7 +89,7 @@ class LayoutLMv2Processor:
         self.tokenizer.save_pretrained(save_directory)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, use_fast=True, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, use_fast=True, use_xlm=False, **kwargs):
         r"""
         Instantiate a :class:`~transformers.LayoutLMv2Processor` from a pretrained LayoutLMv2 processor.
 
@@ -117,15 +117,24 @@ class LayoutLMv2Processor:
             use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to instantiate a fast tokenizer.
 
+            use_xlm (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to instantiate a XLM tokenizer.
+
             **kwargs
                 Additional keyword arguments passed along to both :class:`~transformers.SequenceFeatureExtractor` and
                 :class:`~transformers.PreTrainedTokenizer`
         """
         feature_extractor = LayoutLMv2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
         if use_fast:
-            tokenizer = LayoutLMv2TokenizerFast.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            if use_xlm:
+                tokenizer = LayoutXLMTokenizerFast.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            else:
+                tokenizer = LayoutLMv2TokenizerFast.from_pretrained(pretrained_model_name_or_path, **kwargs)
         else:
-            tokenizer = LayoutLMv2Tokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            if use_xlm:
+                tokenizer = LayoutXLMTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            else:
+                tokenizer = LayoutLMv2Tokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
