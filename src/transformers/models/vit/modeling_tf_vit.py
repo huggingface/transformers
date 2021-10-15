@@ -145,7 +145,6 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
 class TFPatchEmbeddings(tf.keras.layers.Layer):
     """
     Image to Patch Embedding.
-
     """
 
     def __init__(self, config: ViTConfig, **kwargs):
@@ -160,28 +159,17 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         self.embed_dim = config.hidden_size
         self.config = config
 
-    def build(self, input_shape):
-
-        with tf.name_scope("projection"):
-
-            # shape = (kernel_size[1], kernel_size[0], in_channels, out_channels)
-            # This is in the inverse order of `torch.nn.Conv2d.weight` format, which is necessary to make weight loading (PT->TF) work.
-            # See `transformers.modeling_tf_pytorch_utils.load_pytorch_weights_in_tf2_model` for more details (places involving `transpose`).
-            # In TensorFlow, `Conv2D.kernel` expects (kernel_size[0], kernel_size[1], in_channels, out_channels),
-            # so we need to perform a transpose (1st & 2nd axes) before using `tf.nn.conv2d` in `self.call`.
-            self.conv_kernel = self.add_weight(
-                shape=(self.patch_size[1], self.patch_size[0], self.num_channels, self.embed_dim),
-                initializer=get_initializer(self.config.initializer_range),
-                name="kernel",
-            )
-
-            self.conv_bias = self.add_weight(
-                shape=(self.embed_dim,),
-                initializer=tf.zeros_initializer(),
-                name="bias",
-            )
-
-        return super().build(input_shape)
+        self.projection = tf.keras.layers.Conv2D(
+            filters=self.embed_dim,
+            kernel_size=patch_size,
+            strides=self.patch_size,
+            padding="valid",
+            data_format="channels_last",
+            use_bias=True,
+            kernel_initializer=get_initializer(self.config.initializer_range),
+            bias_initializer="zeros",
+            name="projection",
+        )
 
     def call(
         self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
@@ -194,28 +182,12 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
                         f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
                     )
 
-        # When running on CPU, `tf.nn.conv2d` doesn't support `NCHW` format.
+        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
 
-        # # shape = (kernel_size[0], kernel_size[1], in_channels=num_channels, out_channels=embed_dim)
-        # # This is the format `tf.nn.conv2d` expects.
-        # filters = tf.transpose(self.conv_kernel, perm=(1, 0, 2, 3))
-        filters = self.conv_kernel
-
-        # Conv2D
-        # shape = (batch_size, out_height, out_width, out_channels=embed_dim)
-        projection = (
-            tf.nn.conv2d(
-                input=pixel_values,
-                filters=filters,
-                strides=self.patch_size,
-                padding="VALID",
-                data_format="NHWC",
-            )
-            + self.conv_bias
-        )
+        projection = self.projection(pixel_values)
 
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
@@ -508,7 +480,7 @@ class TFViTMainLayer(tf.keras.layers.Layer):
 
     def _get_conv2d_kernels(self) -> List[tf.Variable]:
         """Get the list of all kernels of convolution 2D layers"""
-        return [self.embeddings.patch_embeddings.conv_kernel]
+        return [self.embeddings.patch_embeddings.projection.kernel]
 
     def call(
         self,
