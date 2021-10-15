@@ -20,7 +20,6 @@ import json
 import os
 
 import fairseq
-import numpy as np
 import torch
 from fairseq.data import Dictionary
 
