@@ -33,11 +33,11 @@ from .configuration_segformer import SegformerConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "nvidia/segformer-b0-512-512-ade-160k"
+_CHECKPOINT_FOR_DOC = "nvidia/segformer-b0-finetuned-ade-512-512"
 _CONFIG_FOR_DOC = "SegformerConfig"
 
 SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/segformer-b0-512-512-ade-160k",
+    "nvidia/segformer-b0-finetuned-ade-512-512",
     # See all SegFormer models at https://huggingface.co/models?filter=segformer
 ]
 
@@ -747,9 +747,10 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, height, width)`, `optional`): Ground truth semantic
-        segmentation maps for computing the image segmentation loss. Indices should be in :obj:`[0, ...,
-        config.num_labels - 1]`. If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, height, width)`, `optional`):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels > 1`, a classification loss is computed
+            (Cross-Entropy).
 
         Returns:
 
@@ -759,8 +760,8 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             >>> from PIL import Image
             >>> import requests
 
-            >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-fine-tuned-ade-512-512")
-            >>> model = SegformerForSemanticSegmentation("nvidia/segformer-b0-fine-tuned-ade-512-512")
+            >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+            >>> model = SegformerForSemanticSegmentation("nvidia/segformer-b0-finetuned-ade-512-512")
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)

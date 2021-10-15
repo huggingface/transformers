@@ -3284,12 +3284,22 @@ def load_tf_weights_in_roformer(*args, **kwargs):
 SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class SegformerDecodeHead:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SegformerForImageClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
 class SegformerForSemanticSegmentation:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegformerLayer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

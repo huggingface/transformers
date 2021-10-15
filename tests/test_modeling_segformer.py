@@ -28,7 +28,12 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import SegformerConfig, SegformerForSemanticSegmentation, SegformerModel
+    from transformers import (
+        SegformerConfig,
+        SegformerForImageClassification,
+        SegformerForSemanticSegmentation,
+        SegformerModel,
+    )
     from transformers.models.segformer.modeling_segformer import SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -151,6 +156,7 @@ class SegformerModelTest(ModelTesterMixin, unittest.TestCase):
         (
             SegformerModel,
             SegformerForSemanticSegmentation,
+            SegformerForImageClassification,
         )
         if is_torch_available()
         else ()

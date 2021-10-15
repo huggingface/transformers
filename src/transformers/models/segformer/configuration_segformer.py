@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nvidia/segformer-b0-512-512-ade-160k": "https://huggingface.co/nvidia/segformer-b0-512-512-ade-160k/resolve/main/config.json",
+    "nvidia/segformer-b0-finetuned-ade-512-512": "https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512/resolve/main/config.json",
     # See all SegFormer models at https://huggingface.co/models?filter=segformer
 }
 
@@ -29,9 +29,9 @@ SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class SegformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.SegformerModel`. It is used
-    to instantiate an BrandNewBERT model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the BrandNewBERT
-    `nvidia/segformer-b0-512-512-ade-160k <https://huggingface.co/nvidia/segformer-b0-512-512-ade-160k>`__
+    to instantiate an SegFormer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the SegFormer
+    `nvidia/segformer-b0-finetuned-ade-512-512 <https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512>`__
     architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
@@ -81,14 +81,14 @@ class SegformerConfig(PretrainedConfig):
         reshape_last_stage (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to reshape the features of the last stage.
 
-        Example::
+    Example::
 
         >>> from transformers import SegformerModel, SegformerConfig
 
-        >>> # Initializing a BrandNewBERT nvidia/segformer-b0-512-512-ade-160k style configuration
+        >>> # Initializing a SegFormer nvidia/segformer-b0-finetuned-ade-512-512 style configuration
         >>> configuration = SegformerConfig()
 
-        >>> # Initializing a model from the nvidia/segformer-b0-512-512-ade-160k style configuration
+        >>> # Initializing a model from the nvidia/segformer-b0-finetuned-ade-512-512 style configuration
         >>> model = SegformerModel(configuration)
 
         >>> # Accessing the model configuration
