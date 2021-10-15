@@ -50,7 +50,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LayoutXLMTokenizer
     rust_tokenizer_class = LayoutXLMTokenizerFast
     test_rust_tokenizer = True
-    space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
     test_seq2seq = False
     test_sentencepiece = True

@@ -21,9 +21,21 @@ from typing import List
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
-from transformers.models.layoutlmv2 import LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
+from transformers.models.layoutlmv2 import (
+    LayoutLMv2Tokenizer,
+    LayoutLMv2TokenizerFast,
+    LayoutXLMTokenizer,
+    LayoutXLMTokenizerFast,
+)
+
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
+from transformers.testing_utils import (
+    require_pytesseract,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
 
 
 if is_pytesseract_available():
@@ -33,6 +45,7 @@ if is_pytesseract_available():
 
 
 @require_pytesseract
+@require_sentencepiece
 @require_tokenizers
 class LayoutLMv2ProcessorTest(unittest.TestCase):
     tokenizer_class = LayoutLMv2Tokenizer
@@ -77,8 +90,19 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
+    def get_xlm_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
+        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+
+    def get_rust_xlm_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
+        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+
     def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
-        return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
+        return [
+            self.get_tokenizer(**kwargs),
+            self.get_rust_tokenizer(**kwargs),
+            self.get_xlm_tokenizer(**kwargs),
+            self.get_rust_xlm_tokenizer(**kwargs),
+        ]
 
     def get_feature_extractor(self, **kwargs):
         return LayoutLMv2FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
@@ -96,7 +120,10 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
             processor = LayoutLMv2Processor.from_pretrained(self.tmpdirname)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-            self.assertIsInstance(processor.tokenizer, (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast))
+            self.assertIsInstance(
+                processor.tokenizer,
+                (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast, LayoutXLMTokenizer, LayoutXLMTokenizerFast)
+            )
 
             self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
             self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
@@ -135,6 +162,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
 
 
 # different use cases tests
+@require_sentencepiece
 @require_torch
 @require_pytesseract
 class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
@@ -154,7 +182,9 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
     def get_tokenizers(self):
         slow_tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
         fast_tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
-        return [slow_tokenizer, fast_tokenizer]
+        slow_xlm_tokenizer = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
+        fast_xlm_tokenizer = LayoutXLMTokenizerFast.from_pretrained("microsoft/layoutxlm-base")
+        return [slow_tokenizer, fast_tokenizer, slow_xlm_tokenizer, fast_xlm_tokenizer]
 
     @slow
     def test_processor_case_1(self):
