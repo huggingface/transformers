@@ -18,9 +18,9 @@
 import argparse
 import json
 import os
-import numpy as np
 
 import fairseq
+import numpy as np
 import torch
 from fairseq.data import Dictionary
 
@@ -171,7 +171,7 @@ def convert_config(model):
     fs_config = model.cfg
 
     config.activation_dropout = fs_config.activation_dropout
-    config.apply_spec_augment = (fs_config.mask_prob > 0 or fs_config.mask_channel_prob > 0)
+    config.apply_spec_augment = fs_config.mask_prob > 0 or fs_config.mask_channel_prob > 0
     config.attention_dropout = fs_config.attention_dropout
     config.conv_bias = fs_config.conv_bias
     conv_layers = eval(fs_config.conv_feature_layers)
@@ -224,6 +224,15 @@ def convert_sew_checkpoint(
         config = convert_config(model[0])
     model = model[0].eval()
 
+    return_attention_mask = True if config.feat_extract_norm == "layer" else False
+    feature_extractor = Wav2Vec2FeatureExtractor(
+        feature_size=1,
+        sampling_rate=16000,
+        padding_value=0,
+        do_normalize=True,
+        return_attention_mask=return_attention_mask,
+    )
+
     if is_finetuned:
         if dict_path:
             target_dict = Dictionary.load(dict_path)
@@ -250,20 +259,13 @@ def convert_sew_checkpoint(
                 word_delimiter_token="|",
                 do_lower_case=False,
             )
-            return_attention_mask = True if config.feat_extract_norm == "layer" else False
-            feature_extractor = Wav2Vec2FeatureExtractor(
-                feature_size=1,
-                sampling_rate=16000,
-                padding_value=0,
-                do_normalize=True,
-                return_attention_mask=return_attention_mask,
-            )
             processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
             processor.save_pretrained(pytorch_dump_folder_path)
 
         hf_model = SEWForCTC(config)
     else:
         hf_model = SEWModel(config)
+        feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     recursively_load_weights(model, hf_model, is_finetuned)
 

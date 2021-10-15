@@ -557,8 +557,8 @@ class StableDropout(nn.Module):
             return self.drop_prob
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaSelfOutput with DebertaLayerNorm->LayerNorm, hidden_dropout_prob->activation_dropout
-class DebertaV2SelfOutput(nn.Module):
+# Copied from transformers.models.deberta.modeling_deberta.DebertaSelfOutput with DebertaV2->SEWD, DebertaLayerNorm->LayerNorm, hidden_dropout_prob->activation_dropout
+class SEWDSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -807,12 +807,12 @@ class DisentangledSelfAttention(nn.Module):
         return score
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaAttention with Deberta->DebertaV2
-class DebertaV2Attention(nn.Module):
+# Copied from transformers.models.deberta.modeling_deberta.DebertaAttention with Deberta->SEWD
+class SEWDAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.self = DisentangledSelfAttention(config)
-        self.output = DebertaV2SelfOutput(config)
+        self.output = SEWDSelfOutput(config)
         self.config = config
 
     def forward(
@@ -844,8 +844,8 @@ class DebertaV2Attention(nn.Module):
             return attention_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->DebertaV2
-class DebertaV2Intermediate(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->SEWD
+class SEWDIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -861,7 +861,7 @@ class DebertaV2Intermediate(nn.Module):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DebertaOutput with DebertaLayerNorm->LayerNorm, hidden_dropout_prob->activation_dropout
-class DebertaV2Output(nn.Module):
+class SEWDOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -876,13 +876,13 @@ class DebertaV2Output(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaLayer with Deberta->DebertaV2
-class DebertaV2Layer(nn.Module):
+# Copied from transformers.models.deberta.modeling_deberta.DebertaLayer with Deberta->SEWD
+class SEWDLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = DebertaV2Attention(config)
-        self.intermediate = DebertaV2Intermediate(config)
-        self.output = DebertaV2Output(config)
+        self.attention = SEWDAttention(config)
+        self.intermediate = SEWDIntermediate(config)
+        self.output = SEWDOutput(config)
 
     def forward(
         self,
@@ -948,14 +948,14 @@ class ConvLayer(nn.Module):
         return output_states
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.DebertaV2Encoder
-class DebertaV2Encoder(nn.Module):
+# Copied from transformers.models.deberta_v2.modeling_deberta_v2.DebertaV2Encoder with DebertaV2->SEWD
+class SEWDTransformerEncoder(nn.Module):
     """Modified BertEncoder with relative position bias support"""
 
     def __init__(self, config):
         super().__init__()
 
-        self.layer = nn.ModuleList([DebertaV2Layer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([SEWDLayer(config) for _ in range(config.num_hidden_layers)])
         self.relative_attention = getattr(config, "relative_attention", False)
 
         if self.relative_attention:
@@ -1073,7 +1073,7 @@ class SEWDEncoder(nn.Module):
         self.config = config
         self.pos_conv_embed = SEWDPositionalConvEmbedding(config)
         self.pool = nn.AvgPool1d(config.squeeze_factor, config.squeeze_factor)
-        self.encoder = DebertaV2Encoder(config)
+        self.encoder = SEWDTransformerEncoder(config)
         self.upsample = SEWDUpsampling(config)
         self.gradient_checkpointing = False
 
@@ -1263,11 +1263,8 @@ class SEWDModel(SEWDPreTrainedModel):
         self.config = config
         self.feature_extractor = SEWDFeatureExtractor(config)
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
-        if config.conv_dim[-1] != config.hidden_size:
-            self.feature_projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
-            self.feature_dropout = nn.Dropout(config.feat_proj_dropout)
-        else:
-            self.feature_projection = None
+        self.feature_projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
+        self.feature_dropout = nn.Dropout(config.feat_proj_dropout)
 
         self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
@@ -1371,11 +1368,8 @@ class SEWDModel(SEWDPreTrainedModel):
             # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
-        if self.feature_projection is not None:
-            hidden_states = self.feature_projection(extract_features)
-            hidden_states = self.feature_dropout(hidden_states)
-        else:
-            hidden_states = extract_features
+        hidden_states = self.feature_projection(extract_features)
+        hidden_states = self.feature_dropout(hidden_states)
 
         hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 

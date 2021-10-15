@@ -21,7 +21,6 @@ from ...file_utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
-    ".wav2vec2.feature_extraction_wav2vec2": ["Wav2Vec2FeatureExtractor"],
     "configuration_sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
 }
 
@@ -34,7 +33,6 @@ if is_torch_available():
     ]
 
 if TYPE_CHECKING:
-    from ..wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
     from .configuration_sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
 
     if is_torch_available():

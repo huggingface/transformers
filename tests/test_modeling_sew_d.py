@@ -389,7 +389,7 @@ class SEWDModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = SEWDModel.from_pretrained("../sew/checkpoints/sew-d-tiny-converted")
+        model = SEWDModel.from_pretrained("anton-l/sew-d-tiny-100k")
         self.assertIsNotNone(model)
 
 
@@ -445,27 +445,26 @@ class SEWDModelIntegrationTest(unittest.TestCase):
         return ds["speech"][:num_samples]
 
     def test_inference_pretrained_batched(self):
-        model = SEWDModel.from_pretrained("../sew/checkpoints/sew-d-tiny-converted").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("../sew/checkpoints/sew-d-tiny-converted")
+        model = SEWDModel.from_pretrained("anton-l/sew-d-tiny-100k").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/sew-d-tiny-100k")
 
         input_speech = self._load_datasamples(2)
 
         inputs = processor(input_speech, return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
-        attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
+            outputs = model(input_values).last_hidden_state
 
         # expected outputs taken from the original SEW-D implementation
         expected_outputs_first = torch.tensor(
             [
                 [
-                    [-0.1555, 0.5452, 0.5410, -0.1194],
-                    [-0.1215, 0.4503, 0.1607, -0.0922],
-                    [-0.1485, 0.4368, 0.5610, -0.1129],
-                    [-0.1162, 0.5325, 0.2036, -0.0951],
+                    [-0.1619, 0.6995, 0.4062, -0.1014],
+                    [-0.1364, 0.5960, 0.0952, -0.0873],
+                    [-0.1572, 0.5718, 0.4228, -0.0864],
+                    [-0.1325, 0.6823, 0.1387, -0.0871],
                 ],
                 [
                     [-0.1296, 0.4008, 0.4952, -0.1450],
@@ -479,10 +478,10 @@ class SEWDModelIntegrationTest(unittest.TestCase):
         expected_outputs_last = torch.tensor(
             [
                 [
-                    [-0.0297, 1.0532, 0.6920, -0.0416],
-                    [-0.0110, 1.0858, 0.7791, -0.0208],
-                    [-0.0297, 1.0532, 0.6920, -0.0416],
-                    [-0.0110, 1.0858, 0.7791, -0.0208],
+                    [-0.1577, 0.5108, 0.8553, 0.2550],
+                    [-0.1530, 0.3580, 0.6143, 0.2672],
+                    [-0.1535, 0.4954, 0.8503, 0.1387],
+                    [-0.1572, 0.3363, 0.6217, 0.1490],
                 ],
                 [
                     [-0.1338, 0.5459, 0.9607, -0.1133],
@@ -493,7 +492,7 @@ class SEWDModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
-        expected_output_sum = 59279.3984
+        expected_output_sum = 54201.0469
 
         self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
         self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
@@ -502,8 +501,8 @@ class SEWDModelIntegrationTest(unittest.TestCase):
     @tooslow
     def test_inference_ctc_batched(self):
         # TODO: enable this test once the finetuned models are available
-        model = SEWDForCTC.from_pretrained("../sew/checkpoints/sew-d-tiny-converted").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("../sew/checkpoints/sew-d-tiny-converted", do_lower_case=True)
+        model = SEWDForCTC.from_pretrained("anton-l/sew-d-tiny-100k-ft-100h").to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained("anton-l/sew-d-tiny-100k-ft-100h", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 

@@ -768,11 +768,6 @@ class SEWModel(SEWPreTrainedModel):
         self.config = config
         self.feature_extractor = SEWFeatureExtractor(config)
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
-        if config.conv_dim[-1] != config.hidden_size:
-            self.feature_projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
-            self.feature_dropout = nn.Dropout(config.feat_proj_dropout)
-        else:
-            self.feature_projection = None
 
         self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
@@ -876,13 +871,7 @@ class SEWModel(SEWPreTrainedModel):
             # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
-        if self.feature_projection is not None:
-            hidden_states = self.feature_projection(extract_features)
-            hidden_states = self.feature_dropout(hidden_states)
-        else:
-            hidden_states = extract_features
-
-        hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
+        hidden_states = self._mask_hidden_states(extract_features, mask_time_indices=mask_time_indices)
 
         encoder_outputs = self.encoder(
             hidden_states,
