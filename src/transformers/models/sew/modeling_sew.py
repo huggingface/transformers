@@ -679,7 +679,7 @@ class SEWPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, SEWEncoder):
+        if isinstance(module, (SEWEncoder, SEWFeatureExtractor)):
             module.gradient_checkpointing = value
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
