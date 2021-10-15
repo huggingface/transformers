@@ -49,9 +49,7 @@ def load_ov_model_from_pytorch(model):
         )
 
     net = ie.read_network(buf.getvalue(), b"", init_from_buffer=True)
-    ov_model = OVPreTrainedModel(net)
-    ov_model.config = model.config
-    return ov_model
+    return OVPreTrainedModel(net, model.config)
 
 
 def load_ov_model_from_tf(model):
@@ -74,9 +72,7 @@ def load_ov_model_from_tf(model):
         check=True,
     )
     net = ie.read_network("model.xml")
-    ov_model = OVPreTrainedModel(net)
-    ov_model.config = model.config
-    return ov_model
+    return OVPreTrainedModel(net, model.config)
 
 
 def load_ov_model_from_ir(xml_path, bin_path):
@@ -91,10 +87,12 @@ def load_ov_model_from_ir(xml_path, bin_path):
 
 
 class OVPreTrainedModel(GenerationMixin):
-    def __init__(self, net):
+    def __init__(self, net, config=None):
         super().__init__()
         self.net = net
-        self.config = None
+        self.exec_net = None
+        self.config = config
+        self.max_length = 0
         self.ov_config = {}
         self.device = "CPU"
 
@@ -209,8 +207,14 @@ class OVPreTrainedModel(GenerationMixin):
         if attention_mask is None:
             attention_mask = np.ones_like(input_ids)
 
+        batch_size, inp_length = input_ids.shape
+        if inp_length < self.max_length:
+            pad = ((0, 0), (0, self.max_length - inp_length))
+            input_ids = np.pad(input_ids, pad)
+            attention_mask = np.pad(attention_mask, pad)
+
         inputs_info = self.net.input_info
-        if inputs_info["input_ids"].input_data.shape != input_ids.shape:
+        if list(inputs_info["input_ids"].input_data.shape) != list(input_ids.shape):
             self.net.reshape(
                 {
                     "input_ids": input_ids.shape,
@@ -230,6 +234,11 @@ class OVPreTrainedModel(GenerationMixin):
         )
 
         logits = outs["output"] if "output" in outs else next(iter(outs.values()))
+
+        # Trunc padded values
+        if inp_length != logits.shape[1]:
+            logits = logits[:, :inp_length]
+
         if return_dict:
             Result = namedtuple('Result', ['logits'])
             result = Result(
@@ -239,8 +248,11 @@ class OVPreTrainedModel(GenerationMixin):
             result = [logits]
         return result
 
-    def generate(self, *args, **kwargs):
-        args = list(args)
-        if len(args) > 0:
-            args[0] = torch.tensor(args[0])
-        return super().generate(*args, **kwargs)
+    def generate(self, input_ids, *args, **kwargs):
+        input_ids = torch.tensor(input_ids)
+
+        max_length = kwargs.get("max_length", None)
+        self.max_length = max_length if max_length is not None else self.config.max_length
+        self.max_length -= 1
+
+        return super().generate(input_ids, *args, **kwargs)

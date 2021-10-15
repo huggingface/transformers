@@ -28,11 +28,8 @@ if is_ov_available():
 class OVOPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_openai_gpt(self):
-        import torch
         model = OVAutoModelWithLMHead.from_pretrained("openai-gpt", from_pt=True)
-        # model = AutoModelWithLMHead.from_pretrained("openai-gpt")
         input_ids = np.array([[481, 4735, 544]], dtype=np.int64)  # the president is
-        # input_ids = torch.tensor([[481, 4735, 544]], dtype=torch.long, device=torch.device('cpu'))  # the president is
         expected_output_ids = [
             481,
             4735,
