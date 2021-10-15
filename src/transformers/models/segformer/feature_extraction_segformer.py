@@ -109,12 +109,12 @@ def rescale_size(old_size, scale, return_scale=False):
         if scale <= 0:
             raise ValueError(f"Invalid scale {scale}, must be positive.")
         scale_factor = scale
-    elif isinstance(scale, tuple):
+    elif isinstance(scale, (tuple, list)):
         max_long_edge = max(scale)
         max_short_edge = min(scale)
         scale_factor = min(max_long_edge / max(h, w), max_short_edge / min(h, w))
     else:
-        raise TypeError(f"Scale must be a number or tuple of int, but got {type(scale)}")
+        raise TypeError(f"Scale must be a number or tuple/list of int, but got {type(scale)}")
 
     new_size = _scale_size((w, h), scale_factor)
 
@@ -137,7 +137,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         keep_ratio (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to keep the aspect ratio when resizing the input. Only has an effect if :obj:`do_resize` is set to
             :obj:`True`.
-        image_scale (:obj:`float` or :obj:`Tuple[int]`, `optional`, defaults to (2048, 512)):
+        image_scale (:obj:`float` or :obj:`Tuple[int]`/:obj:`List[int]`, `optional`, defaults to (2048, 512)):
             In case :obj:`keep_ratio` is set to :obj:`True`, the scaling factor or maximum size. If it is a float
             number, then the image will be rescaled by this factor, else if it is a tuple of 2 integers (width,
             height), then the image will be rescaled as large as possible within the scale. In case :obj:`keep_ratio`
@@ -156,8 +156,8 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         do_random_crop (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to randomly crop the input to a certain obj:`crop_size`.
-        crop_size (:obj:`Tuple[int]`, `optional`, defaults to (512, 512)):
-            The crop size to use, as a list [width, height]. Only has an effect if :obj:`do_random_crop` is set to
+        crop_size (:obj:`Tuple[int]`/:obj:`List[int]`, `optional`, defaults to (512, 512)):
+            The crop size to use, as a tuple (width, height). Only has an effect if :obj:`do_random_crop` is set to
             :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.

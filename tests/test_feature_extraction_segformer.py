@@ -43,11 +43,11 @@ class SegformerFeatureExtractionTester(unittest.TestCase):
         max_resolution=400,
         do_resize=True,
         keep_ratio=True,
-        image_scale=(100, 20),
+        image_scale=[100, 20],
         align=True,
         size_divisor=10,
         do_random_crop=True,
-        crop_size=(20, 20),
+        crop_size=[20, 20],
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
@@ -249,8 +249,12 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
 
     @require_torch
     def test_random_crop(self):
-        image = Image.open("./tests/fixtures/tests_samples/ADE_20k/ADE_val_00002000.jpg")
-        segmentation_map = Image.open("./tests/fixtures/tests_samples/ADE_20k/ADE_val_00002000.png")
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+
+        image = Image.open(ds[0]["file"])
+        segmentation_map = Image.open(ds[1]["file"])
 
         w, h = image.size
 

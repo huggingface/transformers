@@ -162,8 +162,10 @@ class ImageFeatureExtractionMixin:
         """
         self._ensure_format_supported(image)
 
-        if not isinstance(size, tuple):
+        if isinstance(size, int):
             size = (size, size)
+        elif isinstance(size, list):
+            size = tuple(size)
         if not isinstance(image, PIL.Image.Image):
             image = self.to_pil_image(image)
 
