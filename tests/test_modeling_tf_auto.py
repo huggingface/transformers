@@ -17,7 +17,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import AutoConfig, BertConfig, GPT2Config, T5Config, is_tf_available
+from transformers import CONFIG_MAPPING, AutoConfig, BertConfig, GPT2Config, T5Config, is_tf_available
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_tf, slow
 
 from .test_modeling_bert import BertModelTester
@@ -235,35 +235,51 @@ class TFAutoModelTest(unittest.TestCase):
                         assert not issubclass(child, parent), f"{child.__name__} is child of {parent.__name__}"
 
     def test_new_model_registration(self):
-        AutoConfig.register("new-model", NewModelConfig)
+        try:
+            AutoConfig.register("new-model", NewModelConfig)
 
-        auto_classes = [
-            TFAutoModel,
-            TFAutoModelForCausalLM,
-            TFAutoModelForMaskedLM,
-            TFAutoModelForPreTraining,
-            TFAutoModelForQuestionAnswering,
-            TFAutoModelForSequenceClassification,
-            TFAutoModelForTokenClassification,
-        ]
+            auto_classes = [
+                TFAutoModel,
+                TFAutoModelForCausalLM,
+                TFAutoModelForMaskedLM,
+                TFAutoModelForPreTraining,
+                TFAutoModelForQuestionAnswering,
+                TFAutoModelForSequenceClassification,
+                TFAutoModelForTokenClassification,
+            ]
 
-        for auto_class in auto_classes:
-            with self.subTest(auto_class.__name__):
-                # Wrong config class will raise an error
-                with self.assertRaises(ValueError):
-                    auto_class.register(BertConfig, TFNewModel)
-                auto_class.register(NewModelConfig, TFNewModel)
-                # Trying to register something existing in the Transformers library will raise an error
-                with self.assertRaises(ValueError):
-                    auto_class.register(BertConfig, TFBertModel)
+            for auto_class in auto_classes:
+                with self.subTest(auto_class.__name__):
+                    # Wrong config class will raise an error
+                    with self.assertRaises(ValueError):
+                        auto_class.register(BertConfig, TFNewModel)
+                    auto_class.register(NewModelConfig, TFNewModel)
+                    # Trying to register something existing in the Transformers library will raise an error
+                    with self.assertRaises(ValueError):
+                        auto_class.register(BertConfig, TFBertModel)
 
-                # Now that the config is registered, it can be used as any other config with the auto-API
-                tiny_config = BertModelTester(self).get_config()
-                config = NewModelConfig(**tiny_config.to_dict())
-                model = auto_class.from_config(config)
-                self.assertIsInstance(model, TFNewModel)
+                    # Now that the config is registered, it can be used as any other config with the auto-API
+                    tiny_config = BertModelTester(self).get_config()
+                    config = NewModelConfig(**tiny_config.to_dict())
+                    model = auto_class.from_config(config)
+                    self.assertIsInstance(model, TFNewModel)
 
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    model.save_pretrained(tmp_dir)
-                    new_model = auto_class.from_pretrained(tmp_dir)
-                    self.assertIsInstance(new_model, TFNewModel)
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        model.save_pretrained(tmp_dir)
+                        new_model = auto_class.from_pretrained(tmp_dir)
+                        self.assertIsInstance(new_model, TFNewModel)
+
+        finally:
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
+            for mapping in (
+                TF_MODEL_MAPPING,
+                TF_MODEL_FOR_PRETRAINING_MAPPING,
+                TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+                TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+                TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+                TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+                TF_MODEL_FOR_MASKED_LM_MAPPING,
+            ):
+                if NewModelConfig in mapping._extra_content:
+                    del mapping._extra_content[NewModelConfig]
