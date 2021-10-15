@@ -110,7 +110,7 @@ class DataTrainingArguments:
         metadata={"help": "The name of the column in the datasets containing the questions (for question answering)."},
     )
     answer_column: Optional[str] = field(
-        default="answer",
+        default="answers",
         metadata={"help": "The name of the column in the datasets containing the answers (for question answering)."},
     )
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
