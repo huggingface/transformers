@@ -54,3 +54,18 @@ As LayoutXLM's architecture is equivalent to that of LayoutLMv2, one can refer t
 
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
 <https://github.com/microsoft/unilm>`__.
+
+
+LayoutXLMTokenizer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LayoutXLMTokenizer
+    :members: __call__, build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
+
+
+LayoutXLMTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LayoutXLMTokenizerFast
+    :members: __call__
