@@ -58,17 +58,21 @@ class AutoConfigTest(unittest.TestCase):
             self.assertFalse(any(key in later_key for later_key in keys[i + 1 :]))
 
     def test_new_config_registration(self):
-        AutoConfig.register("new-model", NewModelConfig)
-        # Wrong model type will raise an error
-        with self.assertRaises(ValueError):
-            AutoConfig.register("model", NewModelConfig)
-        # Trying to register something existing in the Transformers library will raise an error
-        with self.assertRaises(ValueError):
-            AutoConfig.register("bert", BertConfig)
+        try:
+            AutoConfig.register("new-model", NewModelConfig)
+            # Wrong model type will raise an error
+            with self.assertRaises(ValueError):
+                AutoConfig.register("model", NewModelConfig)
+            # Trying to register something existing in the Transformers library will raise an error
+            with self.assertRaises(ValueError):
+                AutoConfig.register("bert", BertConfig)
 
-        # Now that the config is registered, it can be used as any other config with the auto-API
-        config = NewModelConfig()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir)
-            new_config = AutoConfig.from_pretrained(tmp_dir)
-            self.assertIsInstance(new_config, NewModelConfig)
+            # Now that the config is registered, it can be used as any other config with the auto-API
+            config = NewModelConfig()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config.save_pretrained(tmp_dir)
+                new_config = AutoConfig.from_pretrained(tmp_dir)
+                self.assertIsInstance(new_config, NewModelConfig)
+
+        finally:
+            del CONFIG_MAPPING._extra_content["new-model"]

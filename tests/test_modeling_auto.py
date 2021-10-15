@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
@@ -353,23 +354,37 @@ class AutoModelTest(unittest.TestCase):
             AutoModelForTokenClassification,
         ]
 
-        for auto_class in auto_classes:
-            with self.subTest(auto_class.__name__):
-                # Wrong config class will raise an error
-                with self.assertRaises(ValueError):
-                    auto_class.register(BertConfig, NewModel)
-                auto_class.register(NewModelConfig, NewModel)
-                # Trying to register something existing in the Transformers library will raise an error
-                with self.assertRaises(ValueError):
-                    auto_class.register(BertConfig, BertModel)
+        try:
+            for auto_class in auto_classes:
+                with self.subTest(auto_class.__name__):
+                    # Wrong config class will raise an error
+                    with self.assertRaises(ValueError):
+                        auto_class.register(BertConfig, NewModel)
+                    auto_class.register(NewModelConfig, NewModel)
+                    # Trying to register something existing in the Transformers library will raise an error
+                    with self.assertRaises(ValueError):
+                        auto_class.register(BertConfig, BertModel)
 
-                # Now that the config is registered, it can be used as any other config with the auto-API
-                tiny_config = BertModelTester(self).get_config()
-                config = NewModelConfig(**tiny_config.to_dict())
-                model = auto_class.from_config(config)
-                self.assertIsInstance(model, NewModel)
+                    # Now that the config is registered, it can be used as any other config with the auto-API
+                    tiny_config = BertModelTester(self).get_config()
+                    config = NewModelConfig(**tiny_config.to_dict())
+                    model = auto_class.from_config(config)
+                    self.assertIsInstance(model, NewModel)
 
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    model.save_pretrained(tmp_dir)
-                    new_model = auto_class.from_pretrained(tmp_dir)
-                    self.assertIsInstance(new_model, NewModel)
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        model.save_pretrained(tmp_dir)
+                        new_model = auto_class.from_pretrained(tmp_dir)
+                        self.assertIsInstance(new_model, NewModel)
+
+        finally:
+            del CONFIG_MAPPING._extra_content["new_model"]
+            for mapping in (
+                MODEL_MAPPING,
+                MODEL_FOR_PRETRAINING_MAPPING,
+                MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+                MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+                MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+                MODEL_FOR_CAUSAL_LM_MAPPING,
+                MODEL_FOR_MASKED_LM_MAPPING,
+            ):
+                del mapping._extra_content[NewModelConfig]
