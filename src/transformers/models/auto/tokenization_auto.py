@@ -536,6 +536,19 @@ class AutoTokenizer:
         if fast_tokenizer_class is not None and issubclass(fast_tokenizer_class, PreTrainedTokenizer):
             raise ValueError("You passed a slow tokenizer in the `fast_tokenizer_class`.")
 
+        if (
+            slow_tokenizer_class is not None
+            and fast_tokenizer_class is not None
+            and issubclass(fast_tokenizer_class, PreTrainedTokenizerFast)
+            and fast_tokenizer_class.slow_tokenizer_class != slow_tokenizer_class
+        ):
+            raise ValueError(
+                "The fast tokenizer class you are passing has a `slow_tokenizer_class` attribute that is not "
+                "consistent with the slow tokenizer class you passed (fast tokenizer has "
+                f"{fast_tokenizer_class.slow_tokenizer_class} and you passed {slow_tokenizer_class}. Fix one of those "
+                "so they match!"
+            )
+
         # Avoid resetting a set slow/fast tokenizer if we are passing just the other ones.
         if config_class in TOKENIZER_MAPPING._extra_content:
             existing_slow, existing_fast = TOKENIZER_MAPPING[config_class]
