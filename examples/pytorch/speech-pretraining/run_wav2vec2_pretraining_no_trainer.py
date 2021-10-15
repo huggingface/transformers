@@ -442,6 +442,8 @@ def main():
             sample["array"], sampling_rate=sample["sampling_rate"], max_length=max_length, truncation=True
         )
         batch["input_values"] = inputs.input_values[0]
+        batch["input_length"] = len(inputs.input_values[0])
+
         return batch
 
     # load audio files into numpy arrays
@@ -450,11 +452,16 @@ def main():
             prepare_dataset,
             num_proc=args.preprocessing_num_workers,
             remove_columns=raw_datasets["train"].column_names,
-            load_from_cache_file=not args.overwrite_cache,
         )
-        vectorized_datasets = vectorized_datasets.filter(
-            lambda x: len(x["input_values"]) > min_length, load_from_cache_file=not args.overwrite_cache
-        )
+
+        if min_length > 0.0:
+            vectorized_datasets = vectorized_datasets.filter(
+                lambda x: x > min_length,
+                num_proc=args.preprocessing_num_workers,
+                input_columns=["input_length"],
+            )
+
+        vectorized_datasets = vectorized_datasets.remove_columns("input_length")
 
     # for large datasets it is advised to run the preprocessing on a
     # single machine first with ``args.preprocessing_only`` since there will mostly likely

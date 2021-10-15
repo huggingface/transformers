@@ -472,6 +472,7 @@ def main():
         batch["input_values"] = processor(
             sample["array"], sampling_rate=sample["sampling_rate"], truncate=True, max_length=max_input_length
         ).input_values[0]
+        batch["input_length"] = len(batch["input_values"])
 
         # Setup the processor for targets
         with processor.as_target_processor():
@@ -489,9 +490,12 @@ def main():
         if min_input_length > 0.0:
             # filter data that is shorter than min_input_length
             vectorized_datasets = vectorized_datasets.filter(
-                lambda data: len(data["input_values"]) > min_input_length,
+                lambda x: x > min_input_length,
                 num_proc=data_args.preprocessing_num_workers,
+                input_columns=["input_length"],
             )
+
+        vectorized_datasets = vectorized_datasets.remove_columns("input_length")
 
     # 6. Next, we can prepare the training.
     # Let's use word error rate (WER) as our evaluation metric,
