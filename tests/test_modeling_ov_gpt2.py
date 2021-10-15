@@ -20,7 +20,7 @@ from transformers import is_ov_available, is_torch_available
 from transformers.testing_utils import require_ov, require_torch, slow
 
 if is_ov_available():
-    from transformers import OVAutoModel, AutoModel
+    from transformers import OVAutoModel
 
 if is_torch_available():
     from transformers import (

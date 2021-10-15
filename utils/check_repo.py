@@ -171,6 +171,7 @@ def get_model_modules():
         "modeling_tf_utils",
         "modeling_tf_transfo_xl_utilities",
         "modeling_vision_encoder_decoder",
+        "modeling_ov_auto",
     ]
     modules = []
     for model in dir(transformers.models):

@@ -1,27 +1,18 @@
 import os
-from functools import partial
-from pickle import UnpicklingError
-from typing import Dict, Set, Tuple, Union
 from collections import namedtuple
 
 import numpy as np
+
+from openvino.inference_engine import IECore
 
 from transformers import (
     AutoModel,
     TFAutoModel,
 )
-from .configuration_utils import PretrainedConfig
 from .file_utils import (
     OV_WEIGHTS_NAME,
-    PushToHubMixin,
-    add_code_sample_docstrings,
-    add_start_docstrings_to_model_forward,
     cached_path,
-    copy_func,
     hf_bucket_url,
-    is_offline_mode,
-    is_remote_url,
-    replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
 from .utils import logging
@@ -29,9 +20,9 @@ from .utils import logging
 import torch
 
 logger = logging.get_logger(__name__)
-from openvino.inference_engine import IECore
 
 ie = IECore()
+
 
 def load_ov_model_from_pytorch(model):
     import io
@@ -53,7 +44,8 @@ def load_ov_model_from_pytorch(model):
 
 
 def load_ov_model_from_tf(model):
-    import sys, subprocess
+    import sys
+    import subprocess
 
     model.save("keras_model", signatures=model.serving)
     subprocess.run(
@@ -98,7 +90,6 @@ class OVPreTrainedModel(GenerationMixin):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        config = kwargs.pop("config", None)
         cache_dir = kwargs.pop("cache_dir", None)
         from_pt = kwargs.pop("from_pt", False)
         from_tf = kwargs.pop("from_tf", False)
