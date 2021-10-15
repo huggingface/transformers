@@ -358,8 +358,9 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
         print("Predicted class:", model.config.id2label[predicted_class_idx])
 
     # verify logits
-    assert logits.shape == expected_shape
-    assert torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-2)
+    if not encoder_only:
+        assert logits.shape == expected_shape
+        assert torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-2)
 
     # finally, save model and feature extractor
     logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
