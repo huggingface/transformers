@@ -17,7 +17,7 @@
 
 import collections.abc
 import math
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -199,9 +199,10 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
 
-        # shape = (kernel_size[0], kernel_size[1], in_channels=num_channels, out_channels=embed_dim)
-        # This is the format `tf.nn.conv2d` expects.
-        filters = tf.transpose(self.conv_kernel, perm=(1, 0, 2, 3))
+        # # shape = (kernel_size[0], kernel_size[1], in_channels=num_channels, out_channels=embed_dim)
+        # # This is the format `tf.nn.conv2d` expects.
+        # filters = tf.transpose(self.conv_kernel, perm=(1, 0, 2, 3))
+        filters = self.conv_kernel
 
         # Conv2D
         # shape = (batch_size, out_height, out_width, out_channels=embed_dim)
@@ -504,6 +505,10 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         class PreTrainedModel
         """
         raise NotImplementedError
+
+    def _get_conv2d_kernels(self) -> List[tf.Variable]:
+        """Get the list of all kernels of convolution 2D layers"""
+        return [self.embeddings.patch_embeddings.conv_kernel]
 
     def call(
         self,
