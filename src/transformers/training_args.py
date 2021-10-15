@@ -248,6 +248,9 @@ class TrainingArguments:
             otherwise.
         dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
+        ddp_backends (:obj:`str`, `optional`, defaults to `nccl`):
+            The backends to be used when doing DistributedDataParallel training. (nccl or gloo)
+
     """
 
     output_dir: Optional[str] = field(
@@ -445,6 +448,7 @@ class TrainingArguments:
         default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
+    ddp_backends: str = field(default='gloo', metadata={"help": "The DDP backends: gloo / nccl, defaults to gloo"})
 
     def __post_init__(self):
         if self.output_dir is None and os.getenv("SM_OUTPUT_DATA_DIR") is None:
@@ -565,7 +569,7 @@ class TrainingArguments:
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
-            torch.distributed.init_process_group(backend="nccl")
+            torch.distributed.init_process_group(backend=self.ddp_backends)
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
 
