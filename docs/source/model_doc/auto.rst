@@ -33,8 +33,8 @@ Extending the Auto Classes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Each of the auto classes as a method to be extended with your custom classes. For instance, if you have defined a
-custom class of model :obj:`NewModel`, make sure you have a :obj:`NewModelConfig` then you can add those to the auto classes
-like this:
+custom class of model :obj:`NewModel`, make sure you have a :obj:`NewModelConfig` then you can add those to the auto
+classes like this:
 
 .. code-block::
 
@@ -47,11 +47,12 @@ You will then be able to use the auto classes like you would usually do!
 
 .. warning::
 
-    If your :obj:`NewModelConfig` is a subclass of :class:`~transformer.PretrainedConfig`, make sure its :obj:`model_type`
-    attribute is set to the same key you use when registering the config (here :obj:`"new-model"`).
+    If your :obj:`NewModelConfig` is a subclass of :class:`~transformer.PretrainedConfig`, make sure its
+    :obj:`model_type` attribute is set to the same key you use when registering the config (here :obj:`"new-model"`).
 
     Likewise, if your :obj:`NewModel` is a subclass of :class:`~transformers.PreTrainedModel`, make sure its
-    :obj:`config_class` attribute is set to the same class you use when registering the model (here :obj:`NewModelConfig`).
+    :obj:`config_class` attribute is set to the same class you use when registering the model (here
+    :obj:`NewModelConfig`).
 
 
 AutoConfig
