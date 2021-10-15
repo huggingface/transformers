@@ -33,8 +33,8 @@ from ...tokenization_utils_base import (
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from ..xlm_roberta.tokenization_xlm_roberta import (
-    PRETRAINED_VOCAB_FILES_MAP,
     PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
+    PRETRAINED_VOCAB_FILES_MAP,
     VOCAB_FILES_NAMES,
 )
 from .tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING

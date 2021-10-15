@@ -21,10 +21,7 @@ import unittest
 from typing import List
 
 from transformers import AddedToken, LayoutXLMTokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available
-from transformers.models.layoutlmv2.tokenization_layoutxlm import (
-    VOCAB_FILES_NAMES,
-    LayoutXLMTokenizer,
-)
+from transformers.models.layoutlmv2.tokenization_layoutxlm import LayoutXLMTokenizer
 from transformers.testing_utils import (
     is_pt_tf_cross_test,
     require_pandas,
@@ -57,7 +54,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_filter = filter_non_english
     test_seq2seq = False
     test_sentencepiece = True
-
 
     def get_words_and_boxes(self):
         words = ["a", "weirdly", "test"]
@@ -1681,9 +1677,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
-        tokenizer_p = LayoutXLMTokenizer.from_pretrained(
-            "microsoft/layoutxlm-base", only_label_first_subword=False
-        )
+        tokenizer_p = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base", only_label_first_subword=False)
         encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
 
@@ -1692,9 +1686,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
-        tokenizer_r = LayoutXLMTokenizer.from_pretrained(
-            "microsoft/layoutxlm-base", only_label_first_subword=False
-        )
+        tokenizer_r = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base", only_label_first_subword=False)
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
 
