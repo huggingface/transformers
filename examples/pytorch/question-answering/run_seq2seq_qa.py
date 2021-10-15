@@ -200,6 +200,13 @@ class DataTrainingArguments:
         default=20,
         metadata={"help": "The total number of n-best predictions to generate when looking for an answer."},
     )
+    num_beams: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
+            "which is used during ``evaluate`` and ``predict``."
+        },
+    )
     ignore_pad_token_for_loss: bool = field(
         default=True,
         metadata={
