@@ -851,3 +851,267 @@ class BeitForImageClassification(BeitPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+class ConvModule(nn.Module):
+    def __init__(self):
+        super(ConvModule).__init__()
+
+    def forward(self):
+        return -1
+
+
+class PPM(nn.ModuleList):
+    """
+    Pooling Pyramid Module used in PSPNet.
+
+    Args:
+        pool_scales (tuple[int]): Pooling scales used in Pooling Pyramid
+            Module.
+        in_channels (int): Input channels.
+        channels (int): Channels after modules, before conv_seg.
+        conv_cfg (dict|None): Config of conv layers.
+        norm_cfg (dict|None): Config of norm layers.
+        act_cfg (dict): Config of activation layers.
+        align_corners (bool): align_corners argument of F.interpolate.
+    """
+
+    def __init__(self, pool_scales, in_channels, channels, conv_cfg, norm_cfg, act_cfg, align_corners, **kwargs):
+        super(PPM, self).__init__()
+        self.pool_scales = pool_scales
+        self.align_corners = align_corners
+        self.in_channels = in_channels
+        self.channels = channels
+        self.conv_cfg = conv_cfg
+        self.norm_cfg = norm_cfg
+        self.act_cfg = act_cfg
+        for pool_scale in pool_scales:
+            self.append(
+                nn.Sequential(
+                    nn.AdaptiveAvgPool2d(pool_scale),
+                    ConvModule(
+                        self.in_channels,
+                        self.channels,
+                        1,
+                        conv_cfg=self.conv_cfg,
+                        norm_cfg=self.norm_cfg,
+                        act_cfg=self.act_cfg,
+                        **kwargs,
+                    ),
+                )
+            )
+
+    def forward(self, x):
+        """Forward function."""
+        ppm_outs = []
+        for ppm in self:
+            ppm_out = ppm(x)
+            upsampled_ppm_out = nn.functional.interpolate(
+                ppm_out, size=x.size()[2:], mode="bilinear", align_corners=self.align_corners
+            )
+            ppm_outs.append(upsampled_ppm_out)
+        return ppm_outs
+
+
+class UPerHead(nn.Module):
+    """
+    Unified Perceptual Parsing for Scene Understanding. This head is the implementation of `UPerNet
+    <https://arxiv.org/abs/1807.10221>`_.
+    """
+
+    def __init__(self, config):
+        super(UPerHead).__init__()
+
+        self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
+        self.in_channels = config.hidden_sizes  # e.g. [768, 768, 768, 768]
+        self.in_index = [0, 1, 2, 3]
+        self.channels = config.hidden_size
+        self.conv_cfg = None
+        self.norm_cfg = dict(type="SyncBN", requires_grad=True)
+        self.act_cfg = dict(type="ReLU")
+        self.align_corners = False
+
+        # PSP Module
+        self.psp_modules = PPM(
+            self.pool_scales,
+            self.in_channels[-1],
+            self.channels,
+            conv_cfg=self.conv_cfg,
+            norm_cfg=self.norm_cfg,
+            act_cfg=self.act_cfg,
+            align_corners=self.align_corners,
+        )
+        self.bottleneck = ConvModule(
+            self.in_channels[-1] + len(self.pool_scales) * self.channels,
+            self.channels,
+            3,
+            padding=1,
+            conv_cfg=self.conv_cfg,
+            norm_cfg=self.norm_cfg,
+            act_cfg=self.act_cfg,
+        )
+        # FPN Module
+        self.lateral_convs = nn.ModuleList()
+        self.fpn_convs = nn.ModuleList()
+        for in_channels in self.in_channels[:-1]:  # skip the top layer
+            l_conv = ConvModule(
+                in_channels,
+                self.channels,
+                1,
+                conv_cfg=self.conv_cfg,
+                norm_cfg=self.norm_cfg,
+                act_cfg=self.act_cfg,
+                inplace=False,
+            )
+            fpn_conv = ConvModule(
+                self.channels,
+                self.channels,
+                3,
+                padding=1,
+                conv_cfg=self.conv_cfg,
+                norm_cfg=self.norm_cfg,
+                act_cfg=self.act_cfg,
+                inplace=False,
+            )
+            self.lateral_convs.append(l_conv)
+            self.fpn_convs.append(fpn_conv)
+
+        self.fpn_bottleneck = ConvModule(
+            len(self.in_channels) * self.channels,
+            self.channels,
+            3,
+            padding=1,
+            conv_cfg=self.conv_cfg,
+            norm_cfg=self.norm_cfg,
+            act_cfg=self.act_cfg,
+        )
+
+    def psp_forward(self, inputs):
+        """Forward function of PSP module."""
+        x = inputs[-1]
+        psp_outs = [x]
+        psp_outs.extend(self.psp_modules(x))
+        psp_outs = torch.cat(psp_outs, dim=1)
+        output = self.bottleneck(psp_outs)
+
+        return output
+
+    def forward(self, hidden_states):
+        # build laterals
+        laterals = [lateral_conv(hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+
+        laterals.append(self.psp_forward(hidden_states))
+
+        # build top-down path
+        used_backbone_levels = len(laterals)
+        for i in range(used_backbone_levels - 1, 0, -1):
+            prev_shape = laterals[i - 1].shape[2:]
+            laterals[i - 1] += nn.functional.interpolate(
+                laterals[i], size=prev_shape, mode="bilinear", align_corners=self.align_corners
+            )
+
+        # build outputs
+        fpn_outs = [self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels - 1)]
+        # append psp feature
+        fpn_outs.append(laterals[-1])
+
+        for i in range(used_backbone_levels - 1, 0, -1):
+            fpn_outs[i] = nn.functional.interpolate(
+                fpn_outs[i], size=fpn_outs[0].shape[2:], mode="bilinear", align_corners=self.align_corners
+            )
+        fpn_outs = torch.cat(fpn_outs, dim=1)
+        output = self.fpn_bottleneck(fpn_outs)
+        output = self.cls_seg(output)
+        return output
+
+
+@add_start_docstrings(
+    """
+    Beit Model transformer with an semantic segmentation head on top e.g. for ADE20k.
+    """,
+    BEIT_START_DOCSTRING,
+)
+class BeitForSemanticSegmentation(BeitPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.beit = BeitModel(config, add_pooling_layer=True)
+
+        # Semantic segmentation head
+        self.head = UPerHead(config)
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values=None,
+        head_mask=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import BeitFeatureExtractor, BeitForImageClassification
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
+            >>> model = BeitForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
+            >>> # model predicts one of the 1000 ImageNet classes
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.beit(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs.pooler_output if return_dict else outputs[1]
+
+        logits = self.head(pooled_output)
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
