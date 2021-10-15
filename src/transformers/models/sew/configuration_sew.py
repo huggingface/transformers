@@ -89,10 +89,6 @@ class SEWConfig(PretrainedConfig):
             embeddings layer.
         num_conv_pos_embedding_groups (:obj:`int`, `optional`, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
-        do_stable_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to apply `stable` layer norm architecture of the Transformer encoder. ``do_stable_layer_norm is
-            True`` corresponds to applying layer norm before the attention layer, whereas ``do_stable_layer_norm is
-            False`` corresponds to applying layer norm after the attention layer.
         apply_spec_augment (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature extractor. For reference see
             `SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition
@@ -157,7 +153,6 @@ class SEWConfig(PretrainedConfig):
         conv_bias=False,
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
-        do_stable_layer_norm=False,
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
@@ -195,7 +190,6 @@ class SEWConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
-        self.do_stable_layer_norm = do_stable_layer_norm
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)

@@ -169,6 +169,51 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
         unused_weights.append(full_name)
 
 
+def convert_config(model):
+    config = SEWDConfig()
+    fs_config = model.cfg
+
+    config.activation_dropout = fs_config.activation_dropout
+    config.apply_spec_augment = (fs_config.mask_prob > 0 or fs_config.mask_channel_prob > 0)
+    config.attention_dropout = fs_config.attention_dropout
+    config.conv_bias = fs_config.conv_bias
+    conv_layers = eval(fs_config.conv_feature_layers)
+    config.conv_dim = [x[0] for x in conv_layers]
+    config.conv_kernel = [x[1] for x in conv_layers]
+    config.conv_stride = [x[2] for x in conv_layers]
+    config.feat_extract_activation = "gelu"
+    config.feat_extract_norm = "layer" if fs_config.extractor_mode == "layer_norm" else "group"
+    config.feat_proj_dropout = fs_config.dropout_input
+    config.final_dropout = 0.0
+    config.hidden_act = fs_config.activation_fn.name
+    config.hidden_dropout = fs_config.dropout
+    config.hidden_size = fs_config.encoder_embed_dim
+    config.initializer_range = 0.02
+    config.intermediate_size = fs_config.encoder_ffn_embed_dim
+    config.layer_norm_eps = 1e-5
+    config.layerdrop = fs_config.encoder_layerdrop
+    config.mask_feature_length = fs_config.mask_channel_length
+    config.mask_feature_prob = fs_config.mask_channel_prob
+    config.mask_time_length = fs_config.mask_length
+    config.mask_time_prob = fs_config.mask_prob
+    config.num_attention_heads = fs_config.encoder_attention_heads
+    config.num_conv_pos_embedding_groups = fs_config.conv_pos_groups
+    config.num_conv_pos_embeddings = fs_config.conv_pos
+    config.num_feat_extract_layers = len(conv_layers)
+    config.num_hidden_layers = fs_config.encoder_layers
+    config.squeeze_factor = fs_config.squeeze_factor
+    # DeBERTa-specific parameters:
+    config.max_position_embeddings = fs_config.max_position_embeddings
+    config.position_buckets = fs_config.position_buckets
+    config.share_att_key = fs_config.share_att_key
+    config.relative_attention = fs_config.relative_attention
+    config.position_biased_input = fs_config.position_biased_input
+    config.pos_att_type = tuple(fs_config.pos_att_type.split("|"))
+    config.norm_rel_ebd = fs_config.norm_rel_ebd
+
+    return config
+
+
 @torch.no_grad()
 def convert_sew_checkpoint(
     checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True
@@ -176,10 +221,19 @@ def convert_sew_checkpoint(
     """
     Copy/paste/tweak model's weights to transformers design.
     """
+
+    if is_finetuned:
+        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
+            [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
+        )
+    else:
+        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
+
     if config_path is not None:
         config = SEWDConfig.from_pretrained(config_path)
     else:
-        config = SEWDConfig()
+        config = convert_config(model[0])
+    model = model[0].eval()
 
     if is_finetuned:
         if dict_path:
@@ -221,15 +275,6 @@ def convert_sew_checkpoint(
         hf_model = SEWDForCTC(config)
     else:
         hf_model = SEWDModel(config)
-
-    if is_finetuned:
-        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-            [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
-        )
-    else:
-        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
-
-    model = model[0].eval()
 
     recursively_load_weights(model, hf_model, is_finetuned)
 

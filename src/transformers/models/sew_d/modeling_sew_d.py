@@ -354,8 +354,8 @@ class SEWDUpsampling(nn.Module):
             bsz, src_len, src_embed_dim = hidden_states.size()
             tgt_len = src_len * self.squeeze_factor
             tgt_embed_dim = src_embed_dim // self.squeeze_factor
-            hidden_states = hidden_states.view(bsz, src_len, self.squeeze_factor, tgt_embed_dim)
-            hidden_states = hidden_states.view(bsz, tgt_len, tgt_embed_dim).contiguous()
+            hidden_states = hidden_states.reshape(bsz, src_len, self.squeeze_factor, tgt_embed_dim)
+            hidden_states = hidden_states.reshape(bsz, tgt_len, tgt_embed_dim)
 
         return hidden_states
 
