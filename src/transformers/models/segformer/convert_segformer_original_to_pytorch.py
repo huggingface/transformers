@@ -29,7 +29,7 @@ from transformers import (
     SegformerConfig,
     SegformerFeatureExtractor,
     SegformerForImageClassification,
-    SegformerForImageSegmentation,
+    SegformerForSemanticSegmentation,
 )
 from transformers.utils import logging
 
@@ -210,7 +210,7 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
         config.reshape_last_stage = False
         model = SegformerForImageClassification(config)
     else:
-        model = SegformerForImageSegmentation(config)
+        model = SegformerForSemanticSegmentation(config)
     model.load_state_dict(state_dict)
     model.eval()
 

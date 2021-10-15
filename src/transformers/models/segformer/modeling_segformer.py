@@ -731,7 +731,7 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
     """SegFormer Model transformer with an all-MLP decode head on top e.g. for ADE20k, CityScapes. """,
     SEGFORMER_START_DOCSTRING,
 )
-class SegformerForImageSegmentation(SegformerPreTrainedModel):
+class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.segformer = SegformerModel(config)
@@ -758,12 +758,12 @@ class SegformerForImageSegmentation(SegformerPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import SegformerFeatureExtractor, SegformerForImageSegmentation
+            >>> from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
             >>> from PIL import Image
             >>> import requests
 
             >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-fine-tuned-ade-512-512")
-            >>> model = SegformerForImageSegmentation("nvidia/segformer-b0-fine-tuned-ade-512-512")
+            >>> model = SegformerForSemanticSegmentation("nvidia/segformer-b0-fine-tuned-ade-512-512")
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)

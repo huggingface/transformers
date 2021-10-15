@@ -3281,21 +3281,43 @@ def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
 
 
-SEW_PRETRAINED_MODEL_ARCHIVE_LIST = None
+SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class SEWForCTC:
+class SegformerForImageClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class SEWForSequenceClassification:
+class SegformerForSemanticSegmentation:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegformerModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
+
+class SegformerPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+SEW_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SEWForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class SEWModel:
@@ -3322,15 +3344,6 @@ SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST = None
 class SEWDForCTC:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-
-class SEWDForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
 
 class SEWDModel:

@@ -1153,7 +1153,7 @@ if is_torch_available():
         [
             "SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SegformerForImageClassification",
-            "SegformerForImageSegmentation",
+            "SegformerForSemanticSegmentation",
             "SegformerLayer",
             "SegformerModel",
             "SegformerPreTrainedModel",
@@ -1175,6 +1175,8 @@ if is_torch_available():
             "SEWDForSequenceClassification",
             "SEWDModel",
             "SEWDPreTrainedModel",
+        ]
+    )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
     _import_structure["models.speech_to_text"].extend(
         [
@@ -2906,7 +2908,7 @@ if TYPE_CHECKING:
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SegformerForImageClassification,
-            SegformerForImageSegmentation,
+            SegformerForSemanticSegmentation,
             SegformerModel,
             SegformerPreTrainedModel,
         )

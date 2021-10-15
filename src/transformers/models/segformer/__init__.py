@@ -31,7 +31,7 @@ if is_torch_available():
     _import_structure["modeling_segformer"] = [
         "SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SegformerForImageClassification",
-        "SegformerForImageSegmentation",
+        "SegformerForSemanticSegmentation",
         "SegformerLayer",
         "SegformerModel",
         "SegformerPreTrainedModel",
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
         from .modeling_segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SegformerForImageClassification,
-            SegformerForImageSegmentation,
+            SegformerForSemanticSegmentation,
             SegformerLayer,
             SegformerModel,
             SegformerPreTrainedModel,
