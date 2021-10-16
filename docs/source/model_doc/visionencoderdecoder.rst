@@ -40,7 +40,7 @@ VisionEncoderDecoderModel
 .. autoclass:: transformers.VisionEncoderDecoderModel
     :members: forward, from_encoder_decoder_pretrained
 
-    
+
 FlaxVisionEncoderDecoderModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
