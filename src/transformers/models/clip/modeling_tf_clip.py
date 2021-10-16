@@ -445,7 +445,7 @@ class TFCLIPEncoder(tf.keras.layers.Layer):
     def __init__(self, config: CLIPConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.layers = [TFCLIPEncoderLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
+        self.layers = [TFCLIPEncoderLayer(config, name=f"layers_._{i}") for i in range(config.num_hidden_layers)]
 
     def call(
         self,
@@ -580,12 +580,16 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
 
     def _build_causal_attention_mask(self, batch_size, seq_length, dtype=tf.float32):
 
+        diag = tf.constant(0.0, shape=(seq_length,), dtype=dtype)
+
         # set an additive 2D attention mask with all places being masked
         to_mask = tf.constant(-10000.0, shape=(seq_length, seq_length), dtype=dtype)
 
         # set diagonal & lower triangular parts to 0 (i.e. the places not to be masked)
         # TIP: think the 2D matrix as the space of (query_seq, key_seq)
-        to_mask = tf.linalg.band_part(to_mask, -1, 0)
+        to_mask = tf.linalg.band_part(to_mask, 0, -1)
+        # to_mask = tf.linalg.band_part(to_mask, -1, 0)
+        to_mask = tf.linalg.set_diag(to_mask, diagonal=diag)
 
         return tf.broadcast_to(input=to_mask, shape=(batch_size, 1, seq_length, seq_length))
 
@@ -798,7 +802,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
     def build(self, input_shape: tf.TensorShape):
 
         self.logit_scale = self.add_weight(
-            shape=(),
+            shape=(1,),
             initializer=tf.keras.initializers.Constant(self.config.logit_scale_init_value),
             trainable=True,
             name="logit_scale",

@@ -254,7 +254,7 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFCLIPVisionModel.from_pretrained(model_name)
+            model = TFCLIPVisionModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
@@ -359,7 +359,7 @@ class TFCLIPTextModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFCLIPTextModel.from_pretrained(model_name)
+            model = TFCLIPTextModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
@@ -435,7 +435,7 @@ class TFCLIPModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFCLIPModel.from_pretrained(model_name)
+            model = TFCLIPModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
@@ -451,7 +451,7 @@ class TFCLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "openai/clip-vit-base-patch32"
-        model = TFCLIPModel.from_pretrained(model_name)
+        model = TFCLIPModel.from_pretrained(model_name, from_pt=True)
         processor = CLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
