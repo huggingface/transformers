@@ -2123,7 +2123,13 @@ class _LazyModule(ModuleType):
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
-        return super().__dir__() + self.__all__
+        result = super().__dir__()
+        # The elements of self.__all__ that are submodules may or may not be in the dir already, depending on whether
+        # they have been accessed or not. So we only add the elements of self.__all__ that are not already in the dir.
+        for attr in self.__all__:
+            if attr not in result:
+                result.append(attr)
+        return result
 
     def __getattr__(self, name: str) -> Any:
         if name in self._objects:
