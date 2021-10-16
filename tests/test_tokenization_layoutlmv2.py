@@ -1820,38 +1820,43 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Build a sequence from our model's vocabulary
                 stride = 2
                 seq_0, boxes_0, ids = self.get_clean_sequence(tokenizer, max_length=20)
-                question_0 = ' '.join(map(str,seq_0))
+                question_0 = " ".join(map(str, seq_0))
                 if len(ids) <= 2 + stride:
                     seq_0 = (seq_0 + " ") * (2 + stride)
                     ids = None
 
                 seq0_tokens = tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)
-                assert len(seq0_tokens['input_ids']) > 2 + stride
+                assert len(seq0_tokens["input_ids"]) > 2 + stride
                 question_1 = "This is another sentence to be encoded."
                 seq_1 = ["This", "is", "another", "sentence", "to", "be", "encoded."]
                 boxes_1 = [[i, i, i, i] for i in range(len(seq_1))]
                 seq1_tokens = tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)
-                if abs(len(seq0_tokens['input_ids']) - len(seq1_tokens['input_ids'])) <= 2:
-                    seq1_tokens_input_ids = seq1_tokens['input_ids'] + seq1_tokens['input_ids']
+                if abs(len(seq0_tokens["input_ids"]) - len(seq1_tokens["input_ids"])) <= 2:
+                    seq1_tokens_input_ids = seq1_tokens["input_ids"] + seq1_tokens["input_ids"]
                     seq_1 = tokenizer.decode(seq1_tokens_input_ids, clean_up_tokenization_spaces=False)
                     seq_1 = seq_1.split(" ")
                     boxes_1 = [[i, i, i, i] for i in range(len(seq_1))]
                 seq1_tokens = tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)
 
-                assert len(seq1_tokens['input_ids']) > 2 + stride
+                assert len(seq1_tokens["input_ids"]) > 2 + stride
 
-                smallest = seq1_tokens['input_ids'] if len(seq0_tokens['input_ids']) > len(seq1_tokens['input_ids']) else seq0_tokens['input_ids']
+                smallest = (
+                    seq1_tokens["input_ids"]
+                    if len(seq0_tokens["input_ids"]) > len(seq1_tokens["input_ids"])
+                    else seq0_tokens["input_ids"]
+                )
 
                 # We are not using the special tokens - a bit too hard to test all the tokenizers with this
                 # TODO try this again later
-                sequence = tokenizer(question_0, seq_1, boxes= boxes_1,
-                                            add_special_tokens=False)  # , add_prefix_space=False)
+                sequence = tokenizer(
+                    question_0, seq_1, boxes=boxes_1, add_special_tokens=False
+                )  # , add_prefix_space=False)
 
                 # Test with max model input length
                 model_max_length = tokenizer.model_max_length
                 self.assertEqual(model_max_length, 100)
                 seq_2 = seq_0 * model_max_length
-                question_2 = ' '.join(map(str,seq_2))
+                question_2 = " ".join(map(str, seq_2))
                 boxes_2 = boxes_0 * model_max_length
                 assert len(seq_2) > model_max_length
 
@@ -1870,26 +1875,36 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     with self.subTest(f"{tokenizer.__class__.__name__} Padding: {padding_state}"):
                         for truncation_state in [True, "longest_first", "only_first"]:
                             with self.subTest(f"{tokenizer.__class__.__name__} Truncation: {truncation_state}"):
-                                output = tokenizer(question_2, seq_1, boxes=boxes_1, padding=padding_state,
-                                                   truncation=truncation_state)
+                                output = tokenizer(
+                                    question_2,
+                                    seq_1,
+                                    boxes=boxes_1,
+                                    padding=padding_state,
+                                    truncation=truncation_state,
+                                )
                                 self.assertEqual(len(output["input_ids"]), model_max_length)
                                 self.assertEqual(len(output["bbox"]), model_max_length)
 
                                 output = tokenizer(
-                                    [question_2], [seq_1], boxes=[boxes_1], padding=padding_state,
-                                    truncation=truncation_state
+                                    [question_2],
+                                    [seq_1],
+                                    boxes=[boxes_1],
+                                    padding=padding_state,
+                                    truncation=truncation_state,
                                 )
                                 self.assertEqual(len(output["input_ids"][0]), model_max_length)
                                 self.assertEqual(len(output["bbox"][0]), model_max_length)
 
                         # Simple
-                        output = tokenizer(question_1, seq_2, boxes=boxes_2, padding=padding_state,
-                                           truncation="only_second")
+                        output = tokenizer(
+                            question_1, seq_2, boxes=boxes_2, padding=padding_state, truncation="only_second"
+                        )
                         self.assertEqual(len(output["input_ids"]), model_max_length)
                         self.assertEqual(len(output["bbox"]), model_max_length)
 
-                        output = tokenizer([question_1], [seq_2], boxes=[boxes_2], padding=padding_state,
-                                           truncation="only_second")
+                        output = tokenizer(
+                            [question_1], [seq_2], boxes=[boxes_2], padding=padding_state, truncation="only_second"
+                        )
                         self.assertEqual(len(output["input_ids"][0]), model_max_length)
                         self.assertEqual(len(output["bbox"][0]), model_max_length)
 
@@ -1897,8 +1912,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         # Reset warnings
                         tokenizer.deprecation_warnings = {}
                         with self.assertLogs("transformers", level="WARNING") as cm:
-                            output = tokenizer(question_1, seq_2, boxes=boxes_2, padding=padding_state,
-                                               truncation=False)
+                            output = tokenizer(
+                                question_1, seq_2, boxes=boxes_2, padding=padding_state, truncation=False
+                            )
                             self.assertNotEqual(len(output["input_ids"]), model_max_length)
                             self.assertNotEqual(len(output["bbox"]), model_max_length)
                         self.assertEqual(len(cm.records), 1)
@@ -1910,8 +1926,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                         tokenizer.deprecation_warnings = {}
                         with self.assertLogs("transformers", level="WARNING") as cm:
-                            output = tokenizer([question_1], [seq_2], boxes=[boxes_2], padding=padding_state,
-                                               truncation=False)
+                            output = tokenizer(
+                                [question_1], [seq_2], boxes=[boxes_2], padding=padding_state, truncation=False
+                            )
                             self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
                             self.assertNotEqual(len(output["bbox"][0]), model_max_length)
                         self.assertEqual(len(cm.records), 1)
@@ -1921,24 +1938,25 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                             )
                         )
 
-                truncated_first_sequence = tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)['input_ids'][
-                                           :-2] + tokenizer(
-                    seq_1, boxes=boxes_1, add_special_tokens=False
-                )['input_ids']
+                truncated_first_sequence = (
+                    tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)["input_ids"][:-2]
+                    + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["input_ids"]
+                )
                 truncated_second_sequence = (
-                        tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)['input_ids']
-                        + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)['input_ids'][:-2]
+                    tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)["input_ids"]
+                    + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["input_ids"][:-2]
                 )
                 truncated_longest_sequence = (
                     truncated_first_sequence if len(seq0_tokens) > len(seq1_tokens) else truncated_second_sequence
                 )
 
-                overflow_first_sequence = tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)['input_ids'][
-                                          -(2 + stride):
-                                          ] + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)['input_ids']
+                overflow_first_sequence = (
+                    tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)["input_ids"][-(2 + stride) :]
+                    + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["input_ids"]
+                )
                 overflow_second_sequence = (
-                        tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)['input_ids']
-                        + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)['input_ids'][-(2 + stride):]
+                    tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)["input_ids"]
+                    + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["input_ids"][-(2 + stride) :]
                 )
                 overflow_longest_sequence = (
                     overflow_first_sequence if len(seq0_tokens) > len(seq1_tokens) else overflow_second_sequence
@@ -1952,7 +1970,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         question_0,
                         seq_1,
                         boxes=boxes_1,
-                        max_length=len(sequence['input_ids']) - 2,
+                        max_length=len(sequence["input_ids"]) - 2,
                         add_special_tokens=False,
                         stride=stride,
                         truncation="longest_first",
@@ -1964,7 +1982,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     # bbox = information["bbox"]
                     self.assertEqual(len(information["input_ids"]), 2)
 
-                    self.assertEqual(len(truncated_sequence), len(sequence['input_ids']) - 2)
+                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_longest_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
@@ -1977,7 +1995,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                             question_0,
                             seq_1,
                             boxes=boxes_1,
-                            max_length=len(sequence['input_ids']) - 2,
+                            max_length=len(sequence["input_ids"]) - 2,
                             add_special_tokens=False,
                             stride=stride,
                             truncation="longest_first",
@@ -1998,8 +2016,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     information = tokenizer(
                         question_0,
                         seq_1,
-                        boxes = boxes_1,
-                        max_length=len(sequence['input_ids']) - 2,
+                        boxes=boxes_1,
+                        max_length=len(sequence["input_ids"]) - 2,
                         add_special_tokens=False,
                         stride=stride,
                         truncation=True,
@@ -2011,7 +2029,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     # bbox = information["bbox"]
                     self.assertEqual(len(information["input_ids"]), 2)
 
-                    self.assertEqual(len(truncated_sequence), len(sequence['input_ids']) - 2)
+                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_longest_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
@@ -2024,7 +2042,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                             question_0,
                             seq_1,
                             boxes=boxes_1,
-                            max_length=len(sequence['input_ids']) - 2,
+                            max_length=len(sequence["input_ids"]) - 2,
                             add_special_tokens=False,
                             stride=stride,
                             truncation=True,
@@ -2044,7 +2062,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     question_0,
                     seq_1,
                     boxes=boxes_1,
-                    max_length=len(sequence['input_ids']) - 2,
+                    max_length=len(sequence["input_ids"]) - 2,
                     add_special_tokens=False,
                     stride=stride,
                     truncation="only_first",
@@ -2058,10 +2076,10 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     # bbox = information_first_truncated["bbox"]
                     self.assertEqual(len(information_first_truncated["input_ids"]), 2)
 
-                    self.assertEqual(len(truncated_sequence), len(sequence['input_ids']) - 2)
+                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_first_sequence)
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq1_tokens['input_ids']))
+                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq1_tokens["input_ids"]))
                     self.assertEqual(overflowing_tokens, overflow_first_sequence)
                     # self.assertEqual(bbox,truncated_first_sequence["bbox"][:-2])
                 else:
@@ -2069,19 +2087,18 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     overflowing_tokens = information_first_truncated["overflowing_tokens"]
                     # bbox = information_first_truncated["bbox"]
 
-                    self.assertEqual(len(truncated_sequence), len(sequence['input_ids']) - 2)
+                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_first_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, seq0_tokens['input_ids'][-(2 + stride):])
+                    self.assertEqual(overflowing_tokens, seq0_tokens["input_ids"][-(2 + stride) :])
                     # self.assertEqual(bbox,truncated_first_sequence["bbox"][:-2])
-
 
                 information_second_truncated = tokenizer(
                     question_0,
                     seq_1,
                     boxes=boxes_1,
-                    max_length=len(sequence['input_ids']) - 2,
+                    max_length=len(sequence["input_ids"]) - 2,
                     add_special_tokens=False,
                     stride=stride,
                     truncation="only_second",
@@ -2096,10 +2113,10 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(information_second_truncated["input_ids"]), 2)
 
-                    self.assertEqual(len(truncated_sequence), len(sequence['input_ids']) - 2)
+                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_second_sequence)
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq0_tokens['input_ids']))
+                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq0_tokens["input_ids"]))
                     self.assertEqual(overflowing_tokens, overflow_second_sequence)
                     # self.assertEqual(bbox,truncated_second_sequence["bbox"][:-2])
                 else:
@@ -2107,13 +2124,12 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     overflowing_tokens = information_second_truncated["overflowing_tokens"]
                     # bbox = information_second_truncated["bbox"]
 
-                    self.assertEqual(len(truncated_sequence), len(sequence['input_ids']) - 2)
+                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_second_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, seq1_tokens['input_ids'][-(2 + stride):])
+                    self.assertEqual(overflowing_tokens, seq1_tokens["input_ids"][-(2 + stride) :])
                     # self.assertEqual(bbox,truncated_second_sequence["bbox"][:-2])
-
 
     # @unittest.skip("LayoutLMv2 tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_single_input(self):
