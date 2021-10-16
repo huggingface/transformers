@@ -54,10 +54,10 @@ Example of use:
 
 Tips:
 
-- This implementation is only for tokenization. Following mBART, BARTpho uses the "large" architecture of BART with an
-  additional layer-normalization layer on top of both the encoder and decoder. Thus, usage examples in the
-  :doc:`documentation of BART <bart>`, when adapting to use with BARTpho, should be adjusted by replacing the
-  BART-specialized classes with the mBART-specialized counterparts. For example:
+- Following mBART, BARTpho uses the "large" architecture of BART with an additional layer-normalization layer on top of
+  both the encoder and decoder. Thus, usage examples in the :doc:`documentation of BART <bart>`, when adapting to use
+  with BARTpho, should be adjusted by replacing the BART-specialized classes with the mBART-specialized counterparts.
+  For example:
 
 .. code-block::
 
@@ -70,6 +70,11 @@ Tips:
     >>> probs = logits[0, masked_index].softmax(dim=0)
     >>> values, predictions = probs.topk(5)
     >>> print(tokenizer.decode(predictions).split())
+
+- This implementation is only for tokenization: "monolingual_vocab_file" consists of Vietnamese-specialized types
+  extracted from the pre-trained SentencePiece model "vocab_file" that is available from the multilingual XLM-RoBERTa.
+  Other languages, if employing this pre-trained multilingual SentencePiece model "vocab_file" for subword
+  segmentation, can reuse BartphoTokenizer with their own language-specialized "monolingual_vocab_file".
 
 This model was contributed by `dqnguyen <https://huggingface.co/dqnguyen>`__. The original code can be found `here
 <https://github.com/VinAIResearch/BARTpho>`__.
