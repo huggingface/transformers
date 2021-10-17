@@ -377,16 +377,16 @@ class FlaxVisionEncoderDecoderModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGIT_SLICE = np.array(
             [
-                -38.72459,
-                -30.65585,
-                -31.436113,
-                -39.031097,
-                -38.40545,
-                -34.90358,
-                -33.307343,
-                -35.70261,
-                -38.527237,
-                -36.14068,
+                -38.705837,
+                -30.639936,
+                -31.41905,
+                -39.01204,
+                -38.38698,
+                -34.887215,
+                -33.29087,
+                -35.684475,
+                -38.50852,
+                -36.124676,
             ]
         )
         max_diff = np.amax(np.abs(logits[0, 0, :10] - EXPECTED_LOGIT_SLICE))
