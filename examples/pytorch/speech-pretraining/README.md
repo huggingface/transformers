@@ -94,7 +94,7 @@ To pre-train `"large-sized"` Wav2Vec2 model, *e.g.* [facebook/wav2vec2-large-lv6
 on [librispeech_asr](https://huggingface.co/datasets/librispeech_asr), the following command can be run:
 
 ```bash
-accelerate launch run_pretrain_no_trainer.py \ 
+accelerate launch run_wav2vec2_pretraining_no_trainer.py \ 
 	--dataset_name=librispeech_asr \
 	--dataset_config_names clean clean other \
 	--dataset_split_names train.100 train.360 train.500 \

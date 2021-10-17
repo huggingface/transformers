@@ -395,7 +395,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
-            --audio_column_name file
             --do_train
             --do_eval
             --learning_rate 1e-4
