@@ -1530,7 +1530,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
     SEWD_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV_2_VEC_2->SEWD
-class SEWForSequenceClassification(SEWDPreTrainedModel):
+class SEWDForSequenceClassification(SEWDPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
