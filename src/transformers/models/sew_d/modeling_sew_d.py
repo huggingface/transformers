@@ -22,12 +22,17 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import _softmax_backward_data, nn
-from torch.nn import LayerNorm, CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, LayerNorm
 
 from transformers.deepspeed import is_deepspeed_zero3_enabled
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings, add_code_sample_docstrings
+from ...file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -1519,8 +1524,8 @@ class SEWDForCTC(SEWDPreTrainedModel):
 
 @add_start_docstrings(
     """
-    SEWD Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
+    SEWD Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like SUPERB
+    Keyword Spotting.
     """,
     SEWD_START_DOCSTRING,
 )

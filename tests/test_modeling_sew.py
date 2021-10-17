@@ -31,7 +31,13 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import SEWForCTC, SEWModel, Wav2Vec2FeatureExtractor, Wav2Vec2Processor
+    from transformers import (
+        SEWForCTC,
+        SEWForSequenceClassification,
+        SEWModel,
+        Wav2Vec2FeatureExtractor,
+        Wav2Vec2Processor,
+    )
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
 
 
@@ -241,7 +247,7 @@ class SEWModelTester:
 
 @require_torch
 class SEWModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (SEWForCTC, SEWModel) if is_torch_available() else ()
+    all_model_classes = (SEWForCTC, SEWModel, SEWForSequenceClassification) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
