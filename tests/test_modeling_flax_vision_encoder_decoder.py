@@ -403,7 +403,7 @@ class FlaxVisionEncoderDecoderModelIntegrationTest(unittest.TestCase):
 
         preds, scores = generate_step(pixel_values)
 
-        EXPECTED_SCORES = np.array([-0.5892731])
+        EXPECTED_SCORES = np.array([-0.59563464])
         scores = np.array(scores)
         max_diff = np.amax(np.abs(scores - EXPECTED_SCORES))
         self.assertLessEqual(max_diff, 1e-5)
