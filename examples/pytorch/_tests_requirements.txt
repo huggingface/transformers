@@ -13,7 +13,7 @@ streamlit
 elasticsearch
 nltk
 pandas
-datasets >= 1.1.3
+datasets >= 1.13.3
 fire
 pytest
 conllu
@@ -21,3 +21,4 @@ sentencepiece != 0.1.92
 protobuf
 torchvision
 jiwer
+librosa
