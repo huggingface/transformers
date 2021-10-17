@@ -128,6 +128,18 @@ def parse_args():
         help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
+        "--train_cache_file_name",
+        type=str,
+        default=None,
+        help="Path to the train cached file name",
+    )
+    parser.add_argument(
+        "--validation_cache_file_name",
+        type=str,
+        default=None,
+        help="Path to the validation cached file name",
+    )
+    parser.add_argument(
         "--per_device_train_batch_size",
         type=int,
         default=8,
@@ -419,11 +431,10 @@ def main():
     # via the `feature_extractor`
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(args.model_name_or_path)
 
-    source_sampling_rate = raw_datasets["train"].features["audio"].sampling_rate
-    target_sampling_rate = feature_extractor.sampling_rate
-
-    if source_sampling_rate != target_sampling_rate:
-        raw_datasets = raw_datasets.cast_column("audio", datasets.features.Audio(sampling_rate=target_sampling_rate))
+    # make sure that dataset decodes audio with correct samlping rate
+    raw_datasets = raw_datasets.cast_column(
+        "audio", datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+    )
 
     # only normalized-inputs-training is supported
     if not feature_extractor.do_normalize:
@@ -446,12 +457,18 @@ def main():
 
         return batch
 
+    # load via mapped files via path
+    cache_file_names = None
+    if args.train_cache_file_name is not None:
+        cache_file_names = {"train": args.train_cache_file_name, "validation": args.validation_cache_file_name}
+
     # load audio files into numpy arrays
     with accelerator.main_process_first():
         vectorized_datasets = raw_datasets.map(
             prepare_dataset,
             num_proc=args.preprocessing_num_workers,
             remove_columns=raw_datasets["train"].column_names,
+            cache_file_names=cache_file_names,
         )
 
         if min_length > 0.0:

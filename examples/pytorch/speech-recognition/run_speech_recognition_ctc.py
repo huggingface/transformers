@@ -178,12 +178,12 @@ class DataTrainingArguments:
     min_duration_in_seconds: Optional[float] = field(
         default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
     )
-    only_data_preprocessing: Optional[bool] = field(
+    preprocessing_only: Optional[bool] = field(
         default=False,
         metadata={
             "help": "Whether to only do data preprocessing and skip training. "
             "This is especially useful when data preprocessing errors out in distributed training due to timeout. "
-            "In this case, one should run the preprocessing in a non-distributed setup with `only_data_preprocessing=True` "
+            "In this case, one should run the preprocessing in a non-distributed setup with `preprocessing_only=True` "
             "so that the cached datasets can consequently be loaded in distributed training"
         },
     )
@@ -453,11 +453,11 @@ def main():
     # Thankfully, `datasets` takes care of automatically loading and resampling the audio,
     # so that we just need to set the correct target sampling rate and normalize the input
     # via the `feature_extractor`
-    source_sampling_rate = raw_datasets["train"].features["audio"].sampling_rate
-    target_sampling_rate = processor.feature_extractor.sampling_rate
 
-    if source_sampling_rate != target_sampling_rate:
-        raw_datasets = raw_datasets.cast_column("audio", datasets.features.Audio(sampling_rate=target_sampling_rate))
+    # make sure that dataset decodes audio with correct samlping rate
+    raw_datasets = raw_datasets.cast_column(
+        "audio", datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+    )
 
     # derive max & min input length for sample rate & max duration
     max_input_length = data_args.max_duration_in_seconds * processor.feature_extractor.sampling_rate
@@ -504,8 +504,13 @@ def main():
     # Define Metric during training
     wer_metric = load_metric("wer")
 
-    if data_args.only_data_preprocessing:
-        logger.info("Data preprocessing finished.")
+    # for large datasets it is advised to run the preprocessing on a
+    # single machine first with ``args.preprocessing_only`` since there will mostly likely
+    # be a timeout when running the script in distributed mode.
+    # In a second step ``args.preprocessing_only`` can then be set to `False` to load the
+    # cached dataset
+    if data_args.preprocessing_only:
+        logger.info(f"Data preprocessing finished. Files cached at {vectorized_datasets.cache_files}")
         return
 
     def compute_metrics(pred):
