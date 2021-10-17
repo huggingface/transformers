@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 HuggingFace Inc. team.
+# Copyright 2021 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import unittest
 
 import numpy as np
 
-from transformers import is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers import is_flax_available, is_vision_available
+from transformers.testing_utils import require_flax, require_vision, slow
 
 from .test_modeling_flax_common import floats_tensor, ids_tensor
 from .test_modeling_flax_gpt2 import FlaxGPT2ModelTester
@@ -30,11 +30,18 @@ from .test_modeling_flax_vit import FlaxViTModelTester
 if is_flax_available():
     from transformers import (
         AutoConfig,
+        AutoTokenizer,
         FlaxGPT2LMHeadModel,
         FlaxVisionEncoderDecoderModel,
         FlaxViTModel,
         VisionEncoderDecoderConfig,
     )
+
+
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import ViTFeatureExtractor
 
 
 @require_flax
@@ -337,3 +344,70 @@ class FlaxVisionEncoderDecoderModelTest(unittest.TestCase):
     def test_configuration_tie(self):
         model = self.get_from_encoderdecoder_pretrained_model()
         self._check_configuration_tie(model)
+
+
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
+
+@require_vision
+@require_flax
+class FlaxVisionEncoderDecoderModelIntegrationTest(unittest.TestCase):
+    # @slow
+    def test_inference_coco_en(self):
+
+        loc = "ydshieh/flax-vit-gpt2-coco-en"
+
+        feature_extractor = ViTFeatureExtractor.from_pretrained(loc)
+        tokenizer = AutoTokenizer.from_pretrained(loc)
+        model = FlaxVisionEncoderDecoderModel.from_pretrained(loc)
+
+        img = prepare_img()
+        pixel_values = feature_extractor(images=img, return_tensors="np").pixel_values
+
+        decoder_input_ids = np.array([[model.config.decoder_start_token_id]])
+        logits = model(pixel_values, decoder_input_ids)[0]
+        logits = np.array(logits)
+
+        # verify the logits
+        expected_shape = (1, 1, model.config.decoder.vocab_size)
+        self.assertEqual(logits.shape, expected_shape)
+
+        EXPECTED_LOGIT_SLICE = np.array(
+            [
+                -38.72459,
+                -30.65585,
+                -31.436113,
+                -39.031097,
+                -38.40545,
+                -34.90358,
+                -33.307343,
+                -35.70261,
+                -38.527237,
+                -36.14068,
+            ]
+        )
+        max_diff = np.amax(np.abs(logits[0, 0, :10] - EXPECTED_LOGIT_SLICE))
+        self.assertLessEqual(max_diff, 1e-5)
+
+        def generate_step(pixel_values):
+
+            outputs = model.generate(pixel_values, max_length=16, num_beams=4)
+            output_ids = outputs.sequences
+            preds = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            preds = [pred.strip() for pred in preds]
+
+            return preds, outputs.scores
+
+        preds, scores = generate_step(pixel_values)
+
+        EXPECTED_SCORES = np.array([-0.5892731])
+        scores = np.array(scores)
+        max_diff = np.amax(np.abs(scores - EXPECTED_SCORES))
+        self.assertLessEqual(max_diff, 1e-5)
+
+        # should produce
+        # ["a cat laying on top of a couch next to another cat"]
+        self.assertEqual(preds, ["a cat laying on top of a couch next to another cat"])
