@@ -519,6 +519,9 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
+import pytorch_quantization.nn as quant_nn
+from pytorch_quantization import calib
+from pytorch_quantization.tensor_quant import QuantDescriptor
 
 @require_torch
 class QDQBertModelIntegrationTest(unittest.TestCase):
@@ -526,11 +529,18 @@ class QDQBertModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head_absolute_embedding(self):
         model = QDQBertForMaskedLM.from_pretrained("bert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+
+        input_desc = QuantDescriptor(num_bits=8, calib_method="max")
+        weight_desc = QuantDescriptor(num_bits=8, axis=((0,)))
+        quant_nn.QuantLinear.set_default_quant_desc_input(input_desc)
+        quant_nn.QuantLinear.set_default_quant_desc_weight(weight_desc)
+
         output = model(input_ids)[0]
+        
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
+        
         expected_slice = torch.tensor(
             [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
         )
-
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
