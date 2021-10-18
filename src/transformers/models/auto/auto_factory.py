@@ -430,7 +430,7 @@ class _BaseAutoModelClass:
         Args:
             config_class (:class:`~transformers.PretrainedConfig`):
                 The configuration corresponding to the model to register.
-            model_class (:class:`~transformers.PretrainedConfig`):
+            model_class (:class:`~transformers.PreTrainedModel`):
                 The model to register.
         """
         if hasattr(model_class, "config_class") and model_class.config_class != config_class:
