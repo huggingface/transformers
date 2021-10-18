@@ -19,6 +19,7 @@ import inspect
 import unittest
 
 from transformers import is_torch_available, is_vision_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -29,6 +30,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_MAPPING,
         SegformerConfig,
         SegformerForImageClassification,
         SegformerForSemanticSegmentation,
@@ -305,6 +307,28 @@ class SegformerModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class in get_values(MODEL_MAPPING):
+                continue
+            # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
+            # this can then be incorporated into _prepare_for_class in test_modeling_common.py
+            if model_class.__name__ == "SegformerForSemanticSegmentation":
+                batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
+                inputs_dict["labels"] = torch.zeros([self.model_tester.batch_size, height, width]).long()
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
 
     @slow
     def test_model_from_pretrained(self):
