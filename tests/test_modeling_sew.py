@@ -467,7 +467,7 @@ class SEWModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
         self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
-        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 2)
+        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 5)
 
     @tooslow
     def test_inference_ctc_batched(self):
