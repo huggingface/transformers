@@ -32,7 +32,7 @@ There is one class of :obj:`AutoModel` for each task, and for each backend (PyTo
 Extending the Auto Classes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Each of the auto classes as a method to be extended with your custom classes. For instance, if you have defined a
+Each of the auto classes has a method to be extended with your custom classes. For instance, if you have defined a
 custom class of model :obj:`NewModel`, make sure you have a :obj:`NewModelConfig` then you can add those to the auto
 classes like this:
 
