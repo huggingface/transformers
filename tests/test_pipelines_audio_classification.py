@@ -21,6 +21,7 @@ from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
+    require_audio,
     require_datasets,
     require_tf,
     require_torch,
@@ -43,10 +44,7 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         audio2 = np.zeros((14000,))
         return audio_classifier, [audio2, audio]
 
-    @require_datasets
     def run_pipeline_test(self, audio_classifier, examples):
-        import datasets
-
         audio2, audio = examples
         output = audio_classifier(audio)
         # by default a model is initialized with num_labels=2
@@ -64,6 +62,13 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
                 {"score": ANY(float), "label": ANY(str)},
             ],
         )
+
+        self.run_audio(audio_classifier)
+
+    @require_datasets
+    @require_audio
+    def run_audio(self, audio_classifier):
+        import datasets
 
         # test with a local file
         dataset = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
