@@ -25,6 +25,8 @@ import unittest
 import warnings
 from typing import Dict, List, Tuple
 
+import numpy as np
+
 import transformers
 from huggingface_hub import HfApi, Repository
 from requests.exceptions import HTTPError
@@ -48,7 +50,6 @@ from transformers.testing_utils import (
 
 
 if is_torch_available():
-    import numpy as np
     import torch
     from torch import nn
 
@@ -1428,6 +1429,7 @@ class ModelTesterMixin:
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
+        import numpy as np
         import tensorflow as tf
 
         import transformers
