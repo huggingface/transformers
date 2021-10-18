@@ -243,6 +243,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("hubert", "Hubert"),
         ("barthez", "BARThez"),
         ("phobert", "PhoBERT"),
+        ("bartpho", "BARTpho"),
         ("cpm", "CPM"),
         ("bertweet", "Bertweet"),
         ("bert-japanese", "BertJapanese"),
