@@ -16,7 +16,7 @@ QDQBERT
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The QDQBERT model was proposed in `Integer Quantization for Deep Learning Inference: Principles and Empirical Evaluation
+The QDQBERT model can be referenced in `Integer Quantization for Deep Learning Inference: Principles and Empirical Evaluation
 <https://arxiv.org/abs/2004.09602>`__  by Hao Wu, Patrick Judd, Xiaojie Zhang, Mikhail Isaev and Paulius Micikevicius
 
 The abstract from the paper is the following:
@@ -25,7 +25,8 @@ Quantization techniques can reduce the size of Deep Neural Networks and improve 
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+An example of using QDQBERT model to perform quatization aware training and post training quantization for SQUAD task can be found at [QAT-qdqbert](transformers
+/examples/pytorch/question-answering/QAT-qdqbert)
 
 This model was contributed by `<INSERT YOUR HF USERNAME HERE> 
 <https://huggingface.co/<INSERT YOUR HF USERNAME HERE>>`__. The original code can be found `here 
