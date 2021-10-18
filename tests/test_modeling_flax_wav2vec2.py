@@ -356,21 +356,13 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        import soundfile as sf
-
-        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
-
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").filter(
+            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
+        )[:num_samples]["audio"]
 
-        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
-
-        return ds["speech"][:num_samples]
+        return [x["array"] for x in speech_samples]
 
     def test_inference_ctc_robust_batched(self):
         model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", from_pt=True)
