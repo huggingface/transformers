@@ -284,3 +284,37 @@ class PipelinePadTest(unittest.TestCase):
                 _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
             )
         )
+
+    @require_torch
+    def test_pipeline_image_padding(self):
+        import torch
+
+        items = [
+            {
+                "label": "label1",
+                "pixel_values": torch.zeros((1, 3, 10, 10)),
+            },
+            {
+                "label": "label2",
+                "pixel_values": torch.zeros((1, 3, 10, 10)),
+            },
+        ]
+
+        self.assertEqual(_pad(items, "label", 0, "right"), ["label1", "label2"])
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "pixel_values", 10, "right"),
+                torch.zeros((2, 3, 10, 10)),
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "input_ids", 10, "left"),
+                torch.LongTensor([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
+            )
+        )

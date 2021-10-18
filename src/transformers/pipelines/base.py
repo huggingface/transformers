@@ -70,6 +70,10 @@ def _pad(items, key, padding_value, padding_side):
     batch_size = len(items)
     if isinstance(items[0][key], torch.Tensor):
         # Others include `attention_mask` etc...
+        shape = items[0][key].shape
+        if len(shape) != 2:
+            # This is probable image so padding shouldn't be necessary
+            return torch.cat([item[key] for item in items], dim=0)
         max_length = max(item[key].shape[-1] for item in items)
         dtype = items[0][key].dtype
         tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
