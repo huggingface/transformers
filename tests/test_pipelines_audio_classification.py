@@ -21,10 +21,10 @@ from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
-    require_audio,
     require_datasets,
     require_tf,
     require_torch,
+    require_torchaudio,
     slow,
 )
 
@@ -63,11 +63,11 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             ],
         )
 
-        self.run_audio(audio_classifier)
+        self.run_torchaudio(audio_classifier)
 
     @require_datasets
-    @require_audio
-    def run_audio(self, audio_classifier):
+    @require_torchaudio
+    def run_torchaudio(self, audio_classifier):
         import datasets
 
         # test with a local file
