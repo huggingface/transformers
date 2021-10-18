@@ -6,6 +6,7 @@ from collections import OrderedDict
 
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
+        ("QDQBertConfig", "QDQBertForQuestionAnswering"),
         ("CanineConfig", "CanineForQuestionAnswering"),
         ("RoFormerConfig", "RoFormerForQuestionAnswering"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForQuestionAnswering"),
@@ -41,6 +42,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
+        ("QDQBertConfig", "QDQBertLMHeadModel"),
         ("RoFormerConfig", "RoFormerForCausalLM"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForCausalLM"),
         ("GPTNeoConfig", "GPTNeoForCausalLM"),
@@ -80,6 +82,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
+        ("QDQBertConfig", "QDQBertForMaskedLM"),
         ("RoFormerConfig", "RoFormerForMaskedLM"),
         ("BigBirdConfig", "BigBirdForMaskedLM"),
         ("Wav2Vec2Config", "Wav2Vec2ForMaskedLM"),
@@ -113,6 +116,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
+        ("QDQBertConfig", "QDQBertForMultipleChoice"),
         ("CanineConfig", "CanineForMultipleChoice"),
         ("RoFormerConfig", "RoFormerForMultipleChoice"),
         ("BigBirdConfig", "BigBirdForMultipleChoice"),
@@ -140,6 +144,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
+        ("QDQBertConfig", "QDQBertForNextSentencePrediction"),
         ("BertConfig", "BertForNextSentencePrediction"),
         ("MegatronBertConfig", "MegatronBertForNextSentencePrediction"),
         ("MobileBertConfig", "MobileBertForNextSentencePrediction"),
@@ -177,6 +182,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
+        ("QDQBertConfig", "QDQBertForSequenceClassification"),
         ("CanineConfig", "CanineForSequenceClassification"),
         ("RoFormerConfig", "RoFormerForSequenceClassification"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForSequenceClassification"),
@@ -225,6 +231,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
+        ("QDQBertConfig", "QDQBertForTokenClassification"),
         ("CanineConfig", "CanineForTokenClassification"),
         ("RoFormerConfig", "RoFormerForTokenClassification"),
         ("BigBirdConfig", "BigBirdForTokenClassification"),
@@ -255,6 +262,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_MAPPING_NAMES = OrderedDict(
     [
+        ("QDQBertConfig", "QDQBertModel"),
         ("VisualBertConfig", "VisualBertModel"),
         ("CanineConfig", "CanineModel"),
         ("RoFormerConfig", "RoFormerModel"),
@@ -319,6 +327,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
 
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
+        ("QDQBertConfig", "QDQBertForMaskedLM"),
         ("RoFormerConfig", "RoFormerForMaskedLM"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForConditionalGeneration"),
         ("GPTNeoConfig", "GPTNeoForCausalLM"),

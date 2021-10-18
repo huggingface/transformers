@@ -14,37 +14,26 @@
 # limitations under the License.
 """ Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
 import argparse
-import glob
 import logging
 import os
-import random
+import time
 import timeit
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
-from torch.utils.data.distributed import DistributedSampler
-from tqdm import tqdm, trange
+from torch.utils.data import DataLoader
 
-import tensorrt as trt
 import pycuda.driver as cuda
-import pycuda.autoinit
+import tensorrt as trt
 
-import time
+
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 
-from transformers import (
-    AutoTokenizer,
-    default_data_collator,
-    set_seed,
-    EvalPrediction,
-)
-from transformers.trainer_pt_utils import (
-    nested_concat,
-    nested_truncate,
-)
-
 from absl import logging as absl_logging
+
+from transformers import AutoTokenizer, EvalPrediction, default_data_collator, set_seed
+from transformers.trainer_pt_utils import nested_concat, nested_truncate
+
 
 absl_logger = absl_logging.get_absl_logger()
 absl_logger.setLevel(logging.WARNING)
@@ -106,9 +95,7 @@ parser.add_argument(
     help="When splitting up a long document into chunks, how much stride to take between chunks.",
 )
 
-parser.add_argument(
-    "--per_device_eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation."
-)
+parser.add_argument("--per_device_eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.")
 
 parser.add_argument(
     "--n_best_size",
@@ -126,11 +113,13 @@ parser.add_argument(
 
 parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
-import transformers
 import datasets
 from datasets import load_dataset, load_metric
+
+import transformers
 from accelerate import Accelerator
 from utils_qa import postprocess_qa_predictions
+
 
 parser.add_argument(
     "--dataset_name",
@@ -174,7 +163,7 @@ else:
 
 logger.info("Training/evaluation parameters %s", args)
 
-args.eval_batch_size = args.per_device_eval_batch_size #* max(1, args.n_gpu)
+args.eval_batch_size = args.per_device_eval_batch_size  # * max(1, args.n_gpu)
 
 INPUT_SHAPE = (args.eval_batch_size, args.max_seq_length)
 
@@ -190,25 +179,25 @@ if INT8_ENGINE:
     engine_name = "temp_engine/bert-int8.engine"
 
 # import ONNX file
-if not os.path.exists('temp_engine'):
-    os.makedirs('temp_engine')
-    
+if not os.path.exists("temp_engine"):
+    os.makedirs("temp_engine")
+
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-with trt.Builder(TRT_LOGGER) as builder, \
-    builder.create_network(EXPLICIT_BATCH) as network, \
-    trt.OnnxParser(network, TRT_LOGGER) as parser:
-    with open(args.onnx_model_path, 'rb') as model:
+with trt.Builder(TRT_LOGGER) as builder, builder.create_network(EXPLICIT_BATCH) as network, trt.OnnxParser(
+    network, TRT_LOGGER
+) as parser:
+    with open(args.onnx_model_path, "rb") as model:
         if not parser.parse(model.read()):
             for error in range(parser.num_errors):
                 print(parser.get_error(error))
-                
+
     # print(network)
-    # num_layers = network.num_layers 
+    # num_layers = network.num_layers
     # print('nLayers', num_layers)
 
     # Query input names and shapes from parsed TensorRT network
     network_inputs = [network.get_input(i) for i in range(network.num_inputs)]
-    input_names = [_input.name for _input in network_inputs]   # ex: ["actual_input1"]
+    input_names = [_input.name for _input in network_inputs]  # ex: ["actual_input1"]
 
     with builder.create_builder_config() as config:
         config.max_workspace_size = 1 << 30
@@ -222,20 +211,19 @@ with trt.Builder(TRT_LOGGER) as builder, \
         config.add_optimization_profile(profile)
         for i in range(len(input_names)):
             profile.set_shape(input_names[i], INPUT_SHAPE, INPUT_SHAPE, INPUT_SHAPE)
-            #profile.set_shape(input_names[i], (1, 128), (8, 128), (256, 128)) 
+            # profile.set_shape(input_names[i], (1, 128), (8, 128), (256, 128))
         engine = builder.build_engine(network, config)
 
-        #serialize_engine and store in file (can be directly loaded and deserialized):
+        # serialize_engine and store in file (can be directly loaded and deserialized):
         with open(engine_name, "wb") as f:
             f.write(engine.serialize())
 
 # run inference with TRT
-def model_infer(inputs, context, d_inputs, h_output0, h_output1, \
-    d_output0, d_output1, stream):
-    input_ids = np.asarray(inputs["input_ids"], dtype = np.int32)
-    attention_mask = np.asarray(inputs["attention_mask"], dtype = np.int32)
-    token_type_ids = np.asarray(inputs["token_type_ids"], dtype = np.int32)
-    
+def model_infer(inputs, context, d_inputs, h_output0, h_output1, d_output0, d_output1, stream):
+    input_ids = np.asarray(inputs["input_ids"], dtype=np.int32)
+    attention_mask = np.asarray(inputs["attention_mask"], dtype=np.int32)
+    token_type_ids = np.asarray(inputs["token_type_ids"], dtype=np.int32)
+
     # Copy inputs
     cuda.memcpy_htod_async(d_inputs[0], input_ids.ravel(), stream)
     cuda.memcpy_htod_async(d_inputs[1], attention_mask.ravel(), stream)
@@ -243,7 +231,9 @@ def model_infer(inputs, context, d_inputs, h_output0, h_output1, \
     # start time
     start_time = time.time()
     # Run inference
-    context.execute_async(bindings=[int(d_inp) for d_inp in d_inputs] + [int(d_output0), int(d_output1)], stream_handle=stream.handle)
+    context.execute_async(
+        bindings=[int(d_inp) for d_inp in d_inputs] + [int(d_output0), int(d_output1)], stream_handle=stream.handle
+    )
     # Transfer predictions back from GPU
     cuda.memcpy_dtoh_async(h_output0, d_output0, stream)
     cuda.memcpy_dtoh_async(h_output1, d_output1, stream)
@@ -253,8 +243,9 @@ def model_infer(inputs, context, d_inputs, h_output0, h_output1, \
     end_time = time.time()
     infer_time = end_time - start_time
     outputs = (h_output0, h_output1)
-    #print(outputs)
+    # print(outputs)
     return outputs, infer_time
+
 
 # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
 accelerator = Accelerator()
@@ -364,6 +355,7 @@ def prepare_validation_features(examples):
 
     return tokenized_examples
 
+
 if "validation" not in raw_datasets:
     raise ValueError("--do_eval requires a validation dataset")
 eval_examples = raw_datasets["validation"]
@@ -409,13 +401,14 @@ def post_processing_function(examples, features, predictions, stage="eval"):
     references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
     return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
+
 metric = load_metric("squad_v2" if args.version_2_with_negative else "squad")
 
 # Evaluation!
 logger.info("Loading ONNX model %s for evaluation", args.onnx_model_path)
-with open(engine_name, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime, \
-    runtime.deserialize_cuda_engine(f.read()) as engine, \
-    engine.create_execution_context() as context:
+with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.deserialize_cuda_engine(
+    f.read()
+) as engine, engine.create_execution_context() as context:
 
     # setup for TRT inferrence
     for i in range(len(input_names)):
@@ -441,21 +434,20 @@ with open(engine_name, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime, \
     logger.info("***** Running Evaluation *****")
     logger.info(f"  Num examples = {len(eval_dataset)}")
     logger.info(f"  Batch size = {args.per_device_eval_batch_size}")
-    
-    total_time = 0.
+
+    total_time = 0.0
     niter = 0
     start_time = timeit.default_timer()
 
     all_preds = None
     for step, batch in enumerate(eval_dataloader):
-                
-        outputs, infer_time = model_infer(batch, context, d_inputs, h_output0, h_output1, \
-            d_output0, d_output1, stream)
+
+        outputs, infer_time = model_infer(batch, context, d_inputs, h_output0, h_output1, d_output0, d_output1, stream)
         total_time += infer_time
-        niter+=1
+        niter += 1
 
         start_logits, end_logits = outputs
-        #print(outputs)
+        # print(outputs)
         start_logits = torch.tensor(start_logits)
         end_logits = torch.tensor(end_logits)
 
@@ -472,8 +464,8 @@ with open(engine_name, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime, \
     evalTime = timeit.default_timer() - start_time
     logger.info("  Evaluation done in total %f secs (%f sec per example)", evalTime, evalTime / len(eval_dataset))
     # Inference time from TRT
-    logger.info("Average Inference Time = {:.3f} ms".format(total_time*1000/niter))
-    logger.info("Total Inference Time =  {:.3f} ms".format(total_time*1000))
+    logger.info("Average Inference Time = {:.3f} ms".format(total_time * 1000 / niter))
+    logger.info("Total Inference Time =  {:.3f} ms".format(total_time * 1000))
     logger.info("Total Number of Inference =  %d", niter)
 
 prediction = post_processing_function(eval_examples, eval_dataset, all_preds)

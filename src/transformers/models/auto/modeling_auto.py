@@ -19,18 +19,6 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
-
-# Add modeling imports here
-from ..qdqbert.modeling_qdqbert import (
-    QDQBertForMaskedLM,
-    QDQBertForMultipleChoice,
-    QDQBertForNextSentencePrediction,
-    QDQBertForQuestionAnswering,
-    QDQBertForSequenceClassification,
-    QDQBertForTokenClassification,
-    QDQBertLMHeadModel,
-    QDQBertModel,
-)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -237,6 +225,18 @@ from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from ..pegasus.modeling_pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
 from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
+
+# Add modeling imports here
+from ..qdqbert.modeling_qdqbert import (
+    QDQBertForMaskedLM,
+    QDQBertForMultipleChoice,
+    QDQBertForNextSentencePrediction,
+    QDQBertForQuestionAnswering,
+    QDQBertForSequenceClassification,
+    QDQBertForTokenClassification,
+    QDQBertLMHeadModel,
+    QDQBertModel,
+)
 from ..rag.modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
     RagSequenceForGeneration,
@@ -320,7 +320,6 @@ from ..xlnet.modeling_xlnet import (
 )
 from .auto_factory import _BaseAutoModelClass, auto_class_update
 from .configuration_auto import (
-    QDQBertConfig,
     AlbertConfig,
     BartConfig,
     BertConfig,
@@ -364,6 +363,7 @@ from .configuration_auto import (
     OpenAIGPTConfig,
     PegasusConfig,
     ProphetNetConfig,
+    QDQBertConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,

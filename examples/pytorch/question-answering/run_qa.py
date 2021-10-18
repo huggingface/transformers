@@ -631,6 +631,7 @@ def main():
         logger.info("Exporting model to onnx")
         results = trainer.save_onnx(output_dir=training_args.output_dir, device=training_args.device, logger=logger)
 
+
 def _mp_fn(index):
     # For xla_spawn (TPUs)
     main()

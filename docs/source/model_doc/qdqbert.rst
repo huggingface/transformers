@@ -16,20 +16,27 @@ QDQBERT
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The QDQBERT model can be referenced in `Integer Quantization for Deep Learning Inference: Principles and Empirical Evaluation
-<https://arxiv.org/abs/2004.09602>`__  by Hao Wu, Patrick Judd, Xiaojie Zhang, Mikhail Isaev and Paulius Micikevicius
+The QDQBERT model can be referenced in `Integer Quantization for Deep Learning Inference: Principles and Empirical
+Evaluation <https://arxiv.org/abs/2004.09602>`__ by Hao Wu, Patrick Judd, Xiaojie Zhang, Mikhail Isaev and Paulius
+Micikevicius
 
 The abstract from the paper is the following:
 
-Quantization techniques can reduce the size of Deep Neural Networks and improve inference latency and throughput by taking advantage of high throughput integer instructions. In this paper we review the mathematical aspects of quantization parameters and evaluate their choices on a wide range of neural network models for different application domains, including vision, speech, and language. We focus on quantization techniques that are amenable to acceleration by processors with high-throughput integer math pipelines. We also present a workflow for 8-bit quantization that is able to maintain accuracy within 1% of the floating-point baseline on all networks studied, including models that are more difficult to quantize, such as MobileNets and BERT-large.
+Quantization techniques can reduce the size of Deep Neural Networks and improve inference latency and throughput by
+taking advantage of high throughput integer instructions. In this paper we review the mathematical aspects of
+quantization parameters and evaluate their choices on a wide range of neural network models for different application
+domains, including vision, speech, and language. We focus on quantization techniques that are amenable to acceleration
+by processors with high-throughput integer math pipelines. We also present a workflow for 8-bit quantization that is
+able to maintain accuracy within 1% of the floating-point baseline on all networks studied, including models that are
+more difficult to quantize, such as MobileNets and BERT-large.
 
 Tips:
 
-An example of using QDQBERT model to perform quatization aware training and post training quantization for SQUAD task can be found at transformers/examples/pytorch/question-answering/QAT-qdqbert.
+An example of using QDQBERT model to perform quatization aware training and post training quantization for SQUAD task
+can be found at transformers/examples/pytorch/question-answering/QAT-qdqbert.
 
-This model was contributed by `<INSERT YOUR HF USERNAME HERE> 
-<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>>`__. The original code can be found `here 
-<<INSERT LINK TO GITHUB REPO HERE>>`__.
+This model was contributed by `<INSERT YOUR HF USERNAME HERE> <https://huggingface.co/<INSERT YOUR HF USERNAME
+HERE>>`__. The original code can be found `here <<INSERT LINK TO GITHUB REPO HERE>>`__.
 
 QDQBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

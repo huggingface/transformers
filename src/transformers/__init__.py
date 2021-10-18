@@ -133,7 +133,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig", "QDQBertTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -222,6 +221,7 @@ _import_structure = {
     "models.pegasus": ["PegasusConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
+    "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig", "QDQBertTokenizer"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
@@ -495,22 +495,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.qdqbert"].extend(
-        [
-            "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "QDQBertForMaskedLM",
-            "QDQBertLMHeadModel",
-            "QDQBertForNextSentencePrediction",
-            "QDQBertForMultipleChoice",
-            "QDQBertForQuestionAnswering",
-            "QDQBertForSequenceClassification",
-            "QDQBertForTokenClassification",
-            "QDQBertLayer",
-            "QDQBertModel",
-            "QDQBertPreTrainedModel",
-            "load_tf_weights_in_qdqbert",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -556,7 +540,6 @@ if is_torch_available():
             "AutoModelWithLMHead",
         ]
     )
-
     _import_structure["models.bart"].extend(
         [
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -569,6 +552,7 @@ if is_torch_available():
             "PretrainedBartModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -978,6 +962,22 @@ if is_torch_available():
             "ProphetNetForConditionalGeneration",
             "ProphetNetModel",
             "ProphetNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.qdqbert"].extend(
+        [
+            "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "QDQBertForMaskedLM",
+            "QDQBertForMultipleChoice",
+            "QDQBertForNextSentencePrediction",
+            "QDQBertForQuestionAnswering",
+            "QDQBertForSequenceClassification",
+            "QDQBertForTokenClassification",
+            "QDQBertLayer",
+            "QDQBertLMHeadModel",
+            "QDQBertModel",
+            "QDQBertPreTrainedModel",
+            "load_tf_weights_in_qdqbert",
         ]
     )
     _import_structure["models.rag"].extend(
@@ -1787,7 +1787,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig, QDQBertTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1870,6 +1869,7 @@ if TYPE_CHECKING:
     from .models.pegasus import PegasusConfig
     from .models.phobert import PhobertTokenizer
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
+    from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig, QDQBertTokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
@@ -1974,7 +1974,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.qdqbert import QDQBertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2000,6 +1999,7 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5TokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
+        from .models.qdqbert import QDQBertTokenizerFast
         from .models.reformer import ReformerTokenizerFast
         from .models.retribert import RetriBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
@@ -2052,20 +2052,6 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-        from .models.qdqbert import (
-            QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            QDQBertForMaskedLM,
-            QDQBertLMHeadModel,
-            QDQBertForNextSentencePrediction,
-            QDQBertForMultipleChoice,
-            QDQBertForQuestionAnswering,
-            QDQBertForSequenceClassification,
-            QDQBertForTokenClassification,
-            QDQBertLayer,
-            QDQBertModel,
-            QDQBertPreTrainedModel,
-            load_tf_weights_in_qdqbert,
-        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2511,6 +2497,20 @@ if TYPE_CHECKING:
             ProphetNetForConditionalGeneration,
             ProphetNetModel,
             ProphetNetPreTrainedModel,
+        )
+        from .models.qdqbert import (
+            QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            QDQBertForMaskedLM,
+            QDQBertForMultipleChoice,
+            QDQBertForNextSentencePrediction,
+            QDQBertForQuestionAnswering,
+            QDQBertForSequenceClassification,
+            QDQBertForTokenClassification,
+            QDQBertLayer,
+            QDQBertLMHeadModel,
+            QDQBertModel,
+            QDQBertPreTrainedModel,
+            load_tf_weights_in_qdqbert,
         )
         from .models.rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
         from .models.reformer import (

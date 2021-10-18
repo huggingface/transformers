@@ -19,12 +19,12 @@
 import unittest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import QDQBertConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from transformers import QDQBertConfig
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+
 
 if is_torch_available():
     import torch
@@ -39,36 +39,34 @@ if is_torch_available():
         QDQBertLMHeadModel,
         QDQBertModel,
     )
-    from transformers.models.qdqbert.modeling_qdqbert import (
-        QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers.models.qdqbert.modeling_qdqbert import QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class QDQBertModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -160,7 +158,7 @@ class QDQBertModelTester:
         )
 
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = QDQBertModel(config=config)
         model.to(torch_device)
@@ -171,16 +169,16 @@ class QDQBertModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.add_cross_attention = True
         model = QDQBertModel(config)
@@ -203,16 +201,16 @@ class QDQBertModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         model = QDQBertLMHeadModel(config=config)
         model.to(torch_device)
@@ -221,7 +219,7 @@ class QDQBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = QDQBertForMaskedLM(config=config)
         model.to(torch_device)
@@ -338,9 +336,8 @@ class QDQBertModelTester:
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
-
     def create_and_check_for_question_answering(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = QDQBertForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -356,7 +353,7 @@ class QDQBertModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = QDQBertForSequenceClassification(config)
@@ -366,7 +363,7 @@ class QDQBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = QDQBertForTokenClassification(config=config)
@@ -376,7 +373,7 @@ class QDQBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_multiple_choice(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
         model = QDQBertForMultipleChoice(config=config)
@@ -511,6 +508,7 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -521,19 +519,18 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
+
 @require_torch
 class QDQBertModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_no_head_absolute_embedding(self): 
+    def test_inference_no_head_absolute_embedding(self):
         model = QDQBertForMaskedLM.from_pretrained("bert-base-uncased")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]]) 
-        output = model(input_ids)[0] 
-        expected_shape = torch.Size((1, 11, 768)) 
-        self.assertEqual(output.shape, expected_shape) 
-        expected_slice = torch.tensor( 
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]] 
-        ) 
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        output = model(input_ids)[0]
+        expected_shape = torch.Size((1, 11, 768))
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+        )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4)) 
-
-
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

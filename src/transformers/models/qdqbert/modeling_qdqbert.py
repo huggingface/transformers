@@ -19,8 +19,6 @@
 import math
 import os
 import warnings
-from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -28,9 +26,12 @@ from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from pytorch_quantization import calib as quant_calib
+from pytorch_quantization import nn as quant_nn
+from pytorch_quantization.nn.modules.tensor_quantizer import TensorQuantizer
+
 from ...activations import ACT2FN
 from ...file_utils import (
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -56,9 +57,6 @@ from ...modeling_utils import (
 from ...utils import logging
 from .configuration_qdqbert import QDQBertConfig
 
-from pytorch_quantization import nn as quant_nn
-from pytorch_quantization import calib as quant_calib
-from pytorch_quantization.nn.modules.tensor_quantizer import TensorQuantizer
 
 logger = logging.get_logger(__name__)
 
@@ -145,23 +143,27 @@ def load_tf_weights_in_qdqbert(model, config, tf_checkpoint_path):
         pointer.data = torch.from_numpy(array)
     return model
 
+
 class QuantEmbedding(nn.Embedding):
-    """Quantized version of nn.Embedding.
-    """
+    """Quantized version of nn.Embedding."""
 
     def __init__(self, *args, **kwargs):
         super(QuantEmbedding, self).__init__(*args, **kwargs)
         quant_desc_weight = quant_nn.QuantLinear.default_quant_desc_weight
         self._weight_quantizer = TensorQuantizer(quant_desc_weight)
-        logger.info("Embedding weight is %squantized to %d bits in %s with axis %s!", ""
-                    if not quant_desc_weight.fake_quant else "fake ",
-                    quant_desc_weight.num_bits, self.__class__.__name__, quant_desc_weight.axis)
+        logger.info(
+            "Embedding weight is %squantized to %d bits in %s with axis %s!",
+            "" if not quant_desc_weight.fake_quant else "fake ",
+            quant_desc_weight.num_bits,
+            self.__class__.__name__,
+            quant_desc_weight.axis,
+        )
 
     def forward(self, input):
         quant_weight = self._weight_quantizer(self.weight)
         return F.embedding(
-            input, quant_weight, self.padding_idx, self.max_norm,
-            self.norm_type, self.scale_grad_by_freq, self.sparse)
+            input, quant_weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse
+        )
 
 
 class QDQBertEmbeddings(nn.Module):
@@ -309,8 +311,8 @@ class QDQBertSelfAttention(nn.Module):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(
-                self.matmul_q_input_quantizer(query_layer),
-                self.matmul_k_input_quantizer(key_layer.transpose(-1, -2)))
+            self.matmul_q_input_quantizer(query_layer), self.matmul_k_input_quantizer(key_layer.transpose(-1, -2))
+        )
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             seq_length = hidden_states.size()[1]
@@ -345,8 +347,8 @@ class QDQBertSelfAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(
-                self.matmul_a_input_quantizer(attention_probs),
-                self.matmul_v_input_quantizer(value_layer))
+            self.matmul_a_input_quantizer(attention_probs), self.matmul_v_input_quantizer(value_layer)
+        )
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -663,6 +665,7 @@ class QDQBertPooler(nn.Module):
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
+
 class QDQBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -734,8 +737,8 @@ class QDQBertPreTrainingHeads(nn.Module):
 
 class QDQBertPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = QDQBertConfig
@@ -744,7 +747,7 @@ class QDQBertPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -758,8 +761,6 @@ class QDQBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-
 
 
 QDQBERT_START_DOCSTRING = r"""
@@ -1009,8 +1010,6 @@ class QDQBertModel(QDQBertPreTrainedModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
-
-
 
 
 @add_start_docstrings(

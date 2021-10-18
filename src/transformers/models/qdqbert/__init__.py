@@ -16,7 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import TYPE_CHECKING
-from ...file_utils import _LazyModule, is_torch_available, is_tokenizers_available
+
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+
+
 _import_structure = {
     "configuration_qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
     "tokenization_qdqbert": ["QDQBertTokenizer"],
@@ -29,19 +32,17 @@ if is_torch_available():
     _import_structure["modeling_qdqbert"] = [
         "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "QDQBertForMaskedLM",
-        "QDQBertLMHeadModel",
-        "QDQBertForNextSentencePrediction",
         "QDQBertForMultipleChoice",
+        "QDQBertForNextSentencePrediction",
         "QDQBertForQuestionAnswering",
         "QDQBertForSequenceClassification",
         "QDQBertForTokenClassification",
         "QDQBertLayer",
+        "QDQBertLMHeadModel",
         "QDQBertModel",
         "QDQBertPreTrainedModel",
         "load_tf_weights_in_qdqbert",
     ]
-
-
 
 
 if TYPE_CHECKING:
@@ -55,13 +56,13 @@ if TYPE_CHECKING:
         from .modeling_qdqbert import (
             QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             QDQBertForMaskedLM,
-            QDQBertLMHeadModel,
-            QDQBertForNextSentencePrediction,
             QDQBertForMultipleChoice,
+            QDQBertForNextSentencePrediction,
             QDQBertForQuestionAnswering,
             QDQBertForSequenceClassification,
             QDQBertForTokenClassification,
             QDQBertLayer,
+            QDQBertLMHeadModel,
             QDQBertModel,
             QDQBertPreTrainedModel,
             load_tf_weights_in_qdqbert,

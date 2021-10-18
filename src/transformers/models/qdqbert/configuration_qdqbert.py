@@ -28,14 +28,13 @@ QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class QDQBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.QDQBertModel`.
-    It is used to instantiate an QDQBERT model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the QDQBERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.QDQBertModel`. It is used to
+    instantiate an QDQBERT model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the QDQBERT `bert-base-uncased
+    <https://huggingface.co/bert-base-uncased>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
@@ -52,15 +51,15 @@ class QDQBertConfig(PretrainedConfig):
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.QDQBertModel` or
             :class:`~transformers.TFQDQBertModel`.
@@ -73,6 +72,7 @@ class QDQBertConfig(PretrainedConfig):
             relevant if ``config.is_decoder=True``.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
+
         Example::
 
         >>> from transformers import QDQBertModel, QDQBertConfig
@@ -87,6 +87,7 @@ class QDQBertConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "qdqbert"
+
     def __init__(
         self,
         vocab_size=30522,
@@ -108,12 +109,7 @@ class QDQBertConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -128,4 +124,3 @@ class QDQBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        

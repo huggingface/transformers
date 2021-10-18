@@ -28,28 +28,26 @@ from typing import Optional
 import datasets
 from datasets import load_dataset, load_metric
 
+import quant_trainer
 import transformers
+from trainer_qat_qa import QuestionAnsweringTrainer
 from transformers import (
-    AutoConfig,
-    AutoModelForQuestionAnswering,
     AutoTokenizer,
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
     PreTrainedTokenizerFast,
+    QDQBertConfig,
+    QDQBertForQuestionAnswering,
     TrainingArguments,
     default_data_collator,
     set_seed,
-    QDQBertConfig,
-    QDQBertForQuestionAnswering,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 from utils_qa import postprocess_qa_predictions
 
-import quant_trainer
-from trainer_qat_qa import QuestionAnsweringTrainer
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.9.0")
@@ -92,11 +90,10 @@ class ModelArguments:
     do_calib: bool = field(default=False, metadata={"help": "Whether to run calibration of quantization ranges."})
     num_calib_batch: int = field(
         default=4,
-        metadata={
-            "help": "Number of batches for calibration. 0 will disable calibration "
-        },
+        metadata={"help": "Number of batches for calibration. 0 will disable calibration "},
     )
     save_onnx: bool = field(default=False, metadata={"help": "Whether to save model to onnx."})
+
 
 @dataclass
 class DataTrainingArguments:
@@ -217,13 +214,13 @@ def main():
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     # quant_trainer arguments
     quant_trainer.add_arguments(parser)
-    
+
     # if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
     #     # If we pass only one argument to the script and it's the path to a json file,
     #     # let's parse it to get our arguments.
     #     model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     # else:
-    
+
     model_args, data_args, training_args, quant_trainer_args = parser.parse_args_into_dataclasses()
 
     # Setup logging
@@ -602,7 +599,7 @@ def main():
             checkpoint = last_checkpoint
 
         quant_trainer.configure_model(trainer.model, quant_trainer_args)
-        
+
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
@@ -656,6 +653,7 @@ def main():
     if model_args.save_onnx:
         logger.info("Exporting model to onnx")
         results = trainer.save_onnx(output_dir=training_args.output_dir)
+
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)

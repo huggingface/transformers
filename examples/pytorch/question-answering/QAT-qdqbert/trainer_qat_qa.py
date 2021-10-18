@@ -17,15 +17,16 @@
 A subclass of `Trainer` specific to Question-Answering tasks
 """
 
+import logging
+import os
+
+import torch
+
+import quant_trainer
 from transformers import Trainer, is_torch_tpu_available
 from transformers.trainer_utils import PredictionOutput
 
-import quant_trainer
 
-import collections
-import os
-import logging
-import torch
 logger = logging.getLogger(__name__)
 
 if is_torch_tpu_available():
@@ -59,7 +60,7 @@ class QuestionAnsweringTrainer(Trainer):
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only=True)
             break
-        
+
         quant_trainer.finish_calibration(model, self.quant_trainer_args)
         self.model = model
 
@@ -141,40 +142,47 @@ class QuestionAnsweringTrainer(Trainer):
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
         batch = next(iter(eval_dataloader))
-        
+
         # saving device - to make it consistent
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # convert to tuple
-        input_tuple = tuple(v.to(device) for k,v in batch.items())
+        input_tuple = tuple(v.to(device) for k, v in batch.items())
 
         logger.info("Converting model to be onnx compatible")
         from pytorch_quantization.nn import TensorQuantizer
+
         TensorQuantizer.use_fb_fake_quant = True
-        
+
         model = self.model.to(device)
 
         model.eval()
         model.float()
 
-        model_to_save = model.module if hasattr(model, 'module') else model
+        model_to_save = model.module if hasattr(model, "module") else model
         quant_trainer.configure_model(model_to_save, self.quant_trainer_args)
 
-        output_model_file = os.path.join(output_dir, 'model.onnx')
+        output_model_file = os.path.join(output_dir, "model.onnx")
         logger.info(f"exporting model to {output_model_file}")
 
-        axes={0:'batch_size', 1:'seq_len'}
+        axes = {0: "batch_size", 1: "seq_len"}
 
-        torch.onnx.export(model_to_save,
-                          input_tuple,
-                          output_model_file,
-                          export_params=True,
-                          opset_version=13,
-                          do_constant_folding=True,
-                          input_names=['input_ids', 'attention_mask', 'token_type_ids'],
-                          output_names=['output_start_logits', 'output_end_logits'],
-                          dynamic_axes={'input_ids':axes, 'attention_mask':axes, 'token_type_ids':axes,
-                                        'output_start_logits':axes, 'output_end_logits':axes},
-                          verbose=True
-                         )
+        torch.onnx.export(
+            model_to_save,
+            input_tuple,
+            output_model_file,
+            export_params=True,
+            opset_version=13,
+            do_constant_folding=True,
+            input_names=["input_ids", "attention_mask", "token_type_ids"],
+            output_names=["output_start_logits", "output_end_logits"],
+            dynamic_axes={
+                "input_ids": axes,
+                "attention_mask": axes,
+                "token_type_ids": axes,
+                "output_start_logits": axes,
+                "output_end_logits": axes,
+            },
+            verbose=True,
+        )
         logger.info("onnx export finished")

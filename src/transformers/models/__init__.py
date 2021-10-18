@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    qdqbert,
     albert,
     auto,
     bart,
@@ -67,6 +66,7 @@ from . import (
     pegasus,
     phobert,
     prophetnet,
+    qdqbert,
     rag,
     reformer,
     retribert,
