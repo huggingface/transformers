@@ -59,3 +59,9 @@ SEWForCTC
 .. autoclass:: transformers.SEWForCTC
     :members: forward
 
+
+SEWForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.SEWForSequenceClassification
+    :members: forward
