@@ -1962,7 +1962,17 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     overflow_first_sequence if len(seq0_tokens) > len(seq1_tokens) else overflow_second_sequence
                 )
 
-                # bbox_first_sequence = tokenizer(seq_0,boxes=boxes_0,add_special_tokens=False)["bbox"][:-2]
+                bbox_first = [[0, 0, 0, 0]] * (len(seq_0) - 2)
+                bbox_first_sequence = bbox_first + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["bbox"]
+
+                bbox_second = [[0, 0, 0, 0]] * len(seq_0)
+                bbox_second_sequence = (
+                    bbox_second + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["bbox"][:-2]
+                )
+
+                bbox_longest_sequence = (
+                    bbox_first_sequence if len(seq0_tokens) > len(seq1_tokens) else bbox_second_sequence
+                )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
                 if isinstance(tokenizer, LayoutLMv2TokenizerFast):
@@ -1979,7 +1989,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
                     truncated_sequence = information["input_ids"][0]
                     overflowing_tokens = information["input_ids"][1]
-                    # bbox = information["bbox"]
+                    bbox = information["bbox"][0]
                     self.assertEqual(len(information["input_ids"]), 2)
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
@@ -1987,7 +1997,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
                     self.assertEqual(overflowing_tokens, overflow_longest_sequence)
-                    # self.assertEqual(bbox,truncated_longest_sequence["bbox"][:-2])
+                    self.assertEqual(bbox, bbox_longest_sequence)
                 else:
                     # No overflowing tokens when using 'longest' in python tokenizers
                     with self.assertRaises(ValueError) as context:
@@ -2026,7 +2036,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
                     truncated_sequence = information["input_ids"][0]
                     overflowing_tokens = information["input_ids"][1]
-                    # bbox = information["bbox"]
+                    bbox = information["bbox"][0]
                     self.assertEqual(len(information["input_ids"]), 2)
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
@@ -2034,7 +2044,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
                     self.assertEqual(overflowing_tokens, overflow_longest_sequence)
-                    # self.assertEqual(bbox,truncated_longest_sequence["bbox"][:-2])
+                    self.assertEqual(bbox, bbox_longest_sequence)
                 else:
                     # No overflowing tokens when using 'longest' in python tokenizers
                     with self.assertRaises(ValueError) as context:
@@ -2073,7 +2083,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 if isinstance(tokenizer, LayoutLMv2TokenizerFast):
                     truncated_sequence = information_first_truncated["input_ids"][0]
                     overflowing_tokens = information_first_truncated["input_ids"][1]
-                    # bbox = information_first_truncated["bbox"]
+                    bbox = information_first_truncated["bbox"][0]
                     self.assertEqual(len(information_first_truncated["input_ids"]), 2)
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
@@ -2081,18 +2091,18 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq1_tokens["input_ids"]))
                     self.assertEqual(overflowing_tokens, overflow_first_sequence)
-                    # self.assertEqual(bbox,truncated_first_sequence["bbox"][:-2])
+                    self.assertEqual(bbox, bbox_first_sequence)
                 else:
                     truncated_sequence = information_first_truncated["input_ids"]
                     overflowing_tokens = information_first_truncated["overflowing_tokens"]
-                    # bbox = information_first_truncated["bbox"]
+                    bbox = information_first_truncated["bbox"]
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_first_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq0_tokens["input_ids"][-(2 + stride) :])
-                    # self.assertEqual(bbox,truncated_first_sequence["bbox"][:-2])
+                    self.assertEqual(bbox, bbox_first_sequence)
 
                 information_second_truncated = tokenizer(
                     question_0,
@@ -2109,7 +2119,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 if isinstance(tokenizer, LayoutLMv2TokenizerFast):
                     truncated_sequence = information_second_truncated["input_ids"][0]
                     overflowing_tokens = information_second_truncated["input_ids"][1]
-                    # bbox = information_second_truncated["bbox"]
+                    bbox = information_second_truncated["bbox"][0]
 
                     self.assertEqual(len(information_second_truncated["input_ids"]), 2)
 
@@ -2118,18 +2128,18 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq0_tokens["input_ids"]))
                     self.assertEqual(overflowing_tokens, overflow_second_sequence)
-                    # self.assertEqual(bbox,truncated_second_sequence["bbox"][:-2])
+                    self.assertEqual(bbox, bbox_second_sequence)
                 else:
                     truncated_sequence = information_second_truncated["input_ids"]
                     overflowing_tokens = information_second_truncated["overflowing_tokens"]
-                    # bbox = information_second_truncated["bbox"]
+                    bbox = information_second_truncated["bbox"]
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_second_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq1_tokens["input_ids"][-(2 + stride) :])
-                    # self.assertEqual(bbox,truncated_second_sequence["bbox"][:-2])
+                    self.assertEqual(bbox, bbox_second_sequence)
 
     # @unittest.skip("LayoutLMv2 tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_single_input(self):
