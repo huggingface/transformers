@@ -422,6 +422,25 @@ class _BaseAutoModelClass:
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
         )
 
+    @classmethod
+    def register(cls, config_class, model_class):
+        """
+        Register a new model for this class.
+
+        Args:
+            config_class (:class:`~transformers.PretrainedConfig`):
+                The configuration corresponding to the model to register.
+            model_class (:class:`~transformers.PreTrainedModel`):
+                The model to register.
+        """
+        if hasattr(model_class, "config_class") and model_class.config_class != config_class:
+            raise ValueError(
+                "The model class you are passing has a `config_class` attribute that is not consistent with the "
+                f"config class you passed (model has {model_class.config_class} and you passed {config_class}. Fix "
+                "one of those so they match!"
+            )
+        cls._model_mapping.register(config_class, model_class)
+
 
 def insert_head_doc(docstring, head_doc=""):
     if len(head_doc) > 0:
@@ -507,9 +526,12 @@ class _LazyAutoMapping(OrderedDict):
         self._config_mapping = config_mapping
         self._reverse_config_mapping = {v: k for k, v in config_mapping.items()}
         self._model_mapping = model_mapping
+        self._extra_content = {}
         self._modules = {}
 
     def __getitem__(self, key):
+        if key in self._extra_content:
+            return self._extra_content[key]
         model_type = self._reverse_config_mapping[key.__name__]
         if model_type not in self._model_mapping:
             raise KeyError(key)
@@ -523,11 +545,12 @@ class _LazyAutoMapping(OrderedDict):
         return getattribute_from_module(self._modules[module_name], attr)
 
     def keys(self):
-        return [
+        mapping_keys = [
             self._load_attr_from_module(key, name)
             for key, name in self._config_mapping.items()
             if key in self._model_mapping.keys()
         ]
+        return mapping_keys + list(self._extra_content.keys())
 
     def get(self, key, default):
         try:
@@ -539,14 +562,15 @@ class _LazyAutoMapping(OrderedDict):
         return bool(self.keys())
 
     def values(self):
-        return [
+        mapping_values = [
             self._load_attr_from_module(key, name)
             for key, name in self._model_mapping.items()
             if key in self._config_mapping.keys()
         ]
+        return mapping_values + list(self._extra_content.values())
 
     def items(self):
-        return [
+        mapping_items = [
             (
                 self._load_attr_from_module(key, self._config_mapping[key]),
                 self._load_attr_from_module(key, self._model_mapping[key]),
@@ -554,12 +578,26 @@ class _LazyAutoMapping(OrderedDict):
             for key in self._model_mapping.keys()
             if key in self._config_mapping.keys()
         ]
+        return mapping_items + list(self._extra_content.items())
 
     def __iter__(self):
-        return iter(self._model_mapping.keys())
+        return iter(self.keys())
 
     def __contains__(self, item):
+        if item in self._extra_content:
+            return True
         if not hasattr(item, "__name__") or item.__name__ not in self._reverse_config_mapping:
             return False
         model_type = self._reverse_config_mapping[item.__name__]
         return model_type in self._model_mapping
+
+    def register(self, key, value):
+        """
+        Register a new model in this mapping.
+        """
+        if hasattr(key, "__name__") and key.__name__ in self._reverse_config_mapping:
+            model_type = self._reverse_config_mapping[key.__name__]
+            if model_type in self._model_mapping.keys():
+                raise ValueError(f"'{key}' is already used by a Transformers model.")
+
+        self._extra_content[key] = value
