@@ -189,6 +189,7 @@ else:
             ),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("phobert", ("PhobertTokenizer", None)),
+            ("bartpho", ("BartphoTokenizer", None)),
             (
                 "barthez",
                 (
