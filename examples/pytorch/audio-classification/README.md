@@ -31,7 +31,7 @@ The following command shows how to fine-tune [wav2vec2-base](https://huggingface
 ```bash
 python run_audio_classification.py \
     --model_name_or_path facebook/wav2vec2-base \
-    --dataset_name anton-l/superb \
+    --dataset_name superb \
     --dataset_config_name ks \
     --output_dir wav2vec2-base-keyword-spotting \
     --overwrite_output_dir \

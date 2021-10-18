@@ -205,10 +205,10 @@ def main():
     # Initialize our dataset and prepare it for the audio classification task.
     raw_datasets = DatasetDict()
     raw_datasets["train"] = load_dataset(
-        data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
+        data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name, revision="master"
     )
     raw_datasets["eval"] = load_dataset(
-        data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
+        data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name, revision="master"
     )
 
     if data_args.audio_column_name not in raw_datasets["train"].column_names:
