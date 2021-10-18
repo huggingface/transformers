@@ -22,7 +22,6 @@ from typing import Optional
 
 import datasets
 import numpy as np
-import torchaudio
 from datasets import DatasetDict, load_dataset
 
 import transformers
