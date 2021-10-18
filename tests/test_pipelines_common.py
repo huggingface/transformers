@@ -23,6 +23,7 @@ from functools import lru_cache
 from unittest import skipIf
 
 from transformers import FEATURE_EXTRACTOR_MAPPING, TOKENIZER_MAPPING, AutoFeatureExtractor, AutoTokenizer, pipeline
+from transformers.pipelines.base import _pad
 from transformers.testing_utils import is_pipeline_test, require_torch
 
 
@@ -244,3 +245,42 @@ class CommonPipelineTest(unittest.TestCase):
         dataset = MyDataset()
         for output in text_classifier(dataset):
             self.assertEqual(output, {"label": ANY(str), "score": ANY(float)})
+
+
+@is_pipeline_test
+class PipelinePadTest(unittest.TestCase):
+    @require_torch
+    def test_pipeline_padding(self):
+        import torch
+
+        items = [
+            {
+                "label": "label1",
+                "input_ids": torch.LongTensor([[1, 23, 24, 2]]),
+                "attention_mask": torch.LongTensor([[0, 1, 1, 0]]),
+            },
+            {
+                "label": "label2",
+                "input_ids": torch.LongTensor([[1, 23, 24, 43, 44, 2]]),
+                "attention_mask": torch.LongTensor([[0, 1, 1, 1, 1, 0]]),
+            },
+        ]
+
+        self.assertEqual(_pad(items, "label", 0, "right"), ["label1", "label2"])
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "input_ids", 10, "right"),
+                torch.LongTensor([[1, 23, 24, 2, 10, 10], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "input_ids", 10, "left"),
+                torch.LongTensor([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
+            )
+        )

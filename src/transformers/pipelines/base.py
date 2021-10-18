@@ -66,7 +66,26 @@ def no_collate_fn(items):
     return items[0]
 
 
+def _pad(items, key, padding_value, padding_side):
+    batch_size = len(items)
+    if isinstance(items[0][key], torch.Tensor):
+        # Others include `attention_mask` etc...
+        max_length = max(item[key].shape[-1] for item in items)
+        dtype = items[0][key].dtype
+        tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
+
+        for i, item in enumerate(items):
+            if padding_side == "left":
+                tensor[i, -len(item[key][0]) :] = item[key][0].clone()
+            else:
+                tensor[i, : len(item[key][0])] = item[key][0].clone()
+        return tensor
+    else:
+        return [item[key] for item in items]
+
+
 def pad_collate_fn(tokenizer, feature_extractor):
+    padding_side = "right"
     if tokenizer is None and feature_extractor is None:
         raise ValueError("Pipeline without tokenizer or feature_extractor cannot do batching")
     if tokenizer is not None:
@@ -74,21 +93,11 @@ def pad_collate_fn(tokenizer, feature_extractor):
             raise ValueError("Pipeline with tokenizer without pad_token cannot do batching")
         else:
             padding_value = tokenizer.pad_token_id
+            padding_side = tokenizer.padding_side
     if feature_extractor is not None:
         # Feature extractor can be images, where no padding is expected
         padding_value = getattr(feature_extractor, "padding_value", None)
-
-    def pad(items, key, padding_value):
-        if isinstance(items[0][key], torch.Tensor):
-            # input_values, input_pixels, input_ids, ...
-            # Others include `attention_mask` etc...
-            padding_value = padding_value if key.startswith("input_") else 0
-            return torch.nn.utils.rnn.pad_sequence(
-                [item[key].squeeze(0) for item in items],
-                batch_first=True,
-                padding_value=padding_value,
-            )
-        return [item[key] for item in items]
+        padding_side = getattr(feature_extractor, "padding_side", None)
 
     def inner(items):
         keys = set(items[0].keys())
@@ -97,7 +106,10 @@ def pad_collate_fn(tokenizer, feature_extractor):
                 raise ValueError(
                     f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} != {keys})"
                 )
-        padded = {key: pad(items, key, padding_value) for key in keys}
+        # input_values, input_pixels, input_ids, ...
+        padded = {
+            key: _pad(items, key, padding_value if key.startswith("input_") else 0, padding_side) for key in keys
+        }
         return padded
 
     return inner
