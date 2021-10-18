@@ -134,6 +134,7 @@ class HFProxy(Proxy):
         if hasattr(self, "tracer") and self.tracer is not None:
             self.device = self.tracer.root.device
             self.dtype = next(self.tracer.root.parameters()).dtype
+            self.cache = None
 
     @property
     def shape(self):
@@ -144,6 +145,42 @@ class HFProxy(Proxy):
 
     def __contains__(self, key):
         return False
+
+    def __eq__(self, other):
+        if self.cache is not None:
+            return self.cache == other
+        return super().__eq__(other)
+
+    def __len__(self):
+        if self.cache is not None:
+            if isinstance(self.cache, int):
+                return self.cache
+            elif isinstance(self.cache, (torch.Size, list, tuple)):
+                return len(self.cache)
+            else:
+                return super().__len__(self)
+        return super().__len__(self)
+
+    def __torch_function__(self, orig_method, types, args=None, kwargs=None):
+        proxy = super().__torch_function__(orig_method, types, args=args, kwargs=kwargs)
+        proxy.cache = self.cache
+        return proxy
+
+
+def _function_to_leaf(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def _function_leaf_getter(func_name, mapping):
+    @functools.wraps(mapping[func_name])
+    def wrapper(*args, **kwargs):
+        return mapping[func_name](*args, **kwargs)
+
+    return wrapper
 
 
 def _wrap_method_for_model_recording(model, method_name, cache_name):
@@ -168,10 +205,20 @@ def _create_recorded_proxy_method(proxy, method_name, cache_name):
     during symbolic tracing.
     """
 
-    def method(self, *args, **kwargs):
-        cache = getattr(self.tracer.root, cache_name)
+    original_method = getattr(torch.Tensor, method_name)
+
+    @functools.wraps(original_method)
+    def method(*args, **kwargs):
+        cache = getattr(args[0].tracer.root, cache_name)
         res = cache.pop(0)
-        return res
+        proxy = args[0].__torch_function__(
+            original_method,
+            None,
+            args=args,
+            kwargs=kwargs,
+        )
+        proxy.cache = res
+        return proxy
 
     method.__name__ = method_name
     bound_method = method.__get__(proxy, proxy.__class__)
@@ -193,6 +240,28 @@ def _wrap_method_for_model_tracing(model, method_name, cache_name):
         return res
 
     setattr(torch.Tensor, method_name, method)
+
+    if method_name == "size":
+        setattr(torch.Tensor, "shape", property(getattr(torch.Tensor, method_name)))
+
+
+def _create_proxy_method_for_model_tracing(model, method_name, cache_name):
+    """
+    Helper function that sets a recorded torch.Tensor method as a torch.Tensor method that will use the recorded values
+    during symbolic tracing.
+    """
+
+    original_method = getattr(torch.Tensor, method_name)
+
+    @functools.wraps(original_method)
+    def method(*args, **kwargs):
+        cache = getattr(model, cache_name)
+        res = cache.pop(0)
+        args[0].cache_value = res
+
+        return original_method(*args, **kwargs)
+
+    setattr(HFProxy, method_name, method)
 
     if method_name == "size":
         setattr(torch.Tensor, "shape", property(getattr(torch.Tensor, method_name)))
@@ -233,10 +302,22 @@ class HFTracer(Tracer):
     regular PyTorch torch.fx.Proxy.
     """
 
-    default_methods_to_record = {"__bool__", "size", "dim"}
+    _DEFAULT_METHODS_TO_RECORD = {"__bool__", "size", "dim"}
+    from transformers import modeling_utils
+
+    _FUNCTIONS_TO_AUTOWRAP = {
+        torch: {"arange", "zeros", "ones", "full_like"},
+        # modeling_utils.ModuleUtilsMixin: {"get_extended_attention_mask"},
+        modeling_utils.ModuleUtilsMixin: {"create_extended_attention_mask_for_decoder"},
+    }
 
     def __init__(self, batch_size=1, sequence_length=[128, 128], num_choices=-1):
         super().__init__()
+
+        self._leaf_functions_register = {}
+        for module, names in self._FUNCTIONS_TO_AUTOWRAP.items():
+            for name in names:
+                self._register_leaf_function(module, name)
 
         if not is_torch_fx_available():
             torch_version = version.parse(importlib_metadata.version("torch"))
@@ -261,6 +342,24 @@ class HFTracer(Tracer):
         self.prev_module = None
         self.recorded_methods = None
 
+    def _register_leaf_function(self, module, name):
+        orig_func = getattr(module, name)
+        patched_func = _function_to_leaf(orig_func)
+        patched_func.__module__ = __name__
+        self._leaf_functions_register[name] = (module, orig_func, patched_func)
+
+    def _patch_leaf_functions_for_root(self, root, restore=False):
+        for name in self._leaf_functions_register:
+            module, orig_func, patched_func = self._leaf_functions_register[name]
+            if restore:
+                root.__class__.forward.__globals__.pop(name)
+                setattr(module, name, orig_func)
+            else:
+                root.__class__.forward.__globals__[name] = patched_func
+                leaf_getter = _function_leaf_getter(name, root.__class__.forward.__globals__)
+                leaf_getter.__module__ = __name__
+                setattr(module, name, leaf_getter)
+
     def proxy(self, node: Node):
         p = HFProxy(node, self)
         if self.recorded_methods:
@@ -277,7 +376,7 @@ class HFTracer(Tracer):
         if input_name in ["labels", "start_positions", "end_positions"]:
             batch_size = self.encoder_shape[0]
             if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-                inputs_dict["labels"] = torch.ones(batch_size, dtype=torch.long, device=device)
+                inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
             elif model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                 inputs_dict["start_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
                 inputs_dict["end_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
@@ -302,11 +401,11 @@ class HFTracer(Tracer):
 
         elif "mask" in input_name or "ids" in input_name:
             shape = self.encoder_shape if "decoder" not in input_name else self.decoder_shape
-            inputs_dict[input_name] = torch.ones(shape, dtype=torch.long, device=device)
+            inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
         else:
             shape = self.encoder_shape if "decoder" not in input_name else self.decoder_shape
             shape += [model.config.hidden_size]
-            inputs_dict[input_name] = torch.ones(shape, dtype=torch.float, device=device)
+            inputs_dict[input_name] = torch.zeros(shape, dtype=torch.float, device=device)
 
         return inputs_dict
 
@@ -316,7 +415,7 @@ class HFTracer(Tracer):
         tracing.
         """
         if method_names is None:
-            method_names = self.default_methods_to_record
+            method_names = self._DEFAULT_METHODS_TO_RECORD
 
         inputs = {}
         for input_name in input_names:
@@ -340,6 +439,8 @@ class HFTracer(Tracer):
 
         for cache_name in self.recorded_methods.values():
             setattr(model, cache_name, getattr(clone, cache_name))
+
+        # _restore_tensor_creators(self.original_tensor_creators)
 
     def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
         if isinstance(attr_val, torch.nn.Parameter):
@@ -366,11 +467,13 @@ class HFTracer(Tracer):
 
         self.record(root, input_names, method_names=method_names)
 
-        for method_name, cache_name in self.recorded_methods.items():
-            _wrap_method_for_model_tracing(root, method_name, cache_name)
+        autowrap_functions = [patched for (_, _, patched) in self._leaf_functions_register.values()]
+        self._autowrap_function_ids.update(set([id(f) for f in autowrap_functions]))
+        self._patch_leaf_functions_for_root(root)
 
         graph = super().trace(root, concrete_args=concrete_args)
 
+        self._patch_leaf_functions_for_root(root, restore=True)
         _reset_tensor_methods(self.original_methods)
 
         # TODO: keep this until necessary.
@@ -433,6 +536,10 @@ class HFTracer(Tracer):
                 raise NameError(f"Module {mod._get_name()} is not installed as a submodule")
             self.prev_module = path
             return path
+
+    def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+        is_loss_module = m.__module__.startswith("torch.nn.modules.loss")
+        return (not is_loss_module) and super().is_leaf_module(m, module_qualified_name)
 
     def create_arg(self, a: Any) -> Argument:
         if isinstance(a, range):
@@ -562,18 +669,18 @@ def symbolic_trace(
             decoder_sequence_length = _generate_random_int(forbidden_values=forbidden_values)
             sequence_length = [encoder_sequence_length, decoder_sequence_length]
 
-    if not isinstance(model, _SUPPORTED_MODELS):
-        supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
-        raise NotImplementedError(
-            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
-        )
-    if (use_dynamic_batch_size or use_dynamic_sequence_length) and not isinstance(
-        model, _SUPPORTED_MODELS_FOR_DYNAMIC_AXES
-    ):
-        supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS_FOR_DYNAMIC_AXES))
-        raise NotImplementedError(
-            f"Dynamic axes are not supported for {model.__class__.__name__} yet, supported models: {supported_model_names}"
-        )
+    # if not isinstance(model, _SUPPORTED_MODELS):
+    #     supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
+    #     raise NotImplementedError(
+    #         f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
+    #     )
+    # if (use_dynamic_batch_size or use_dynamic_sequence_length) and not isinstance(
+    #     model, _SUPPORTED_MODELS_FOR_DYNAMIC_AXES
+    # ):
+    #     supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS_FOR_DYNAMIC_AXES))
+    #     raise NotImplementedError(
+    #         f"Dynamic axes are not supported for {model.__class__.__name__} yet, supported models: {supported_model_names}"
+    #     )
 
     # Tracing.
     tracer = HFTracer(batch_size=batch_size, sequence_length=sequence_length, num_choices=num_choices)
@@ -593,6 +700,6 @@ def symbolic_trace(
     traced.static_batch_size = batch_size
     traced.static_sequence_length = sequence_length
 
-    transform_to_dynamic_input_(traced)
+    # transform_to_dynamic_input_(traced)
 
     return traced
