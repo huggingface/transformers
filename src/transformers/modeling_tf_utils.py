@@ -819,17 +819,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if y is None and "labels" in x:
             y = x["labels"]  # Stops confusion with metric computations
         y_pred = self(x, training=False)
-        if not self.loss:
-            self.loss_tracker.update_state(y_pred.loss)
-            return_metrics = {"loss": self.loss_tracker.result()}
-        else:
-            return_metrics = {}
         self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Updates stateful loss metrics.
         if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
             y_pred = y_pred["logits"]
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
+        return_metrics = {}
         for metric in self.metrics:
             result = metric.result()
             if isinstance(result, dict):
