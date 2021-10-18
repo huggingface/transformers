@@ -86,7 +86,7 @@ summarization_name_mapping = {
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a summarization task")
     parser.add_argument(
         "--dataset_name",
         type=str,
