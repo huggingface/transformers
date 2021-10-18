@@ -25,11 +25,11 @@ import unittest
 import warnings
 from typing import Dict, List, Tuple
 
+import transformers
 from huggingface_hub import HfApi, Repository
 from requests.exceptions import HTTPError
 from transformers import AutoModel, AutoModelForSequenceClassification, is_torch_available, logging
-import transformers
-from transformers.file_utils import WEIGHTS_NAME, is_torch_fx_available, is_flax_available
+from transformers.file_utils import WEIGHTS_NAME, is_flax_available, is_torch_fx_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
@@ -37,8 +37,8 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     TestCasePlus,
-    is_pt_tf_cross_test,
     is_pt_flax_cross_test,
+    is_pt_tf_cross_test,
     is_staging_test,
     require_torch,
     require_torch_multi_gpu,
@@ -1428,46 +1428,48 @@ class ModelTesterMixin:
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
-        import torch
+        import tensorflow as tf
 
         import transformers
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
-            pt_model_class = getattr(transformers, pt_model_class_name)
+            tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
+
+            if not hasattr(transformers, tf_model_class_name):
+                # transformers does not have TF version yet
+                return
+
+            tf_model_class = getattr(transformers, tf_model_class_name)
 
             config.output_hidden_states = True
 
-            tf_model = model_class(config)
-            pt_model = pt_model_class(config)
-
-            # Check we can load pt model in tf and vice-versa with model => model functions
-
-            tf_model = transformers.load_pytorch_model_in_tf2_model(
-                tf_model, pt_model, tf_inputs=self._prepare_for_class(inputs_dict, model_class)
-            )
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+            tf_model = tf_model_class(config)
+            pt_model = model_class(config)
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
-            pt_inputs_dict = {}
+            tf_inputs_dict = {}
             for name, key in self._prepare_for_class(inputs_dict, model_class).items():
                 if type(key) == bool:
-                    pt_inputs_dict[name] = key
+                    tf_inputs_dict[name] = key
                 elif name == "input_values":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                    tf_inputs_dict[name] = tf.convert_to_tensor(key.numpy(), dtype=tf.float32)
                 else:
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
+                    tf_inputs_dict[name] = tf.convert_to_tensor(key.numpy(), dtype=tf.int32)
+
+            # Check we can load pt model in tf and vice-versa with model => model functions
+            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
+            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
             # need to rename encoder-decoder "inputs" for PyTorch
-            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
-                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+            #            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
+            #                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
             with torch.no_grad():
-                pto = pt_model(**pt_inputs_dict)
-            tfo = tf_model(self._prepare_for_class(inputs_dict, model_class), training=False)
+                pto = pt_model(**self._prepare_for_class(inputs_dict, model_class))
+            tfo = tf_model(tf_inputs_dict, training=False)
 
             tf_hidden_states = tfo[0].numpy()
             pt_hidden_states = pto[0].numpy()
@@ -1495,22 +1497,24 @@ class ModelTesterMixin:
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
-            pt_inputs_dict = {}
+            tf_inputs_dict = {}
             for name, key in self._prepare_for_class(inputs_dict, model_class).items():
                 if type(key) == bool:
                     key = np.array(key, dtype=bool)
-                    pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
+                    tf_inputs_dict[name] = tf.convert_to_tensor(key, dtype=tf.int32)
                 elif name == "input_values":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                    tf_inputs_dict[name] = tf.convert_to_tensor(key.numpy(), dtype=tf.float32)
                 else:
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
+                    tf_inputs_dict[name] = tf.convert_to_tensor(key.numpy(), dtype=tf.int32)
+
             # need to rename encoder-decoder "inputs" for PyTorch
-            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
-                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+            #            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
+            #                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
             with torch.no_grad():
-                pto = pt_model(**pt_inputs_dict)
-            tfo = tf_model(self._prepare_for_class(inputs_dict, model_class))
+                pto = pt_model(**self._prepare_for_class(inputs_dict, model_class))
+
+            tfo = tf_model(tf_inputs_dict)
             tfo = tfo[0].numpy()
             pto = pto[0].numpy()
             tf_nans = np.copy(np.isnan(tfo))
@@ -1524,6 +1528,10 @@ class ModelTesterMixin:
             max_diff = np.amax(np.abs(tfo - pto))
             self.assertLessEqual(max_diff, 4e-2)
 
+    def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
+        diff = np.abs((a - b)).max()
+        self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
+
     @is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1531,18 +1539,21 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 # prepare inputs
-                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
 
-                # load corresponding PyTorch class
-                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
-                pt_model_class = getattr(transformers, pt_model_class_name)
-
-                pt_model = pt_model_class(config).eval()
+                # load PyTorch class
+                pt_model = model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
                 # So we disable `use_cache` here for PyTorch model.
                 pt_model.config.use_cache = False
-                fx_model = model_class(config, dtype=jnp.float32)
+
+                fx_model_class_name = "Flax" + model_class.__name__
+
+                if not hasattr(transformers, fx_model_class_name):
+                    return
+
+                fx_model_class = getattr(transformers, fx_model_class_name)
+                fx_model = fx_model_class(config, dtype=jnp.float32)
 
                 fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
                 fx_model.params = fx_state
@@ -1550,16 +1561,18 @@ class ModelTesterMixin:
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 
-                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
+                # convert inputs to Flax
+                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
+                fx_outputs = fx_model(**fx_inputs).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
+                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, from_pt=True)
 
-                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict).to_tuple()
+                fx_outputs_loaded = fx_model_loaded(**fx_inputs).to_tuple()
                 self.assertEqual(
                     len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
                 )
@@ -1573,18 +1586,24 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 # prepare inputs
-                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
 
                 # load corresponding PyTorch class
-                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
-                pt_model_class = getattr(transformers, pt_model_class_name)
+                pt_model = model_class(config).eval()
 
-                pt_model = pt_model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
                 # So we disable `use_cache` here for PyTorch model.
                 pt_model.config.use_cache = False
-                fx_model = model_class(config, dtype=jnp.float32)
+
+                fx_model_class_name = "Flax" + model_class.__name__
+
+                if not hasattr(transformers, fx_model_class_name):
+                    # no flax model exists for this class
+                    return
+
+                fx_model_class = getattr(transformers, fx_model_class_name)
+
+                # load Flax class
+                fx_model = fx_model_class(config, dtype=jnp.float32)
 
                 pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
 
@@ -1594,7 +1613,9 @@ class ModelTesterMixin:
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 
-                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
+                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
+
+                fx_outputs = fx_model(**fx_inputs).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
 
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
@@ -1602,7 +1623,7 @@ class ModelTesterMixin:
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
 
                 with torch.no_grad():
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
