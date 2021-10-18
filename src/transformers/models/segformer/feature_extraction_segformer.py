@@ -19,10 +19,9 @@ from typing import List, Optional, Union
 
 import numpy as np
 from PIL import Image
-from torch import nn
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType
+from ...file_utils import TensorType, is_torch_available
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -34,6 +33,10 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_torch_available():
+    from torch import nn
 
 
 # 2 functions below taken from https://github.com/open-mmlab/mmcv/blob/master/mmcv/utils/misc.py
