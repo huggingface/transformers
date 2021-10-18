@@ -1024,7 +1024,7 @@ class Pipeline(_ScikitCompat):
         dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
         collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, self.feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
-        model_iterator = PipelineIterator(dataloader, self.forward, forward_params, unbatch_size=batch_size)
+        model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
 
