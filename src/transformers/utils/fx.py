@@ -193,11 +193,9 @@ def _wrap_method_for_model_tracing(model, method_name, cache_name):
         return res
 
     setattr(torch.Tensor, method_name, method)
-    setattr(Proxy, method_name, method)
 
     if method_name == "size":
         setattr(torch.Tensor, "shape", property(getattr(torch.Tensor, method_name)))
-        setattr(Proxy, "shape", property(getattr(torch.Tensor, method_name)))
 
 def _monkey_patch_tensor_methods_for_model_recording(model, method_names):
     """
@@ -229,6 +227,13 @@ def _reset_tensor_methods(original_methods):
 
 class DynamicTracer(Tracer):
     default_methods_to_record = {"__bool__", "size", "dim"}
+
+    def proxy(self, node: Node):
+        p = super().proxy(node)
+        if self.recorded_methods:
+            for method_name, cache_name in self.recorded_methods.items():
+                _create_recorded_proxy_method(p, method_name, cache_name)
+        return p
 
     def record(self, model, dummy_inputs: Union[Dict[str, Any], Tuple], method_names=None):
         """
