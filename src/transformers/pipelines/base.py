@@ -678,7 +678,7 @@ if is_torch_available():
             return processed
 
     class PipelineIterator(IterableDataset):
-        def __init__(self, loader, infer, params, unbatch_size=None):
+        def __init__(self, loader, infer, params, loader_batch_size=None):
             """
             Roughly equivalent to
 
@@ -693,29 +693,29 @@ if is_torch_available():
                     The function to apply of each element of :obj:`loader`.
                 params (:obj:`dict`):
                     The parameters passed to :obj:`infer` along with every item
-                unbatch_size (:obj:`int`, :obj:`optional`):
-                    If specified, the items of :obj:`loader` are supposed to come as batch, and are unbatched here
+                loader_batch_size (:obj:`int`, :obj:`optional`):
+                    If specified, the items of :obj:`loader` are supposed to come as batch, and are loader_batched here
                     making it roughly behave as
 
 
                     .. code-block::
 
                         for items in loader:
-                            for i in unbatch_size:
+                            for i in loader_batch_size:
                                 item = items[i]
                                 yield infer(item, **params)
             """
             self.loader = loader
             self.infer = infer
             self.params = params
-            if unbatch_size == 1:
+            if loader_batch_size == 1:
                 # Let's spare some time by deactivating altogether
-                unbatch_size = None
-            self.unbatch_size = unbatch_size
+                loader_batch_size = None
+            self.loader_batch_size = loader_batch_size
 
             # Internal bookkeeping
-            self._unbatch_index = None
-            self._unbatch_data = None
+            self._loader_batch_index = None
+            self._loader_batch_data = None
 
         def __len__(self):
             return len(self.loader)
@@ -724,31 +724,31 @@ if is_torch_available():
             self.iterator = iter(self.loader)
             return self
 
-        def unbatch_item(self):
-            if isinstance(self._unbatch_data, torch.Tensor):
-                result = self._unbatch_data[self._unbatch_index]
+        def loader_batch_item(self):
+            if isinstance(self._loader_batch_data, torch.Tensor):
+                result = self._loader_batch_data[self._loader_batch_index]
             else:
-                unbatched = {}
-                for k, element in self._unbatch_data.items():
+                loader_batched = {}
+                for k, element in self._loader_batch_data.items():
                     if k == "past_key_values":
                         continue
-                    if isinstance(element[self._unbatch_index], torch.Tensor):
-                        unbatched[k] = element[self._unbatch_index].unsqueeze(0)
-                    elif isinstance(element[self._unbatch_index], np.ndarray):
-                        unbatched[k] = np.expand_dims(element[self._unbatch_index], 0)
+                    if isinstance(element[self._loader_batch_index], torch.Tensor):
+                        loader_batched[k] = element[self._loader_batch_index].unsqueeze(0)
+                    elif isinstance(element[self._loader_batch_index], np.ndarray):
+                        loader_batched[k] = np.expand_dims(element[self._loader_batch_index], 0)
                     else:
-                        unbatched[k] = element[self._unbatch_index]
-                result = self._unbatch_data.__class__(unbatched)
-            self._unbatch_index += 1
+                        loader_batched[k] = element[self._loader_batch_index]
+                result = self._loader_batch_data.__class__(loader_batched)
+            self._loader_batch_index += 1
             return result
 
         def __next__(self):
-            if self._unbatch_index is not None and self._unbatch_index < self.unbatch_size:
-                return self.unbatch_item()
+            if self._loader_batch_index is not None and self._loader_batch_index < self.loader_batch_size:
+                return self.loader_batch_item()
 
             item = next(self.iterator)
             processed = self.infer(item, **self.params)
-            if self.unbatch_size is not None:
+            if self.loader_batch_size is not None:
                 if isinstance(processed, torch.Tensor):
                     first_tensor = processed
                 else:
@@ -758,13 +758,13 @@ if is_torch_available():
                     observed_batch_size = len(first_tensor)
                 else:
                     observed_batch_size = first_tensor.shape[0]
-                if 0 < observed_batch_size < self.unbatch_size:
+                if 0 < observed_batch_size < self.loader_batch_size:
                     # Could be last batch so we can't unroll as many
                     # elements.
-                    self.unbatch_size = observed_batch_size
-                self._unbatch_data = processed
-                self._unbatch_index = 0
-                return self.unbatch_item()
+                    self.loader_batch_size = observed_batch_size
+                self._loader_batch_data = processed
+                self._loader_batch_index = 0
+                return self.loader_batch_item()
             else:
                 return processed
 
