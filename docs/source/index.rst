@@ -105,17 +105,17 @@ Supported models
 3. :doc:`BARThez <model_doc/barthez>` (from École polytechnique) released with the paper `BARThez: a Skilled Pretrained
    French Sequence-to-Sequence Model <https://arxiv.org/abs/2010.12321>`__ by Moussa Kamal Eddine, Antoine J.-P.
    Tixier, Michalis Vazirgiannis.
-4. :doc:`BARTpho <model_doc/bartpho>` (from VinAI Research) released with the paper `BARTpho: Pre-trained
-   Sequence-to-Sequence Models for Vietnamese <https://arxiv.org/abs/2109.09701>`__ by Nguyen Luong Tran, Duong Minh Le
-   and Dat Quoc Nguyen.
+4. `BARTpho <https://huggingface.co/transformers/master/model_doc/bartpho.html>`__ (from VinAI Research) released with
+   the paper `BARTpho: Pre-trained Sequence-to-Sequence Models for Vietnamese <https://arxiv.org/abs/2109.09701>`__ by
+   Nguyen Luong Tran, Duong Minh Le and Dat Quoc Nguyen.
 5. :doc:`BEiT <model_doc/beit>` (from Microsoft) released with the paper `BEiT: BERT Pre-Training of Image Transformers
    <https://arxiv.org/abs/2106.08254>`__ by Hangbo Bao, Li Dong, Furu Wei.
 6. :doc:`BERT <model_doc/bert>` (from Google) released with the paper `BERT: Pre-training of Deep Bidirectional
    Transformers for Language Understanding <https://arxiv.org/abs/1810.04805>`__ by Jacob Devlin, Ming-Wei Chang,
    Kenton Lee and Kristina Toutanova.
-7. :doc:`BERTweet <model_doc/bertweet>` (from VinAI Research) released with the paper `BERTweet: A pre-trained language
-   model for English Tweets <https://aclanthology.org/2020.emnlp-demos.2/>`__ by Dat Quoc Nguyen, Thanh Vu and Anh Tuan
-   Nguyen.
+7. `BERTweet <https://huggingface.co/transformers/master/model_doc/bertweet.html>`__ (from VinAI Research) released
+   with the paper `BERTweet: A pre-trained language model for English Tweets
+   <https://aclanthology.org/2020.emnlp-demos.2/>`__ by Dat Quoc Nguyen, Thanh Vu and Anh Tuan Nguyen.
 8. :doc:`BERT For Sequence Generation <model_doc/bertgeneration>` (from Google) released with the paper `Leveraging
    Pre-trained Checkpoints for Sequence Generation Tasks <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi
    Narayan, Aliaksei Severyn.
@@ -261,9 +261,9 @@ Supported models
 54. :doc:`Pegasus <model_doc/pegasus>` (from Google) released with the paper `PEGASUS: Pre-training with Extracted
     Gap-sentences for Abstractive Summarization <https://arxiv.org/abs/1912.08777>`__ by Jingqing Zhang, Yao Zhao,
     Mohammad Saleh and Peter J. Liu.
-55. :doc:`PhoBERT <model_doc/phobert>` (from VinAI Research) released with the paper `PhoBERT: Pre-trained language
-    models for Vietnamese <https://www.aclweb.org/anthology/2020.findings-emnlp.92/>`__ by Dat Quoc Nguyen and Anh Tuan
-    Nguyen.
+55. `PhoBERT <https://huggingface.co/transformers/master/model_doc/phobert.html>`__ (from VinAI Research) released with
+    the paper `PhoBERT: Pre-trained language models for Vietnamese
+    <https://www.aclweb.org/anthology/2020.findings-emnlp.92/>`__ by Dat Quoc Nguyen and Anh Tuan Nguyen.
 56. :doc:`ProphetNet <model_doc/prophetnet>` (from Microsoft Research) released with the paper `ProphetNet: Predicting
     Future N-gram for Sequence-to-Sequence Pre-training <https://arxiv.org/abs/2001.04063>`__ by Yu Yan, Weizhen Qi,
     Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang and Ming Zhou.
