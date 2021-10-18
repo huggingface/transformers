@@ -524,22 +524,16 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class QDQBertModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
+    def test_inference_no_head_absolute_embedding(self): 
         model = QDQBertForMaskedLM.from_pretrained("bert-base-uncased")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]]) 
+        output = model(input_ids)[0] 
+        expected_shape = torch.Size((1, 11, 768)) 
+        self.assertEqual(output.shape, expected_shape) 
+        expected_slice = torch.tensor( 
+            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]] 
+        ) 
 
-        # TODO Replace vocab size
-        vocab_size = 32000
-
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
-
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
-        )
-
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4)) 
 
 
