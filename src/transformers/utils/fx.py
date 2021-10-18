@@ -190,7 +190,6 @@ def _wrap_method_for_model_tracing(model, method_name, cache_name):
     def method(*args, **kwargs):
         cache = getattr(model, cache_name)
         res = cache.pop(0)
-        print(f"Extracting {res} from the cache {cache_name}")
         return res
 
     setattr(torch.Tensor, method_name, method)
@@ -257,7 +256,6 @@ class DynamicTracer(Tracer):
 
     def trace_with_dummy_inputs(self, root: nn.Module, dummy_inputs: Union[Dict[str, Any], Tuple], concrete_args: Optional[Dict[str, Any]] = None, method_names=None) -> Graph:
         """Smart way to get some dynamic values that really are static ... size(), shape ..."""
-        print("------------------ NEW TRACE -------------------")
         sig = inspect.signature(root.forward)
         input_names = sig.parameters.keys() - concrete_args.keys()
 
