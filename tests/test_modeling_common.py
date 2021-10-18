@@ -1543,6 +1543,9 @@ class ModelTesterMixin:
                 # prepare inputs
                 pt_inputs = self._prepare_for_class(inputs_dict, model_class)
 
+                # remove all head_mask
+                pt_inputs = {k: v for k, v in pt_inputs.items() if "head_mask" not in k}
+
                 # load PyTorch class
                 pt_model = model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
@@ -1589,6 +1592,9 @@ class ModelTesterMixin:
             with self.subTest(model_class.__name__):
                 # prepare inputs
                 pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                # remove all head_mask
+                pt_inputs = {k: v for k, v in pt_inputs.items() if "head_mask" not in k}
 
                 # load corresponding PyTorch class
                 pt_model = model_class(config).eval()
