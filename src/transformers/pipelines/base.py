@@ -71,18 +71,30 @@ def _pad(items, key, padding_value, padding_side):
     if isinstance(items[0][key], torch.Tensor):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
-        if len(shape) != 2:
+        dim = len(shape)
+        if dim == 4:
             # This is probable image so padding shouldn't be necessary
+            # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
-        max_length = max(item[key].shape[-1] for item in items)
+        max_length = max(item[key].shape[1] for item in items)
         dtype = items[0][key].dtype
-        tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
+
+        if dim == 2:
+            tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
+        elif dim == 3:
+            tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
 
         for i, item in enumerate(items):
-            if padding_side == "left":
-                tensor[i, -len(item[key][0]) :] = item[key][0].clone()
-            else:
-                tensor[i, : len(item[key][0])] = item[key][0].clone()
+            if dim == 2:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0])] = item[key][0].clone()
+            elif dim == 3:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0]), :] = item[key][0].clone()
         return tensor
     else:
         return [item[key] for item in items]
@@ -1028,7 +1040,7 @@ class Pipeline(_ScikitCompat):
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
 
-    def __call__(self, inputs, *args, num_workers=2, batch_size=1, **kwargs):
+    def __call__(self, inputs, *args, num_workers=0, batch_size=1, **kwargs):
         if args:
             logger.warning(f"Ignoring args : {args}")
         preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)

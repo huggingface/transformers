@@ -307,14 +307,23 @@ class PipelinePadTest(unittest.TestCase):
                 torch.zeros((2, 3, 10, 10)),
             )
         )
+
+    @require_torch
+    def test_pipeline_offset_mapping(self):
+        import torch
+
+        items = [
+            {
+                "offset_mappings": torch.zeros([1, 11, 2], dtype=torch.long),
+            },
+            {
+                "offset_mappings": torch.zeros([1, 4, 2], dtype=torch.long),
+            },
+        ]
+
         self.assertTrue(
             torch.allclose(
-                _pad(items, "input_ids", 10, "left"),
-                torch.LongTensor([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
-            )
-        )
-        self.assertTrue(
-            torch.allclose(
-                _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
-            )
+                _pad(items, "offset_mappings", 0, "right"),
+                torch.zeros((2, 11, 2), dtype=torch.long),
+            ),
         )
