@@ -1946,7 +1946,7 @@ def to_py_obj(obj):
         return obj.detach().cpu().tolist()
     elif is_flax_available() and _is_jax(obj):
         return np.asarray(obj).tolist()
-    elif isinstance(obj, np.ndarray):
+    elif isinstance(obj, (np.ndarray, np.int32, np.int64)):
         return obj.tolist()
     else:
         return obj
