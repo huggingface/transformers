@@ -56,8 +56,6 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
-    # For `Conv2D`, this transpose also swaps the height/width axes. However, both PyTorch and TensorFlow expect
-    # the order (height, width). A manual transpose in the layer's `call` is required to get identical results.
     transpose = bool(
         tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
         or "emb_projs" in tf_name
@@ -80,19 +78,6 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         tf_name = tf_name.replace(start_prefix_to_remove, "", 1)
 
     return tf_name, transpose
-
-
-def _get_tf_conv2d_kernel_names(tf_model):
-    """Get the set of names of all convolution 2D layer kernels in a TF 2.0 model"""
-
-    main_layer = getattr(tf_model, tf_model.base_model_prefix, None)
-    conv2d_kernel_names = {}
-    if main_layer:
-        if hasattr(main_layer, "_get_conv2d_kernels"):
-            conv2d_kernels = main_layer._get_conv2d_kernels()
-            conv2d_kernel_names = set([x.name for x in conv2d_kernels])
-
-    return conv2d_kernel_names
 
 
 #####################
@@ -172,8 +157,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     if not any(s.startswith(tf_model.base_model_prefix) for s in pt_state_dict.keys()):
         start_prefix_to_remove = tf_model.base_model_prefix + "."
 
-    tf_conv2d_kernel_names = _get_tf_conv2d_kernel_names(tf_model)
-
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
     tf_loaded_numel = 0
     weight_value_tuples = []
@@ -202,6 +185,14 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         if transpose:
             array = numpy.transpose(array)
 
+        # A heuristic to detect Conv2D layer
+        if sw_name.split("/")[-1].startswith("kernel") and len(array.shape) == 4:
+            # TF Conv2D weights has [kernel[0], kernel[1], C_in, C_out] format,
+            # but PT Conv2D weights has [C_out, C_in, kernel[0], kernel[1]], which has been transposed to
+            # [kernel[1], kernel[0], C_in, C_out]. We need to swap axes 0 and 1 here.
+            # TODO: If conv2d filter's height & width are different, extra steps have to be carried due to `reshape` above.
+            array = numpy.transpose(array, axes=(1, 0, 2, 3))
+
         if len(symbolic_weight.shape) < len(array.shape):
             array = numpy.squeeze(array)
         elif len(symbolic_weight.shape) > len(array.shape):
@@ -221,14 +212,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             raise e
 
         tf_loaded_numel += array.size
-
-        # TF Conv2D weights has [kernel[0], kernel[1], C_in, C_out] format,
-        # but PT Conv2D weights has [C_out, C_in, kernel[0], kernel[1]], which has been transposed to
-        # [kernel[1], kernel[0], C_in, C_out]. We need to swap axes 0 and 1 here.
-        # TODO: If conv2d filter's height & width are different, extra steps have to be carried due to `reshape` above.
-        if sw_name in tf_conv2d_kernel_names:
-            array = numpy.transpose(array, axes=(1, 0, 2, 3))
-
         # logger.warning(f"Initialize TF weight {symbolic_weight.name}")
 
         weight_value_tuples.append((symbolic_weight, array))
@@ -323,17 +306,10 @@ def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False
     """Load TF 2.0 model in a pytorch model"""
     weights = tf_model.weights
 
-    tf_conv2d_kernel_names = _get_tf_conv2d_kernel_names(tf_model)
-
-    return load_tf2_weights_in_pytorch_model(
-        pt_model,
-        weights,
-        allow_missing_keys=allow_missing_keys,
-        tf_conv2d_kernel_names=tf_conv2d_kernel_names,
-    )
+    return load_tf2_weights_in_pytorch_model(pt_model, weights, allow_missing_keys=allow_missing_keys)
 
 
-def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False, tf_conv2d_kernel_names=None):
+def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False):
     """Load TF2.0 symbolic weights in a PyTorch model"""
     try:
         import tensorflow as tf  # noqa: F401
@@ -344,9 +320,6 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
         )
         raise
-
-    if tf_conv2d_kernel_names is None:
-        tf_conv2d_kernel_names = {}
 
     new_pt_params_dict = {}
     current_pt_params_dict = dict(pt_model.named_parameters())
@@ -383,10 +356,18 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
             raise AttributeError(f"{pt_weight_name} not found in TF 2.0 model")
 
-        tf_weight_name, array, transpose = tf_weights_map[pt_weight_name]
+        tf_name, array, transpose = tf_weights_map[pt_weight_name]
 
         if transpose:
             array = numpy.transpose(array)
+
+        # A heuristic to detect Conv2D layer
+        if tf_name.split("/")[-1].startswith("kernel") and len(array.shape) == 4:
+            # PT Conv2D weights has [C_out, C_in, kernel[0], kernel[1]] format,
+            # TF Conv2D weights has [kernel[0], , C_in, C_out] format, which has been transposed to
+            # [C_out, C_in, kernel[1], kernel[0]]. We need to swap axes 2 and 3 here.
+            # TODO: If conv2d filter's height & width are different, extra steps have to be carried due to `reshape` above.
+            array = numpy.transpose(array, axes=(0, 1, 3, 2))
 
         if len(pt_weight.shape) < len(array.shape):
             array = numpy.squeeze(array)
@@ -405,13 +386,6 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
         except AssertionError as e:
             e.args += (pt_weight.shape, array.shape)
             raise e
-
-        # PT Conv2D weights has [C_out, C_in, kernel[0], kernel[1]] format,
-        # TF Conv2D weights has [kernel[0], , C_in, C_out] format, which has been transposed to
-        # [C_out, C_in, kernel[1], kernel[0]]. We need to swap axes 2 and 3 here.
-        # TODO: If conv2d filter's height & width are different, extra steps have to be carried due to `reshape` above.
-        if tf_weight_name in tf_conv2d_kernel_names:
-            array = numpy.transpose(array, axes=(0, 1, 3, 2))
 
         # logger.warning(f"Initialize PyTorch weight {pt_weight_name}")
 

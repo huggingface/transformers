@@ -17,7 +17,7 @@
 
 import collections.abc
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -477,10 +477,6 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         class PreTrainedModel
         """
         raise NotImplementedError
-
-    def _get_conv2d_kernels(self) -> List[tf.Variable]:
-        """Get the list of all kernels of convolution 2D layers"""
-        return [self.embeddings.patch_embeddings.projection.kernel]
 
     def call(
         self,
