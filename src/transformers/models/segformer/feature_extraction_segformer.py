@@ -98,8 +98,8 @@ def rescale_size(old_size, scale, return_scale=False):
 
     Args:
         old_size (tuple[int]): The old size (w, h) of image.
-        scale (float | tuple[int]): The scaling factor or maximum size.
-            If it is a float number, then the image will be rescaled by this factor, else if it is a tuple of 2
+        scale (float | tuple[int] | list[int]): The scaling factor or maximum size.
+            If it is a float number, then the image will be rescaled by this factor, else if it is a tuple or list of 2
             integers, then the image will be rescaled as large as possible within the scale.
         return_scale (bool): Whether to return the scaling factor besides the
             rescaled image size.
@@ -140,11 +140,12 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         keep_ratio (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to keep the aspect ratio when resizing the input. Only has an effect if :obj:`do_resize` is set to
             :obj:`True`.
-        image_scale (:obj:`float` or :obj:`Tuple[int]`/:obj:`List[int]`, `optional`, defaults to (2048, 512)):
+        image_scale (:obj:`float` or :obj:`int` or :obj:`Tuple[int]`/:obj:`List[int]`, `optional`, defaults to (2048, 512)):
             In case :obj:`keep_ratio` is set to :obj:`True`, the scaling factor or maximum size. If it is a float
-            number, then the image will be rescaled by this factor, else if it is a tuple of 2 integers (width,
+            number, then the image will be rescaled by this factor, else if it is a tuple/list of 2 integers (width,
             height), then the image will be rescaled as large as possible within the scale. In case :obj:`keep_ratio`
-            is set to :obj:`False`, the target size (width, height) to which the image will be resized.
+            is set to :obj:`False`, the target size (width, height) to which the image will be resized. If only an
+            integer is provided, then the input will be resized to (size, size).
 
             Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         align (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -229,10 +230,18 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
     def _resize(self, image, size, resample):
         """
-        This class is based on PIL's ``resize`` method, the only difference is it is possible to ensure the long and
-        short sides are divisible by ``self.size_divisor``.
+        This class is based on PIL's :obj:`resize` method, the only difference is it is possible to ensure the long and
+        short sides are divisible by :obj:`self.size_divisor`.
 
-        If ``self.keep_ratio`` equals ``True``, then it replicates mmcv.rescale, else it replicates mmcv.resize.
+        If :obj:`self.keep_ratio` equals :obj:`True`, then it replicates mmcv.rescale, else it replicates mmcv.resize.
+
+        Args:
+            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+                The image to resize.
+            size (:obj:`float` or :obj:`int` or :obj:`Tuple[int, int]` or :obj:`List[int, int]`):
+                The size to use for resizing/rescaling the image.
+            resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
+                The filter to user for resampling.
         """
         if not isinstance(image, Image.Image):
             image = self.to_pil_image(image)
@@ -256,7 +265,13 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         return image
 
     def _get_crop_bbox(self, image):
-        """Randomly get a crop bounding box."""
+        """
+        Randomly get a crop bounding box for an image.
+
+        Args:
+            image (:obj:`np.ndarray`):
+                Image as NumPy array.
+        """
 
         # self.crop_size is a tuple (width, height)
         # however image has shape (num_channels, height, width)
@@ -270,19 +285,37 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         return crop_y1, crop_y2, crop_x1, crop_x2
 
     def _crop(self, image, crop_bbox):
+        """
+        Crop an image using a provided bounding box.
+
+        Args:
+            image (:obj:`np.ndarray`):
+                Image to crop, as NumPy array.
+            crop_bbox (:obj:`Tuple[int]`):
+                Bounding box to use for cropping, as a tuple of 4 integers: y1, y2, x1, x2.
+        """
         crop_y1, crop_y2, crop_x1, crop_x2 = crop_bbox
         image = image[..., crop_y1:crop_y2, crop_x1:crop_x2]
         return image
 
     def random_crop(self, image, segmentation_map=None):
-        """Randomly crop an image and optionally its corresponding segmentation map."""
+        """
+        Randomly crop an image and optionally its corresponding segmentation map using :obj:`self.crop_size`.
+
+        Args:
+            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+                Image to crop.
+            segmentation_map (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`, `optional`):
+                Optional corresponding segmentation map.
+        """
         image = self.to_numpy_array(image)
         crop_bbox = self._get_crop_bbox(image)
 
         image = self._crop(image, crop_bbox)
 
         if segmentation_map is not None:
-            segmentation_map = self._crop(np.array(segmentation_map, dtype=np.int64), crop_bbox)
+            segmentation_map = self.to_numpy_array(segmentation_map, rescale=False, channel_first=False)
+            segmentation_map = self._crop(segmentation_map, crop_bbox)
             return image, segmentation_map
 
         return image
