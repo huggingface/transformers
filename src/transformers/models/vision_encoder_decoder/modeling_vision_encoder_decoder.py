@@ -130,10 +130,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
             representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`
@@ -165,8 +161,8 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 class VisionEncoderDecoderModel(PreTrainedModel):
     r"""
     :class:`~transformers.VisionEncoderDecoderModel` is a generic model class that will be instantiated as a
-    transformer architecture with one of the base model classes of the library as encoder and another one as decoder
-    when created with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
+    transformer architecture with one of the base vision model classes of the library as encoder and another one as
+    decoder when created with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
     :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
     """
     config_class = VisionEncoderDecoderConfig

@@ -29,7 +29,6 @@ from .test_modeling_flax_vit import FlaxViTModelTester
 
 if is_flax_available():
     from transformers import (
-        AutoConfig,
         AutoTokenizer,
         FlaxGPT2LMHeadModel,
         FlaxVisionEncoderDecoderModel,
@@ -45,7 +44,7 @@ if is_vision_available():
 
 
 @require_flax
-class FlaxVisionEncoderDecoderMixin:
+class FlaxEncoderDecoderMixin:
     def get_encoder_decoder_model(self, config, decoder_config):
         raise NotImplementedError
 
@@ -286,7 +285,7 @@ class FlaxVisionEncoderDecoderMixin:
 
 
 @require_flax
-class FlaxVisionGPT2EncoderDecoderModelTest(FlaxVisionEncoderDecoderMixin, unittest.TestCase):
+class FlaxViT2GPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = FlaxViTModel(config)
         decoder_model = FlaxGPT2LMHeadModel(decoder_config)
@@ -330,12 +329,6 @@ class FlaxVisionEncoderDecoderModelTest(unittest.TestCase):
             "google/vit-base-patch16-224-in21k", "gpt2"
         )
 
-    def get_decoder_config(self):
-        config = AutoConfig.from_pretrained("gpt2")
-        config.is_decoder = True
-        config.add_cross_attention = True
-        return config
-
     def _check_configuration_tie(self, model):
         assert id(model.decoder.config) == id(model.config.decoder)
         assert id(model.encoder.config) == id(model.config.encoder)
@@ -354,11 +347,11 @@ def prepare_img():
 
 @require_vision
 @require_flax
-class FlaxVisionEncoderDecoderModelIntegrationTest(unittest.TestCase):
+class FlaxViT2GPT2ModelIntegrationTest(unittest.TestCase):
     # @slow
     def test_inference_coco_en(self):
 
-        loc = "ydshieh/flax-vit-gpt2-coco-en"
+        loc = "ydshieh/vit-gpt2-coco-en"
 
         feature_extractor = ViTFeatureExtractor.from_pretrained(loc)
         tokenizer = AutoTokenizer.from_pretrained(loc)
@@ -390,7 +383,7 @@ class FlaxVisionEncoderDecoderModelIntegrationTest(unittest.TestCase):
             ]
         )
         max_diff = np.amax(np.abs(logits[0, 0, :10] - EXPECTED_LOGIT_SLICE))
-        self.assertLessEqual(max_diff, 1e-5)
+        self.assertLessEqual(max_diff, 1e-4)
 
         def generate_step(pixel_values):
 
@@ -406,7 +399,7 @@ class FlaxVisionEncoderDecoderModelIntegrationTest(unittest.TestCase):
         EXPECTED_SCORES = np.array([-0.59563464])
         scores = np.array(scores)
         max_diff = np.amax(np.abs(scores - EXPECTED_SCORES))
-        self.assertLessEqual(max_diff, 1e-5)
+        self.assertLessEqual(max_diff, 1e-4)
 
         # should produce
         # ["a cat laying on top of a couch next to another cat"]

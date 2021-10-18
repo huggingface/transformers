@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support Vision-Encoder-Decoder architectures """
+""" Classes to support Vision-Encoder-Text-Decoder architectures """
 
 
 import os
@@ -37,23 +37,23 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VisionEncoderDecoderConfig"
 
 VISION_ENCODER_DECODER_START_DOCSTRING = r"""
-    This class can be used to initialize a vision-to-text-sequence model with any pretrained vision autoencoding model
+    This class can be used to initialize an image-to-text-sequence model with any pretrained vision autoencoding model
     as the encoder and any pretrained text autoregressive model as the decoder. The encoder is loaded via
     :meth:`~transformers.AutoModel.from_pretrained` function and the decoder is loaded via
     :meth:`~transformers.AutoModelForCausalLM.from_pretrained` function. Cross-attention layers are automatically added
-    to the decoder and should be fine-tuned on a downstream generative task, like summarization.
+    to the decoder and should be fine-tuned on a downstream generative task, like image captioning.
 
     The effectiveness of initializing sequence-to-sequence models with pretrained checkpoints for sequence generation
     tasks was shown in `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks
     <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
     Zhou, Wei Li, Peter J. Liu.
 
-    Additionally, in `BEiT: BERT Pre-Training of Image Transformers <https://arxiv.org/abs/2106.08254>`__ it is shown
-    how leveraging large self-supervised pretrained vision models for image tasks (image classification and semantic
-    segmentation) yields significant performance improvements.
+    Additionally, in `TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models
+    <https://arxiv.org/abs/2109.10282>`__ it is shown how leveraging large pretrained vision models for optical
+    character recognition (OCR) yields a significant performance improvement.
 
-    After such an Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other models
-    (see the examples for more information).
+    After such an Vision-Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other
+    models (see the examples for more information).
 
     This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
@@ -372,7 +372,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
 
-            >>> # initialize a vit2gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
             >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
 
             >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
@@ -450,7 +450,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
 
-            >>> # initialize a vit2gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
             >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
 
             >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
@@ -571,7 +571,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
             >>> # load output tokenizer
             >>> tokenizer_output = GPT2Tokenizer.from_pretrained('gpt2')
 
-            >>> # initialize a vit2gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
             >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
 
             >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
@@ -683,9 +683,8 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
             encoder_pretrained_model_name_or_path (:obj: `Union[str, os.PathLike]`, `optional`):
                 Information necessary to initiate the encoder. Can be either:
 
-                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co. An
+                      example is ``google/vit-base-patch16-224-in21k``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
 
@@ -714,12 +713,12 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         Example::
 
             >>> from transformers import FlaxVisionEncoderDecoderModel
-            >>> # initialize a bert2gpt2 from pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> # initialize a vit-gpt2 from a pretrained ViT and a pretrained GPT2 model. Note that the cross-attention layers will be randomly initialized
             >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('google/vit-base-patch16-224-in21k', 'gpt2')
             >>> # saving model after fine-tuning
-            >>> model.save_pretrained("./vit2gpt2")
+            >>> model.save_pretrained("./vit-gpt2")
             >>> # load fine-tuned model
-            >>> model = FlaxVisionEncoderDecoderModel.from_pretrained("./vit2gpt2")
+            >>> model = FlaxVisionEncoderDecoderModel.from_pretrained("./vit-gpt2")
 
         """
 
