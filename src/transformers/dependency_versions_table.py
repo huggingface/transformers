@@ -54,7 +54,7 @@ deps = {
     "scikit-learn": "scikit-learn",
     "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt": "sigopt",
-    "soundfile": "soundfile",
+    "librosa": "librosa",
     "sphinx-copybutton": "sphinx-copybutton",
     "sphinx-markdown-tables": "sphinx-markdown-tables",
     "sphinx-rtd-theme": "sphinx-rtd-theme==0.4.3",
