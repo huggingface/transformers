@@ -282,9 +282,12 @@ class _LazyConfigMapping(OrderedDict):
 
     def __init__(self, mapping):
         self._mapping = mapping
+        self._extra_content = {}
         self._modules = {}
 
     def __getitem__(self, key):
+        if key in self._extra_content:
+            return self._extra_content[key]
         if key not in self._mapping:
             raise KeyError(key)
         value = self._mapping[key]
@@ -294,19 +297,27 @@ class _LazyConfigMapping(OrderedDict):
         return getattr(self._modules[module_name], value)
 
     def keys(self):
-        return self._mapping.keys()
+        return list(self._mapping.keys()) + list(self._extra_content.keys())
 
     def values(self):
-        return [self[k] for k in self._mapping.keys()]
+        return [self[k] for k in self._mapping.keys()] + list(self._extra_content.values())
 
     def items(self):
-        return [(k, self[k]) for k in self._mapping.keys()]
+        return [(k, self[k]) for k in self._mapping.keys()] + list(self._extra_content.items())
 
     def __iter__(self):
-        return iter(self._mapping.keys())
+        return iter(list(self._mapping.keys()) + list(self._extra_content.keys()))
 
     def __contains__(self, item):
-        return item in self._mapping
+        return item in self._mapping or item in self._extra_content
+
+    def register(self, key, value):
+        """
+        Register a new configuration in this mapping.
+        """
+        if key in self._mapping.keys():
+            raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
+        self._extra_content[key] = value
 
 
 CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
@@ -550,3 +561,20 @@ class AutoConfig:
             f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
             f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
         )
+
+    @staticmethod
+    def register(model_type, config):
+        """
+        Register a new configuration for this class.
+
+        Args:
+            model_type (:obj:`str`): The model type like "bert" or "gpt".
+            config (:class:`~transformers.PretrainedConfig`): The config to register.
+        """
+        if issubclass(config, PretrainedConfig) and config.model_type != model_type:
+            raise ValueError(
+                "The config you are passing has a `model_type` attribute that is not consistent with the model type "
+                f"you passed (config has {config.model_type} and you passed {model_type}. Fix one of those so they "
+                "match!"
+            )
+        CONFIG_MAPPING.register(model_type, config)
