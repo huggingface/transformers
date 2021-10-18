@@ -163,6 +163,7 @@ class PatchEmbeddings(nn.Module):
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
+
         return x
 
 
@@ -854,11 +855,26 @@ class BeitForImageClassification(BeitPreTrainedModel):
 
 
 class ConvModule(nn.Module):
-    def __init__(self):
-        super(ConvModule).__init__()
+    """
+    A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
+    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
+    """
 
-    def forward(self):
-        return -1
+    def __init__(self, in_channels, out_channels, kernel_size, padding=0):
+        super(ConvModule, self).__init__()
+        self.conv = nn.Conv2d(
+            in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding
+        )
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.activation = nn.ReLU()
+
+    def forward(self, input):
+        output = self.conv(input)
+        print("Shape of output after conv:", output.shape)
+        output = self.norm(output)
+        output = self.activation(output)
+
+        return output
 
 
 class PPM(nn.ModuleList):
@@ -870,21 +886,15 @@ class PPM(nn.ModuleList):
             Module.
         in_channels (int): Input channels.
         channels (int): Channels after modules, before conv_seg.
-        conv_cfg (dict|None): Config of conv layers.
-        norm_cfg (dict|None): Config of norm layers.
-        act_cfg (dict): Config of activation layers.
         align_corners (bool): align_corners argument of F.interpolate.
     """
 
-    def __init__(self, pool_scales, in_channels, channels, conv_cfg, norm_cfg, act_cfg, align_corners, **kwargs):
+    def __init__(self, pool_scales, in_channels, channels, align_corners):
         super(PPM, self).__init__()
         self.pool_scales = pool_scales
         self.align_corners = align_corners
         self.in_channels = in_channels
         self.channels = channels
-        self.conv_cfg = conv_cfg
-        self.norm_cfg = norm_cfg
-        self.act_cfg = act_cfg
         for pool_scale in pool_scales:
             self.append(
                 nn.Sequential(
@@ -893,10 +903,6 @@ class PPM(nn.ModuleList):
                         self.in_channels,
                         self.channels,
                         1,
-                        conv_cfg=self.conv_cfg,
-                        norm_cfg=self.norm_cfg,
-                        act_cfg=self.act_cfg,
-                        **kwargs,
                     ),
                 )
             )
@@ -920,25 +926,19 @@ class UPerHead(nn.Module):
     """
 
     def __init__(self, config):
-        super(UPerHead).__init__()
+        super(UPerHead, self).__init__()
 
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
-        self.in_channels = config.hidden_sizes  # e.g. [768, 768, 768, 768]
-        self.in_index = [0, 1, 2, 3]
+        self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
         self.channels = config.hidden_size
-        self.conv_cfg = None
-        self.norm_cfg = dict(type="SyncBN", requires_grad=True)
-        self.act_cfg = dict(type="ReLU")
         self.align_corners = False
+        self.classifier = nn.Conv2d(config.hidden_size, config.num_labels, kernel_size=1)
 
         # PSP Module
         self.psp_modules = PPM(
             self.pool_scales,
             self.in_channels[-1],
             self.channels,
-            conv_cfg=self.conv_cfg,
-            norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg,
             align_corners=self.align_corners,
         )
         self.bottleneck = ConvModule(
@@ -946,9 +946,6 @@ class UPerHead(nn.Module):
             self.channels,
             3,
             padding=1,
-            conv_cfg=self.conv_cfg,
-            norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg,
         )
         # FPN Module
         self.lateral_convs = nn.ModuleList()
@@ -958,20 +955,14 @@ class UPerHead(nn.Module):
                 in_channels,
                 self.channels,
                 1,
-                conv_cfg=self.conv_cfg,
-                norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg,
-                inplace=False,
+                # inplace=False,
             )
             fpn_conv = ConvModule(
                 self.channels,
                 self.channels,
                 3,
                 padding=1,
-                conv_cfg=self.conv_cfg,
-                norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg,
-                inplace=False,
+                # inplace=False,
             )
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
@@ -981,9 +972,6 @@ class UPerHead(nn.Module):
             self.channels,
             3,
             padding=1,
-            conv_cfg=self.conv_cfg,
-            norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg,
         )
 
     def psp_forward(self, inputs):
@@ -1021,7 +1009,8 @@ class UPerHead(nn.Module):
             )
         fpn_outs = torch.cat(fpn_outs, dim=1)
         output = self.fpn_bottleneck(fpn_outs)
-        output = self.cls_seg(output)
+        output = self.classifier(output)
+
         return output
 
 
@@ -1037,6 +1026,19 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         self.num_labels = config.num_labels
         self.beit = BeitModel(config, add_pooling_layer=True)
+
+        # FPNs
+        self.fpn1 = nn.Sequential(
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+            nn.BatchNorm2d(config.hidden_size),
+            nn.GELU(),
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+        )
+        self.fpn2 = nn.Sequential(
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+        )
+        self.fpn3 = nn.Identity()
+        self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         # Semantic segmentation head
         self.head = UPerHead(config)
@@ -1087,13 +1089,24 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            output_hidden_states=True,  # we need the intermediate hidden states
             return_dict=return_dict,
         )
 
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
+        # only keep certain features, and reshape
+        features = [feature for idx, feature in enumerate(outputs.hidden_states) if idx + 1 in self.config.out_indices]
+        batch_size = pixel_values.shape[0]
+        patch_resolution = self.config.image_size // self.config.patch_size
+        features = [
+            x[:, 1:, :].permute(0, 2, 1).reshape(batch_size, -1, patch_resolution, patch_resolution) for x in features
+        ]
 
-        logits = self.head(pooled_output)
+        # apply FPNs
+        ops = [self.fpn1, self.fpn2, self.fpn3, self.fpn4]
+        for i in range(len(features)):
+            features[i] = ops[i](features[i])
+
+        logits = self.head(features)
 
         loss = None
         if labels is not None:

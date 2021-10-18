@@ -78,6 +78,10 @@ class BeitConfig(PretrainedConfig):
         use_mean_pooling (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
+        out_indices (:obj:`List[int]`, `optional`, defaults to :obj:`[3, 5, 7, 11]`):
+            Indices of the feature maps to use for semantic segmentation.
+        pool_scales (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(1, 2, 3, 6)`):
+            Pooling scales used in Pooling Pyramid Module applied on the last feature map.
 
     Example::
 
@@ -117,6 +121,8 @@ class BeitConfig(PretrainedConfig):
         layer_scale_init_value=0.1,
         drop_path_rate=0.1,
         use_mean_pooling=True,
+        out_indices=[3, 5, 7, 11],
+        pool_scales=(1, 2, 3, 6),
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -142,3 +148,6 @@ class BeitConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.use_mean_pooling = use_mean_pooling
+        # semantic segmentation attributes
+        self.out_indices = out_indices
+        self.pool_scales = pool_scales
