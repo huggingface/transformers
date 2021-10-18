@@ -32,6 +32,14 @@ more difficult to quantize, such as MobileNets and BERT-large.
 
 Tips:
 
+QDQBERT requires the support of `Pytorch Quantization Toolkit <https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization>`_.
+
+To install::
+
+.. code-block:: bash
+
+    pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
+
 An example of using QDQBERT model to perform quatization aware training and post training quantization for SQUAD task
 can be found at transformers/examples/pytorch/question-answering/QAT-qdqbert.
 
