@@ -25,7 +25,6 @@ from ..qdqbert.modeling_qdqbert import (
     QDQBertForMaskedLM,
     QDQBertForMultipleChoice,
     QDQBertForNextSentencePrediction,
-    QDQBertForPreTraining,
     QDQBertForQuestionAnswering,
     QDQBertForSequenceClassification,
     QDQBertForTokenClassification,
@@ -456,7 +455,6 @@ MODEL_MAPPING = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
         # Model for pre-training mapping
-        (QDQBertConfig, QDQBertForPreTraining),
         (VisualBertConfig, VisualBertForPreTraining),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (RetriBertConfig, RetriBertModel),
