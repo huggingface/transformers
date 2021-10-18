@@ -46,6 +46,12 @@ _CONFIG_FOR_DOC = "Wav2Vec2Config"
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
+_SEQ_CLASS_CHECKPOINT = ("superb/wav2vec2-base-superb-ks",)
+_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+
+_HIDDEN_STATES_START_POSITION = 2
+
+
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/wav2vec2-base-960h",
     "facebook/wav2vec2-large-960h",
@@ -1557,7 +1563,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
                 )
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
@@ -1602,8 +1608,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class="Wav2Vec2FeatureExtractor",
-        checkpoint="superb/wav2vec2-base-superb-ks",
+        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
@@ -1636,7 +1642,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[2]
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
@@ -1659,7 +1665,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(

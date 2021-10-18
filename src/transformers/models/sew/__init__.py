@@ -28,6 +28,7 @@ if is_torch_available():
     _import_structure["modeling_sew"] = [
         "SEW_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SEWForCTC",
+        "SEWForSequenceClassification",
         "SEWModel",
         "SEWPreTrainedModel",
     ]
@@ -36,7 +37,13 @@ if TYPE_CHECKING:
     from .configuration_sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
 
     if is_torch_available():
-        from .modeling_sew import SEW_PRETRAINED_MODEL_ARCHIVE_LIST, SEWForCTC, SEWModel, SEWPreTrainedModel
+        from .modeling_sew import (
+            SEW_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SEWForCTC,
+            SEWForSequenceClassification,
+            SEWModel,
+            SEWPreTrainedModel,
+        )
 
 
 else:
