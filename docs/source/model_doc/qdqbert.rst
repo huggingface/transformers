@@ -25,8 +25,7 @@ Quantization techniques can reduce the size of Deep Neural Networks and improve 
 
 Tips:
 
-An example of using QDQBERT model to perform quatization aware training and post training quantization for SQUAD task can be found at [QAT-qdqbert](transformers
-/examples/pytorch/question-answering/QAT-qdqbert)
+An example of using QDQBERT model to perform quatization aware training and post training quantization for SQUAD task can be found at transformers/examples/pytorch/question-answering/QAT-qdqbert.
 
 This model was contributed by `<INSERT YOUR HF USERNAME HERE> 
 <https://huggingface.co/<INSERT YOUR HF USERNAME HERE>>`__. The original code can be found `here 
