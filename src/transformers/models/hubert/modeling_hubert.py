@@ -25,7 +25,12 @@ from torch.nn import CrossEntropyLoss
 from transformers.deepspeed import is_deepspeed_zero3_enabled
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -36,6 +41,13 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "HubertConfig"
 _CHECKPOINT_FOR_DOC = "facebook/hubert-base-ls960"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+_SEQ_CLASS_CHECKPOINT = ("superb/hubert-base-superb-ks",)
+_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+
+_HIDDEN_STATES_START_POSITION = 1
+
 
 HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/hubert-base-ls960",
@@ -999,6 +1011,7 @@ class HubertModel(HubertPreTrainedModel):
     """Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
     HUBERT_START_DOCSTRING,
 )
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->Hubert, wav2vec2->hubert, WAV_2_VEC_2->HUBERT
 class HubertForCTC(HubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1025,7 +1038,12 @@ class HubertForCTC(HubertPreTrainedModel):
         self.hubert.feature_extractor._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_PROCESSOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_values,
@@ -1041,41 +1059,6 @@ class HubertForCTC(HubertPreTrainedModel):
             the sequence length of the output logits. Indices are selected in ``[-100, 0, ..., config.vocab_size -
             1]``. All labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
             config.vocab_size - 1]``.
-
-        Returns:
-
-        Example::
-
-            >>> import torch
-            >>> from transformers import Wav2Vec2Processor, HubertForCTC
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
-            >>> model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
-
-            >>> def map_to_array(batch):
-            ...     speech, _ = sf.read(batch["file"])
-            ...     batch["speech"] = speech
-            ...     return batch
-
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> logits = model(input_values).logits
-            >>> predicted_ids = torch.argmax(logits, dim=-1)
-
-            >>> transcription = processor.decode(predicted_ids[0])
-
-            >>> # compute loss
-            >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
-
-            >>> # wrap processor as target processor to encode labels
-            >>> with processor.as_target_processor():
-            ...     labels = processor(target_transcription, return_tensors="pt").input_ids
-
-            >>> loss = model(input_values, labels=labels).loss
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1126,7 +1109,7 @@ class HubertForCTC(HubertPreTrainedModel):
                 )
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
@@ -1141,8 +1124,8 @@ class HubertForCTC(HubertPreTrainedModel):
     """,
     HUBERT_START_DOCSTRING,
 )
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->Hubert, wav2vec2->hubert, WAV_2_VEC_2->HUBERT
 class HubertForSequenceClassification(HubertPreTrainedModel):
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.__init__ with Wav2Vec2->Hubert, wav2vec2->hubert
     def __init__(self, config):
         super().__init__(config)
 
@@ -1155,7 +1138,6 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
 
         self.init_weights()
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_feature_extractor with wav2vec2->hubert
     def freeze_feature_extractor(self):
         """
         Calling this function will disable the gradient computation for the feature extractor so that its parameters
@@ -1163,7 +1145,6 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         """
         self.hubert.feature_extractor._freeze_parameters()
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_base_model with wav2vec2->hubert
     def freeze_base_model(self):
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
@@ -1173,7 +1154,13 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             param.requires_grad = False
 
     @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+    )
     def forward(
         self,
         input_values,
@@ -1188,29 +1175,6 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Example::
-
-            >>> import torch
-            >>> from transformers import Wav2Vec2FeatureExtractor, HubertForSequenceClassification
-            >>> from datasets import load_dataset
-
-            >>> processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ks")
-            >>> model = HubertForSequenceClassification.from_pretrained("superb/hubert-base-superb-ks")
-
-            >>> ds = load_dataset("anton-l/superb_dummy", "ks", split="test")
-
-            >>> input_values = processor(ds["speech"][4], return_tensors="pt").input_values  # Batch size 1
-            >>> logits = model(input_values).logits
-            >>> predicted_class_ids = torch.argmax(logits, dim=-1)
-
-            >>> # compute loss
-            >>> target_label = "down"
-            >>> labels = torch.tensor([model.config.label2id[target_label]])
-
-            >>> loss = model(input_values, labels=labels).loss
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1225,7 +1189,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[1]
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
@@ -1248,7 +1212,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(

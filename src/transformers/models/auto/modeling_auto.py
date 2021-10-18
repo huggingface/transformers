@@ -476,6 +476,8 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Audio Classification mapping
         ("wav2vec2", "Wav2Vec2ForSequenceClassification"),
         ("hubert", "HubertForSequenceClassification"),
+        ("sew", "SEWForSequenceClassification"),
+        ("sew-d", "SEWDForSequenceClassification"),
     ]
 )
 
