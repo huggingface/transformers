@@ -719,6 +719,10 @@ class GenerationMixin:
             top_p (:obj:`float`, `optional`, defaults to 1.0):
                 If set to float < 1, only the most probable tokens with probabilities that add up to :obj:`top_p` or
                 higher are kept for generation.
+            tfs (:obj:`float`, `optional`, defaults to 1.0):
+                If set to < 1, only the most probable tokens where the second derivative of the probabilities of the
+                tokens sorted in descending order of probability add up to at most :obj:`tfs` are kept for generation.
+                Described in https://www.trentonbricken.com/Tail-Free-Sampling/.
             repetition_penalty (:obj:`float`, `optional`, defaults to 1.0):
                 The parameter for repetition penalty. 1.0 means no penalty. See `this paper
                 <https://arxiv.org/pdf/1909.05858.pdf>`__ for more details.
