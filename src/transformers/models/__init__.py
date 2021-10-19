@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    qdqbert,
     albert,
     auto,
     bart,
