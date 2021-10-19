@@ -24,6 +24,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
+from datasets import load_dataset
 from transformers import (
     BeitConfig,
     BeitFeatureExtractor,
@@ -267,8 +268,15 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     model.load_state_dict(state_dict)
 
     # Check outputs on an image
-    feature_extractor = BeitFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    if is_semantic:
+        feature_extractor = BeitFeatureExtractor(size=config.image_size, do_center_crop=False)
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = Image.open(ds[0]["file"])  
+    else:
+        feature_extractor = BeitFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
+        image = prepare_img()
+        
+    encoding = feature_extractor(images=image, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     outputs = model(pixel_values)
@@ -309,16 +317,28 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     elif checkpoint_url[:-4].endswith("beit_large_patch16_512_pt22k_ft22kto1k"):
         expected_logits = torch.tensor([-0.3062, 0.7261, 0.4852])
         expected_class_idx = 761
-    elif is_semantic:
+    elif checkpoint_url[-4:].endswith("beit_base_patch16_640_pt22k_ft22ktoade20k"):
         expected_shape = (1, 150, 160, 160)
+        expected_logits = torch.tensor(
+            [
+                [[-4.9225, -2.3954, -3.0522], [-2.8822, -1.0046, -1.7561], [-2.9549, -1.3228, -2.1347]],
+                [[-5.8168, -3.4129, -4.0778], [-3.8651, -2.2214, -3.0277], [-3.8356, -2.4643, -3.3535]],
+                [[-0.0078, 3.9952, 4.0754], [2.9856, 4.6944, 5.0035], [3.2413, 4.7813, 4.9969]],
+            ]
+        )
+    elif checkpoint_url[-4:].endswith("beit_base_patch16_640_pt22k_ft22ktoade20k"):
+        raise NotImplementedError("To do")
     else:
         raise ValueError("Can't verify logits as model is not supported")
 
     assert logits.shape == expected_shape, "Shape of logits not as expected"
-    if not has_lm_head and not is_semantic:
-        print("Predicted class idx:", logits.argmax(-1).item())
-        assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3), "First elements of logits not as expected"
-        assert logits.argmax(-1).item() == expected_class_idx, "Predicted class index not as expected"
+    if not has_lm_head:
+        if is_semantic:
+            assert torch.allclose(logits[0, :3, :3, :3], expected_logits, atol=1e-3), "First elements of logits not as expected"
+        else:
+            print("Predicted class idx:", logits.argmax(-1).item())
+            assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3), "First elements of logits not as expected"
+            assert logits.argmax(-1).item() == expected_class_idx, "Predicted class index not as expected"
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
