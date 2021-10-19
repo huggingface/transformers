@@ -23,8 +23,8 @@ The QDQBERT model adds fake quantization (pair of QuantizeLinear/DequantizeLinea
 In this example, we use QDQBERT model to do quantization on SQuAD task, including Quantization Aware Training (QAT), Post Training Quantization (PTQ) and inferencing using TensorRT.
 
 Required:
--[pytorch-quantization toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization)
--[TensorRT >= 8.2](https://github.com/NVIDIA/TensorRT)
+- [pytorch-quantization toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization)
+- [TensorRT >= 8.2](https://github.com/NVIDIA/TensorRT)
 
 ## Setup
 
