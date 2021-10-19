@@ -31,7 +31,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_MAPPING, BeitForImageClassification, BeitForMaskedImageModeling, BeitModel
+    from transformers import (
+        MODEL_MAPPING,
+        BeitForImageClassification,
+        BeitForMaskedImageModeling,
+        BeitForSemanticSegmentation,
+        BeitModel,
+    )
     from transformers.models.beit.modeling_beit import BEIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
@@ -53,7 +59,7 @@ class BeitModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=4,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -63,6 +69,7 @@ class BeitModelTester:
         initializer_range=0.02,
         num_labels=3,
         scope=None,
+        out_indices=[0,1,2,3],
     ):
         self.parent = parent
         self.vocab_size = 100
@@ -82,6 +89,7 @@ class BeitModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -109,6 +117,7 @@ class BeitModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -159,8 +168,10 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    maxDiff = None
+    
     all_model_classes = (
-        (BeitModel, BeitForImageClassification, BeitForMaskedImageModeling) if is_torch_available() else ()
+        (BeitModel, BeitForImageClassification, BeitForMaskedImageModeling, BeitForSemanticSegmentation) if is_torch_available() else ()
     )
 
     test_pruning = False
@@ -212,11 +223,14 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
-                continue
             # we don't test BeitForMaskedImageModeling
-            if model_class.__name__ == "BeitForMaskedImageModeling":
+            if model_class in [*get_values(MODEL_MAPPING), BeitForMaskedImageModeling]:
                 continue
+            # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
+            # this can then be incorporated into _prepare_for_class in test_modeling_common.py
+            elif model_class.__name__ == "BeitForSemanticSegmentation":
+                batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
+                inputs_dict["labels"] = torch.zeros([self.model_tester.batch_size, height, width]).long()
             model = model_class(config)
             model.to(torch_device)
             model.train()
@@ -233,11 +247,14 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
-                continue
             # we don't test BeitForMaskedImageModeling
-            if model_class.__name__ == "BeitForMaskedImageModeling":
+            if model_class in [*get_values(MODEL_MAPPING), BeitForMaskedImageModeling] or not model_class.supports_gradient_checkpointing:
                 continue
+            # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
+            # this can then be incorporated into _prepare_for_class in test_modeling_common.py
+            elif model_class.__name__ == "BeitForSemanticSegmentation":
+                batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
+                inputs_dict["labels"] = torch.zeros([self.model_tester.batch_size, height, width]).long()
             model = model_class(config)
             model.to(torch_device)
             model.train()
@@ -378,7 +395,7 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
+    
     @slow
     def test_model_from_pretrained(self):
         for model_name in BEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -472,3 +489,34 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         expected_class_idx = 2396
         self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
+
+    @slow
+    def test_inference_semantic_segmentation(self):
+        # TODO rename nielsr to microsoft
+        model = BeitForSemanticSegmentation.from_pretrained("nielsr/beit-base-finetuned-ade20k").to(torch_device)
+
+        feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
+        
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = Image.open(ds[0]["file"])
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        outputs = model(**inputs)
+        logits = outputs.logits
+
+        # verify the logits
+        expected_shape = torch.Size((1, 150, 160, 160))
+        self.assertEqual(logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [
+                [[-4.9225, -2.3954, -3.0522], [-2.8822, -1.0046, -1.7561], [-2.9549, -1.3228, -2.1347]],
+                [[-5.8168, -3.4129, -4.0778], [-3.8651, -2.2214, -3.0277], [-3.8356, -2.4643, -3.3535]],
+                [[-0.0078, 3.9952, 4.0754], [2.9856, 4.6944, 5.0035], [3.2413, 4.7813, 4.9969]],
+            ]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))

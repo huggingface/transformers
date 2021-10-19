@@ -245,18 +245,15 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     if is_semantic:
         # add prefix to decoder keys
         for key, val in state_dict.copy().items():
-            print("Old key:", key)
             val = state_dict.pop(key)
             if key.startswith("decode_head"):
                 key = key.replace("decode_head", "head")
             elif key.startswith("backbone.fpn"):
                 key = key.replace("backbone.fpn", "fpn")
-            
             if "auxiliary_head" in key:
                 # we skip the auxiliary head for now
                 pass
             else:
-                print("Setting new key:", key)
                 state_dict[key] = val
 
     # load HuggingFace model
@@ -316,7 +313,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         expected_shape = (1, 150, 160, 160)
     else:
         raise ValueError("Can't verify logits as model is not supported")
-    
+
     assert logits.shape == expected_shape, "Shape of logits not as expected"
     if not has_lm_head and not is_semantic:
         print("Predicted class idx:", logits.argmax(-1).item())

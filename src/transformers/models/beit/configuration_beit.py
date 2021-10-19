@@ -80,7 +80,7 @@ class BeitConfig(PretrainedConfig):
             CLS token, before applying the classification head.
         out_indices (:obj:`List[int]`, `optional`, defaults to :obj:`[3, 5, 7, 11]`):
             Indices of the feature maps to use for semantic segmentation.
-        pool_scales (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(1, 2, 3, 6)`):
+        pool_scales (:obj:`Tuple[int]`, `optional`, defaults to :obj:`[1, 2, 3, 6]`):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.
 
     Example::
@@ -122,7 +122,7 @@ class BeitConfig(PretrainedConfig):
         drop_path_rate=0.1,
         use_mean_pooling=True,
         out_indices=[3, 5, 7, 11],
-        pool_scales=(1, 2, 3, 6),
+        pool_scales=[1, 2, 3, 6],
         **kwargs
     ):
         super().__init__(**kwargs)
