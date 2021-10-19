@@ -9,7 +9,7 @@ from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_vision_available():
-    from PIL import Image
+    from PIL import Image, ImageOps
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
@@ -58,6 +58,7 @@ class ImageClassificationPipeline(Pipeline):
             raise ValueError(
                 "Incorrect format used for image. Should be an url linking to an image, a local path, or a PIL image."
             )
+        image = ImageOps.exif_transpose(image)
         image = image.convert("RGB")
         return image
 
