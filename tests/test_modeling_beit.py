@@ -69,7 +69,7 @@ class BeitModelTester:
         initializer_range=0.02,
         num_labels=3,
         scope=None,
-        out_indices=[0,1,2,3],
+        out_indices=[0, 1, 2, 3],
     ):
         self.parent = parent
         self.vocab_size = 100
@@ -169,9 +169,11 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     maxDiff = None
-    
+
     all_model_classes = (
-        (BeitModel, BeitForImageClassification, BeitForMaskedImageModeling, BeitForSemanticSegmentation) if is_torch_available() else ()
+        (BeitModel, BeitForImageClassification, BeitForMaskedImageModeling, BeitForSemanticSegmentation)
+        if is_torch_available()
+        else ()
     )
 
     test_pruning = False
@@ -248,7 +250,10 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             # we don't test BeitForMaskedImageModeling
-            if model_class in [*get_values(MODEL_MAPPING), BeitForMaskedImageModeling] or not model_class.supports_gradient_checkpointing:
+            if (
+                model_class in [*get_values(MODEL_MAPPING), BeitForMaskedImageModeling]
+                or not model_class.supports_gradient_checkpointing
+            ):
                 continue
             # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
             # this can then be incorporated into _prepare_for_class in test_modeling_common.py
@@ -395,7 +400,7 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-    
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in BEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -496,7 +501,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         model = BeitForSemanticSegmentation.from_pretrained("nielsr/beit-base-finetuned-ade20k").to(torch_device)
 
         feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
-        
+
         from datasets import load_dataset
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")

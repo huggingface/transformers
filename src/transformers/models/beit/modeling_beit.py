@@ -1019,7 +1019,7 @@ class BeitUperHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Beit Model transformer with an semantic segmentation head on top e.g. for ADE20k.
+    Beit Model transformer with a semantic segmentation head on top e.g. for ADE20k, CityScapes.
     """,
     BEIT_START_DOCSTRING,
 )
@@ -1060,31 +1060,29 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, height, width)`, `optional`):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels > 1`, a classification loss is computed
+            (Cross-Entropy).
 
         Returns:
 
         Examples::
 
-            >>> from transformers import BeitFeatureExtractor, BeitForImageClassification
+            >>> from transformers import BeitFeatureExtractor, BeitForSemanticSegmentation
             >>> from PIL import Image
             >>> import requests
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
-            >>> model = BeitForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
+            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-finetuned-ade20k')
+            >>> model = BeitForSemanticSegmentation.from_pretrained('microsoft/beit-base-finetuned-ade20k')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
+            >>> # logits are of shape (batch_size, num_labels, height/4, width/4)
             >>> logits = outputs.logits
-            >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class_idx = logits.argmax(-1).item()
-            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1125,7 +1123,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
                 )
                 loss_fct = CrossEntropyLoss(ignore_index=255)
                 loss = loss_fct(upsampled_logits, labels)
-        
+
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output

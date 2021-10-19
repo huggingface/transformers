@@ -20,11 +20,11 @@ import json
 from pathlib import Path
 
 import torch
+from datasets import load_dataset
 from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from datasets import load_dataset
 from transformers import (
     BeitConfig,
     BeitFeatureExtractor,
@@ -269,11 +269,11 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     if is_semantic:
         feature_extractor = BeitFeatureExtractor(size=config.image_size, do_center_crop=False)
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-        image = Image.open(ds[0]["file"])  
+        image = Image.open(ds[0]["file"])
     else:
         feature_extractor = BeitFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
         image = prepare_img()
-        
+
     encoding = feature_extractor(images=image, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
@@ -332,10 +332,14 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     assert logits.shape == expected_shape, "Shape of logits not as expected"
     if not has_lm_head:
         if is_semantic and "base" in checkpoint_url:
-            assert torch.allclose(logits[0, :3, :3, :3], expected_logits, atol=1e-3), "First elements of logits not as expected"
+            assert torch.allclose(
+                logits[0, :3, :3, :3], expected_logits, atol=1e-3
+            ), "First elements of logits not as expected"
         else:
             print("Predicted class idx:", logits.argmax(-1).item())
-            assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3), "First elements of logits not as expected"
+            assert torch.allclose(
+                logits[0, :3], expected_logits, atol=1e-3
+            ), "First elements of logits not as expected"
             assert logits.argmax(-1).item() == expected_class_idx, "Predicted class index not as expected"
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
