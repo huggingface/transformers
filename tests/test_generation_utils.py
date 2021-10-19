@@ -45,6 +45,7 @@ if is_torch_available():
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
+        TailFreeLogitsWarper,
     )
     from transformers.generation_stopping_criteria import MaxLengthCriteria, StoppingCriteriaList
     from transformers.generation_utils import (
@@ -135,12 +136,13 @@ class GenerationTesterMixin:
 
     @staticmethod
     def _get_warper_and_kwargs(num_beams):
-        warp_kwargs = {"top_k": 10, "top_p": 0.7, "temperature": 0.7}
+        warp_kwargs = {"top_k": 10, "top_p": 0.7, "tfs": 0.95, "temperature": 0.7}
         logits_warper = LogitsProcessorList(
             [
                 TemperatureLogitsWarper(warp_kwargs["temperature"]),
                 TopKLogitsWarper(top_k=warp_kwargs["top_k"], min_tokens_to_keep=(2 if num_beams > 1 else 1)),
                 TopPLogitsWarper(top_p=warp_kwargs["top_p"], min_tokens_to_keep=(2 if num_beams > 1 else 1)),
+                TailFreeLogitsWarper(tfs=warp_kwargs["tfs"], min_tokens_to_keep=(2 if num_beams > 1 else 1)),
             ]
         )
         return warp_kwargs, logits_warper
