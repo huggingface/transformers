@@ -208,7 +208,13 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
 
         processor = LayoutLMv2Processor.from_pretrained(
-            self.tmpdirname, use_fast=False, use_xlm=True, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
+            self.tmpdirname,
+            use_fast=False,
+            use_xlm=True,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_resize=False,
+            size=30,
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
