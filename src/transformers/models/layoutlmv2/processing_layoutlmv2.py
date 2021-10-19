@@ -37,6 +37,7 @@ class LayoutLMv2Processor:
     optionally applies OCR to get words and normalized bounding boxes. These are then provided to
     :class:`~transformers.LayoutLMv2Tokenizer`, :class:`~transformers.LayoutLMv2TokenizerFast`,
     :class:`LayoutXLMTokenizer` or :class:`LayoutXLMTokenizerFast` which turns the words and bounding boxes into
+    and bounding boxes into token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`.
 
     Args:
         feature_extractor (:obj:`LayoutLMv2FeatureExtractor`):
@@ -44,8 +45,8 @@ class LayoutLMv2Processor:
             input.
         tokenizer (:obj:`LayoutLMv2Tokenizer`, :obj:`LayoutLMv2TokenizerFast`, :obj:`LayoutXLMTokenizer`, or
             :obj:`LayoutXLMTokenizerFast`): An instance of :class:`~transformers.LayoutLMv2Tokenizer`,
-            :class:`~transformers.LayoutLMv2TokenizerFast`, :class:`LayoutXLMTokenizer` or
-            :class:`LayoutXLMTokenizerFast`. The tokenizer is a required input.
+            :class:`~transformers.LayoutLMv2TokenizerFast`, :class:`~transformers.LayoutXLMTokenizer` or
+            :class:`~transformers.LayoutXLMTokenizerFast`. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):

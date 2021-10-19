@@ -27,7 +27,6 @@ from transformers.models.layoutlmv2 import (
     LayoutXLMTokenizer,
     LayoutXLMTokenizerFast,
 )
-
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import (
     require_pytesseract,
