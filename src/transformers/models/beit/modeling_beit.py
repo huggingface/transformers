@@ -863,14 +863,17 @@ class ConvModule(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, padding=0):
         super(ConvModule, self).__init__()
         self.conv = nn.Conv2d(
-            in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            bias=False,
         )
         self.norm = nn.BatchNorm2d(out_channels)
         self.activation = nn.ReLU()
 
     def forward(self, input):
         output = self.conv(input)
-        print("Shape of output after conv:", output.shape)
         output = self.norm(output)
         output = self.activation(output)
 
@@ -879,7 +882,7 @@ class ConvModule(nn.Module):
 
 class PPM(nn.ModuleList):
     """
-    Pooling Pyramid Module used in PSPNet.
+    Pyramid Pooling Module (PPM) used in PSPNet.
 
     Args:
         pool_scales (tuple[int]): Pooling scales used in Pooling Pyramid
@@ -1025,7 +1028,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.beit = BeitModel(config, add_pooling_layer=True)
+        self.beit = BeitModel(config, add_pooling_layer=False)
 
         # FPNs
         self.fpn1 = nn.Sequential(
@@ -1094,6 +1097,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         )
 
         # only keep certain features, and reshape
+        # note that we do +1 as outputs.hidden_states also includes the initial embeddings
         features = [feature for idx, feature in enumerate(outputs.hidden_states) if idx + 1 in self.config.out_indices]
         batch_size = pixel_values.shape[0]
         patch_resolution = self.config.image_size // self.config.patch_size
