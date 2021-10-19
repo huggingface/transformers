@@ -2914,8 +2914,20 @@ if TYPE_CHECKING:
             SegformerModel,
             SegformerPreTrainedModel,
         )
-        from .models.sew import SEW_PRETRAINED_MODEL_ARCHIVE_LIST, SEWForCTC, SEWModel, SEWPreTrainedModel
-        from .models.sew_d import SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST, SEWDForCTC, SEWDModel, SEWDPreTrainedModel
+        from .models.sew import (
+            SEW_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SEWForCTC,
+            SEWForSequenceClassification,
+            SEWModel,
+            SEWPreTrainedModel,
+        )
+        from .models.sew_d import (
+            SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SEWDForCTC,
+            SEWDForSequenceClassification,
+            SEWDModel,
+            SEWDPreTrainedModel,
+        )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
