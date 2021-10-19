@@ -24,6 +24,7 @@ import torch
 from torch.utils.data import DataLoader
 
 import pycuda.driver as cuda
+import pycuda.autoinit
 import tensorrt as trt
 
 
