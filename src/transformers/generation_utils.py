@@ -36,10 +36,10 @@ from .generation_logits_process import (
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
+    TailFreeLogitsWarper,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
-    TailFreeLogitsWarper,
 )
 from .generation_stopping_criteria import (
     MaxLengthCriteria,
@@ -522,7 +522,12 @@ class GenerationMixin:
         )
 
     def _get_logits_warper(
-        self, top_k: int = None, top_p: float = None, tfs: float = None, temperature: float = None, num_beams: int = None
+        self,
+        top_k: int = None,
+        top_p: float = None,
+        tfs: float = None,
+        temperature: float = None,
+        num_beams: int = None,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -2569,9 +2574,9 @@ def top_k_top_p_filtering(
             If < 1.0, only keep the top tokens with cumulative probability >= top_p (nucleus filtering). Nucleus
             filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
         tfs (:obj:`float`, `optional`, defaults to 1.0):
-            If < 1.0, only the most probable tokens where the second derivative of the probabilities of the
-            tokens sorted in descending order of probability add up to tfs or higher are kept for generation.
-            Described in https://www.trentonbricken.com/Tail-Free-Sampling/.
+            If < 1.0, only the most probable tokens where the second derivative of the probabilities of the tokens
+            sorted in descending order of probability add up to tfs or higher are kept for generation. Described in
+            https://www.trentonbricken.com/Tail-Free-Sampling/.
         min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
             Minimumber of tokens we keep per batch example in the output.
 
@@ -2584,7 +2589,7 @@ def top_k_top_p_filtering(
 
     if 0 <= top_p <= 1.0:
         logits = TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
-    
+
     if 0 <= tfs <= 1.0:
         logits = TailFreeLogitsWarper(tfs=tfs, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
 

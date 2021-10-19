@@ -249,8 +249,8 @@ class TailFreeLogitsWarper(LogitsWarper):
 
     Args:
         tfs (:obj:`float`):
-            If set to < 1, only the most probable tokens where the second derivative of the probabilities of the
-            tokens sorted in descending order of probability add up to at most :obj:`tfs` are kept for generation.
+            If set to < 1, only the most probable tokens where the second derivative of the probabilities of the tokens
+            sorted in descending order of probability add up to at most :obj:`tfs` are kept for generation.
         filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
             All filtered values will be set to this float value.
         min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
@@ -281,7 +281,14 @@ class TailFreeLogitsWarper(LogitsWarper):
         # Remove tokens with CDF value above the threshold (token with 0 are kept)
         sorted_indices_to_remove = normalized_d2_cdf > self.tfs
         # Centre the distribution around the cutoff as in the original implementation of the algorithm
-        sorted_indices_to_remove = torch.cat((torch.zeros(scores.shape[0], 1, dtype=torch.bool), sorted_indices_to_remove, torch.ones(scores.shape[0], 1, dtype=torch.bool)), dim=-1)
+        sorted_indices_to_remove = torch.cat(
+            (
+                torch.zeros(scores.shape[0], 1, dtype=torch.bool),
+                sorted_indices_to_remove,
+                torch.ones(scores.shape[0], 1, dtype=torch.bool),
+            ),
+            dim=-1,
+        )
         if self.min_tokens_to_keep > 1:
             # Keep at least min_tokens_to_keep
             sorted_indices_to_remove[..., : self.min_tokens_to_keep] = 0

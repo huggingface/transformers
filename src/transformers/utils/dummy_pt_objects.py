@@ -171,6 +171,11 @@ class RepetitionPenaltyLogitsProcessor:
         requires_backends(cls, ["torch"])
 
 
+class TailFreeLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class TemperatureLogitsWarper:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -182,11 +187,6 @@ class TopKLogitsWarper:
 
 
 class TopPLogitsWarper:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TailFreeLogitsWarper:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

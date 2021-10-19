@@ -42,10 +42,10 @@ if is_torch_available():
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
+        TailFreeLogitsWarper,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
-        TailFreeLogitsWarper,
     )
     from transformers.generation_stopping_criteria import MaxLengthCriteria, StoppingCriteriaList
     from transformers.generation_utils import (

@@ -38,10 +38,10 @@ if is_torch_available():
         NoRepeatNGramLogitsProcessor,
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
+        TailFreeLogitsWarper,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
-        TailFreeLogitsWarper,
     )
 
 
@@ -196,7 +196,11 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids = None
 
         # Create dist and take log of cumsum of cumsum (inverse of sorted_logits.softmax(dim=-1).diff().diff())
-        dist = torch.tensor([[1.0, 2.0, 0.25, 0.15, 0.1, 0.5], [0.3, 0.1, 0.15, 0.3, 0.3, 0.25]], device=torch_device, dtype=torch.float).abs()
+        dist = torch.tensor(
+            [[1.0, 2.0, 0.25, 0.15, 0.1, 0.5], [0.3, 0.1, 0.15, 0.3, 0.3, 0.25]],
+            device=torch_device,
+            dtype=torch.float,
+        ).abs()
         dist_s2 = dist.cumsum(dim=-1).cumsum(dim=-1)
         dist_s2_log = dist_s2.log()
 
@@ -209,14 +213,24 @@ class LogitsProcessorTest(unittest.TestCase):
         # from the second row, and then remove an extra token from each row (due to the centering of the distribution
         # around the cutoff) for a total of 2 elements from the first row and 3 elements from the second row removed.
 
-        tfs_warp = TailFreeLogitsWarper(0.8, filter_value=-float('inf'))
+        tfs_warp = TailFreeLogitsWarper(0.8, filter_value=-float("inf"))
         filtered_dist_s2 = tfs_warp(input_ids, dist_s2_log).exp()
 
         # Verify that the 2 smallest elements from the first row and 3 smallest elements from the second row are 0
         # and the rest are the same as dist_s2
         expected_removed_tokens_per_row = torch.tensor([2, 3])
         zeros = filtered_dist_s2 == 0.0
-        self.assertTrue((zeros == (torch.arange(dist.shape[1]).repeat(dist.shape[0], 1) < expected_removed_tokens_per_row.unsqueeze(-1))).all().item())
+        self.assertTrue(
+            (
+                zeros
+                == (
+                    torch.arange(dist.shape[1]).repeat(dist.shape[0], 1)
+                    < expected_removed_tokens_per_row.unsqueeze(-1)
+                )
+            )
+            .all()
+            .item()
+        )
         equals = torch.isclose(filtered_dist_s2, dist_s2)
         self.assertTrue(torch.logical_xor(zeros, equals).all().item())
 
