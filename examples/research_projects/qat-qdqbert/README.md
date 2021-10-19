@@ -28,7 +28,7 @@ Required: [pytorch-quantization toolkit](https://github.com/NVIDIA/TensorRT/tree
 
 Build the docker image:
 ```
-docker build . -f examples/pytorch/question-answering/QAT-qdqbert/Dockerfile -t bert_quantization:latest
+docker build . -f Dockerfile -t bert_quantization:latest
 ```
 
 Run the docker:
@@ -38,7 +38,7 @@ docker run --gpus all --privileged --rm -it --shm-size=1g --ulimit memlock=-1 --
 
 In the container:
 ```
-cd transformers/examples/pytorch/question-answering/
+cd /transformers/examples/research_projects/qat-qdqbert/
 ```
 
 ## Quantization Aware Training (QAT)
@@ -46,12 +46,12 @@ cd transformers/examples/pytorch/question-answering/
 Calibrate the pretrained model and finetune with quantization awared:
 
 ```
-python3 QAT-qdqbert/run_qat_qa.py \
+python3 run_qat_qa.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \
   --max_seq_length 128 \
   --doc_stride 32 \
-  --output_dir QAT-qdqbert/calib/bert-base-uncased \
+  --output_dir calib/bert-base-uncased \
   --do_calib \
   --calibrator percentile \
   --percentile 99.99 \
@@ -59,8 +59,8 @@ python3 QAT-qdqbert/run_qat_qa.py \
 ```
 
 ```
-python3 QAT-qdqbert/run_qat_qa.py \
-  --model_name_or_path QAT-qdqbert/calib/bert-base-uncased \
+python3 run_qat_qa.py \
+  --model_name_or_path calib/bert-base-uncased \
   --dataset_name squad \
   --do_train \
   --do_eval \
@@ -69,7 +69,7 @@ python3 QAT-qdqbert/run_qat_qa.py \
   --num_train_epochs 2 \
   --max_seq_length 128 \
   --doc_stride 32 \
-  --output_dir QAT-qdqbert/finetuned_int8/bert-base-uncased \
+  --output_dir finetuned_int8/bert-base-uncased \
   --tokenizer_name bert-base-uncased \
   --save_steps 0 \
   --fp16
@@ -80,9 +80,9 @@ python3 QAT-qdqbert/run_qat_qa.py \
 To export the QAT model finetuned above:
 
 ```
-python3 QAT-qdqbert/run_qat_qa.py \
-  --model_name_or_path QAT-qdqbert/finetuned_int8/bert-base-uncased \
-  --output_dir QAT-qdqbert/ \
+python3 run_qat_qa.py \
+  --model_name_or_path finetuned_int8/bert-base-uncased \
+  --output_dir ./ \
   --save_onnx \
   --per_device_eval_batch_size 1 \
   --max_seq_length 128 \
@@ -98,15 +98,15 @@ Recalibrating will affect the accuracy of the model, but the change should be mi
 ### Benchmark the INT8 QAT ONNX model inference with TensorRT using dummy input
 
 ```
-trtexec --onnx=QAT-qdqbert/model.onnx --explicitBatch --workspace=16384 --int8 --fp16 --shapes=input_ids:64x128,attention_mask:64x128,token_type_ids:64x128 --verbose
+trtexec --onnx=model.onnx --explicitBatch --workspace=16384 --int8 --fp16 --shapes=input_ids:64x128,attention_mask:64x128,token_type_ids:64x128 --verbose
 ```
 
 ### Evaluate the INT8 QAT ONNX model inference with TensorRT
 
 ```
-python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
-  --onnx_model_path=QAT-qdqbert/model.onnx \
-  --output_dir QAT-qdqbert/ \
+python3 evaluate-hf-trt-qa.py \
+  --onnx_model_path=./model.onnx \
+  --output_dir ./ \
   --per_device_eval_batch_size 64 \
   --max_seq_length 128 \
   --doc_stride 32 \
@@ -119,10 +119,10 @@ python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
 
 ## Fine-tuning of FP32 model for comparison
 
-Finetune a fp32 precision model with:
+Finetune a fp32 precision model with [transformers/examples/pytorch/question-answering/run_qa.py](../../pytorch/question-answering/run_qa.py):
 
 ```
-python3 run_qa.py \
+python3 workspace/transformers/examples/pytorch/question-answering/run_qa.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \
   --per_device_train_batch_size 12 \
@@ -136,55 +136,12 @@ python3 run_qa.py \
   --do_eval
 ```
 
-### Export the FP32 model to ONNX
-
-```
-python3 run_qa.py \
-  --model_name_or_path ./finetuned_fp32/bert-base-uncased \
-  --output_dir ./ \
-  --save_onnx \
-  --per_device_eval_batch_size 1 \
-  --max_seq_length 128 \
-  --doc_stride 32 \
-  --dataset_name squad \
-  --tokenizer_name bert-base-uncased
-```
-
-### Evaluate the FP32 ONNX model inference with TensorRT
-
-```
-python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
-  --onnx_model_path=./model.onnx \
-  --output_dir ./ \
-  --per_device_eval_batch_size 64 \
-  --max_seq_length 128 \
-  --doc_stride 32 \
-  --dataset_name squad \
-  --tokenizer_name bert-base-uncased \
-  --seed 42
-```
-
-### Evaluate the FP32 ONNX model inference in FP16 with TensorRT
-
-```
-python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
-  --onnx_model_path=./model.onnx \
-  --output_dir ./ \
-  --per_device_eval_batch_size 64 \
-  --max_seq_length 128 \
-  --doc_stride 32 \
-  --dataset_name squad \
-  --tokenizer_name bert-base-uncased \
-  --fp16 \
-  --seed 42
-```
-
 ## Post Training Quantization (PTQ)
 
 ### PTQ by calibrating and evaluating the finetuned FP32 model above:
 
 ```
-python3 QAT-qdqbert/run_qat_qa.py \
+python3 run_qat_qa.py \
   --model_name_or_path ./finetuned_fp32/bert-base-uncased \
   --dataset_name squad \
   --calibrator percentile \
@@ -201,7 +158,7 @@ python3 QAT-qdqbert/run_qat_qa.py \
 ### Export the INT8 PTQ model to ONNX
 
 ```
-python3 QAT-qdqbert/run_qat_qa.py \
+python3 run_qat_qa.py \
   --model_name_or_path ./calib/bert-base-uncased \
   --output_dir ./ \
   --save_onnx \
@@ -216,7 +173,7 @@ python3 QAT-qdqbert/run_qat_qa.py \
 ### Evaluate the INT8 PTQ ONNX model inference with TensorRT
 
 ```
-python3 QAT-qdqbert/evaluate-hf-trt-qa.py \
+python3 evaluate-hf-trt-qa.py \
   --onnx_model_path=./model.onnx \
   --output_dir ./ \
   --per_device_eval_batch_size 64 \
@@ -239,40 +196,3 @@ Some useful options to support different implementations and optimizations. Thes
 |`--fuse-qkv` | use a single range (the max) for quantizing QKV weights and output activations  |
 |`--clip-gelu N` | clip the output of GELU to a maximum of N when quantizing (e.g. 10) |
 |`--disable-dropout` | disable dropout for consistent activation ranges |
-
-<!---
-## FP16 Fine-tuning for comparison
-
-Finetune a high precision model with:
-
-```
-python3 run_qa.py \
-  --model_name_or_path bert-base-uncased \
-  --dataset_name squad \
-  --per_device_train_batch_size 12 \
-  --learning_rate 3e-5 \
-  --num_train_epochs 2 \
-  --max_seq_length 128 \
-  --doc_stride 32 \
-  --output_dir ./finetuned_fp16/bert-base-uncased \
-  --save_steps 0 \
-  --do_train \
-  --do_eval \
-  --fp16
-```
-
-### Export to ONNX
-
-```
-python3 run_qa.py \
-  --model_name_or_path ./finetuned_fp16/bert-base-uncased \
-  --output_dir ./ \
-  --save_onnx \
-  --per_device_eval_batch_size 1 \
-  --max_seq_length 128 \
-  --doc_stride 32 \
-  --dataset_name squad \
-  --tokenizer_name bert-base-uncased \
-  --fp16
-```
--->
