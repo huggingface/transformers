@@ -987,11 +987,11 @@ class UPerHead(nn.Module):
 
         return output
 
-    def forward(self, hidden_states):
+    def forward(self, encoder_hidden_states):
         # build laterals
-        laterals = [lateral_conv(hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+        laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
 
-        laterals.append(self.psp_forward(hidden_states))
+        laterals.append(self.psp_forward(encoder_hidden_states))
 
         # build top-down path
         used_backbone_levels = len(laterals)
@@ -1044,7 +1044,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         # Semantic segmentation head
-        self.head = UPerHead(config)
+        self.decode_head = UPerHead(config)
 
         self.init_weights()
 
@@ -1096,9 +1096,11 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             return_dict=return_dict,
         )
 
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+
         # only keep certain features, and reshape
-        # note that we do +1 as outputs.hidden_states also includes the initial embeddings
-        features = [feature for idx, feature in enumerate(outputs.hidden_states) if idx + 1 in self.config.out_indices]
+        # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
+        features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
         batch_size = pixel_values.shape[0]
         patch_resolution = self.config.image_size // self.config.patch_size
         features = [
@@ -1110,7 +1112,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         for i in range(len(features)):
             features[i] = ops[i](features[i])
 
-        logits = self.head(features)
+        logits = self.decode_head(features)
 
         loss = None
         if labels is not None:

@@ -10,7 +10,7 @@ image = Image.open(ds[0]["file"])
 segmentation_map = Image.open(ds[1]["file"])
 
 # load model
-model_name = "nielsr/beit-base-finetuned-ade20k"
+model_name = "/Users/NielsRogge/Documents/BEIT/beit-base-finetuned-ade20k"
 feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
 model = BeitForSemanticSegmentation.from_pretrained(model_name)
 
