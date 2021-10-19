@@ -869,12 +869,12 @@ class ConvModule(nn.Module):
             padding=padding,
             bias=False,
         )
-        self.norm = nn.BatchNorm2d(out_channels)
+        self.bn = nn.BatchNorm2d(out_channels)
         self.activation = nn.ReLU()
 
     def forward(self, input):
         output = self.conv(input)
-        output = self.norm(output)
+        output = self.bn(output)
         output = self.activation(output)
 
         return output

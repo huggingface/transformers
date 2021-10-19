@@ -1,14 +1,20 @@
-import torch
+from datasets import load_dataset
+from PIL import Image
+from transformers import BeitFeatureExtractor, BeitForSemanticSegmentation
 
-from transformers import BeitConfig, BeitForSemanticSegmentation
+# load image + ground truth map
+ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+image = Image.open(ds[0]["file"])
+segmentation_map = Image.open(ds[1]["file"])
 
+# load model
+model_name = "nielsr/beit-test"
+feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
+model = BeitForSemanticSegmentation.from_pretrained(model_name)
 
-config = BeitConfig(image_size=512)
-model = BeitForSemanticSegmentation(config)
-model.eval()
-
-pixel_values = torch.randn((1, 3, 512, 512))
-
+pixel_values = feature_extractor(image, return_tensors="pt").pixel_values
 outputs = model(pixel_values)
+logits = outputs.logits
 
 print("Shape of logits:", outputs.logits.shape)
+print("First elements of logits:", logits[0,:3,:3,:3])

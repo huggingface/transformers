@@ -242,6 +242,22 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config, has_lm_head=has_lm_head, is_semantic=is_semantic)
+    if is_semantic:
+        # add prefix to decoder keys
+        for key, val in state_dict.copy().items():
+            print("Old key:", key)
+            val = state_dict.pop(key)
+            if key.startswith("decode_head"):
+                key = key.replace("decode_head", "head")
+            elif key.startswith("backbone.fpn"):
+                key = key.replace("backbone.fpn", "fpn")
+            
+            if "auxiliary_head" in key:
+                # we skip the auxiliary head for now
+                pass
+            else:
+                print("Setting new key:", key)
+                state_dict[key] = val
 
     # load HuggingFace model
     if checkpoint_url[-9:-4] == "pt22k":
@@ -296,12 +312,13 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     elif checkpoint_url[:-4].endswith("beit_large_patch16_512_pt22k_ft22kto1k"):
         expected_logits = torch.tensor([-0.3062, 0.7261, 0.4852])
         expected_class_idx = 761
+    elif is_semantic:
+        expected_shape = (1, 150, 160, 160)
     else:
         raise ValueError("Can't verify logits as model is not supported")
-
+    
     assert logits.shape == expected_shape, "Shape of logits not as expected"
-    print("Shape of logits:", logits.shape)
-    if not has_lm_head:
+    if not has_lm_head and not is_semantic:
         print("Predicted class idx:", logits.argmax(-1).item())
         assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3), "First elements of logits not as expected"
         assert logits.argmax(-1).item() == expected_class_idx, "Predicted class index not as expected"
