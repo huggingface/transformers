@@ -17,9 +17,8 @@ import os
 from typing import List, Optional, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
-
 from ...tokenization_utils_base import AddedToken
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -104,5 +103,3 @@ class ESMTokenizer(PreTrainedTokenizer):
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         return super()._add_tokens(new_tokens, special_tokens=True)
-
-   

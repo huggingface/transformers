@@ -392,7 +392,6 @@ else:
 if is_tokenizers_available():
     # Fast tokenizers
     _import_structure["models.fnet"].append("FNetTokenizerFast")
-    _import_structure["models.esm"].append("ESMTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")

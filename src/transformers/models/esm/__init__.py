@@ -25,16 +25,11 @@ _import_structure = {
     "tokenization_esm": ["ESMTokenizer"],
 }
 
-if is_tokenizers_available():
-    _import_structure["tokenization_esm_fast"] = ["ESMTokenizerFast"]
-
 if is_torch_available():
     _import_structure["modeling_esm"] = [
         "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ESMForCausalLM",
         "ESMForMaskedLM",
-        "ESMForMultipleChoice",
-        "ESMForQuestionAnswering",
         "ESMForSequenceClassification",
         "ESMForTokenClassification",
         "ESMLayer",
@@ -48,16 +43,11 @@ if TYPE_CHECKING:
     from .configuration_esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, ESMConfig
     from .tokenization_esm import ESMTokenizer
 
-    if is_tokenizers_available():
-        from .tokenization_esm_fast import ESMTokenizerFast
-
     if is_torch_available():
         from .modeling_esm import (
             ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
             ESMForCausalLM,
             ESMForMaskedLM,
-            ESMForMultipleChoice,
-            ESMForQuestionAnswering,
             ESMForSequenceClassification,
             ESMForTokenClassification,
             ESMLayer,

@@ -35,8 +35,6 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
@@ -52,12 +50,12 @@ from .configuration_esm import ESMConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "facebook/esm1b"
+_CHECKPOINT_FOR_DOC = "facebook/esm-1b"
 _CONFIG_FOR_DOC = "ESMConfig"
 _TOKENIZER_FOR_DOC = "ESMTokenizer"
 
 ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/esm1b",
+    "facebook/esm-1b",
     # See all ESM models at https://huggingface.co/models?filter=esm
 ]
 
@@ -792,7 +790,7 @@ class ESMModel(ESMPreTrainedModel):
         self.pooler = ESMPooler(config) if add_pooling_layer else None
 
         self.init_weights()
-    
+
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ESMEncoder):
             module.gradient_checkpointing = value
@@ -1028,10 +1026,10 @@ class ESMForCausalLM(ESMPreTrainedModel):
             >>> from transformers import ESMTokenizer, ESMForCausalLM, ESMConfig
             >>> import torch
 
-            >>> tokenizer = ESMTokenizer.from_pretrained('esm1b')
-            >>> config = ESMConfig.from_pretrained("esm1b")
+            >>> tokenizer = ESMTokenizer.from_pretrained('facebook/esm-1b')
+            >>> config = ESMConfig.from_pretrained("facebook/esm-1b")
             >>> config.is_decoder = True
-            >>> model = ESMForCausalLM.from_pretrained('esm1b', config=config)
+            >>> model = ESMForCausalLM.from_pretrained('facebook/esm-1b', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)

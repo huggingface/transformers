@@ -437,8 +437,8 @@ class ESMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 class ESMModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
-        # model = ESMForMaskedLM.from_pretrained("facebook/esm1b")
-        model = ESMForMaskedLM.from_pretrained("/checkpoint/jasonliu/tmp/huggingface/")
+        model = ESMForMaskedLM.from_pretrained("facebook/esm-1b")
+        # model = ESMForMaskedLM.from_pretrained("/checkpoint/jasonliu/tmp/huggingface/")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
@@ -457,7 +457,7 @@ class ESMModelIntegrationTest(TestCasePlus):
 
     @slow
     def test_inference_no_head(self):
-        model = ESMModel.from_pretrained("/checkpoint/jasonliu/tmp/huggingface/")
+        model = ESMModel.from_pretrained("facebook/esm-1b")
 
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         output = model(input_ids)[0]
@@ -474,7 +474,7 @@ class ESMModelIntegrationTest(TestCasePlus):
 
         keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
         keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
-        config = ESMConfig.from_pretrained("/checkpoint/jasonliu/tmp/huggingface/")
+        config = ESMConfig.from_pretrained("facebook/esm-1b")
         config_tied = deepcopy(config)
         config_tied.tie_word_embeddings = True
         config_untied = deepcopy(config)

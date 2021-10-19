@@ -97,6 +97,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("splinter", "SplinterModel"),
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
+        ("esm", "ESMModel"),
     ]
 )
 
@@ -224,6 +225,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
         ("speech_to_text_2", "Speech2Text2ForCausalLM"),
+        ("esm", "ESMForCausalLM"),
     ]
 )
 
@@ -282,6 +284,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaForMaskedLM"),
         ("deberta-v2", "DebertaV2ForMaskedLM"),
         ("ibert", "IBertForMaskedLM"),
+        ("esm", "ESMForMaskedLM"),
     ]
 )
 
@@ -362,6 +365,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mpnet", "MPNetForSequenceClassification"),
         ("tapas", "TapasForSequenceClassification"),
         ("ibert", "IBertForSequenceClassification"),
+        ("esm", "ESMForSequenceClassification"),
     ]
 )
 
@@ -442,6 +446,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DebertaV2ForTokenClassification"),
         ("gpt2", "GPT2ForTokenClassification"),
         ("ibert", "IBertForTokenClassification"),
+        ("esm", "ESMForTokenClassification"),
     ]
 )
 
