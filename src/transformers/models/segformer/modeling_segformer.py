@@ -357,7 +357,11 @@ class SegformerEncoder(nn.Module):
         )
 
     def forward(
-        self, pixel_values, output_attentions=False, output_hidden_states=False, return_dict=True,
+        self,
+        pixel_values,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -386,15 +390,7 @@ class SegformerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -484,9 +480,7 @@ class SegformerModel(SegformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None
-    ):
+    def forward(self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None):
         r"""
         Returns:
 
@@ -672,11 +666,10 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
         all_hidden_states = ()
         for encoder_hidden_state, mlp in zip(encoder_hidden_states, self.linear_c):
             # unify channel dimension
-            encoder_hidden_state = (
-                mlp(encoder_hidden_state)
-                .permute(0, 2, 1)
-                .reshape(batch_size, -1, encoder_hidden_state.shape[2], encoder_hidden_state.shape[3])
-            )
+            height, width = encoder_hidden_state.shape[2], encoder_hidden_state.shape[3]
+            encoder_hidden_state = mlp(encoder_hidden_state)
+            encoder_hidden_state = encoder_hidden_state.permute(0, 2, 1)
+            encoder_hidden_state = encoder_hidden_state.reshape(batch_size, -1, height, width)
             # upsample
             encoder_hidden_state = nn.functional.interpolate(
                 encoder_hidden_state, size=encoder_hidden_states[0].size()[2:], mode="bilinear", align_corners=False
@@ -749,10 +742,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             return_dict=return_dict,
         )
 
-        if return_dict:
-            encoder_hidden_states = outputs.hidden_states
-        else:
-            encoder_hidden_states = outputs[1]
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         logits = self.decode_head(encoder_hidden_states)
 
