@@ -36,7 +36,7 @@ class LayoutLMv2Processor:
     It first uses :class:`~transformers.LayoutLMv2FeatureExtractor` to resize document images to a fixed size, and
     optionally applies OCR to get words and normalized bounding boxes. These are then provided to
     :class:`~transformers.LayoutLMv2Tokenizer`, :class:`~transformers.LayoutLMv2TokenizerFast`,
-    :class:`LayoutXLMTokenizer` or :class:`LayoutXLMTokenizerFast` which turns the words and bounding boxes into
+    :class:`~transformers.LayoutXLMTokenizer` or :class:`~transformers.LayoutXLMTokenizerFast` which turns the words
     and bounding boxes into token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`.
 
     Args:
