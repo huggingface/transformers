@@ -41,7 +41,7 @@ To install::
     pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
 
 An example of using QDQBERT model to perform quatization aware training and post training quantization for SQUAD task
-can be found at transformers/examples/pytorch/question-answering/QAT-qdqbert.
+can be found at transformers/examples/research_projects/qat-qdqbert/.
 
 This model was contributed by `<INSERT YOUR HF USERNAME HERE> <https://huggingface.co/<INSERT YOUR HF USERNAME
 HERE>>`__. The original code can be found `here <<INSERT LINK TO GITHUB REPO HERE>>`__.
