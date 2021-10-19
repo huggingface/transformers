@@ -58,7 +58,6 @@ python run_speech_recognition_ctc.py \
 	--learning_rate="3e-4" \
 	--warmup_steps="500" \
 	--evaluation_strategy="steps" \
-	--audio_column_name="path" \
 	--text_column_name="sentence" \
 	--save_steps="400" \
 	--eval_steps="100" \
@@ -87,7 +86,6 @@ python -m torch.distributed.launch \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo-dist" \
-	--preprocessing_num_workers="16" \
 	--overwrite_output_dir \
 	--num_train_epochs="15" \
 	--per_device_train_batch_size="4" \

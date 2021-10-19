@@ -160,6 +160,7 @@ _import_structure = {
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
+    "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -351,6 +352,7 @@ _import_structure = {
 if is_sentencepiece_available():
     _import_structure["models.albert"].append("AlbertTokenizer")
     _import_structure["models.barthez"].append("BarthezTokenizer")
+    _import_structure["models.bartpho"].append("BartphoTokenizer")
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
@@ -1142,6 +1144,7 @@ if is_torch_available():
         [
             "SEW_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SEWForCTC",
+            "SEWForSequenceClassification",
             "SEWModel",
             "SEWPreTrainedModel",
         ]
@@ -1150,6 +1153,7 @@ if is_torch_available():
         [
             "SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SEWDForCTC",
+            "SEWDForSequenceClassification",
             "SEWDModel",
             "SEWDPreTrainedModel",
         ]
@@ -2211,6 +2215,7 @@ if TYPE_CHECKING:
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
         from .models.barthez import BarthezTokenizer
+        from .models.bartpho import BartphoTokenizer
         from .models.bert_generation import BertGenerationTokenizer
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
@@ -2857,8 +2862,20 @@ if TYPE_CHECKING:
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
         )
-        from .models.sew import SEW_PRETRAINED_MODEL_ARCHIVE_LIST, SEWForCTC, SEWModel, SEWPreTrainedModel
-        from .models.sew_d import SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST, SEWDForCTC, SEWDModel, SEWDPreTrainedModel
+        from .models.sew import (
+            SEW_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SEWForCTC,
+            SEWForSequenceClassification,
+            SEWModel,
+            SEWPreTrainedModel,
+        )
+        from .models.sew_d import (
+            SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SEWDForCTC,
+            SEWDForSequenceClassification,
+            SEWDModel,
+            SEWDPreTrainedModel,
+        )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,

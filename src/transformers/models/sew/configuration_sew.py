@@ -113,6 +113,11 @@ class SEWConfig(PretrainedConfig):
             Whether to zero infinite losses and the associated gradients of ``torch.nn.CTCLoss``. Infinite losses
             mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
             instance of :class:`~transformers.SEWForCTC`.
+        use_weighted_layer_sum (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
+            instance of :class:`~transformers.Wav2Vec2ForSequenceClassification`.
+        classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
+            Dimensionality of the projection before token mean-pooling for classification.
 
     Example::
 
@@ -161,6 +166,8 @@ class SEWConfig(PretrainedConfig):
         mask_feature_length=10,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
+        use_weighted_layer_sum=False,
+        classifier_proj_size=256,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -214,3 +221,7 @@ class SEWConfig(PretrainedConfig):
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
+
+        # sequence classification
+        self.use_weighted_layer_sum = use_weighted_layer_sum
+        self.classifier_proj_size = classifier_proj_size
