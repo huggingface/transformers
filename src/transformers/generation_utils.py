@@ -39,6 +39,7 @@ from .generation_logits_process import (
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
+    TailFreeLogitsWarper,
 )
 from .generation_stopping_criteria import (
     MaxLengthCriteria,
@@ -521,7 +522,7 @@ class GenerationMixin:
         )
 
     def _get_logits_warper(
-        self, top_k: int = None, top_p: float = None, temperature: float = None, num_beams: int = None
+        self, top_k: int = None, top_p: float = None, tfs: float = None, temperature: float = None, num_beams: int = None
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -531,6 +532,7 @@ class GenerationMixin:
         # init warp parameters
         top_k = top_k if top_k is not None else self.config.top_k
         top_p = top_p if top_p is not None else self.config.top_p
+        tfs = tfs if tfs is not None else self.config.tfs
         temperature = temperature if temperature is not None else self.config.temperature
         # instantiate warpers list
         warpers = LogitsProcessorList()
@@ -543,6 +545,8 @@ class GenerationMixin:
             warpers.append(TopKLogitsWarper(top_k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if top_p is not None and top_p < 1.0:
             warpers.append(TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
+        if tfs is not None and tfs < 1.0:
+            warpers.append(TailFreeLogitsWarper(tfs=tfs, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         return warpers
 
     def _get_logits_processor(
@@ -647,6 +651,7 @@ class GenerationMixin:
         temperature: Optional[float] = None,
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
+        tfs: Optional[float] = None,
         repetition_penalty: Optional[float] = None,
         bad_words_ids: Optional[Iterable[int]] = None,
         bos_token_id: Optional[int] = None,
@@ -1001,7 +1006,7 @@ class GenerationMixin:
         elif is_sample_gen_mode:
             # get probability distribution warper
             logits_warper = self._get_logits_warper(
-                top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
+                top_k=top_k, top_p=top_p, tfs=tfs, temperature=temperature, num_beams=num_beams
             )
 
             # expand input_ids with `num_return_sequences` additional sequences per batch
@@ -1065,7 +1070,7 @@ class GenerationMixin:
 
         elif is_beam_sample_gen_mode:
             logits_warper = self._get_logits_warper(
-                top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
+                top_k=top_k, top_p=top_p, tfs=tfs, temperature=temperature, num_beams=num_beams
             )
 
             batch_size = input_ids.shape[0] * num_return_sequences
@@ -2549,6 +2554,7 @@ def top_k_top_p_filtering(
     logits: torch.FloatTensor,
     top_k: int = 0,
     top_p: float = 1.0,
+    tfs: float = 1.0,
     filter_value: float = -float("Inf"),
     min_tokens_to_keep: int = 1,
 ) -> torch.FloatTensor:
@@ -2562,6 +2568,10 @@ def top_k_top_p_filtering(
         top_p (:obj:`float`, `optional`, defaults to 1.0):
             If < 1.0, only keep the top tokens with cumulative probability >= top_p (nucleus filtering). Nucleus
             filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+        tfs (:obj:`float`, `optional`, defaults to 1.0):
+            If < 1.0, only the most probable tokens where the second derivative of the probabilities of the
+            tokens sorted in descending order of probability add up to tfs or higher are kept for generation.
+            Described in https://www.trentonbricken.com/Tail-Free-Sampling/.
         min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
             Minimumber of tokens we keep per batch example in the output.
 
@@ -2574,5 +2584,8 @@ def top_k_top_p_filtering(
 
     if 0 <= top_p <= 1.0:
         logits = TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
+    
+    if 0 <= tfs <= 1.0:
+        logits = TailFreeLogitsWarper(tfs=tfs, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
 
     return logits

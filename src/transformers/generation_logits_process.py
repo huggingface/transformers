@@ -242,6 +242,53 @@ class TopKLogitsWarper(LogitsWarper):
         return scores
 
 
+class TailFreeLogitsWarper(LogitsWarper):
+    r"""
+    :class:`transformers.LogitsWarper` that performs tail free sampling, as described in
+    https://www.trentonbricken.com/Tail-Free-Sampling/.
+
+    Args:
+        tfs (:obj:`float`):
+            If set to < 1, only the most probable tokens where the second derivative of the probabilities of the
+            tokens sorted in descending order of probability add up to at most :obj:`tfs` are kept for generation.
+        filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
+
+    def __init__(self, tfs: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        tfs = float(tfs)
+        if tfs < 0 or tfs > 1.0:
+            raise ValueError(f"`tfs` has to be a float > 0 and < 1, but is {tfs}")
+
+        self.tfs = tfs
+        self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        sorted_logits, sorted_indices = torch.sort(scores, descending=True)
+        probs = sorted_logits.softmax(dim=-1)
+
+        # Compute second derivative normalized CDF
+        d2 = probs.diff().diff().abs()
+        normalized_d2 = d2 / d2.sum(dim=-1, keepdim=True)
+        normalized_d2_cdf = normalized_d2.cumsum(dim=-1)
+
+        # Remove tokens with CDF value above the threshold (token with 0 are kept)
+        sorted_indices_to_remove = normalized_d2_cdf > self.tfs
+        # Centre the distribution around the cutoff as in the original implementation of the algorithm
+        sorted_indices_to_remove = torch.cat((torch.zeros(scores.shape[0], 1, dtype=torch.bool), sorted_indices_to_remove, torch.ones(scores.shape[0], 1, dtype=torch.bool)), dim=-1)
+        if self.min_tokens_to_keep > 1:
+            # Keep at least min_tokens_to_keep
+            sorted_indices_to_remove[..., : self.min_tokens_to_keep] = 0
+
+        # scatter sorted tensors to original indexing
+        indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
+        scores = scores.masked_fill(indices_to_remove, self.filter_value)
+        return scores
+
+
 def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
     generated_ngrams = [{} for _ in range(num_hypos)]
     for idx in range(num_hypos):
