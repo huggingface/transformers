@@ -278,9 +278,10 @@ Supported models
 60. :doc:`RoFormer <model_doc/roformer>` (from ZhuiyiTechnology), released together with the paper a `RoFormer:
     Enhanced Transformer with Rotary Position Embedding <https://arxiv.org/pdf/2104.09864v1.pdf>`__ by Jianlin Su and
     Yu Lu and Shengfeng Pan and Bo Wen and Yunfeng Liu.
-61. :doc:`SegFormer <model_doc/segformer>` (from NVIDIA) released with the paper `SegFormer: Simple and Efficient
-    Design for Semantic Segmentation with Transformers <https://arxiv.org/abs/2105.15203>`__ by Enze Xie, Wenhai Wang,
-    Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping Luo.
+61. `SegFormer <https://huggingface.co/transformers/master/model_doc/segformer.html>`__ (from NVIDIA) released with the
+    paper `SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers
+    <https://arxiv.org/abs/2105.15203>`__ by Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping
+    Luo.
 62. :doc:`SEW <model_doc/sew>` (from ASAPP) released with the paper `Performance-Efficiency Trade-offs in Unsupervised
     Pre-training for Speech Recognition <https://arxiv.org/abs/2109.06870>`__ by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu
     Han, Kilian Q. Weinberger, Yoav Artzi.
