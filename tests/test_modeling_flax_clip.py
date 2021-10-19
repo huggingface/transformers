@@ -484,7 +484,7 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-4)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -495,7 +495,7 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
                     len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 1e-4)
 
     # overwrite from common since FlaxCLIPModel returns nested output
     # which is not supported in the common test
