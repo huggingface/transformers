@@ -70,8 +70,8 @@ VISION_ENCODER_DECODER_START_DOCSTRING = r"""
     <https://arxiv.org/abs/2109.10282>`__ it is shown how leveraging large pretrained vision models for optical
     character recognition (OCR) yields a significant performance improvement.
 
-    After such an Vision-Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other
-    models (see the examples for more information).
+    After such a Vision-Encoder-Text-Decoder model has been trained/fine-tuned, it can be saved/loaded just like any
+    other models (see the examples for more information).
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
