@@ -434,7 +434,7 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
-        """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.encoder.layer...`
+        """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.encoder.layer...`.
         (For Bert decoder, there is no issue, because `BertModel` is wrapped into `decoder` as `bert`)
         model = TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", from_pt=True)
         """
@@ -523,7 +523,7 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
         tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
         tokenizer_out = AutoTokenizer.from_pretrained("gpt2")
 
-        """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.layer...`.
+        """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.encoder.layer...`.
         (For GPT2 decoder, there is no issue)
         model = TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16", from_pt=True)
         """
