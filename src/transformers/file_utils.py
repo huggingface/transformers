@@ -2304,7 +2304,12 @@ class PushToHubMixin:
 
         # Special provision for the test endpoint (CI)
         return HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
-            token, repo_name, organization=organization, private=private, repo_type=None, exist_ok=True,
+            token,
+            repo_name,
+            organization=organization,
+            private=private,
+            repo_type=None,
+            exist_ok=True,
         )
 
     @classmethod
