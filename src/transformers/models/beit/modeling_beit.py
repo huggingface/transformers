@@ -922,14 +922,14 @@ class PPM(nn.ModuleList):
         return ppm_outs
 
 
-class UPerHead(nn.Module):
+class BeitUperHead(nn.Module):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of `UPerNet
     <https://arxiv.org/abs/1807.10221>`_.
     """
 
     def __init__(self, config):
-        super(UPerHead, self).__init__()
+        super(BeitUperHead, self).__init__()
 
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
         self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
@@ -1044,7 +1044,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         # Semantic segmentation head
-        self.decode_head = UPerHead(config)
+        self.decode_head = BeitUperHead(config)
 
         self.init_weights()
 
@@ -1096,7 +1096,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             return_dict=return_dict,
         )
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[2]
 
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
@@ -1125,7 +1125,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
                 )
                 loss_fct = CrossEntropyLoss(ignore_index=255)
                 loss = loss_fct(upsampled_logits, labels)
-
+        
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
