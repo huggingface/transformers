@@ -79,7 +79,7 @@ class SegformerConfig(PretrainedConfig):
         decoder_hidden_size (:obj:`int`, `optional`, defaults to 256):
             The dimension of the all-MLP decode head.
         reshape_last_stage (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to reshape the features of the last stage back to (batch_size, num_channels, height, width). Only
+            Whether to reshape the features of the last stage back to :obj:`(batch_size, num_channels, height, width)`. Only
             required for the semantic segmentation model.
 
     Example::

@@ -45,8 +45,6 @@ SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Inspired by
 # https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
 # From PyTorch internals
-
-
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
@@ -55,8 +53,6 @@ def to_2tuple(x):
 
 # Stochastic depth implementation
 # Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
-
-
 def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
@@ -79,7 +75,7 @@ class DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None):
-        super(DropPath, self).__init__()
+        super().__init__()
         self.drop_prob = drop_prob
 
     def forward(self, x):
@@ -106,7 +102,6 @@ class SegformerOverlapPatchEmbeddings(nn.Module):
         self.layer_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, pixel_values):
-
         x = self.proj(pixel_values)
         _, _, height, width = x.shape
         x = x.flatten(2).transpose(1, 2)
@@ -226,19 +221,8 @@ class SegformerAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(
-        self,
-        hidden_states,
-        height,
-        width,
-        output_attentions=False,
-    ):
-        self_outputs = self.self(
-            hidden_states,
-            height,
-            width,
-            output_attentions,
-        )
+    def forward(self, hidden_states, height, width, output_attentions=False):
+        self_outputs = self.self(hidden_states, height, width, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -247,7 +231,7 @@ class SegformerAttention(nn.Module):
 
 class SegformerDWConv(nn.Module):
     def __init__(self, dim=768):
-        super(SegformerDWConv, self).__init__()
+        super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
 
     def forward(self, hidden_states, height, width):
@@ -296,13 +280,7 @@ class SegformerLayer(nn.Module):
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = SegformerMixFFN(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
 
-    def forward(
-        self,
-        hidden_states,
-        height,
-        width,
-        output_attentions=False,
-    ):
+    def forward(self, hidden_states, height, width, output_attentions=False):
         self_attention_outputs = self.attention(
             self.layer_norm_1(hidden_states),  # in Segformer, layernorm is applied before self-attention
             height,
@@ -379,11 +357,7 @@ class SegformerEncoder(nn.Module):
         )
 
     def forward(
-        self,
-        pixel_values,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        self, pixel_values, output_attentions=False, output_hidden_states=False, return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -511,11 +485,7 @@ class SegformerModel(SegformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        pixel_values,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None
     ):
         r"""
         Returns:
