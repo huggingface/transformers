@@ -147,6 +147,9 @@ generation.
 .. autoclass:: transformers.TopKLogitsWarper
     :members: __call__
 
+.. autoclass:: transformers.TailFreeLogitsWarper
+    :members: __call__
+
 .. autoclass:: transformers.NoRepeatNGramLogitsProcessor
     :members: __call__
 
