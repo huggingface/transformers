@@ -267,6 +267,9 @@ class TailFreeLogitsWarper(LogitsWarper):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if self.filter_value >= 1.0:
+            return scores
+
         sorted_logits, sorted_indices = torch.sort(scores, descending=True)
         probs = sorted_logits.softmax(dim=-1)
 
