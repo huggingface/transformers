@@ -1946,7 +1946,7 @@ def to_py_obj(obj):
         return obj.detach().cpu().tolist()
     elif is_flax_available() and _is_jax(obj):
         return np.asarray(obj).tolist()
-    elif isinstance(obj, (np.ndarray, np.int32, np.int64)):
+    elif isinstance(obj, (np.ndarray, np.number)):  # tolist also works on 0d np arrays
         return obj.tolist()
     else:
         return obj
@@ -2304,12 +2304,7 @@ class PushToHubMixin:
 
         # Special provision for the test endpoint (CI)
         return HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
-            token,
-            repo_name,
-            organization=organization,
-            private=private,
-            repo_type=None,
-            exist_ok=True,
+            token, repo_name, organization=organization, private=private, repo_type=None, exist_ok=True,
         )
 
     @classmethod
