@@ -153,7 +153,6 @@ class ESMEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        # End copy
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
@@ -201,16 +200,6 @@ class ESMEmbeddings(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
-
-        # TODO: fairseq logic checks if there is token dropout and if the tokens are not masked at all
-        # https://github.com/facebookresearch/esm/blob/master/esm/model.py#L128-L134
-        # if getattr(self.args, "token_dropout", False):
-        #     x.masked_fill_((tokens == self.mask_idx).unsqueeze(-1), 0.0)
-        #     # x: B x T x C
-        #     mask_ratio_train = 0.15 * 0.8
-        #     src_lengths = (~padding_mask).sum(-1)
-        #     mask_ratio_observed = (tokens == self.mask_idx).sum(-1).float() / src_lengths
-        #     x = x * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]
         embeddings *= self.encoder_keep_prob
 
         if self.position_embedding_type == "absolute":
@@ -502,9 +491,13 @@ class ESMLayer(nn.Module):
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            if not hasattr(self, "crossattention"):
+                raise AttributeError(
+                    (
+                        f"If `encoder_hidden_states` are passed, {self} has to be instantiated"
+                        " with cross-attention layers by setting `config.add_cross_attention=True`"
+                    )
+                )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -548,6 +541,7 @@ class ESMEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([ESMLayer(config) for _ in range(config.num_hidden_layers)])
         self.emb_layer_norm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -574,7 +568,7 @@ class ESMEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
@@ -785,6 +779,7 @@ class ESMModel(ESMPreTrainedModel):
     """
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    supports_gradient_checkpointing = True
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->ESM
     def __init__(self, config, add_pooling_layer=True):
@@ -797,6 +792,10 @@ class ESMModel(ESMPreTrainedModel):
         self.pooler = ESMPooler(config) if add_pooling_layer else None
 
         self.init_weights()
+    
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, ESMEncoder):
+            module.gradient_checkpointing = value
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -871,13 +870,12 @@ class ESMModel(ESMPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
-            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length

@@ -15,14 +15,11 @@
 """Tokenization classes for ESM."""
 import os
 from typing import List, Optional, Union
-import warnings
-import requests
 
-from transformers.file_utils import cached_path, hf_bucket_url, is_offline_mode, is_remote_url
-from transformers.tokenization_utils_base import get_fast_tokenizer_file
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
+from ...tokenization_utils_base import AddedToken
 
 
 logger = logging.get_logger(__name__)
@@ -67,6 +64,7 @@ class ESMTokenizer(PreTrainedTokenizer):
         self.mask_token = "<mask>"
         self.eos_token = "<eos>"
         self.unique_no_split_tokens = self.all_tokens
+        self._create_trie(self.unique_no_split_tokens)
 
     def _convert_id_to_token(self, index: int) -> str:
         return self._id_to_token.get(index, self.unk_token)
@@ -90,13 +88,21 @@ class ESMTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         assert token_ids_1 is None, "not supporting multiple sentences"
-        cls_ : List[int] = [self.cls_token_id]
-        return cls_ + token_ids_0
+        cls_: List[int] = [self.cls_token_id]
+        eos_: List[int] = [self.eos_token_id]
+        return cls_ + token_ids_0 + eos_
 
     def save_vocabulary(self, save_directory, filename_prefix):
-        vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + 'vocab.txt'
-        )
-        with open(vocab_file, 'w') as f:
-            f.write('\n'.join(self.all_tokens))
+        vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + "vocab.txt")
+        with open(vocab_file, "w") as f:
+            f.write("\n".join(self.all_tokens))
         return (vocab_file,)
+
+    @property
+    def vocab_size(self) -> int:
+        return self.get_vocab_size(with_added_tokens=False)
+
+    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+        return super()._add_tokens(new_tokens, special_tokens=True)
+
+   

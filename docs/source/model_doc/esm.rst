@@ -37,10 +37,10 @@ improving state-of-the-art features for long-range contact prediction.*
 
 Tips:
 
-- ESM was trained with the masked language modeling (MLM)
+- ESM was trained with a masked language modeling (MLM) objective.
 
-This model was contributed by `jasonliu <https://huggingface.co/jasonliu>`__. The original code can be found 
-`here <https://github.com/facebookresearch/esm>`__.
+This model was contributed by `jasonliu <https://huggingface.co/jasonliu>`__. The original code can be found `here
+<https://github.com/facebookresearch/esm>`__.
 
 ESMConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -55,13 +55,6 @@ ESMTokenizer
 .. autoclass:: transformers.ESMTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
-
-
-.. ESMTokenizerFast ..
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. .. autoclass:: transformers.ESMTokenizerFast
-..     :members:
 
 
 ESMModel
