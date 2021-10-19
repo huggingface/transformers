@@ -105,6 +105,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("sew", "SEWConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("unispeech", "UniSpeechConfig"),
+        ("esm", "ESMConfig"),
     ]
 )
 
@@ -176,6 +177,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("esm", "ESM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
@@ -266,6 +268,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("sew", "SEW"),
         ("unispeech-sat", "UniSpeechSat"),
         ("unispeech", "UniSpeech"),
+        ("esm", "ESM"),
     ]
 )
 
