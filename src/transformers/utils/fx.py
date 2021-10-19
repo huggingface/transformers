@@ -197,6 +197,7 @@ def _wrap_method_for_model_tracing(model, method_name, cache_name):
     if method_name == "size":
         setattr(torch.Tensor, "shape", property(getattr(torch.Tensor, method_name)))
 
+
 def _monkey_patch_tensor_methods_for_model_recording(model, method_names):
     """
     Helper function that patches torch.Tensor methods (specified by the method_names list) to record model inference
@@ -224,6 +225,7 @@ def _reset_tensor_methods(original_methods):
     """Helper function that resets the monkey patched torch.Tensor methods to their original values."""
     for name, method in original_methods.items():
         setattr(torch.Tensor, name, method)
+
 
 class DynamicTracer(Tracer):
     default_methods_to_record = {"__bool__", "size", "dim"}
@@ -259,7 +261,13 @@ class DynamicTracer(Tracer):
             method_name: cache_name for method_name, cache_name in cache_names.items() if hasattr(model, cache_name)
         }
 
-    def trace_with_dummy_inputs(self, root: nn.Module, dummy_inputs: Union[Dict[str, Any], Tuple], concrete_args: Optional[Dict[str, Any]] = None, method_names=None) -> Graph:
+    def trace_with_dummy_inputs(
+        self,
+        root: nn.Module,
+        dummy_inputs: Union[Dict[str, Any], Tuple],
+        concrete_args: Optional[Dict[str, Any]] = None,
+        method_names=None,
+    ) -> Graph:
         """Smart way to get some dynamic values that really are static ... size(), shape ..."""
         sig = inspect.signature(root.forward)
         input_names = sig.parameters.keys() - concrete_args.keys()
@@ -287,6 +295,7 @@ class DynamicTracer(Tracer):
                     graph.erase_node(node)
 
         return graph
+
 
 class HFTracer(Tracer):
     """
