@@ -22,7 +22,9 @@ The QDQBERT model adds fake quantization (pair of QuantizeLinear/DequantizeLinea
 
 In this example, we use QDQBERT model to do quantization on SQuAD task, including Quantization Aware Training (QAT), Post Training Quantization (PTQ) and inferencing using TensorRT.
 
-Required: [pytorch-quantization toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization)
+Required:
+-[pytorch-quantization toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization)
+-[TensorRT >= 8.2](https://github.com/NVIDIA/TensorRT)
 
 ## Setup
 
@@ -119,10 +121,10 @@ python3 evaluate-hf-trt-qa.py \
 
 ## Fine-tuning of FP32 model for comparison
 
-Finetune a fp32 precision model with [transformers/examples/pytorch/question-answering/run_qa.py](../../pytorch/question-answering/run_qa.py):
+Finetune a fp32 precision model with [transformers/examples/pytorch/question-answering/](../../pytorch/question-answering/):
 
 ```
-python3 workspace/transformers/examples/pytorch/question-answering/run_qa.py \
+python3 ../../pytorch/question-answering/run_qa.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \
   --per_device_train_batch_size 12 \
