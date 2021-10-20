@@ -24,6 +24,7 @@ from .. import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     MODEL_MAPPING,
     GPT2DoubleHeadsModel,
+    GPTMegDoubleHeadsModel,
     PretrainedConfig,
     PreTrainedModel,
     logging,
@@ -104,9 +105,7 @@ for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
     else:
         _REGULAR_SUPPORTED_MODELS.extend(_generate_supported_model_classes(item))
 
-_SPECIAL_SUPPORTED_MODELS = [
-    GPT2DoubleHeadsModel,
-]
+_SPECIAL_SUPPORTED_MODELS = [GPT2DoubleHeadsModel, GPTMegDoubleHeadsModel]
 _SUPPORTED_MODELS = tuple(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)
 
 _REGULAR_SUPPORTED_MODELS_FOR_DYNAMIC_AXES = []
@@ -293,6 +292,7 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
                 GPT2DoubleHeadsModel,
+                GPTMegDoubleHeadsModel,
             ]:
                 inputs_dict["labels"] = torch.zeros(self.decoder_shape, dtype=torch.long, device=device)
             elif model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):

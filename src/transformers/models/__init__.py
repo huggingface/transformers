@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    gptmeg,
     albert,
     auto,
     bart,
@@ -54,6 +53,7 @@ from . import (
     gpt2,
     gpt_neo,
     gptj,
+    gptmeg,
     herbert,
     hubert,
     ibert,

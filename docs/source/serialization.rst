@@ -45,6 +45,7 @@ Ready-made configurations include the following models:
 - BERT
 - DistilBERT
 - GPT Neo
+- GPTMeg
 - LayoutLM
 - Longformer
 - mBART

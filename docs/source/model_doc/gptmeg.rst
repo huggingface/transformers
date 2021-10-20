@@ -26,9 +26,8 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by `<INSERT YOUR HF USERNAME HERE> 
-<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>>`__. The original code can be found `here 
-<<INSERT LINK TO GITHUB REPO HERE>>`__.
+This model was contributed by `<INSERT YOUR HF USERNAME HERE> <https://huggingface.co/<INSERT YOUR HF USERNAME
+HERE>>`__. The original code can be found `here <<INSERT LINK TO GITHUB REPO HERE>>`__.
 
 GPTMegConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -51,6 +50,11 @@ GPTMegTokenizerFast
 .. autoclass:: transformers.GPTMegTokenizerFast
     :members:
 
+GPTMeg specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.models.gptmeg.modeling_gptmeg.GPTMegDoubleHeadsModelOutput
+    :members:
 
 GPTMegModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -65,6 +69,12 @@ GPTMegLMHeadModel
 .. autoclass:: transformers.GPTMegLMHeadModel
     :members: forward
 
+
+GPTMegDoubleHeadsModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.GPTMegDoubleHeadsModel
+    :members: forward
 
 GPTMegForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

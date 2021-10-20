@@ -18,8 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available
-from ...file_utils import is_torch_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -43,8 +42,6 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_gptmeg import GPTMEG_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTMegConfig
     from .tokenization_gptmeg import GPTMegTokenizer
@@ -63,7 +60,6 @@ if TYPE_CHECKING:
             GPTMegPreTrainedModel,
             load_tf_weights_in_gptmeg,
         )
-
 
 
 else:

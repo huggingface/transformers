@@ -164,6 +164,15 @@ class GPT2TokenizerFast:
         requires_backends(cls, ["tokenizers"])
 
 
+class GPTMegTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tokenizers"])
+
+
 class HerbertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])

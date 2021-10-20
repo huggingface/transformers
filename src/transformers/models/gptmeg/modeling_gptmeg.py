@@ -56,6 +56,8 @@ from ...modeling_utils import (
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gptmeg import GPTMegConfig
+from .meg_module import GeLUMegatronFunction
+from .meg_module import UpcastLayerNorm as LayerNorm
 
 
 logger = logging.get_logger(__name__)
@@ -74,10 +76,9 @@ GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GPTMeg models at https://huggingface.co/models?filter=gptmeg
 ]
 
-from .meg_module import GeLUMegatronFunction 
-from .meg_module import UpcastLayerNorm as LayerNorm
 
-ACT2FN['gelu_megatron'] = GeLUMegatronFunction.apply
+ACT2FN["gelu_megatron"] = GeLUMegatronFunction.apply
+
 
 def load_tf_weights_in_gptmeg(model, config, GPTMeg_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""

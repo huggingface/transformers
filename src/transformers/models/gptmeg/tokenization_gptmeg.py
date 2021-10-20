@@ -65,6 +65,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "distilgpt2": 1024,
 }
 
+
 @lru_cache()
 def bytes_to_unicode():
     """

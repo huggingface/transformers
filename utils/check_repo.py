@@ -108,6 +108,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "DPRReader",
     "FlaubertForQuestionAnswering",
     "GPT2DoubleHeadsModel",
+    "GPTMegDoubleHeadsModel",
     "LukeForEntityClassification",
     "LukeForEntityPairClassification",
     "LukeForEntitySpanClassification",

@@ -428,7 +428,13 @@ class GPTMegModelTester:
 class GPTMegModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (GPTMegModel, GPTMegLMHeadModel, GPTMegDoubleHeadsModel, GPTMegForSequenceClassification, GPTMegForTokenClassification)
+        (
+            GPTMegModel,
+            GPTMegLMHeadModel,
+            GPTMegDoubleHeadsModel,
+            GPTMegForSequenceClassification,
+            GPTMegForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -637,7 +643,7 @@ class GPTMegModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GPTMeg_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = GPTMegModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

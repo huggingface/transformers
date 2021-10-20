@@ -146,7 +146,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.gptmeg": ["GPTMEG_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTMegConfig", "GPTMegTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -219,6 +218,7 @@ _import_structure = {
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.gptmeg": ["GPTMEG_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTMegConfig", "GPTMegTokenizer"],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
@@ -559,18 +559,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.gptmeg"].extend(
-        [
-            "GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GPTMegDoubleHeadsModel",
-            "GPTMegForSequenceClassification",
-            "GPTMegForTokenClassification",
-            "GPTMegLMHeadModel",
-            "GPTMegModel",
-            "GPTMegPreTrainedModel",
-            "load_tf_weights_in_gptmeg",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -915,6 +903,18 @@ if is_torch_available():
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.gptmeg"].extend(
+        [
+            "GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTMegDoubleHeadsModel",
+            "GPTMegForSequenceClassification",
+            "GPTMegForTokenClassification",
+            "GPTMegLMHeadModel",
+            "GPTMegModel",
+            "GPTMegPreTrainedModel",
+            "load_tf_weights_in_gptmeg",
         ]
     )
     _import_structure["models.hubert"].extend(
@@ -2034,7 +2034,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.gptmeg import GPTMEG_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTMegConfig, GPTMegTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2100,6 +2099,7 @@ if TYPE_CHECKING:
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .models.gptmeg import GPTMEG_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTMegConfig, GPTMegTokenizer
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
@@ -2250,7 +2250,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.gptmeg import GPTMegTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2267,6 +2266,7 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
+        from .models.gptmeg import GPTMegTokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
@@ -2348,16 +2348,6 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-        from .models.gptmeg import (
-            GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTMegDoubleHeadsModel,
-            GPTMegForSequenceClassification,
-            GPTMegForTokenClassification,
-            GPTMegLMHeadModel,
-            GPTMegModel,
-            GPTMegPreTrainedModel,
-            load_tf_weights_in_gptmeg,
-        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2689,6 +2679,16 @@ if TYPE_CHECKING:
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
+        )
+        from .models.gptmeg import (
+            GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTMegDoubleHeadsModel,
+            GPTMegForSequenceClassification,
+            GPTMegForTokenClassification,
+            GPTMegLMHeadModel,
+            GPTMegModel,
+            GPTMegPreTrainedModel,
+            load_tf_weights_in_gptmeg,
         )
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
