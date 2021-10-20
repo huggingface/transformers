@@ -1123,7 +1123,7 @@ class M2M100Model(M2M100PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(M2M_100_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,

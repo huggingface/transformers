@@ -15,6 +15,7 @@
 """ PyTorch CLIP model. """
 
 
+from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
 import torch
@@ -71,6 +72,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
+@dataclass
 class CLIPOutput(ModelOutput):
     """
     Args:
@@ -297,10 +299,9 @@ class CLIPEncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
+            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape :obj:`(batch, seq_len, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
                 :obj:`(config.encoder_attention_heads,)`.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
@@ -497,7 +498,6 @@ class CLIPEncoder(nn.Module):
 
     Args:
         config: CLIPConfig
-        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: CLIPConfig):
@@ -517,7 +517,7 @@ class CLIPEncoder(nn.Module):
     ):
         r"""
         Args:
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
                 Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
                 representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
                 into associated vectors than the model's internal embedding lookup matrix.
