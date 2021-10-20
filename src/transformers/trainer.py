@@ -2486,7 +2486,11 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                    if self.use_amp:
+                        with autocast():
+                            loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                    else:
+                        loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
