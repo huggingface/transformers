@@ -67,7 +67,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="",
         tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
-    if tf_name[-1] == "kernel" and tf_weight_shape.rank == 4:
+    if tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 4:
         # A simple heuristic to detect conv layer using weight array shape
         transpose = TransposeType.CONV2D
     elif bool(
