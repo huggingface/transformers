@@ -1,4 +1,4 @@
-datasets>=1.13.3
+datasets>=1.14.0
 librosa
 torchaudio
 torch>=1.6

@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.12.0.dev0")
 
-require_version("datasets>=1.13.3", "To fix: pip install -r examples/pytorch/audio-classification/requirements.txt")
+require_version("datasets>=1.14.0", "To fix: pip install -r examples/pytorch/audio-classification/requirements.txt")
 
 
 def random_subsample(wav: np.ndarray, max_length: float, sample_rate: int = 16000):
