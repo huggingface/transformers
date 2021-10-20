@@ -1511,7 +1511,7 @@ class Trainer:
                 return
         else:
             rng_file = os.path.join(checkpoint, "rng_state.pth")
-            if not os.path.isfile(os.path.join(checkpoint, rng_file)):
+            if not os.path.isfile(rng_file):
                 logger.info(
                     "Didn't find an RNG file, if you are resuming a training that was launched in a distributed "
                     "fashion, reproducibility is not guaranteed."
