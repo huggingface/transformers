@@ -1,5 +1,4 @@
 import os
-from collections import namedtuple
 
 import numpy as np
 
@@ -16,6 +15,7 @@ from .file_utils import (
 )
 from .generation_utils import GenerationMixin
 from .utils import logging
+from .file_utils import ModelOutput
 
 import torch
 
@@ -31,6 +31,9 @@ def load_ov_model_from_pytorch(model):
     dummy_input_ids = torch.randint(0, 255, (1, 11))
     dummy_mask = torch.randint(0, 255, (1, 11))
     if model.config.model_type == "gpt2":
+        if model.config.use_cache:
+            logger.warn("GPT2 model with use_cache=True is not implemented for OpenVINO backend")
+
         inputs = (dummy_input_ids, None, dummy_mask)
     else:
         inputs = (dummy_input_ids, dummy_mask)
@@ -86,7 +89,8 @@ class OVPreTrainedModel(GenerationMixin):
         self.config = config
         self.max_length = 0
         self.ov_config = {}
-        self.device = "CPU"
+        self.ov_device = "CPU"
+        self.device = torch.device("cpu")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -181,17 +185,21 @@ class OVPreTrainedModel(GenerationMixin):
         return load_ov_model_from_ir(*resolved_archive_files)
 
     def to(self, device):
-        self.device = device
+        self.ov_device = device
 
     def set_config(self, config):
         self.ov_config = config
 
     def _load_network(self):
-        self.exec_net = ie.load_network(self.net, self.device, self.ov_config)
+        self.exec_net = ie.load_network(self.net, self.ov_device, self.ov_config)
 
     def __call__(self,
-                 input_ids,
+                 input_ids=None,
+                 past_key_values=None,
                  attention_mask=None,
+                 token_type_ids=None,
+                 position_ids=None,
+                 use_cache=False,
                  return_dict=False,
                  output_attentions=False,
                  output_hidden_states=False):
@@ -231,16 +239,15 @@ class OVPreTrainedModel(GenerationMixin):
             logits = logits[:, :inp_length]
 
         if return_dict:
-            Result = namedtuple('Result', ['logits'])
-            result = Result(
-                logits=torch.tensor(logits),
-            )
+            result = ModelOutput()
+            result["logits"] = torch.tensor(logits)
         else:
             result = [logits]
         return result
 
     def generate(self, input_ids, *args, **kwargs):
-        input_ids = torch.tensor(input_ids)
+        if not isinstance(input_ids, torch.Tensor):
+            input_ids = torch.tensor(input_ids)
 
         max_length = kwargs.get("max_length", None)
         self.max_length = max_length if max_length is not None else self.config.max_length

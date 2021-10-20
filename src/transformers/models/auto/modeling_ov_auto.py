@@ -56,7 +56,10 @@ class OVAutoModelWithLMHead(object):
         from_tf = kwargs.pop("from_tf", False)
         if from_pt:
             model = AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-            return load_ov_model_from_pytorch(model)
+            ov_model = load_ov_model_from_pytorch(model)
+            ov_model.prepare_inputs_for_generation = model.prepare_inputs_for_generation
+            ov_model._reorder_cache = model._reorder_cache
+            return ov_model
         elif from_tf:
             model = TFAutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
             return load_ov_model_from_tf(model)
