@@ -31,6 +31,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
+    add_code_sample_docstrings,
 )
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -40,8 +41,15 @@ from .configuration_unispeech_sat import UniSpeechSatConfig
 
 logger = logging.get_logger(__name__)
 
+
 _CONFIG_FOR_DOC = "UniSpeechSatConfig"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 _CHECKPOINT_FOR_DOC = "facebook/unispeech_sat-base-960h"
+
+_SEQ_CLASS_CHECKPOINT = ""
+_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+
+_HIDDEN_STATES_START_POSITION = 2
 
 UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/unispeech_sat-base-960h",
@@ -217,7 +225,7 @@ def _compute_mask_indices(
 class UniSpeechSatNoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
@@ -239,7 +247,7 @@ class UniSpeechSatNoLayerNormConvLayer(nn.Module):
 class UniSpeechSatLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
@@ -267,7 +275,7 @@ class UniSpeechSatLayerNormConvLayer(nn.Module):
 class UniSpeechSatGroupNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
@@ -1087,7 +1095,13 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
         return hidden_states
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_PROCESSOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=UniSpeechSatBaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+    )
     def forward(
         self,
         input_values,
@@ -1097,30 +1111,6 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        """
-
-        Returns:
-
-        Example::
-
-            >>> from transformers import UniSpeechSatProcessor, UniSpeechSatModel
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> processor = UniSpeechSatProcessor.from_pretrained("facebook/unispeech_sat-base-960h")
-            >>> model = UniSpeechSatModel.from_pretrained("facebook/unispeech_sat-base-960h")
-
-            >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
-
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> hidden_states = model(input_values).last_hidden_state
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1383,6 +1373,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
     """UniSpeechSat Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
     UNISPEECH_SAT_START_DOCSTRING,
 )
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat, WAV_2_VEC_2->UNISPEECH_SAT
 class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1409,7 +1400,12 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
         self.unispeech_sat.feature_extractor._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_PROCESSOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_values,
@@ -1425,41 +1421,6 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
             the sequence length of the output logits. Indices are selected in ``[-100, 0, ..., config.vocab_size -
             1]``. All labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
             config.vocab_size - 1]``.
-
-        Returns:
-
-        Example::
-
-            >>> import torch
-            >>> from transformers import UniSpeechSatProcessor, UniSpeechSatForCTC
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> processor = UniSpeechSatProcessor.from_pretrained("facebook/unispeech_sat-base-960h")
-            >>> model = UniSpeechSatForCTC.from_pretrained("facebook/unispeech_sat-base-960h")
-
-            >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
-
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> logits = model(input_values).logits
-            >>> predicted_ids = torch.argmax(logits, dim=-1)
-
-            >>> transcription = processor.decode(predicted_ids[0])
-
-            >>> # compute loss
-            >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
-
-            >>> # wrap processor as target processor to encode labels
-            >>> with processor.as_target_processor():
-            >>>     labels = processor(target_transcription, return_tensors="pt").input_ids
-
-            >>> loss = model(input_values, labels=labels).loss
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1510,7 +1471,7 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
                 )
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
@@ -1525,11 +1486,12 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
     """,
     UNISPEECH_SAT_START_DOCSTRING,
 )
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat, WAV_2_VEC_2->UNISPEECH_SAT
 class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.wav2vec2 = UniSpeechSatModel(config)
+        self.unispeech_sat = UniSpeechSatModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
@@ -1543,18 +1505,24 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         Calling this function will disable the gradient computation for the feature extractor so that its parameters
         will not be updated during training.
         """
-        self.wav2vec2.feature_extractor._freeze_parameters()
+        self.unispeech_sat.feature_extractor._freeze_parameters()
 
     def freeze_base_model(self):
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
         be updated during training. Only the classification head will be updated.
         """
-        for param in self.wav2vec2.parameters():
+        for param in self.unispeech_sat.parameters():
             param.requires_grad = False
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+    )
     def forward(
         self,
         input_values,
@@ -1569,35 +1537,12 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Example::
-
-            >>> import torch
-            >>> from transformers import UniSpeechSatFeatureExtractor, UniSpeechSatForSequenceClassification
-            >>> from datasets import load_dataset
-
-            >>> processor = UniSpeechSatFeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ks")
-            >>> model = UniSpeechSatForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ks")
-
-            >>> ds = load_dataset("anton-l/superb_dummy", "ks", split="test")
-
-            >>> input_values = processor(ds["speech"][4], return_tensors="pt").input_values  # Batch size 1
-            >>> logits = model(input_values).logits
-            >>> predicted_class_ids = torch.argmax(logits, dim=-1)
-
-            >>> # compute loss
-            >>> target_label = "down"
-            >>> labels = torch.tensor([model.config.label2id[target_label]])
-
-            >>> loss = model(input_values, labels=labels).loss
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
-        outputs = self.wav2vec2(
+        outputs = self.unispeech_sat(
             input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -1606,7 +1551,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[2]
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
@@ -1629,7 +1574,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(

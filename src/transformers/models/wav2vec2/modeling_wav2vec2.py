@@ -46,7 +46,7 @@ _CONFIG_FOR_DOC = "Wav2Vec2Config"
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
-_SEQ_CLASS_CHECKPOINT = ("superb/wav2vec2-base-superb-ks",)
+_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
 _SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 2

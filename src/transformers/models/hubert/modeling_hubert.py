@@ -43,7 +43,7 @@ _CONFIG_FOR_DOC = "HubertConfig"
 _CHECKPOINT_FOR_DOC = "facebook/hubert-base-ls960"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
-_SEQ_CLASS_CHECKPOINT = ("superb/hubert-base-superb-ks",)
+_SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
 _SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 1

@@ -3629,9 +3629,23 @@ class TrOCRPreTrainedModel:
 UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class UniSpeechForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class UniSpeechForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+
+class UniSpeechForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class UniSpeechModel:
@@ -3655,9 +3669,23 @@ class UniSpeechPreTrainedModel:
 UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class UniSpeechSatForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class UniSpeechSatForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+
+class UniSpeechSatForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class UniSpeechSatModel:
