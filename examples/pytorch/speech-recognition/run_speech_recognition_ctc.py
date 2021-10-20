@@ -410,10 +410,15 @@ def main():
     # load config
     config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
 
+    # tokenizer is defined by `tokenizer_class` if present in config else by `model_type`
+    config_for_tokenizer = config if config.tokenizer_class is not None else None
+    tokenizer_type = config.model_type if config.tokenizer_class is None else None
+
     # load feature_extractor, tokenizer and create processor
     tokenizer = AutoTokenizer.from_pretrained(
         training_args.output_dir,
-        tokenizer_type=config.model_type,
+        config=config_for_tokenizer,
+        tokenizer_type=tokenizer_type,
         unk_token="[UNK]",
         pad_token="[PAD]",
         word_delimiter_token="|",
