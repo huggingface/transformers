@@ -1651,21 +1651,20 @@ class ModelTesterMixin:
 
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError) as e:
-                        print(type(e))
-                        new_model_prefix = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                        new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
                     with self.assertRaises(RuntimeError) as e:
                         new_model_without_prefix = AutoModel.from_pretrained(tmp_dir, hidden_size=20)
 
                     logger = logging.get_logger("transformers.modeling_utils")
 
                     with CaptureLogger(logger) as cl:
-                        new_model_prefix = AutoModelForSequenceClassification.from_pretrained(
+                        new_model = AutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
                     self.assertIn("the shapes did not match", cl.out)
-                    new_model_prefix.to(torch_device)
+                    new_model.to(torch_device)
                     inputs = self._prepare_for_class(inputs_dict, model_class)
-                    logits = new_model_prefix(**inputs).logits
+                    logits = new_model(**inputs).logits
                     self.assertEqual(logits.shape[1], 42)
 
                     with CaptureLogger(logger) as cl:
