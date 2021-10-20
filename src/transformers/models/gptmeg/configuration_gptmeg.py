@@ -32,7 +32,6 @@ GPTMEG_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/config.json",
     "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/config.json",
     "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/config.json",
-    # See all GPTMeg models at https://huggingface.co/models?filter=gptmeg
 }
 
 
@@ -49,7 +48,7 @@ class GPTMegConfig(PretrainedConfig):
 
     vocab_size (:obj:`int`, `optional`, defaults to 50257): Vocabulary size of the GPT-2 model. Defines the number of
     different tokens that can be represented by the :obj:`inputs_ids` passed when calling
-    :class:`~transformers.GPT2Model` or :class:`~transformers.TFGPT2Model`. n_positions (:obj:`int`, `optional`,
+    :class:`~transformers.GPTMegModel` or :class:`~transformers.TFGPTMegModel`. n_positions (:obj:`int`, `optional`,
     defaults to 1024): The maximum sequence length that this model might ever be used with. Typically set this to
     something large just in case (e.g., 512 or 1024 or 2048). n_ctx (:obj:`int`, `optional`, defaults to 1024):
     Dimensionality of the causal mask (usually same as n_positions). n_embd (:obj:`int`, `optional`, defaults to 768):
@@ -103,13 +102,13 @@ class GPTMegConfig(PretrainedConfig):
 
     Example::
 
-        >>> from transformers import GPT2Model, GPT2Config
+        >>> from transformers import GPTMegModel, GPTMegConfig
 
-        >>> # Initializing a GPT2 configuration
-        >>> configuration = GPT2Config()
+        >>> # Initializing a GPTMeg configuration
+        >>> configuration = GPTMegConfig()
 
         >>> # Initializing a model from the configuration
-        >>> model = GPT2Model(configuration)
+        >>> model = GPTMegModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config

@@ -84,6 +84,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "electra",
     "megatron-bert",
     "gpt2",
+    "gptmeg",
     "gptj",
     "gpt_neo",
     "t5",

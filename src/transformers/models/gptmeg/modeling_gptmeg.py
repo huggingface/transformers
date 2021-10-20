@@ -73,7 +73,6 @@ GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gpt2-large",
     "gpt2-xl",
     "distilgpt2",
-    # See all GPTMeg models at https://huggingface.co/models?filter=gptmeg
 ]
 
 

@@ -149,7 +149,7 @@ class GPTMegTokenizer(PreTrainedTokenizer):
             The end of sequence token.
         add_prefix_space (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (GPT2 tokenizer detect beginning of words by the preceding space).
+            other word. (GPTMeg tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

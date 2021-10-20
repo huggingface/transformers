@@ -116,7 +116,7 @@ class GPTMegTokenizerFast(PreTrainedTokenizerFast):
             The end of sequence token.
         add_prefix_space (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (GPT2 tokenizer detect beginning of words by the preceding space).
+            other word. (GPTMeg tokenizer detect beginning of words by the preceding space).
         trim_offsets (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the post-processing step should trim offsets to avoid including whitespaces.
     """
