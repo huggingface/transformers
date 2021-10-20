@@ -59,6 +59,7 @@ if is_tf_available():
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
+        TFAutoModel,
         TFAutoModelForSequenceClassification,
         TFBertModel,
         TFSharedEmbeddings,
@@ -1328,6 +1329,8 @@ class TFModelTesterMixin:
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(ValueError):
                         new_model = TFAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                    with self.assertRaises(ValueError):
+                        new_model_without_prefix = TFAutoModel.from_pretrained(tmp_dir, hidden_size=20)
 
                     logger = logging.get_logger("transformers.modeling_tf_utils")
                     with CaptureLogger(logger) as cl:
@@ -1338,6 +1341,15 @@ class TFModelTesterMixin:
 
                     logits = new_model(**inputs).logits
                     self.assertEqual(logits.shape[1], 42)
+
+                    with CaptureLogger(logger) as cl:
+                        new_model_without_prefix = TFAutoModel.from_pretrained(
+                            tmp_dir, hidden_size=20, ignore_mismatched_sizes=True
+                        )
+                    self.assertIn("the shapes did not match", cl.out)
+
+                    last_hidden_state = new_model_without_prefix(**inputs).last_hidden_state
+                    self.assertEqual(last_hidden_state.shape[2], 20)
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens

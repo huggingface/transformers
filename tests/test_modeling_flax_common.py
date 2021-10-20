@@ -50,6 +50,7 @@ if is_flax_available():
         FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         FLAX_MODEL_MAPPING,
         FlaxAutoModelForSequenceClassification,
+        FlaxAutoModel,
         FlaxBertModel,
     )
     from transformers.modeling_flax_pytorch_utils import (
@@ -593,6 +594,8 @@ class FlaxModelTesterMixin:
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(ValueError):
                         new_model = FlaxAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                    with self.assertRaises(ValueError):
+                        new_model_without_prefix = FlaxAutoModel.from_pretrained(tmp_dir, hidden_size=20)
 
                     logger = logging.get_logger("transformers.modeling_flax_utils")
                     with CaptureLogger(logger) as cl:
@@ -603,6 +606,15 @@ class FlaxModelTesterMixin:
 
                     logits = new_model(**inputs_dict)["logits"]
                     self.assertEqual(logits.shape[1], 42)
+
+                    with CaptureLogger(logger) as cl:
+                        new_model_without_prefix = FlaxAutoModel.from_pretrained(
+                            tmp_dir, hidden_size=20, ignore_mismatched_sizes=True
+                        )
+                    self.assertIn("the shapes did not match", cl.out)
+
+                    last_hidden_state = new_model_without_prefix(**inputs_dict)["last_hidden_state"]
+                    self.assertEqual(last_hidden_state.shape[2], 20)
 
 
 @require_flax
