@@ -43,6 +43,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("detr", "DetrFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
+        ("sew-d", "Wav2Vec2FeatureExtractor"),
+        ("sew", "Wav2Vec2FeatureExtractor"),
     ]
 )
 
