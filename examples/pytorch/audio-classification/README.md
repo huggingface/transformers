@@ -68,7 +68,7 @@ The following command shows how to fine-tune [wav2vec2-base](https://huggingface
 ```bash
 python run_audio_classification.py \
     --model_name_or_path facebook/wav2vec2-base \
-    --dataset_name anton-l/common_language \
+    --dataset_name common_language \
     --audio_column_name path \
     --label_column_name language \
     --output_dir wav2vec2-base-lang-id \

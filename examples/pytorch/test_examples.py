@@ -428,7 +428,7 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name ks
             --train_split_name test
             --eval_split_name test
-            --audio_column_name file
+            --audio_column_name audio
             --label_column_name label
             --do_train
             --do_eval

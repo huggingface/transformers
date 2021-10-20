@@ -113,7 +113,7 @@ def parse_args():
         "--audio_column_name",
         type=str,
         default="audio",
-        help="Column in the dataset that contains speech file path. Defaults to 'file'",
+        help="Column in the dataset that contains speech file path. Defaults to 'audio'",
     )
     parser.add_argument(
         "--model_name_or_path",
@@ -431,9 +431,9 @@ def main():
     # via the `feature_extractor`
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(args.model_name_or_path)
 
-    # make sure that dataset decodes audio with correct samlping rate
+    # make sure that dataset decodes audio with correct sampling rate
     raw_datasets = raw_datasets.cast_column(
-        "audio", datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+        args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
     )
 
     # only normalized-inputs-training is supported
