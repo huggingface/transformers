@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import is_flax_available, is_torch_available, is_vision_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_vision, torch_device
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_vision, slow, torch_device
 
 from .test_modeling_flax_common import floats_tensor, ids_tensor
 from .test_modeling_flax_gpt2 import FlaxGPT2ModelTester
@@ -362,7 +362,7 @@ class FlaxEncoderDecoderMixin:
         self.check_equivalence_pt_to_flax(config, decoder_config, inputs_dict)
         self.check_equivalence_flax_to_pt(config, decoder_config, inputs_dict)
 
-    # @slow
+    @slow
     def test_real_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
         pixel_values = floats_tensor(
@@ -461,7 +461,7 @@ def prepare_img():
 @require_vision
 @require_flax
 class FlaxViT2GPT2ModelIntegrationTest(unittest.TestCase):
-    # @slow
+    @slow
     def test_inference_coco_en(self):
 
         loc = "ydshieh/vit-gpt2-coco-en"
