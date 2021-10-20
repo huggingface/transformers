@@ -202,7 +202,6 @@ class UniSpeechSatConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        replace_prob=0.5,
         num_clusters=504,
         **kwargs
     ):
@@ -267,6 +266,3 @@ class UniSpeechSatConfig(PretrainedConfig):
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
-
-        # pretraining loss
-        self.replace_prob = replace_prob

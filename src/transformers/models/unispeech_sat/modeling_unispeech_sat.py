@@ -1334,25 +1334,9 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         quantized_features = self.project_q(quantized_features)
         quantized_features = self.project_hid(quantized_features)
 
-        # TODO(PVP) - DELETE `torch.manual_seed(0)` below after integration is complete
-        prob_replace_matrix = torch.empty(transformer_features.size(0), transformer_features.size(1)).fill_(
-            self.config.replace_prob
-        )
-        prob_replace_matrix = prob_replace_matrix.transpose(0, 1)
-        torch.manual_seed(0)
-        sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool().to(transformer_features.device)
-        sampled_replace_matrix = sampled_replace_matrix.transpose(0, 1)
-        sampled_replace_matrix = sampled_replace_matrix.unsqueeze(-1)
-        logits = transformer_features.masked_fill(sampled_replace_matrix, 0.0) + quantized_features.masked_fill(
-            ~sampled_replace_matrix, 0.0
-        )
-
-        # project to ctc units
-        logits = self.dropout(logits)
-        logits = self.lm_head(logits)
-
-        # TODO(PVP) - add negative sampling & loss computation
+        # TODO(PVP) - add pretraining logic and add to tests
         loss = None
+        logits = None
         if not return_dict:
             if loss is not None:
                 return (loss, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
