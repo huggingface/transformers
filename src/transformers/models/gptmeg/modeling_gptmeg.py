@@ -74,28 +74,7 @@ GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GPTMeg models at https://huggingface.co/models?filter=gptmeg
 ]
 
-@torch.jit.script
-def gelu_megatron_fwd(x):
-    return  x * 0.5 * (1.0 + torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x)))
-
-@torch.jit.script
-def gelu_megatron_bwd(g, x):
-    tanh_out = torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x))
-    # sqrt(2/pi) * 3 * 0.044715 -> 0.1070322243
-    ff = 0.5 * x * ((1 - tanh_out * tanh_out) * (0.79788456 + 0.1070322243 * x * x)) + 0.5 * (1 + tanh_out)
-    return ff*g
-
-class GeLUMegatronFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, input):
-        ctx.save_for_backward(input)
-        return gelu_megatron_fwd(input)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        input = ctx.saved_tensors
-        tmp = gelu_megatron_bwd(grad_output, input)
-        return tmp, tmp
+from meg_module import GeLUMegatronFunction, MixedFusedLayerNorm as LayerNorm
 
 ACT2FN['gelu_megatron'] = GeLUMegatronFunction.apply
 
@@ -393,13 +372,13 @@ class GPTMegBlock(nn.Module):
         hidden_size = config.hidden_size
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
-        self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = GPTMegAttention(config, layer_idx=layer_idx)
-        self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_2 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
             self.crossattention = GPTMegAttention(config, is_cross_attention=True)
-            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            self.ln_cross_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = GPTMegMLP(inner_dim, config)
 
@@ -492,7 +471,7 @@ class GPTMegPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -699,7 +678,7 @@ class GPTMegModel(GPTMegPreTrainedModel):
 
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTMegBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
 
