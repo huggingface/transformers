@@ -734,6 +734,9 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             >>> logits = outputs.logits # shape (batch_size, num_labels, height/4, width/4)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         outputs = self.segformer(
             pixel_values,
@@ -759,12 +762,15 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
                 loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            if output_hidden_states:
+                output = (logits,) + outputs[1:]
+            else:
+                output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
