@@ -74,8 +74,32 @@ GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GPTMeg models at https://huggingface.co/models?filter=gptmeg
 ]
 
+@torch.jit.script
+def gelu_megatron_fwd(x):
+    return  x * 0.5 * (1.0 + torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x)))
 
-def load_tf_weights_in_GPTMeg(model, config, GPTMeg_checkpoint_path):
+@torch.jit.script
+def gelu_megatron_bwd(g, x):
+    tanh_out = torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x))
+    # sqrt(2/pi) * 3 * 0.044715 -> 0.1070322243
+    ff = 0.5 * x * ((1 - tanh_out * tanh_out) * (0.79788456 + 0.1070322243 * x * x)) + 0.5 * (1 + tanh_out)
+    return ff*g
+
+class GeLUMegatronFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input):
+        ctx.save_for_backward(input)
+        return gelu_megatron_fwd(input)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        input = ctx.saved_tensors
+        tmp = gelu_megatron_bwd(grad_output, input)
+        return tmp, tmp
+
+ACT2FN['gelu_megatron'] = GeLUMegatronFunction.apply
+
+def load_tf_weights_in_gptmeg(model, config, GPTMeg_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""
     try:
         import re
@@ -448,7 +472,7 @@ class GPTMegPreTrainedModel(PreTrainedModel):
     """
 
     config_class = GPTMegConfig
-    load_tf_weights = load_tf_weights_in_GPTMeg
+    load_tf_weights = load_tf_weights_in_gptmeg
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
@@ -625,10 +649,10 @@ PARALLELIZE_DOCSTRING = r"""
             have fewer attention modules mapped to it than other devices. For reference, the GPTMeg models have the
             following number of attention modules:
 
-                - GPTMeg: 12
-                - GPTMeg-medium: 24
-                - GPTMeg-large: 36
-                - GPTMeg-xl: 48
+                - gptmeg/gpt2: 12
+                - gpt2-medium: 24
+                - gpt2-large: 36
+                - gpt2-xl: 48
 
     Example::
 
@@ -1220,8 +1244,8 @@ class GPTMegDoubleHeadsModel(GPTMegPreTrainedModel):
             >>> import torch
             >>> from transformers import GPTMegTokenizer, GPTMegDoubleHeadsModel
 
-            >>> tokenizer = GPTMegTokenizer.from_pretrained('GPTMeg')
-            >>> model = GPTMegDoubleHeadsModel.from_pretrained('GPTMeg')
+            >>> tokenizer = GPTMegTokenizer.from_pretrained('gpt2')
+            >>> model = GPTMegDoubleHeadsModel.from_pretrained('gpt2')
 
             >>> # Add a [CLS] to the vocabulary (we should train it also!)
             >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
