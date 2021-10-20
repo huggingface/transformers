@@ -209,6 +209,8 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    # overwrite from common since `encoder_seq_length` and `encoder_key_length` are calculated
+    # in a different way than in text models.
     @tooslow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
