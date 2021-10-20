@@ -143,7 +143,7 @@ can be easily batched such that each key in the batch encoding corresponds to a 
         test_labels
     ))
 
-Now that our datasets our ready, we can fine-tune a model either with the 🤗
+Now that our datasets are ready, we can fine-tune a model either with the 🤗
 :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer` or with native PyTorch/TensorFlow. See :doc:`training
 <training>`.
 

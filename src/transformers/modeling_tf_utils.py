@@ -43,6 +43,7 @@ from .file_utils import (
     is_remote_url,
 )
 from .generation_tf_utils import TFGenerationMixin
+from .modeling_tf_outputs import TFSeq2SeqLMOutput
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -787,6 +788,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
+        # When y_pred is a ModelOutput and y is a tf.Tensor the metrics update
+        # should be done only with the relevant ModelOutput param that is
+        # considered by the loss.
+        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
+            y_pred = y_pred["logits"]
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
@@ -813,17 +819,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if y is None and "labels" in x:
             y = x["labels"]  # Stops confusion with metric computations
         y_pred = self(x, training=False)
-        if not self.loss:
-            self.loss_tracker.update_state(y_pred.loss)
-            return_metrics = {"loss": self.loss_tracker.result()}
-        else:
-            # Run anyway to update state
-            self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
-            return_metrics = {}
-        # Updates stateful loss metrics.
         self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+        # Updates stateful loss metrics.
+        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
+            y_pred = y_pred["logits"]
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
+        return_metrics = {}
         for metric in self.metrics:
             result = metric.result()
             if isinstance(result, dict):

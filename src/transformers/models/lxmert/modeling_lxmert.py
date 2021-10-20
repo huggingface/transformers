@@ -901,7 +901,7 @@ class LxmertModel(LxmertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LxmertModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -935,8 +935,10 @@ class LxmertModel(LxmertPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        assert visual_feats is not None, "`visual_feats` cannot be `None`"
-        assert visual_pos is not None, "`visual_pos` cannot be `None`"
+        if visual_feats is None:
+            raise ValueError("`visual_feats` cannot be `None`")
+        if visual_pos is None:
+            raise ValueError("`visual_pos` cannot be `None`")
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
@@ -1382,7 +1384,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LxmertForQuestionAnsweringOutput,
         config_class=_CONFIG_FOR_DOC,

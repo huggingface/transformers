@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import sys
-import unittest
 from unittest.mock import patch
 
 import torch
@@ -217,7 +216,6 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertLess(result["eval_loss"], 0.5)
 
-    @unittest.skip("squad_v2 metric is broken on Datasets apparently, skipping until it's fixed.")
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -393,11 +391,10 @@ class ExamplesTests(TestCasePlus):
             run_speech_recognition_ctc.py
             --output_dir {tmp_dir}
             --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
-            --dataset_name patrickvonplaten/librispeech_asr_dummy
+            --dataset_name hf-internal-testing/librispeech_asr_dummy
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
-            --audio_column_name file
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -462,7 +459,7 @@ class ExamplesTests(TestCasePlus):
             run_wav2vec2_pretraining_no_trainer.py
             --output_dir {tmp_dir}
             --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
-            --dataset_name patrickvonplaten/librispeech_asr_dummy
+            --dataset_name hf-internal-testing/librispeech_asr_dummy
             --dataset_config_names clean
             --dataset_split_names validation
             --learning_rate 1e-4
