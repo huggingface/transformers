@@ -492,7 +492,9 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640").to(torch_device)
+        model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640").to(
+            torch_device
+        )
 
         feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
 

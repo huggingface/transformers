@@ -88,11 +88,13 @@ def create_rename_keys(config, has_lm_head=False, is_semantic=False):
             ]
         )
     elif is_semantic:
-        # semantic segmentation head + classification head
+        # semantic segmentation classification heads
         rename_keys.extend(
             [
                 ("decode_head.conv_seg.weight", "decode_head.classifier.weight"),
                 ("decode_head.conv_seg.bias", "decode_head.classifier.bias"),
+                ("auxiliary_head.conv_seg.weight", "auxiliary_head.classifier.weight"),
+                ("auxiliary_head.conv_seg.bias", "auxiliary_head.classifier.bias"),
             ]
         )
     else:
@@ -249,11 +251,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
             val = state_dict.pop(key)
             if key.startswith("backbone.fpn"):
                 key = key.replace("backbone.fpn", "fpn")
-            if "auxiliary_head" in key:
-                # we skip the auxiliary head for now
-                pass
-            else:
-                state_dict[key] = val
+            state_dict[key] = val
 
     # load HuggingFace model
     if checkpoint_url[-9:-4] == "pt22k":
