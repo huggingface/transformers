@@ -869,7 +869,7 @@ translation task, you may leverage the `run_translation.py
 An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input
 data and the corresponding sentences in German as the target data. If you would like to fine-tune a model on a
 translation task, various approaches are described in this :prefix_link:`document
-<examples/pytorch.translation/README.md>`.
+<examples/pytorch/translation/README.md>`.
 
 Here is an example of using the pipelines to do translation. It leverages a T5 model that was only pre-trained on a
 multi-task mixture dataset (including WMT), yet, yielding impressive translation results.
