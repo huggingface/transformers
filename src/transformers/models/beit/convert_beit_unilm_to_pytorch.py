@@ -326,18 +326,23 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         )
     elif checkpoint_url[:-4].endswith("beit_large_patch16_640_pt22k_ft22ktoade20k"):
         expected_shape = (1, 150, 160, 160)
+        expected_logits = torch.tensor(
+            [
+                [[-4.3305, -2.3049, -3.0161], [-2.9591, -1.5305, -2.2251], [-3.4198, -1.8004, -2.9062]],
+                [[-5.8922, -3.7435, -4.3978], [-4.2063, -2.7872, -3.4755], [-4.2791, -3.1874, -4.1681]],
+                [[0.9895, 4.3467, 4.7663], [4.2476, 5.6830, 6.1518], [4.5550, 6.2495, 6.5154]],
+            ]
+        )
     else:
         raise ValueError("Can't verify logits as model is not supported")
 
     assert logits.shape == expected_shape, "Shape of logits not as expected"
-    print("Shape of logits:", logits.shape)
-    print("First elements of logits:", logits[0, :3, :3, :3])
     if not has_lm_head:
-        if is_semantic and "base" in checkpoint_url:
+        if is_semantic:
             assert torch.allclose(
                 logits[0, :3, :3, :3], expected_logits, atol=1e-3
             ), "First elements of logits not as expected"
-        elif not is_semantic:
+        else:
             print("Predicted class idx:", logits.argmax(-1).item())
             assert torch.allclose(
                 logits[0, :3], expected_logits, atol=1e-3
