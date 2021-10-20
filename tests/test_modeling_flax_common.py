@@ -49,8 +49,8 @@ if is_flax_available():
         FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         FLAX_MODEL_MAPPING,
-        FlaxAutoModelForSequenceClassification,
         FlaxAutoModel,
+        FlaxAutoModelForSequenceClassification,
         FlaxBertModel,
     )
     from transformers.modeling_flax_pytorch_utils import (
