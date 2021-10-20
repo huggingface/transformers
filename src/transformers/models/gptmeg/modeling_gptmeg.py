@@ -74,7 +74,8 @@ GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GPTMeg models at https://huggingface.co/models?filter=gptmeg
 ]
 
-from meg_module import GeLUMegatronFunction, MixedFusedLayerNorm as LayerNorm
+from .meg_module import GeLUMegatronFunction 
+from .meg_module import UpcastLayerNorm as LayerNorm
 
 ACT2FN['gelu_megatron'] = GeLUMegatronFunction.apply
 
