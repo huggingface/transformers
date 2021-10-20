@@ -454,9 +454,9 @@ def main():
     # so that we just need to set the correct target sampling rate and normalize the input
     # via the `feature_extractor`
 
-    # make sure that dataset decodes audio with correct samlping rate
+    # make sure that dataset decodes audio with correct sampling rate
     raw_datasets = raw_datasets.cast_column(
-        "audio", datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+        data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
     )
 
     # derive max & min input length for sample rate & max duration
