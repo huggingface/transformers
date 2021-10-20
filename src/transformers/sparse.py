@@ -125,6 +125,28 @@ class SparseMLTrainer(Trainer):
 
         return qat_start < epoch + 1
 
+    def compute_loss(self, model, inputs, return_outputs=False):
+        """
+        Computing loss using teacher/student distillation
+        """
+        if not self.recipes or self.teacher is None:
+            return super().compute_loss(model, inputs, return_outputs=return_outputs)
+        student_outputs = model(**inputs)
+        loss = student_outputs["loss"]
+
+        steps_in_epoch = -1  # Unused
+        loss = self.manager.loss_update(
+            loss,
+            model,
+            self.optimizer,
+            self.state.epoch,
+            steps_in_epoch,
+            global_step=self.state.global_step,
+            student_outputs=student_outputs,
+            teacher_inputs=inputs,
+        )
+        return (loss, student_outputs) if return_outputs else loss
+
     def save_model(self, output_dir: Optional[str] = None):
         """
         Save model during or after training. Modifiers that change the model architecture will also be saved.
