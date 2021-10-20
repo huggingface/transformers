@@ -55,10 +55,10 @@ UniSpeechSatConfig
 UniSpeechSat specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.models.unispeech.modeling_unispeech.UniSpeechSatBaseModelOutput
+.. autoclass:: transformers.models.unispeech_sat.modeling_unispeech_sat.UniSpeechSatBaseModelOutput
     :members: 
 
-.. autoclass:: transformers.models.unispeech.modeling_unispeech.UniSpeechSatForPreTrainingOutput
+.. autoclass:: transformers.models.unispeech_sat.modeling_unispeech_sat.UniSpeechSatForPreTrainingOutput
     :members: 
 
 
