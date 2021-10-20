@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("gptmeg", "GPTMegModel"),
         ("fnet", "FNetModel"),
         ("gptj", "GPTJModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
@@ -140,6 +141,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+        ("gptmeg", "GPTMegLMHeadModel"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
         ("rembert", "RemBertForMaskedLM"),
@@ -190,6 +192,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("gptmeg", "GPTMegLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
         ("rembert", "RemBertForCausalLM"),
@@ -311,6 +314,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("gptmeg", "GPTMegForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
         ("gptj", "GPTJForSequenceClassification"),
         ("layoutlmv2", "LayoutLMv2ForSequenceClassification"),
@@ -402,6 +406,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+        ("gptmeg", "GPTMegForTokenClassification"),
         ("fnet", "FNetForTokenClassification"),
         ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
         ("rembert", "RemBertForTokenClassification"),

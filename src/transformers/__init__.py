@@ -146,6 +146,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.gptmeg": ["GPTMEG_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTMegConfig", "GPTMegTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -379,6 +380,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.gptmeg"].append("GPTMegTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
@@ -556,6 +558,19 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.gptmeg"].extend(
+        [
+            "GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTMegDoubleHeadsModel",
+            "GPTMegForSequenceClassification",
+            "GPTMegForTokenClassification",
+            "GPTMegLMHeadModel",
+            "GPTMegModel",
+            "GPTMegPreTrainedModel",
+            "load_tf_weights_in_gptmeg",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2019,6 +2034,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.gptmeg import GPTMEG_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTMegConfig, GPTMegTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2234,6 +2250,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.gptmeg import GPTMegTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2330,6 +2347,17 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
+
+        from .models.gptmeg import (
+            GPTMEG_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTMegDoubleHeadsModel,
+            GPTMegForSequenceClassification,
+            GPTMegForTokenClassification,
+            GPTMegLMHeadModel,
+            GPTMegModel,
+            GPTMegPreTrainedModel,
+            load_tf_weights_in_gptmeg,
+        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
