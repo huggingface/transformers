@@ -1330,7 +1330,7 @@ class TFModelTesterMixin:
                     with self.assertRaises(ValueError):
                         new_model = TFAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
                     with self.assertRaises(ValueError):
-                        new_model_without_prefix = TFAutoModel.from_pretrained(tmp_dir, hidden_size=20)
+                        new_model_without_prefix = TFAutoModel.from_pretrained(tmp_dir, vocab_size=10)
 
                     logger = logging.get_logger("transformers.modeling_tf_utils")
                     with CaptureLogger(logger) as cl:
@@ -1344,12 +1344,14 @@ class TFModelTesterMixin:
 
                     with CaptureLogger(logger) as cl:
                         new_model_without_prefix = TFAutoModel.from_pretrained(
-                            tmp_dir, hidden_size=20, ignore_mismatched_sizes=True
+                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
                     self.assertIn("the shapes did not match", cl.out)
 
-                    last_hidden_state = new_model_without_prefix(**inputs).last_hidden_state
-                    self.assertEqual(last_hidden_state.shape[2], 20)
+                    input_ids = ids_tensor((2, 5), 10)
+                    new_model_without_prefix(input_ids)
+                    new_model_without_prefix_base = getattr(new_model_without_prefix, new_model_without_prefix.base_model_prefix)
+                    self.assertEqual(new_model_without_prefix_base.embeddings.weight.shape[0], 10)
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens

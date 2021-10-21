@@ -595,7 +595,7 @@ class FlaxModelTesterMixin:
                     with self.assertRaises(ValueError):
                         new_model = FlaxAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
                     with self.assertRaises(ValueError):
-                        new_model_without_prefix = FlaxAutoModel.from_pretrained(tmp_dir, hidden_size=20)
+                        new_model_without_prefix = FlaxAutoModel.from_pretrained(tmp_dir, vocab_size=10)
 
                     logger = logging.get_logger("transformers.modeling_flax_utils")
                     with CaptureLogger(logger) as cl:
@@ -609,12 +609,12 @@ class FlaxModelTesterMixin:
 
                     with CaptureLogger(logger) as cl:
                         new_model_without_prefix = FlaxAutoModel.from_pretrained(
-                            tmp_dir, hidden_size=20, ignore_mismatched_sizes=True
+                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
                     self.assertIn("the shapes did not match", cl.out)
-
-                    last_hidden_state = new_model_without_prefix(**inputs_dict)["last_hidden_state"]
-                    self.assertEqual(last_hidden_state.shape[2], 20)
+                    input_ids = ids_tensor((2, 5), 10)
+                    new_model_without_prefix(input_ids)
+                    self.assertEqual(new_model_without_prefix.params["embeddings"]["word_embeddings"]["embedding"].shape[0], 10)
 
 
 @require_flax
