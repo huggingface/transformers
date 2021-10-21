@@ -141,6 +141,8 @@ class UniSpeechConfig(PretrainedConfig):
             instance of :class:`~transformers.UniSpeechForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
+        replace_prob (:obj:`float`, `optional`, defaults to 0.5):
+            Propability that transformer feature is replaced by quantized feature for pretraining.
 
     Example::
 
