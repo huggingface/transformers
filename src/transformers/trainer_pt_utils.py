@@ -623,11 +623,13 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         else:
             # remove tail of data to make it evenly divisible.
             indices = indices[: self.total_size]
-        assert len(indices) == self.total_size
+        if len(indices) != self.total_size:
+            raise ValueError("`indices` length doesn't match with `self.total_size`")
 
         # subsample
         indices = indices[self.rank : self.total_size : self.num_replicas]
-        assert len(indices) == self.num_samples
+        if len(indices) != self.num_samples:
+            raise ValueError("`indices` length doesn't match with `self.num_samples`")
 
         return iter(indices)
 
