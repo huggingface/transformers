@@ -271,7 +271,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images[0], return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(list(input_processor.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -292,7 +292,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images, padding=True, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(list(input_processor.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -325,7 +325,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images[0], words, boxes=boxes, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["input_ids", "bbox", "token_type_ids", "attention_mask", "image"]
+            expected_keys = ["input_ids", "bbox", "attention_mask", "image"]
             actual_keys = list(input_processor.keys())
             for key in expected_keys:
                 self.assertIn(key, actual_keys)
@@ -341,7 +341,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images, words, boxes=boxes, padding=True, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(list(input_processor.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -380,7 +380,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images[0], words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels"]
             actual_keys = sorted(list(input_processor.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -402,7 +402,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             )
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels"]
             actual_keys = sorted(list(input_processor.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -443,13 +443,13 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images[0], question, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(list(input_processor.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
             # fmt: off
-            expected_decoding = "[CLS] what's his name? [SEP] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]"  # noqa: E231
+            expected_decoding = "<s> What's his name?</s></s> 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]"  # noqa: E231
             # fmt: on
             decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
@@ -461,7 +461,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             )
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(list(input_processor.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -494,12 +494,12 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images[0], question, words, boxes, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(list(input_processor.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_decoding = "[CLS] what's his name? [SEP] hello world [SEP]"
+            expected_decoding = "<s> What's his name?</s></s> hello world</s>"
             decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
@@ -510,7 +510,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images, questions, words, boxes, padding=True, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(list(input_processor.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 

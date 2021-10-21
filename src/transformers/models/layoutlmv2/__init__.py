@@ -42,7 +42,7 @@ if is_tokenizers_available():
 if is_vision_available():
     _import_structure["feature_extraction_layoutlmv2"] = ["LayoutLMv2FeatureExtractor"]
     _import_structure["processing_layoutlmv2"] = ["LayoutLMv2Processor"]
-    _import_structure["processing_layoutlmv2"] = ["LayoutXLMProcessor"]
+    _import_structure["processing_layoutxlm"] = ["LayoutXLMProcessor"]
 
 if is_torch_available():
     _import_structure["modeling_layoutlmv2"] = [
