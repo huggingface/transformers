@@ -410,10 +410,15 @@ def main():
     # load config
     config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
 
+    # tokenizer is defined by `tokenizer_class` if present in config else by `model_type`
+    config_for_tokenizer = config if config.tokenizer_class is not None else None
+    tokenizer_type = config.model_type if config.tokenizer_class is None else None
+
     # load feature_extractor, tokenizer and create processor
     tokenizer = AutoTokenizer.from_pretrained(
         training_args.output_dir,
-        tokenizer_type=config.model_type,
+        config=config_for_tokenizer,
+        tokenizer_type=tokenizer_type,
         unk_token="[UNK]",
         pad_token="[PAD]",
         word_delimiter_token="|",
@@ -587,15 +592,16 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     # Write model card and (optionally) push to hub
+    config_name = data_args.dataset_config_name if data_args.dataset_config_name is not None else "na"
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "speech-recognition",
         "tags": ["automatic-speech-recognition", data_args.dataset_name],
-        "dataset_args": f"Config: {data_args.dataset_config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
-        "dataset": f"{data_args.dataset_name.upper()} - {data_args.dataset_config_name.upper()}",
+        "dataset_args": f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
+        "dataset": f"{data_args.dataset_name.upper()} - {config_name.upper()}",
     }
     if "common_voice" in data_args.dataset_name:
-        kwargs["language"] = data_args.dataset_config_name
+        kwargs["language"] = config_name
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)

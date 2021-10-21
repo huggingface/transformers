@@ -561,7 +561,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                 bwd_pos_seq = tf.clip_by_value(bwd_pos_seq, -self.clamp_len, self.clamp_len)
 
             if bsz is not None:
-                assert bsz % 2 == 0, f"With bi_data, the batch size {bsz} should be divisible by 2"
+                if bsz % 2 != 0:
+                    raise ValueError(f"With bi_data, the batch size {bsz} should be divisible by 2")
                 fwd_pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz // 2)
                 bwd_pos_emb = self.positional_embedding(bwd_pos_seq, inv_freq, bsz // 2)
             else:
