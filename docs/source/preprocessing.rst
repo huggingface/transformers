@@ -228,7 +228,7 @@ Everything you always wanted to know about padding and truncation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We have seen the commands that will work for most cases (pad your batch to the length of the maximum sentence and
-truncate to the maximum length the mode can accept). However, the API supports more strategies if you need them. The
+truncate to the maximum length the model can accept). However, the API supports more strategies if you need them. The
 three arguments you need to know for this are :obj:`padding`, :obj:`truncation` and :obj:`max_length`.
 
 - :obj:`padding` controls the padding. It can be a boolean or a string which should be:
