@@ -1512,7 +1512,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if ignore_mismatched_sizes:
             for checkpoint_key in loaded_keys:
                 model_key = checkpoint_key
-                if remove_prefix and checkpoint_key.startswith(prefix):
+                if remove_prefix:
                     model_key = f"{prefix}.{checkpoint_key}"
                 elif add_prefix:
                     model_key = ".".join(checkpoint_key.split(".")[1:])
