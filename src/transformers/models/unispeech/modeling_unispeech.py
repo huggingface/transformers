@@ -43,9 +43,9 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "UniSpeechConfig"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_CHECKPOINT_FOR_DOC = ""
+_CHECKPOINT_FOR_DOC = "microsoft/unispeech-large-1500h-cv"
 
-_SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
+_SEQ_CLASS_CHECKPOINT = "microsoft/unispeech-large-1500h-cv"
 _SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 2

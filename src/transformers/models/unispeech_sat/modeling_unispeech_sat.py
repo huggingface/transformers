@@ -44,18 +44,14 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "UniSpeechSatConfig"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_CHECKPOINT_FOR_DOC = "facebook/unispeech_sat-base-960h"
+_CHECKPOINT_FOR_DOC = "microsoft/unispeech-sat-base-plus"
 
-_SEQ_CLASS_CHECKPOINT = ""
+_SEQ_CLASS_CHECKPOINT = "microsoft/unispeech-sat-base-plus"
 _SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 2
 
 UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/unispeech_sat-base-960h",
-    "facebook/unispeech_sat-large-960h",
-    "facebook/unispeech_sat-large-960h-lv60",
-    "facebook/unispeech_sat-large-960h-lv60-self",
     # See all UniSpeechSat models at https://huggingface.co/models?filter=unispeech_sat
 ]
 
