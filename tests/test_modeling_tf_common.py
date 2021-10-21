@@ -1350,12 +1350,8 @@ class TFModelTesterMixin:
 
                     # Although Tf models always have a prefix pointing to `MainLayer`,
                     # we still add this "without prefix" test to keep a consistency between tf and pt tests.
-                    input_ids = ids_tensor((2, 5), 10)
+                    input_ids = ids_tensor((2, 8), 10)
                     new_model_without_prefix(input_ids)
-                    new_model_without_prefix_base = getattr(
-                        new_model_without_prefix, new_model_without_prefix.base_model_prefix
-                    )
-                    self.assertEqual(new_model_without_prefix_base.embeddings.weight.shape[0], 10)
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens

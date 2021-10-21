@@ -1672,10 +1672,9 @@ class ModelTesterMixin:
                             tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
                     self.assertIn("the shapes did not match", cl.out)
-                    input_ids = ids_tensor((2, 5), 10)
+                    input_ids = ids_tensor((2, 8), 10)
                     new_model_without_prefix.to(torch_device)
                     new_model_without_prefix(input_ids)
-                    self.assertEqual(new_model_without_prefix.get_input_embeddings().weight.shape[0], 10)
 
 
 global_rng = random.Random()
