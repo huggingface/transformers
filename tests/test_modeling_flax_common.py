@@ -616,7 +616,10 @@ class FlaxModelTesterMixin:
                         )
                     self.assertIn("the shapes did not match", cl.out)
                     input_ids = ids_tensor((2, 8), 10)
-                    new_model_without_prefix(input_ids)
+                    if self.is_encoder_decoder:
+                        new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
+                    else:
+                        new_model_without_prefix(input_ids)
 
 
 @require_flax
