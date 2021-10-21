@@ -1,8 +1,9 @@
 import logging
 from pathlib import Path
 from time import sleep
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 
+from tensorflow.data import Dataset
 from tensorflow.keras.callbacks import Callback
 
 from huggingface_hub import Repository
@@ -13,6 +14,27 @@ from .file_utils import get_full_repo_name
 
 logger = logging.getLogger(__name__)
 
+
+class KerasMetricCallback(Callback):
+    def __init__(self, metric_fn: Callable, val_data: tensorflow.data.Dataset, metric_name: Optional[str]):
+
+        """
+        metric_fn: Metric function provided by the user. val_data: Validation data to be used to evaluate the model at
+        the end of the epoch. metric_name: Name of the metric calculated in metric_fn.
+        """
+        super().__init__()
+        self.model = model
+        self.metric_fn = metric_fn
+        self.val_data = val_data
+        self.metric_name = metric_name
+
+    def on_epoch_end(self, epoch, logs=None):
+
+        metric_value = self.metric_fn(val_data)
+        if metric_name is not None:
+            print("{} for epoch {} is {}".format(self.metric_name, self.epoch, metric_value))
+        else:
+            print("At epoch {}: {}".format(self.epoch, metric_value))
 
 class PushToHubCallback(Callback):
     def __init__(
