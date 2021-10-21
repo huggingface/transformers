@@ -136,7 +136,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaForMaskedLM"),
         ("deberta-v2", "DebertaV2ForMaskedLM"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
-        ("unispeech-sat", "UniSpeechForPreTraining"),
+        ("unispeech-sat", "UniSpeechSatForPreTraining"),
         ("unispeech", "UniSpeechForPreTraining"),
     ]
 )
