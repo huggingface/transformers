@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_unispeech_sat import (
             UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            UniSpeechForCTC,
+            UniSpeechSatForCTC,
             UniSpeechSatForPreTraining,
             UniSpeechSatForSequenceClassification,
             UniSpeechSatModel,
