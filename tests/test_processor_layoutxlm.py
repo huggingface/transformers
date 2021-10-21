@@ -185,7 +185,7 @@ class LayoutXLMProcessorTest(unittest.TestCase):
             processor = LayoutXLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
             processor.save_pretrained(self.tmpdirname)
-            processor = LayoutXLMProcessor.from_pretrained(self.tmpdirname, use_xlm=True)
+            processor = LayoutXLMProcessor.from_pretrained(self.tmpdirname)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
             self.assertIsInstance(processor.tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast))
@@ -204,7 +204,6 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         processor = LayoutXLMProcessor.from_pretrained(
             self.tmpdirname,
             use_fast=False,
-            use_xlm=True,
             bos_token="(BOS)",
             eos_token="(EOS)",
             do_resize=False,
