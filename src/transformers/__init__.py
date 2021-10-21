@@ -228,7 +228,7 @@ _import_structure = {
         "LayoutLMv2FeatureExtractor",
         "LayoutLMv2Processor",
         "LayoutLMv2Tokenizer",
-        "LayoutXLMTokenizer",
+        "LayoutXLMProcessor",
     ],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
@@ -366,6 +366,7 @@ if is_sentencepiece_available():
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
+    _import_structure["models.layoutlmv2"].append("LayoutXLMTokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -2140,7 +2141,7 @@ if TYPE_CHECKING:
         LayoutLMv2FeatureExtractor,
         LayoutLMv2Processor,
         LayoutLMv2Tokenizer,
-        LayoutXLMTokenizer,
+        LayoutXLMProcessor,
     )
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
@@ -2268,6 +2269,7 @@ if TYPE_CHECKING:
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
+        from .models.layoutlmv2 import LayoutXLMTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBart50Tokenizer, MBartTokenizer

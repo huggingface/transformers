@@ -13,27 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for LayoutLMv2.
+Processor class for LayoutXLM.
 """
 from typing import List, Optional, Union
 
 from ...file_utils import TensorType
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
-from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
-from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
+from .tokenization_layoutxlm import LayoutXLMTokenizer
+from .tokenization_layoutxlm_fast import LayoutXLMTokenizerFast
 
 
-class LayoutLMv2Processor:
+class LayoutXLMProcessor:
     r"""
-    Constructs a LayoutLMv2 processor which combines a LayoutLMv2 feature extractor and a LayoutLMv2 tokenizer into a
+    Constructs a LayoutXLM processor which combines a LayoutXLM feature extractor and a LayoutXLM tokenizer into a
     single processor.
 
-    :class:`~transformers.LayoutLMv2Processor` offers all the functionalities you need to prepare data for the model.
+    :class:`~transformers.LayoutXLMProcessor` offers all the functionalities you need to prepare data for the model.
 
     It first uses :class:`~transformers.LayoutLMv2FeatureExtractor` to resize document images to a fixed size, and
     optionally applies OCR to get words and normalized bounding boxes. These are then provided to
-    :class:`~transformers.LayoutLMv2Tokenizer` or :class:`~transformers.LayoutLMv2TokenizerFast`, which turns the words
+    :class:`~transformers.LayoutXLMTokenizer` or :class:`~transformers.LayoutXLMTokenizerFast`, which turns the words
     and bounding boxes into token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`.
     Optionally, one can provide integer :obj:`word_labels`, which are turned into token-level :obj:`labels` for token
     classification tasks (such as FUNSD, CORD).
@@ -42,9 +42,9 @@ class LayoutLMv2Processor:
         feature_extractor (:obj:`LayoutLMv2FeatureExtractor`):
             An instance of :class:`~transformers.LayoutLMv2FeatureExtractor`. The feature extractor is a required
             input.
-        tokenizer (:obj:`LayoutLMv2Tokenizer` or :obj:`LayoutLMv2TokenizerFast`):
-            An instance of :class:`~transformers.LayoutLMv2Tokenizer` or
-            :class:`~transformers.LayoutLMv2TokenizerFast`. The tokenizer is a required input.
+        tokenizer (:obj:`LayoutXLMTokenizer` or :obj:`LayoutXLMTokenizerFast`):
+            An instance of :class:`~transformers.LayoutXLMTokenizer` or :class:`~transformers.LayoutXLMTokenizerFast`.
+            The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -52,9 +52,9 @@ class LayoutLMv2Processor:
             raise ValueError(
                 f"`feature_extractor` has to be of type {LayoutLMv2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
             )
-        if not isinstance(tokenizer, (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast)):
+        if not isinstance(tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast)):
             raise ValueError(
-                f"`tokenizer` has to be of type {LayoutLMv2Tokenizer.__class__} or {LayoutLMv2TokenizerFast.__class__}, but is {type(tokenizer)}"
+                f"`tokenizer` has to be of type {LayoutXLMTokenizer.__class__} or {LayoutXLMTokenizerFast.__class__}, but is {type(tokenizer)}"
             )
 
         self.feature_extractor = feature_extractor
@@ -62,8 +62,8 @@ class LayoutLMv2Processor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a LayoutLMv2 feature_extractor object and LayoutLMv2 tokenizer object to the directory ``save_directory``,
-        so that it can be re-loaded using the :func:`~transformers.LayoutLMv2Processor.from_pretrained` class method.
+        Save a LayoutXLM feature_extractor object and LayoutXLM tokenizer object to the directory ``save_directory``,
+        so that it can be re-loaded using the :func:`~transformers.LayoutXLMProcessor.from_pretrained` class method.
 
         .. note::
 
@@ -84,15 +84,14 @@ class LayoutLMv2Processor:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, use_fast=True, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.LayoutLMv2Processor` from a pretrained LayoutLMv2 processor.
+        Instantiate a :class:`~transformers.LayoutXLMProcessor` from a pretrained LayoutXLM processor.
 
         .. note::
 
-            This class method is simply calling LayoutLMv2FeatureExtractor's
+            This class method is simply calling Layoutv2FeatureExtractor's
             :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.from_pretrained` and
-            LayoutLMv2TokenizerFast's
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`. Please refer to the
-            docstrings of the methods above for more information.
+            LayoutXLMTokenizerFast's :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`.
+            Please refer to the docstrings of the methods above for more information.
 
         Args:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
@@ -116,9 +115,9 @@ class LayoutLMv2Processor:
         """
         feature_extractor = LayoutLMv2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
         if use_fast:
-            tokenizer = LayoutLMv2TokenizerFast.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            tokenizer = LayoutXLMTokenizerFast.from_pretrained(pretrained_model_name_or_path, **kwargs)
         else:
-            tokenizer = LayoutLMv2Tokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            tokenizer = LayoutXLMTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -149,10 +148,10 @@ class LayoutLMv2Processor:
         This method first forwards the :obj:`images` argument to
         :meth:`~transformers.LayoutLMv2FeatureExtractor.__call__`. In case :class:`~LayoutLMv2FeatureExtractor` was
         initialized with :obj:`apply_ocr` set to ``True``, it passes the obtained words and bounding boxes along with
-        the additional arguments to :meth:`~transformers.LayoutLMv2Tokenizer.__call__` and returns the output, together
+        the additional arguments to :meth:`~transformers.LayoutXLMTokenizer.__call__` and returns the output, together
         with resized :obj:`images`. In case :class:`~LayoutLMv2FeatureExtractor` was initialized with :obj:`apply_ocr`
         set to ``False``, it passes the words (:obj:`text`/:obj:`text_pair`) and :obj:`boxes` specified by the user
-        along with the additional arguments to :meth:`~transformers.LayoutLMv2Tokenizer.__call__` and returns the
+        along with the additional arguments to :meth:`~transformers.LayoutXLMTokenizer.__call__` and returns the
         output, together with resized :obj:`images`.
 
         Please refer to the docstring of the above two methods for more information.

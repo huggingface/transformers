@@ -21,13 +21,8 @@ from typing import List
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
-from transformers.models.layoutlmv2 import (
-    LayoutLMv2Tokenizer,
-    LayoutLMv2TokenizerFast,
-    LayoutXLMTokenizer,
-    LayoutXLMTokenizerFast,
-)
-from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
+from transformers.models.layoutlmv2 import LayoutXLMTokenizer, LayoutXLMTokenizerFast
+from transformers.models.layoutlmv2.tokenization_layoutxlm import VOCAB_FILES_NAMES
 from transformers.testing_utils import (
     require_pytesseract,
     require_sentencepiece,
@@ -40,7 +35,7 @@ from transformers.testing_utils import (
 if is_pytesseract_available():
     from PIL import Image
 
-    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
+    from transformers import LayoutLMv2FeatureExtractor, LayoutXLMProcessor
 
 
 SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
@@ -49,9 +44,9 @@ SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/t
 @require_pytesseract
 @require_sentencepiece
 @require_tokenizers
-class LayoutLMv2ProcessorTest(unittest.TestCase):
-    tokenizer_class = LayoutLMv2Tokenizer
-    rust_tokenizer_class = LayoutLMv2TokenizerFast
+class LayoutXLMProcessorTest(unittest.TestCase):
+    tokenizer_class = LayoutXLMTokenizer
+    rust_tokenizer_class = LayoutXLMTokenizerFast
 
     def setUp(self):
         vocab_tokens = [
@@ -105,31 +100,31 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
             processor.save_pretrained(self.tmpdirname)
-            processor = LayoutLMv2Processor.from_pretrained(self.tmpdirname)
+            processor = LayoutXLMProcessor.from_pretrained(self.tmpdirname)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-            self.assertIsInstance(processor.tokenizer, (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast))
+            self.assertIsInstance(processor.tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast))
 
             self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
             self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = LayoutLMv2Processor(feature_extractor=self.get_feature_extractor(), tokenizer=self.get_tokenizer())
+        processor = LayoutXLMProcessor(feature_extractor=self.get_feature_extractor(), tokenizer=self.get_tokenizer())
         processor.save_pretrained(self.tmpdirname)
 
         # slow tokenizer
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
 
-        processor = LayoutLMv2Processor.from_pretrained(
+        processor = LayoutXLMProcessor.from_pretrained(
             self.tmpdirname, use_fast=False, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, LayoutLMv2Tokenizer)
+        self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
@@ -138,12 +133,12 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
 
-        processor = LayoutLMv2Processor.from_pretrained(
+        processor = LayoutXLMProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, LayoutLMv2TokenizerFast)
+        self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
@@ -187,10 +182,10 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
             processor.save_pretrained(self.tmpdirname)
-            processor = LayoutLMv2Processor.from_pretrained(self.tmpdirname, use_xlm=True)
+            processor = LayoutXLMProcessor.from_pretrained(self.tmpdirname, use_xlm=True)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
             self.assertIsInstance(processor.tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast))
@@ -199,14 +194,14 @@ class LayoutXLMProcessorTest(unittest.TestCase):
             self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = LayoutLMv2Processor(feature_extractor=self.get_feature_extractor(), tokenizer=self.get_tokenizer())
+        processor = LayoutXLMProcessor(feature_extractor=self.get_feature_extractor(), tokenizer=self.get_tokenizer())
         processor.save_pretrained(self.tmpdirname)
 
         # slow tokenizer
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
 
-        processor = LayoutLMv2Processor.from_pretrained(
+        processor = LayoutXLMProcessor.from_pretrained(
             self.tmpdirname,
             use_fast=False,
             use_xlm=True,
@@ -226,7 +221,7 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
 
-        processor = LayoutLMv2Processor.from_pretrained(
+        processor = LayoutXLMProcessor.from_pretrained(
             self.tmpdirname, use_xlm=True, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
         )
 
@@ -241,7 +236,7 @@ class LayoutXLMProcessorTest(unittest.TestCase):
 @require_sentencepiece
 @require_torch
 @require_pytesseract
-class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
+class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
     @cached_property
     def get_images(self):
         # we verify our implementation on 2 document images from the DocVQA dataset
@@ -256,8 +251,8 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
     @cached_property
     def get_tokenizers(self):
-        slow_tokenizer = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
-        fast_tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        slow_tokenizer = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
+        fast_tokenizer = LayoutXLMTokenizerFast.from_pretrained("microsoft/layoutxlm-base")
         return [slow_tokenizer, fast_tokenizer]
 
     @slow
@@ -269,7 +264,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
             # not batched
             input_feat_extract = feature_extractor(images[0], return_tensors="pt")
@@ -322,7 +317,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
             # not batched
             words = ["hello", "world"]
@@ -376,7 +371,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
             # not batched
             words = ["weirdly", "world"]
@@ -441,7 +436,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
             # not batched
             question = "What's his name?"
@@ -490,7 +485,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
             # not batched
             question = "What's his name?"

@@ -18,14 +18,22 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available
+from ...file_utils import (
+    _LazyModule,
+    is_sentencepiece_available,
+    is_tokenizers_available,
+    is_torch_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
     "configuration_layoutlmv2": ["LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config"],
     "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
-    "tokenization_layoutxlm": ["LayoutXLMTokenizer"],
 }
+
+if is_sentencepiece_available():
+    _import_structure["tokenization_layoutxlm"] = ["LayoutXLMTokenizer"]
 
 if is_tokenizers_available():
     _import_structure["tokenization_layoutlmv2_fast"] = ["LayoutLMv2TokenizerFast"]
@@ -34,6 +42,7 @@ if is_tokenizers_available():
 if is_vision_available():
     _import_structure["feature_extraction_layoutlmv2"] = ["LayoutLMv2FeatureExtractor"]
     _import_structure["processing_layoutlmv2"] = ["LayoutLMv2Processor"]
+    _import_structure["processing_layoutlmv2"] = ["LayoutXLMProcessor"]
 
 if is_torch_available():
     _import_structure["modeling_layoutlmv2"] = [
@@ -49,7 +58,9 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
     from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
-    from .tokenization_layoutxlm import LayoutXLMTokenizer
+
+    if is_sentencepiece_available():
+        from .tokenization_layoutxlm import LayoutXLMTokenizer
 
     if is_tokenizers_available():
         from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
@@ -58,6 +69,7 @@ if TYPE_CHECKING:
     if is_vision_available():
         from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
         from .processing_layoutlmv2 import LayoutLMv2Processor
+        from .processing_layoutxlm import LayoutXLMProcessor
 
     if is_torch_available():
         from .modeling_layoutlmv2 import (

@@ -69,3 +69,10 @@ LayoutXLMTokenizerFast
 
 .. autoclass:: transformers.LayoutXLMTokenizerFast
     :members: __call__
+
+
+LayoutXLMProcessor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LayoutXLMProcessor
+    :members: __call__
