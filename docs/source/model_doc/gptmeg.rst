@@ -16,13 +16,17 @@ GPTMeg
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The GPTMeg model was proposed by BigScience Modeling work group. It is cloning HF's GPT2 to create GPTMeg with a few tiny changes for fp16 adaptation.
+The GPTMeg model was proposed by BigScience Modeling work group. It is cloning HF's GPT2 to create GPTMeg with a few
+tiny changes for fp16 adaptation.
 
 The 3 sources of divergence are:
 
-- `layer_norm` override to be forced to be done in fp32 - as `MixedFusedLayerNorm (meg)` performs it in fp32 and then casts back to fp16.
-- overrides `gelu_fast` to use meg's version which uses torch.jit.script which under fp16 returns diverging output (the bwd function was needed to support jit and it's not the issue)
-- `_attn` override to use `torch.baddbmm` instead of `torch.matmul` - the divergence happens due to the alpha factor as it gets applied differently in the 2 ways.
+- `layer_norm` override to be forced to be done in fp32 - as `MixedFusedLayerNorm (meg)` performs it in fp32 and then
+  casts back to fp16.
+- overrides `gelu_fast` to use meg's version which uses torch.jit.script which under fp16 returns diverging output (the
+  bwd function was needed to support jit and it's not the issue)
+- `_attn` override to use `torch.baddbmm` instead of `torch.matmul` - the divergence happens due to the alpha factor as
+  it gets applied differently in the 2 ways.
 
 
 GPTMegConfig
