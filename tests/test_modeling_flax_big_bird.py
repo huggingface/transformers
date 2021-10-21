@@ -149,6 +149,7 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
     )
 
     test_attn_probs = False
+    test_mismatched_shapes = False
 
     def setUp(self):
         self.model_tester = FlaxBigBirdModelTester(self)

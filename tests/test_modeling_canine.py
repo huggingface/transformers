@@ -220,6 +220,7 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
     )
 
     test_torchscript = False
+    test_mismatched_shapes = False
     test_resize_embeddings = False
     test_pruning = False
 
