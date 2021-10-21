@@ -180,11 +180,13 @@ class XLNetConfig(PretrainedConfig):
         self.d_model = d_model
         self.n_layer = n_layer
         self.n_head = n_head
-        assert d_model % n_head == 0
+        if d_model % n_head != 0:
+            raise ValueError(f"'d_model % n_head' ({d_model % n_head}) should be equal to 0")
         if "d_head" in kwargs:
-            assert (
-                kwargs["d_head"] == d_model // n_head
-            ), f"`d_head` ({kwargs['d_head']}) should be equal to `d_model // n_head` ({d_model // n_head})"
+            if kwargs["d_head"] != d_model // n_head:
+                raise ValueError(
+                    f"`d_head` ({kwargs['d_head']}) should be equal to `d_model // n_head` ({d_model // n_head})"
+                )
         self.d_head = d_model // n_head
         self.ff_activation = ff_activation
         self.d_inner = d_inner
