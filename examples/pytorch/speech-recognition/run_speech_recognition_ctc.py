@@ -592,15 +592,16 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     # Write model card and (optionally) push to hub
+    config_name = data_args.dataset_config_name if data_args.dataset_config_name is not None else "na"
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "speech-recognition",
         "tags": ["automatic-speech-recognition", data_args.dataset_name],
-        "dataset_args": f"Config: {data_args.dataset_config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
-        "dataset": f"{data_args.dataset_name.upper()} - {data_args.dataset_config_name.upper()}",
+        "dataset_args": f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
+        "dataset": f"{data_args.dataset_name.upper()} - {config_name.upper()}",
     }
     if "common_voice" in data_args.dataset_name:
-        kwargs["language"] = data_args.dataset_config_name
+        kwargs["language"] = config_name
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)
