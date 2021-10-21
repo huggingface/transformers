@@ -16,18 +16,14 @@ GPTMeg
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The GPTMeg model was proposed by BigScience Modeling work group. <INSERT SHORT SUMMARY HERE>
+The GPTMeg model was proposed by BigScience Modeling work group. It is cloning HF's GPT2 to create GPTMeg with a few tiny changes for fp16 adaptation.
 
-The abstract from the paper is the following:
+The 3 sources of divergence are:
 
-*<INSERT PAPER ABSTRACT HERE>*
+- `layer_norm` override to be forced to be done in fp32 - as `MixedFusedLayerNorm (meg)` performs it in fp32 and then casts back to fp16.
+- overrides `gelu_fast` to use meg's version which uses torch.jit.script which under fp16 returns diverging output (the bwd function was needed to support jit and it's not the issue)
+- `_attn` override to use `torch.baddbmm` instead of `torch.matmul` - the divergence happens due to the alpha factor as it gets applied differently in the 2 ways.
 
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by `<INSERT YOUR HF USERNAME HERE> <https://huggingface.co/<INSERT YOUR HF USERNAME
-HERE>>`__. The original code can be found `here <<INSERT LINK TO GITHUB REPO HERE>>`__.
 
 GPTMegConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -40,8 +36,7 @@ GPTMegTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPTMegTokenizer
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
+    :members: save_vocabulary
 
 
 GPTMegTokenizerFast
@@ -50,24 +45,26 @@ GPTMegTokenizerFast
 .. autoclass:: transformers.GPTMegTokenizerFast
     :members:
 
+
 GPTMeg specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.models.gptmeg.modeling_gptmeg.GPTMegDoubleHeadsModelOutput
     :members:
 
+
 GPTMegModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPTMegModel
-    :members: forward
+    :members: forward, parallelize, deparallelize
 
 
 GPTMegLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPTMegLMHeadModel
-    :members: forward
+    :members: forward, parallelize, deparallelize
 
 
 GPTMegDoubleHeadsModel
@@ -75,6 +72,7 @@ GPTMegDoubleHeadsModel
 
 .. autoclass:: transformers.GPTMegDoubleHeadsModel
     :members: forward
+
 
 GPTMegForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
