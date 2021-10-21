@@ -511,7 +511,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                                 valid_annotations = True
             else:
                 if isinstance(annotations, (list, tuple)):
-                    assert len(images) == len(annotations), "There must be as many annotations as there are images"
+                    if len(images) != len(annotations):
+                        raise ValueError("There must be as many annotations as there are images")
                     if isinstance(annotations[0], Dict):
                         if self.format == "coco_detection":
                             if isinstance(annotations[0]["annotations"], (list, tuple)):
@@ -692,12 +693,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
-        assert len(out_logits) == len(
-            target_sizes
-        ), "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-        assert (
-            target_sizes.shape[1] == 2
-        ), "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+        if len(out_logits) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+        if target_sizes.shape[1] != 2:
+            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         prob = nn.functional.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
@@ -781,9 +780,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             for an image in the batch as predicted by the model.
         """
 
-        assert len(orig_target_sizes) == len(
-            max_target_sizes
-        ), "Make sure to pass in as many orig_target_sizes as max_target_sizes"
+        if len(orig_target_sizes) != len(max_target_sizes):
+            raise ValueError("Make sure to pass in as many orig_target_sizes as max_target_sizes")
         max_h, max_w = max_target_sizes.max(0)[0].tolist()
         outputs_masks = outputs.pred_masks.squeeze(2)
         outputs_masks = nn.functional.interpolate(
@@ -827,18 +825,18 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         if target_sizes is None:
             target_sizes = processed_sizes
-        assert len(processed_sizes) == len(
-            target_sizes
-        ), "Make sure to pass in as many processed_sizes as target_sizes"
+        if len(processed_sizes) != len(target_sizes):
+            raise ValueError("Make sure to pass in as many processed_sizes as target_sizes")
 
         if is_thing_map is None:
             # default to is_thing_map of COCO panoptic
             is_thing_map = {i: i <= 90 for i in range(201)}
 
         out_logits, raw_masks, raw_boxes = outputs.logits, outputs.pred_masks, outputs.pred_boxes
-        assert (
-            len(out_logits) == len(raw_masks) == len(target_sizes)
-        ), "Make sure that you pass in as many target sizes as the batch dimension of the logits and masks"
+        if not len(out_logits) == len(raw_masks) == len(target_sizes):
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the logits and masks"
+            )
         preds = []
 
         def to_tuple(tup):
@@ -860,7 +858,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             cur_boxes = center_to_corners_format(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]
-            assert len(cur_boxes) == len(cur_classes), "Not as many boxes as there are classes"
+            if len(cur_boxes) != len(cur_classes):
+                raise ValueError("Not as many boxes as there are classes")
 
             # It may be that we have several predicted masks for the same stuff class.
             # In the following, we track the list of masks ids for each stuff class (they are merged later on)
