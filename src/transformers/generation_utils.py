@@ -480,7 +480,7 @@ class GenerationMixin:
 
         if is_encoder_decoder:
             if encoder_outputs is None:
-                raise ValueError("If is_encoder_decoder is True, make sure that encoder_outputs is defined.")
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
             encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
                 0, expanded_return_idx.to(encoder_outputs.last_hidden_state.device)
             )
@@ -1329,7 +1329,7 @@ class GenerationMixin:
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
                 if pad_token_id is None:
-                    raise ValueError("If eos_token_id is defined, make sure that pad_token_id is defined.")
+                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
@@ -1570,7 +1570,7 @@ class GenerationMixin:
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
                 if pad_token_id is None:
-                    raise ValueError("If eos_token_id is defined, make sure that pad_token_id is defined.")
+                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
