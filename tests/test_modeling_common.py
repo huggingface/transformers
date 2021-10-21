@@ -98,6 +98,7 @@ class ModelTesterMixin:
     test_resize_embeddings = True
     test_resize_position_embeddings = False
     test_head_masking = True
+    test_mismatched_shapes = True
     test_missing_keys = True
     test_model_parallel = False
     is_encoder_decoder = False
@@ -1638,6 +1639,8 @@ class ModelTesterMixin:
                     loss.backward()
 
     def test_load_with_mismatched_shapes(self):
+        if not self.test_mismatched_shapes:
+            return
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:

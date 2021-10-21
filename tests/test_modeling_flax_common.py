@@ -117,6 +117,7 @@ def random_attention_mask(shape, rng=None):
 class FlaxModelTesterMixin:
     model_tester = None
     all_model_classes = ()
+    test_mismatched_shapes = True
     is_encoder_decoder = False
 
     def _prepare_for_class(self, inputs_dict, model_class):
@@ -580,6 +581,8 @@ class FlaxModelTesterMixin:
             )
 
     def test_load_with_mismatched_shapes(self):
+        if not self.test_mismatched_shapes:
+            return
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
