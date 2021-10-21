@@ -40,7 +40,7 @@ class PLBartConfig(PretrainedConfig):
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 50265):
+        vocab_size (:obj:`int`, `optional`, defaults to 50005):
             Vocabulary size of the PLBART model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.PLBartModel`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
@@ -85,6 +85,8 @@ class PLBartConfig(PretrainedConfig):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models)
+        num_labels: (:obj:`int`, `optional`, defaults to 2):
+            The number of labels to use in :class:`~transformers.PLBartForSequenceClassification`.
         forced_eos_token_id (:obj:`int`, `optional`, defaults to 2):
             The id of the token to force as the last generated token when :obj:`max_length` is reached. Usually set to
             :obj:`eos_token_id`.
