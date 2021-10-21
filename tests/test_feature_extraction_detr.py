@@ -241,10 +241,14 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         encoded_images = feature_extractor_2(image_inputs, return_tensors="pt")
 
         if not torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4):
-            raise ValueError("The method `pad_and_return_pixel_mask` and the feature extractor didn't return the same tensors")
-            
+            raise ValueError(
+                "The method `pad_and_return_pixel_mask` and the feature extractor didn't return the same tensors"
+            )
+
         if not torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4):
-            raise ValueError("The method `pad_and_return_pixel_mask` and the feature extractor didn't return the same tensors")
+            raise ValueError(
+                "The method `pad_and_return_pixel_mask` and the feature extractor didn't return the same tensors"
+            )
 
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
