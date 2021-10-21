@@ -34,7 +34,8 @@ def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify
     or a list of PyTorch tensors if one specifies torchify=True.
     """
 
-    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+    if numpify and torchify:
+        raise ValueError("You cannot specify both numpy and PyTorch tensors at the same time")
 
     if equal_resolution:
         image_inputs = []

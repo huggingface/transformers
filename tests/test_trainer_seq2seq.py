@@ -57,8 +57,11 @@ class Seq2seqTrainerTester(TestCasePlus):
             ]
             batch["decoder_attention_mask"] = outputs.attention_mask
 
-            assert all([len(x) == 512 for x in inputs.input_ids])
-            assert all([len(x) == 128 for x in outputs.input_ids])
+            if not all([len(x) == 512 for x in inputs.input_ids]):
+                raise ValueError("Not all `inputs.input_ids` has length of 512")
+
+            if not all([len(x) == 128 for x in outputs.input_ids]):
+                raise ValueError("Not all `outputs.input_ids` has length of 128")
 
             return batch
 
