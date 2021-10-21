@@ -98,8 +98,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("splinter", "SplinterConfig"),
         ("sew-d", "SEWDConfig"),
         ("sew", "SEWConfig"),
-        ("unispeech", "UniSpeechConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
+        ("unispeech", "UniSpeechConfig"),
     ]
 )
 
