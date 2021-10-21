@@ -614,7 +614,9 @@ class FlaxModelTesterMixin:
                     self.assertIn("the shapes did not match", cl.out)
                     input_ids = ids_tensor((2, 5), 10)
                     new_model_without_prefix(input_ids)
-                    self.assertEqual(new_model_without_prefix.params["embeddings"]["word_embeddings"]["embedding"].shape[0], 10)
+                    self.assertEqual(
+                        new_model_without_prefix.params["embeddings"]["word_embeddings"]["embedding"].shape[0], 10
+                    )
 
 
 @require_flax
