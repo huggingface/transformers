@@ -16,18 +16,18 @@ limitations under the License.
 
 # Multiple Choice
 
-## Fine-tuning on SWAG with the Trainer
+## Fine-tuning on hellahellaswag with the Trainer
 
-`run_swag` allows you to fine-tune any model from our [hub](https://huggingface.co/models) (as long as its architecture as a `ForMultipleChoice` version in the library) on the SWAG dataset or your own csv/jsonlines files as long as they are structured the same way. To make it works on another dataset, you will need to tweak the `preprocess_function` inside the script.
+`run_hellaswag` allows you to fine-tune any model from our [hub](https://huggingface.co/models) (as long as its architecture as a `ForMultipleChoice` version in the library) on the hellaswag dataset or your own csv/jsonlines files as long as they are structured the same way. To make it works on another dataset, you will need to tweak the `preprocess_function` inside the script.
 
 ```bash
-python examples/multiple-choice/run_swag.py \
+python examples/multiple-choice/run_hellaswag.py \
 --model_name_or_path roberta-base \
 --do_train \
 --do_eval \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
---output_dir /tmp/swag_base \
+--output_dir /tmp/hellaswag_base \
 --per_gpu_eval_batch_size=16 \
 --per_device_train_batch_size=16 \
 --overwrite_output
@@ -41,10 +41,10 @@ eval_loss = 0.44457291918821606
 
 ## With Accelerate
 
-Based on the script [run_swag_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/multiple-choice/run_swag_no_trainer.py).
+Based on the script [run_hellaswag_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/multiple-choice/run_swag_no_trainer.py).
 
-Like `run_swag.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) (as long as its architecture as a `ForMultipleChoice` version in the library) on
-the SWAG dataset or your own data in a csv or a JSON file. The main difference is that this
+Like `run_hellaswag.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) (as long as its architecture as a `ForMultipleChoice` version in the library) on
+the hellahellaswag dataset or your own data in a csv or a JSON file. The main difference is that this
 script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like.
 
 It offers less options than the script with `Trainer` (but you can easily change the options for the optimizer
@@ -59,9 +59,9 @@ pip install accelerate
 then
 
 ```bash
-export DATASET_NAME=swag
+export DATASET_NAME=hellaswag
 
-python run_swag_no_trainer.py \
+python run_hellaswag_no_trainer.py \
   --model_name_or_path bert-base-cased \
   --dataset_name $DATASET_NAME \
   --max_seq_length 128 \
@@ -86,9 +86,9 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-export DATASET_NAME=swag
+export DATASET_NAME=hellaswag
 
-accelerate launch run_swag_no_trainer.py \
+accelerate launch run_hellaswag_no_trainer.py \
   --model_name_or_path bert-base-cased \
   --dataset_name $DATASET_NAME \
   --max_seq_length 128 \
