@@ -114,7 +114,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
         expected_shape = torch.Size((1, 1, 768))
         expected_slice = torch.tensor([[0.1457, 0.1044, 0.0174]])
 
-    if not (outputs.entity_last_hidden_state.shape == expected_shape):
+    if not (outputs.entity_last_hidden_state.shape != expected_shape):
         raise ValueError(
             f"Outputs.entity_last_hidden_state.shape is {outputs.entity_last_hidden_state.shape}, Expected shape is {expected_shape}"
         )
