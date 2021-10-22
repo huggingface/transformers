@@ -1513,8 +1513,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for checkpoint_key in loaded_keys:
                 model_key = checkpoint_key
                 if remove_prefix_from_model:
+                    # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
                     model_key = f"{prefix}.{checkpoint_key}"
                 elif add_prefix_to_model:
+                    # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
                     model_key = ".".join(checkpoint_key.split(".")[1:])
 
                 if (
