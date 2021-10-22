@@ -572,7 +572,7 @@ class OpusState:
 
         if self.extra_keys:
             raise ValueError(f"Failed to convert {self.extra_keys}")
-        if not (model.model.shared.padding_idx == self.pad_token_id):
+        if model.model.shared.padding_idx != self.pad_token_id:
             raise ValueError(f"Padding tokens {model.model.shared.padding_idx} and {self.pad_token_id} mismatched")
         return model
 
