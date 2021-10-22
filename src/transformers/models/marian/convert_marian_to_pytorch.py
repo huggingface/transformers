@@ -112,8 +112,8 @@ def load_config_from_state_dict(opus_dict):
 
 def find_model_file(dest_dir):  # this one better
     model_files = list(Path(dest_dir).glob("*.npz"))
-    if not (len(model_files) == 1, model_files):
-        raise ValueError("Find more than one model file")
+    if len(model_files) != 1:
+        raise ValueError(f"Found more than one model file: {model_files}")
     model_file = model_files[0]
     return model_file
 
