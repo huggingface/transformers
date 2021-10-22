@@ -460,7 +460,7 @@ class OpusState:
         npz_path = find_model_file(source_dir)
         self.state_dict = np.load(npz_path)
         cfg = load_config_from_state_dict(self.state_dict)
-        if not (cfg["dim-vocabs"][0] == cfg["dim-vocabs"][1]):
+        if cfg["dim-vocabs"][0] != cfg["dim-vocabs"][1]:
             raise ValueError
         if "Wpos" in self.state_dict:
             raise ValueError("Wpos key in state dictionary")
