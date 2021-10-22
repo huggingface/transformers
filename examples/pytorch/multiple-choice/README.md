@@ -16,7 +16,7 @@ limitations under the License.
 
 # Multiple Choice
 
-## Fine-tuning on hellahellaswag with the Trainer
+## Fine-tuning on hellaswag with the Trainer
 
 `run_hellaswag` allows you to fine-tune any model from our [hub](https://huggingface.co/models) (as long as its architecture as a `ForMultipleChoice` version in the library) on the hellaswag dataset or your own csv/jsonlines files as long as they are structured the same way. To make it works on another dataset, you will need to tweak the `preprocess_function` inside the script.
 
@@ -31,12 +31,6 @@ python examples/multiple-choice/run_hellaswag.py \
 --per_gpu_eval_batch_size=16 \
 --per_device_train_batch_size=16 \
 --overwrite_output
-```
-Training with the defined hyper-parameters yields the following results:
-```
-***** Eval results *****
-eval_acc = 0.8338998300509847
-eval_loss = 0.44457291918821606
 ```
 
 ## With Accelerate
