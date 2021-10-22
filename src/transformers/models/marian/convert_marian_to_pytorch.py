@@ -219,7 +219,7 @@ def write_model_card(
 
     hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
     opus_name: str = convert_hf_name_to_opus_name(hf_model_name)
-    if not (repo_root in ("OPUS-MT-train", "Tatoeba-Challenge")):
+    if repo_root not in ("OPUS-MT-train", "Tatoeba-Challenge"):
         raise ValueError(f"Repos root is {repo_root}. Expected either OPUS-MT-train or Tatoeba-Challenge")
     opus_readme_path = Path(repo_root).joinpath("models", opus_name, "README.md")
     if not (opus_readme_path.exists()):
