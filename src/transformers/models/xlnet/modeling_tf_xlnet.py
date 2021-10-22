@@ -561,7 +561,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                 bwd_pos_seq = tf.clip_by_value(bwd_pos_seq, -self.clamp_len, self.clamp_len)
 
             if bsz is not None:
-                assert bsz % 2 == 0, f"With bi_data, the batch size {bsz} should be divisible by 2"
+                if bsz % 2 != 0:
+                    raise ValueError(f"With bi_data, the batch size {bsz} should be divisible by 2")
                 fwd_pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz // 2)
                 bwd_pos_emb = self.positional_embedding(bwd_pos_seq, inv_freq, bsz // 2)
             else:
@@ -1160,7 +1161,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1429,7 +1430,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForSequenceClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1555,7 +1556,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForMultipleChoiceOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1704,7 +1705,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForTokenClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1811,7 +1812,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForQuestionAnsweringSimpleOutput,
         config_class=_CONFIG_FOR_DOC,
