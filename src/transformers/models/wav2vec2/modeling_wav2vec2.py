@@ -29,6 +29,7 @@ from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -43,6 +44,13 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+_SEQ_CLASS_CHECKPOINT = ("superb/wav2vec2-base-superb-ks",)
+_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+
+_HIDDEN_STATES_START_POSITION = 2
+
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/wav2vec2-base-960h",
@@ -256,7 +264,7 @@ def _sample_negative_indices(
 class Wav2Vec2NoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
@@ -277,7 +285,7 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
 class Wav2Vec2LayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
@@ -304,7 +312,7 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
 class Wav2Vec2GroupNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
@@ -1118,7 +1126,13 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         return hidden_states
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_PROCESSOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=Wav2Vec2BaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+    )
     def forward(
         self,
         input_values,
@@ -1128,30 +1142,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        """
-
-        Returns:
-
-        Example::
-
-            >>> from transformers import Wav2Vec2Processor, Wav2Vec2Model
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            >>> model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
-
-            >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
-
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> hidden_states = model(input_values).last_hidden_state
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1502,7 +1492,12 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         self.wav2vec2.feature_extractor._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_PROCESSOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_values,
@@ -1518,41 +1513,6 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             the sequence length of the output logits. Indices are selected in ``[-100, 0, ..., config.vocab_size -
             1]``. All labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
             config.vocab_size - 1]``.
-
-        Returns:
-
-        Example::
-
-            >>> import torch
-            >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            >>> model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
-
-            >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
-
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> logits = model(input_values).logits
-            >>> predicted_ids = torch.argmax(logits, dim=-1)
-
-            >>> transcription = processor.decode(predicted_ids[0])
-
-            >>> # compute loss
-            >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
-
-            >>> # wrap processor as target processor to encode labels
-            >>> with processor.as_target_processor():
-            >>>     labels = processor(target_transcription, return_tensors="pt").input_ids
-
-            >>> loss = model(input_values, labels=labels).loss
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1603,7 +1563,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
                 )
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
@@ -1647,7 +1607,13 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             param.requires_grad = False
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+    )
     def forward(
         self,
         input_values,
@@ -1662,29 +1628,6 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Example::
-
-            >>> import torch
-            >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
-            >>> from datasets import load_dataset
-
-            >>> processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ks")
-            >>> model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ks")
-
-            >>> ds = load_dataset("anton-l/superb_dummy", "ks", split="test")
-
-            >>> input_values = processor(ds["speech"][4], return_tensors="pt").input_values  # Batch size 1
-            >>> logits = model(input_values).logits
-            >>> predicted_class_ids = torch.argmax(logits, dim=-1)
-
-            >>> # compute loss
-            >>> target_label = "down"
-            >>> labels = torch.tensor([model.config.label2id[target_label]])
-
-            >>> loss = model(input_values, labels=labels).loss
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1699,7 +1642,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[2]
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
@@ -1722,7 +1665,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(

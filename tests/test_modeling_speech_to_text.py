@@ -715,18 +715,11 @@ class Speech2TextModelIntegrationTests(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        import soundfile as sf
-
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        ds = ds.sort("id").select(range(num_samples)).map(map_to_array)
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
-        return ds["speech"][:num_samples]
+        return [x["array"] for x in speech_samples]
 
     def test_generation_librispeech(self):
         model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
