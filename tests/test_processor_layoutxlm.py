@@ -22,7 +22,6 @@ from typing import List
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
 from transformers.models.layoutlmv2 import LayoutXLMTokenizer, LayoutXLMTokenizerFast
-from transformers.models.layoutlmv2.tokenization_layoutxlm import VOCAB_FILES_NAMES
 from transformers.testing_utils import (
     require_pytesseract,
     require_sentencepiece,
@@ -39,109 +38,6 @@ if is_pytesseract_available():
 
 
 SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
-
-
-@require_pytesseract
-@require_sentencepiece
-@require_tokenizers
-class LayoutXLMProcessorTest(unittest.TestCase):
-    tokenizer_class = LayoutXLMTokenizer
-    rust_tokenizer_class = LayoutXLMTokenizerFast
-
-    def setUp(self):
-        vocab_tokens = [
-            "[UNK]",
-            "[CLS]",
-            "[SEP]",
-            "[PAD]",
-            "[MASK]",
-            "want",
-            "##want",
-            "##ed",
-            "wa",
-            "un",
-            "runn",
-            "##ing",
-            ",",
-            "low",
-            "lowest",
-        ]
-
-        feature_extractor_map = {
-            "do_resize": True,
-            "size": 224,
-            "apply_ocr": True,
-        }
-
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(feature_extractor_map) + "\n")
-
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
-        return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
-
-    def get_feature_extractor(self, **kwargs):
-        return LayoutLMv2FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    def test_save_load_pretrained_default(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            processor = LayoutXLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-
-            processor.save_pretrained(self.tmpdirname)
-            processor = LayoutXLMProcessor.from_pretrained(self.tmpdirname)
-
-            self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-            self.assertIsInstance(processor.tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast))
-
-            self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-            self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
-
-    def test_save_load_pretrained_additional_features(self):
-        processor = LayoutXLMProcessor(feature_extractor=self.get_feature_extractor(), tokenizer=self.get_tokenizer())
-        processor.save_pretrained(self.tmpdirname)
-
-        # slow tokenizer
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
-
-        processor = LayoutXLMProcessor.from_pretrained(
-            self.tmpdirname, use_fast=False, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
-        )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizer)
-
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
-
-        # fast tokenizer
-        tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
-
-        processor = LayoutXLMProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
-        )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizerFast)
-
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
 
 @require_pytesseract
