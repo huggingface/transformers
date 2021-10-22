@@ -14,18 +14,17 @@
 # limitations under the License.
 
 
-import logging
-import sys
 import json
+import logging
 import os
+import sys
 from time import time
 from unittest.mock import patch
 
-from transformers.testing_utils import require_torch_tpu, TestCasePlus
+from transformers.testing_utils import TestCasePlus, require_torch_tpu
+
 
 # See: https://github.com/pytorch/pytorch/issues/37377
-os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
-
 
 logging.basicConfig(level=logging.DEBUG)
 
