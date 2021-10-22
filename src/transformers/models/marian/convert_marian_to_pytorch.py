@@ -393,7 +393,7 @@ def add_special_tokens_to_vocab(model_dir: Path) -> None:
 
 def check_equal(marian_cfg, k1, k2):
     v1, v2 = marian_cfg[k1], marian_cfg[k2]
-    if not (v1 == v2):
+    if v1 != v2:
         raise ValueError(f"hparams {k1},{k2} differ: {v1} != {v2}")
 
 
