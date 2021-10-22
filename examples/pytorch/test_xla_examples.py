@@ -53,9 +53,9 @@ class TorchXLAExamplesTests(TestCasePlus):
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            ./examples/text-classification/run_glue.py
+            ./examples/pytorch/text-classification/run_glue.py
             --num_cores=8
-            ./examples/text-classification/run_glue.py
+            ./examples/pytorch/text-classification/run_glue.py
             --model_name_or_path distilbert-base-uncased
             --output_dir {tmp_dir}
             --overwrite_output_dir
