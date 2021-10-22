@@ -476,7 +476,7 @@ class OpusState:
         self.source_dir = source_dir
         self.cfg = cfg
         hidden_size, intermediate_shape = self.state_dict["encoder_l1_ffn_W1"].shape
-        if not (hidden_size == cfg["dim-emb"] == 512):
+        if hidden_size != 512 or cfg["dim-emb"] != 512:
             raise ValueError(f"Hidden size {hidden_size} and configured size {cfg['dim_emb']} mismatched or not 512")
 
         # Process decoder.yml
