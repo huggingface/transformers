@@ -416,7 +416,7 @@ def check_marian_cfg_assumptions(marian_cfg):
     }
     for k, v in assumed_settings.items():
         actual = marian_cfg[k]
-        if not (actual == v):
+        if actual != v:
             raise ValueError(f"Unexpected config value for {k} expected {v} got {actual}")
     check_equal(marian_cfg, "transformer-ffn-activation", "transformer-aan-activation")
     check_equal(marian_cfg, "transformer-ffn-depth", "transformer-aan-depth")
