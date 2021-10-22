@@ -95,8 +95,12 @@ class RobertaEmbeddings(nn.Module):
 
         # End copy
         self.padding_idx = config.pad_token_id
+        # we need a bit more room than `max_position_embeddings` because
+        # all positions are incremented
+        # See `create_position_ids_from_input_ids`
+        # See `create_position_ids_from_input_embeds` (which actually seem different).
         self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+            config.max_position_embeddings + self.padding_idx + 1, config.hidden_size, padding_idx=self.padding_idx
         )
 
     def forward(
