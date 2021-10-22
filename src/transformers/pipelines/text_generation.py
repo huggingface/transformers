@@ -177,11 +177,13 @@ class TextGenerationPipeline(Pipeline):
         inputs["prompt_text"] = prompt_text
 
         if handle_long_generation == "hole":
+            cur_len = inputs["input_ids"].shape[-1]
             if "max_new_tokens" in generate_kwargs:
                 new_tokens = generate_kwargs["max_new_tokens"]
             else:
-                new_tokens = generate_kwargs.get("max_length", self.model.config.max_length)
-            cur_len = inputs["input_ids"].shape[-1]
+                new_tokens = generate_kwargs.get("max_length", self.model.config.max_length) - cur_len
+                if new_tokens < 0:
+                    raise ValueError("We cannot infer how many new tokens are expected")
             if cur_len + new_tokens > self.tokenizer.model_max_length:
                 keep_length = self.tokenizer.model_max_length - new_tokens
                 if keep_length <= 0:
