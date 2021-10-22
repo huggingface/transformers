@@ -149,8 +149,8 @@ class TextGenerationPipeline(Pipeline):
                 Prefix added to prompt.
             handle_long_generation (:obj:`str`, `optional`):
                 By default, this pipelines does not handle long generation (ones that exceed in one form or the other
-                the model maximum length). There is no perfect way to adress this (`more
-                info<https://github.com/huggingface/transformers/issues/14033#issuecomment-948385227>`__). This
+                the model maximum length). There is no perfect way to adress this (more
+                info :https://github.com/huggingface/transformers/issues/14033#issuecomment-948385227). This
                 provides common strategies to work around that problem depending on your use case.
 
                 - :obj:`None` : default strategy where nothing in particular happens
