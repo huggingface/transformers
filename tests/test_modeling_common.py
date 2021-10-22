@@ -1540,11 +1540,6 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove all head_mask
-                pt_inputs = {k: v for k, v in pt_inputs.items() if "head_mask" not in k}
 
                 # load PyTorch class
                 pt_model = model_class(config).eval()
@@ -1558,7 +1553,17 @@ class ModelTesterMixin:
                     return
 
                 fx_model_class = getattr(transformers, fx_model_class_name)
+
+                # load Flax class
                 fx_model = fx_model_class(config, dtype=jnp.float32)
+                # make sure only flax inputs are forward that actually exist in function args
+                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
+
+                # prepare inputs
+                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                # remove function args that don't exist in Flax
+                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
 
                 fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
                 fx_model.params = fx_state
@@ -1590,12 +1595,6 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove all head_mask
-                pt_inputs = {k: v for k, v in pt_inputs.items() if "head_mask" not in k}
-
                 # load corresponding PyTorch class
                 pt_model = model_class(config).eval()
 
@@ -1612,11 +1611,19 @@ class ModelTesterMixin:
 
                 # load Flax class
                 fx_model = fx_model_class(config, dtype=jnp.float32)
+                # make sure only flax inputs are forward that actually exist in function args
+                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
 
                 pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
 
                 # make sure weights are tied in PyTorch
                 pt_model.tie_weights()
+
+                # prepare inputs
+                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                # remove function args that don't exist in Flax
+                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
 
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
