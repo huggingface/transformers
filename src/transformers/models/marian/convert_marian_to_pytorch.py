@@ -597,7 +597,7 @@ def convert(source_dir: Path, dest_dir):
     tokenizer.save_pretrained(dest_dir)
 
     opus_state = OpusState(source_dir)
-    if not (opus_state.cfg["vocab_size"] == len(tokenizer.encoder)):
+    if opus_state.cfg["vocab_size"] != len(tokenizer.encoder):
         raise ValueError(
             f"Original vocab size {opus_state.cfg['vocab_size']} and new vocab size {len(tokenizer.encoder)} mismatched"
         )
