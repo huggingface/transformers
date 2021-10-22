@@ -40,7 +40,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
+from transformers.trainer_utils import EvalPrediction, get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
@@ -520,6 +520,7 @@ def main():
 
     # Post-processing:
     def postprocess_text(preds, labels):
+        preds = [" ".join(pred) for pred in preds]
         preds = [pred.strip() for pred in preds]
         labels = [label.strip() for label in labels]
 
@@ -531,11 +532,11 @@ def main():
 
     metric = load_metric("rouge")
 
-    def compute_metrics(eval_preds):
+    def compute_metrics(eval_preds: EvalPrediction):
         preds, labels = eval_preds
         if isinstance(preds, tuple):
             preds = preds[0]
-        decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
+        decoded_preds = [tokenizer.batch_decode(pred, skip_special_tokens=True) for pred in preds]
         if data_args.ignore_pad_token_for_loss:
             # Replace -100 in the labels as we can't decode them.
             labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
