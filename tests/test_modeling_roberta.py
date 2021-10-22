@@ -66,7 +66,7 @@ class RobertaModelTester:
         self.hidden_act = "gelu"
         self.hidden_dropout_prob = 0.1
         self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 100
+        self.max_position_embeddings = 512
         self.type_vocab_size = 16
         self.type_sequence_label_size = 2
         self.initializer_range = 0.02
