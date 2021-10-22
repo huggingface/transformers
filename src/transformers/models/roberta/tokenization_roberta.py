@@ -170,9 +170,6 @@ class RobertaTokenizer(GPT2Tokenizer):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-        # Attempt to fix `model_max_length` which is NOT `max_position_embeddings`
-        # since the position_ids are all shifted by `pad_token_id + 1`
-        self.model_max_length -= self.pad_token_id + 1
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
