@@ -51,6 +51,11 @@ LOCALIZED_READMES = {
         "end_prompt": "1. 想要貢獻新的模型？",
         "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
     },
+    "README_ko.md": {
+        "start_prompt": "🤗 Transformers는 다음 모델들을 제공합니다",
+        "end_prompt": "1. 새로운 모델을 올리고 싶나요?",
+        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+    },
 }
 
 
