@@ -27,7 +27,7 @@ from ...file_utils import (
 )
 
 
-_import_structure = dict()
+_import_structure = {}
 
 if is_sentencepiece_available():
     _import_structure["tokenization_layoutxlm"] = ["LayoutXLMTokenizer"]
