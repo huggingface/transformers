@@ -192,7 +192,6 @@ class TokenizerTesterMixin:
             raise ValueError("This tokenizer class has no tokenizer to be tested.")
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        print(kwargs)
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
