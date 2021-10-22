@@ -21,7 +21,7 @@ from typing import List
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
-from transformers.models.layoutlmv2 import LayoutXLMTokenizer, LayoutXLMTokenizerFast
+from transformers.models.layoutxlm import LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
     require_pytesseract,
     require_sentencepiece,

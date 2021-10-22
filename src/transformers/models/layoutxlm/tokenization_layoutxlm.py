@@ -20,6 +20,7 @@ from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece as spm
+from transformers.models.layoutlmv2.tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
 
 from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -39,7 +40,6 @@ from ..xlm_roberta.tokenization_xlm_roberta import (
     SPIECE_UNDERLINE,
     VOCAB_FILES_NAMES,
 )
-from .tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
 
 
 logger = logging.get_logger(__name__)

@@ -19,6 +19,8 @@ import os
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
+from transformers.models.layoutlmv2.tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+
 from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import (
@@ -37,7 +39,6 @@ from ..xlm_roberta.tokenization_xlm_roberta import (
     PRETRAINED_VOCAB_FILES_MAP,
     VOCAB_FILES_NAMES,
 )
-from .tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
 
 
 if is_sentencepiece_available():

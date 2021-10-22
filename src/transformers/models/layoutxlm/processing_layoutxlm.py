@@ -17,9 +17,10 @@ Processor class for LayoutXLM.
 """
 from typing import List, Optional, Union
 
+from transformers.models.layoutlmv2.feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
+
 from ...file_utils import TensorType
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
 from .tokenization_layoutxlm import LayoutXLMTokenizer
 from .tokenization_layoutxlm_fast import LayoutXLMTokenizerFast
 

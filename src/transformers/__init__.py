@@ -228,8 +228,8 @@ _import_structure = {
         "LayoutLMv2FeatureExtractor",
         "LayoutLMv2Processor",
         "LayoutLMv2Tokenizer",
-        "LayoutXLMProcessor",
     ],
+    "models.layoutxlm": ["LayoutXLMProcessor"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -366,7 +366,7 @@ if is_sentencepiece_available():
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
-    _import_structure["models.layoutlmv2"].append("LayoutXLMTokenizer")
+    _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -412,7 +412,8 @@ if is_tokenizers_available():
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
-    _import_structure["models.layoutlmv2"].extend(["LayoutLMv2TokenizerFast", "LayoutXLMTokenizerFast"])
+    _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
+    _import_structure["models.layoutxlm"].append("LayoutXLMTokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
@@ -479,7 +480,11 @@ if is_vision_available():
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
+<<<<<<< HEAD
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
+=======
+    _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
+>>>>>>> Move LayoutXLM tokenizers and processor to separate folder
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
@@ -2141,8 +2146,8 @@ if TYPE_CHECKING:
         LayoutLMv2FeatureExtractor,
         LayoutLMv2Processor,
         LayoutLMv2Tokenizer,
-        LayoutXLMProcessor,
     )
+    from .models.layoutxlm import LayoutXLMProcessor
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
@@ -2269,7 +2274,7 @@ if TYPE_CHECKING:
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
-        from .models.layoutlmv2 import LayoutXLMTokenizer
+        from .models.layoutxlm import LayoutXLMTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBart50Tokenizer, MBartTokenizer
@@ -2305,7 +2310,8 @@ if TYPE_CHECKING:
         from .models.gpt2 import GPT2TokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
-        from .models.layoutlmv2 import LayoutLMv2TokenizerFast, LayoutXLMTokenizerFast
+        from .models.layoutlmv2 import LayoutLMv2TokenizerFast
+        from .models.layoutxlm import LayoutXLMTokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
@@ -2354,6 +2360,7 @@ if TYPE_CHECKING:
         from .models.detr import DetrFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.segformer import SegformerFeatureExtractor
+        from .models.layoutxlm import LayoutXLMProcessor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *

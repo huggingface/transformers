@@ -21,7 +21,7 @@ import unittest
 from typing import List
 
 from transformers import AddedToken, LayoutXLMTokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available
-from transformers.models.layoutlmv2.tokenization_layoutxlm import LayoutXLMTokenizer
+from transformers.models.layoutxlm.tokenization_layoutxlm import LayoutXLMTokenizer
 from transformers.testing_utils import (
     is_pt_tf_cross_test,
     require_pandas,
