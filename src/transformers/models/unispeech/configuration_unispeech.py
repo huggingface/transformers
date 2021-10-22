@@ -129,7 +129,7 @@ class UniSpeechConfig(PretrainedConfig):
             Dimensionality of the final projection of both the quantized and the transformer features.
         diversity_loss_weight (:obj:`int`, `optional`, defaults to 0.1):
             The weight of the codebook diversity loss component.
-        ctc_loss_reduction (:obj:`str`, `optional`, defaults to :obj:`"sum"`):
+        ctc_loss_reduction (:obj:`str`, `optional`, defaults to :obj:`"mean"`):
             Specifies the reduction to apply to the output of ``torch.nn.CTCLoss``. Only relevant when training an
             instance of :class:`~transformers.UniSpeechForCTC`.
         ctc_zero_infinity (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -141,6 +141,8 @@ class UniSpeechConfig(PretrainedConfig):
             instance of :class:`~transformers.UniSpeechForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
+        replace_prob (:obj:`float`, `optional`, defaults to 0.5):
+            Propability that transformer feature is replaced by quantized feature for pretraining.
 
     Example::
 
@@ -195,7 +197,7 @@ class UniSpeechConfig(PretrainedConfig):
         codevector_dim=256,
         proj_codevector_dim=256,
         diversity_loss_weight=0.1,
-        ctc_loss_reduction="sum",
+        ctc_loss_reduction="mean",
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
         classifier_proj_size=256,

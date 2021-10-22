@@ -44,6 +44,7 @@ from . import dependency_versions_check
 from .file_utils import (
     _LazyModule,
     is_flax_available,
+    is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
     is_tf_available,
@@ -159,6 +160,7 @@ _import_structure = {
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
+    "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -250,6 +252,8 @@ _import_structure = {
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
+    "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
+    "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -355,6 +359,7 @@ _import_structure = {
 if is_sentencepiece_available():
     _import_structure["models.albert"].append("AlbertTokenizer")
     _import_structure["models.barthez"].append("BarthezTokenizer")
+    _import_structure["models.bartpho"].append("BartphoTokenizer")
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
@@ -494,6 +499,25 @@ else:
 
     _import_structure["utils.dummy_timm_objects"] = [
         name for name in dir(dummy_timm_objects) if not name.startswith("_")
+    ]
+
+if is_scatter_available():
+    _import_structure["models.tapas"].extend(
+        [
+            "TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TapasForMaskedLM",
+            "TapasForQuestionAnswering",
+            "TapasForSequenceClassification",
+            "TapasModel",
+            "TapasPreTrainedModel",
+            "load_tf_weights_in_tapas",
+        ]
+    )
+else:
+    from .utils import dummy_scatter_objects
+
+    _import_structure["utils.dummy_scatter_objects"] = [
+        name for name in dir(dummy_scatter_objects) if not name.startswith("_")
     ]
 
 # PyTorch-backed objects
@@ -1123,6 +1147,24 @@ if is_torch_available():
             "load_tf_weights_in_roformer",
         ]
     )
+    _import_structure["models.sew"].extend(
+        [
+            "SEW_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SEWForCTC",
+            "SEWForSequenceClassification",
+            "SEWModel",
+            "SEWPreTrainedModel",
+        ]
+    )
+    _import_structure["models.sew_d"].extend(
+        [
+            "SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SEWDForCTC",
+            "SEWDForSequenceClassification",
+            "SEWDModel",
+            "SEWDPreTrainedModel",
+        ]
+    )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
     _import_structure["models.speech_to_text"].extend(
         [
@@ -1163,17 +1205,6 @@ if is_torch_available():
             "T5Model",
             "T5PreTrainedModel",
             "load_tf_weights_in_t5",
-        ]
-    )
-    _import_structure["models.tapas"].extend(
-        [
-            "TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TapasForMaskedLM",
-            "TapasForQuestionAnswering",
-            "TapasForSequenceClassification",
-            "TapasModel",
-            "TapasPreTrainedModel",
-            "load_tf_weights_in_tapas",
         ]
     )
     _import_structure["models.transfo_xl"].extend(
@@ -2114,6 +2145,8 @@ if TYPE_CHECKING:
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
+    from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
+    from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
     from .models.speech_to_text_2 import (
@@ -2133,6 +2166,8 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
+    from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
+    from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
@@ -2208,6 +2243,7 @@ if TYPE_CHECKING:
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
         from .models.barthez import BarthezTokenizer
+        from .models.bartpho import BartphoTokenizer
         from .models.bert_generation import BertGenerationTokenizer
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
@@ -2309,6 +2345,19 @@ if TYPE_CHECKING:
         )
     else:
         from .utils.dummy_timm_objects import *
+
+    if is_scatter_available():
+        from .models.tapas import (
+            TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TapasForMaskedLM,
+            TapasForQuestionAnswering,
+            TapasForSequenceClassification,
+            TapasModel,
+            TapasPreTrainedModel,
+            load_tf_weights_in_tapas,
+        )
+    else:
+        from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
         # Benchmarks
@@ -2841,6 +2890,20 @@ if TYPE_CHECKING:
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
         )
+        from .models.sew import (
+            SEW_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SEWForCTC,
+            SEWForSequenceClassification,
+            SEWModel,
+            SEWPreTrainedModel,
+        )
+        from .models.sew_d import (
+            SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SEWDForCTC,
+            SEWDForSequenceClassification,
+            SEWDModel,
+            SEWDPreTrainedModel,
+        )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2874,15 +2937,6 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
-        )
-        from .models.tapas import (
-            TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TapasForMaskedLM,
-            TapasForQuestionAnswering,
-            TapasForSequenceClassification,
-            TapasModel,
-            TapasPreTrainedModel,
-            load_tf_weights_in_tapas,
         )
         from .models.transfo_xl import (
             TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,

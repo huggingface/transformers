@@ -355,7 +355,7 @@ class CTRLModel(CTRLPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -516,7 +516,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -619,7 +619,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -482,7 +482,7 @@ class UniSpeechSatModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = UniSpeechSatModel.from_pretrained("facebook/unispeech-sat-base-960h")
+        model = UniSpeechSatModel.from_pretrained("microsoft/unispeech-sat-base-plus")
         self.assertIsNotNone(model)
 
 
@@ -713,7 +713,7 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = UniSpeechSatModel.from_pretrained("facebook/unispeech-sat-base-960h")
+        model = UniSpeechSatModel.from_pretrained("microsoft/unispeech-sat-large")
         self.assertIsNotNone(model)
 
 

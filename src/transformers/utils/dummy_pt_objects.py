@@ -3281,6 +3281,76 @@ def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
 
 
+SEW_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SEWForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SEWForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SEWModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SEWPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SEWDForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SEWDForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SEWDModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SEWDPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class SpeechEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3487,58 +3557,6 @@ def load_tf_weights_in_t5(*args, **kwargs):
     requires_backends(load_tf_weights_in_t5, ["torch"])
 
 
-TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class TapasForMaskedLM:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class TapasForQuestionAnswering:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class TapasForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class TapasModel:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class TapasPreTrainedModel:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-def load_tf_weights_in_tapas(*args, **kwargs):
-    requires_backends(load_tf_weights_in_tapas, ["torch"])
-
-
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3611,9 +3629,23 @@ class TrOCRPreTrainedModel:
 UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class UniSpeechForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class UniSpeechForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+
+class UniSpeechForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class UniSpeechModel:
@@ -3637,9 +3669,23 @@ class UniSpeechPreTrainedModel:
 UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class UniSpeechSatForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class UniSpeechSatForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+
+class UniSpeechSatForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class UniSpeechSatModel:

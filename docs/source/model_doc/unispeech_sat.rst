@@ -41,6 +41,7 @@ Tips:
   Please use :class:`~transformers.Wav2Vec2Processor` for the feature extraction.
 - UniSpeechSat model can be fine-tuned using connectionist temporal classification (CTC) so the model output has to be
   decoded using :class:`~transformers.Wav2Vec2CTCTokenizer`.
+- UniSpeechSat performs especially well on speaker verification, speaker identification, and speaker diarization tasks.
 
 This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__.
 

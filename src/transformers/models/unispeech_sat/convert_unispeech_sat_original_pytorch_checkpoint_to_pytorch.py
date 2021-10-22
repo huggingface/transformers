@@ -16,12 +16,9 @@
 
 
 import argparse
-import json
-import os
 
 import fairseq
 import torch
-from fairseq.data import Dictionary
 
 from transformers import (  # UniSpeechSatCTCTokenizer,; UniSpeechSatFeatureExtractor,; UniSpeechSatProcessor,
     UniSpeechSatConfig,
@@ -188,43 +185,7 @@ def convert_unispeech_sat_checkpoint(checkpoint_path, pytorch_dump_folder_path, 
     else:
         config = UniSpeechSatConfig()
 
-    if dict_path:
-        target_dict = Dictionary.load(dict_path)
-
-        # important change bos & pad token id since CTC symbol is <pad> and
-        # not <s> as in fairseq
-        config.bos_token_id = target_dict.pad_index
-        config.pad_token_id = target_dict.bos_index
-        config.eos_token_id = target_dict.eos_index
-        config.vocab_size = len(target_dict.symbols)
-        vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
-        if not os.path.isdir(pytorch_dump_folder_path):
-            logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
-            return
-        os.makedirs(pytorch_dump_folder_path, exist_ok=True)
-        with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
-            json.dump(target_dict.indices, vocab_handle)
-        tokenizer = UniSpeechSatCTCTokenizer(
-            vocab_path,
-            unk_token=target_dict.unk_word,
-            pad_token=target_dict.pad_word,
-            bos_token=target_dict.bos_word,
-            eos_token=target_dict.eos_word,
-            word_delimiter_token="|",
-            do_lower_case=False,
-        )
-        return_attention_mask = True if config.feat_extract_norm == "layer" else False
-        feature_extractor = UniSpeechSatFeatureExtractor(
-            feature_size=1,
-            sampling_rate=16000,
-            padding_value=0,
-            do_normalize=True,
-            return_attention_mask=return_attention_mask,
-        )
-        processor = UniSpeechSatProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-        processor.save_pretrained(pytorch_dump_folder_path)
-    else:
-        dict_path = ""
+    dict_path = ""
 
     hf_wav2vec = UniSpeechSatForPreTraining(config)
 
