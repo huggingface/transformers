@@ -154,8 +154,8 @@ class TextGenerationPipeline(Pipeline):
                 provides common strategies to work around that problem depending on your use case.
 
                 - :obj:`None` : default strategy where nothing in particular happens
-                - :obj:`"hole"`: Truncates left of input, and leaves a gap wide enough
-                    to let generation happen (might truncate a lot of the prompt and not suitable when generation exceed the model capacity)
+                - :obj:`"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
+                  truncate a lot of the prompt and not suitable when generation exceed the model capacity)
 
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
