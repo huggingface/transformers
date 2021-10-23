@@ -402,6 +402,8 @@ if __name__ == "__main__":
     tokenized_datasets = dataset.map(
         tokenize_function,
         batched=True,
+        num_proc=data_args.preprocessing_num_workers,
+        load_from_cache_file=not data_args.overwrite_cache,
     )
 
     shuffle_seed = training_args.seed
