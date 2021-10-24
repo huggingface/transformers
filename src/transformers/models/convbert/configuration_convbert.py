@@ -73,7 +73,8 @@ class ConvBertConfig(PretrainedConfig):
             The number of groups for grouped linear layers for ConvBert model
         conv_kernel_size (:obj:`int`, `optional`, defaults to 9):
             The size of the convolutional kernel.
-
+        classifier_dropout (:obj:`float`, `optional`):
+            The dropout ratio for the classification head.
 
     Example::
         >>> from transformers import ConvBertModel, ConvBertConfig
@@ -108,6 +109,7 @@ class ConvBertConfig(PretrainedConfig):
         head_ratio=2,
         conv_kernel_size=9,
         num_groups=1,
+        classifier_dropout=None,
         **kwargs,
     ):
         super().__init__(
@@ -134,3 +136,4 @@ class ConvBertConfig(PretrainedConfig):
         self.head_ratio = head_ratio
         self.conv_kernel_size = conv_kernel_size
         self.num_groups = num_groups
+        self.classifier_dropout = classifier_dropout

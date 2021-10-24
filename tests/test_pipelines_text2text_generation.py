@@ -14,12 +14,43 @@
 
 import unittest
 
-from .test_pipelines_common import MonoInputPipelineCommonMixin
+from transformers import (
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    Text2TextGenerationPipeline,
+    pipeline,
+)
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
+
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
-class Text2TextGenerationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
-    pipeline_task = "text2text-generation"
-    small_models = ["patrickvonplaten/t5-tiny-random"]  # Default model - Models tested without the @slow decorator
-    large_models = []  # Models tested with the @slow decorator
-    invalid_inputs = [4, "<mask>"]
-    mandatory_keys = ["generated_text"]
+@is_pipeline_test
+class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+        generator = Text2TextGenerationPipeline(model=model, tokenizer=tokenizer)
+
+        outputs = generator("Something there")
+        self.assertEqual(outputs, [{"generated_text": ANY(str)}])
+        # These are encoder decoder, they don't just append to incoming string
+        self.assertFalse(outputs[0]["generated_text"].startswith("Something there"))
+
+        with self.assertRaises(ValueError):
+            generator(4)
+
+    @require_torch
+    def test_small_model_pt(self):
+        generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="pt")
+        # do_sample=False necessary for reproducibility
+        outputs = generator("Something there", do_sample=False)
+        self.assertEqual(outputs, [{"generated_text": ""}])
+
+    @require_tf
+    def test_small_model_tf(self):
+        generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="tf")
+        # do_sample=False necessary for reproducibility
+        outputs = generator("Something there", do_sample=False)
+        self.assertEqual(outputs, [{"generated_text": ""}])

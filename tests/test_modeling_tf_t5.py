@@ -26,7 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import T5Tokenizer, TFT5EncoderModel, TFT5ForConditionalGeneration, TFT5Model
+    from transformers import ByT5Tokenizer, T5Tokenizer, TFT5EncoderModel, TFT5ForConditionalGeneration, TFT5Model
 
 
 class TFT5ModelTester:
@@ -310,6 +310,10 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFT5Model.from_pretrained("t5-small")
         self.assertIsNotNone(model)
 
+    def test_generate_with_headmasking(self):
+        # TODO: Fix head-masking according to PyTorch T5 model
+        pass
+
 
 class TFT5EncoderOnlyModelTester:
     def __init__(
@@ -496,6 +500,30 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
+    def test_small_byt5_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.9.1
+
+        >>> path_to_byt5_small_checkpoint = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_tf_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = t5.data.ByteVocabulary()
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = TFT5ForConditionalGeneration.from_pretrained("google/byt5-small")
+        tokenizer = ByT5Tokenizer.from_pretrained("google/byt5-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="tf").input_ids
+        labels = tokenizer("Hi I am", return_tensors="tf").input_ids
+
+        loss = model(input_ids, labels=labels).loss
+        mtf_score = -tf.math.reduce_sum(loss).numpy()
+
+        EXPECTED_SCORE = -60.7397
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+
+    @slow
     def test_summarization(self):
         model = self.model
         tok = T5Tokenizer.from_pretrained("t5-base")
@@ -638,3 +666,33 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
         self.assertEqual(translation, expected_translation)
+
+    def test_finetune_keras_trainer(self):
+        """Ensure that the model can be fine-tuned via the keras API and
+        that metrics work as expected.
+        """
+
+        # This metric expects to be called with the logits output
+        def _accuracy(y_true, y_pred):
+            return tf.keras.metrics.sparse_categorical_crossentropy(y_true[:, 0], y_pred[:, 0])
+
+        # measure the accuracy of the first token
+        class FirstTokenAccuracy(tf.keras.metrics.MeanMetricWrapper):
+            def __init__(self, name="accuracy", **kwargs):
+                super().__init__(_accuracy, name=name, **kwargs)
+
+        model = self.model
+        model.compile("adam", metrics=FirstTokenAccuracy())
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        examples = [
+            ("sentiment: Everything is awesome!", "positive"),
+            ("sentiment: Tensorflow datasets are hard to use", "negative"),
+        ]
+
+        inputs = dict(tokenizer([x[0] for x in examples], padding=True, return_tensors="tf"))
+        inputs["labels"] = tokenizer([x[1] for x in examples], return_tensors="tf").input_ids
+
+        model.fit(inputs)
+        m = model.evaluate(inputs)
+        self.assertEqual(len(m), 2)

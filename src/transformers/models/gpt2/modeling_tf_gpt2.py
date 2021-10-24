@@ -174,7 +174,7 @@ class TFMLP(tf.keras.layers.Layer):
         nx = config.n_embd
         self.c_fc = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_fc")
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
-        self.act = get_tf_activation("gelu")
+        self.act = get_tf_activation(config.activation_function)
         self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
 
     def call(self, x, training=False):
@@ -587,7 +587,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -679,7 +679,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -959,7 +959,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="microsoft/DialogRPT-updown",
         output_type=TFSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,

@@ -32,14 +32,16 @@ from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
     USER,
+    CaptureLogger,
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     is_staging_test,
-    require_onnx,
+    require_keras2onnx,
     require_tf,
     slow,
     tooslow,
 )
+from transformers.utils import logging
 
 
 if is_tf_available():
@@ -57,9 +59,21 @@ if is_tf_available():
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
+        TFAutoModel,
+        TFAutoModelForSequenceClassification,
         TFBertModel,
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
+    )
+    from transformers.generation_tf_utils import (
+        TFBeamSampleDecoderOnlyOutput,
+        TFBeamSampleEncoderDecoderOutput,
+        TFBeamSearchDecoderOnlyOutput,
+        TFBeamSearchEncoderDecoderOutput,
+        TFGreedySearchDecoderOnlyOutput,
+        TFGreedySearchEncoderDecoderOutput,
+        TFSampleDecoderOnlyOutput,
+        TFSampleEncoderDecoderOutput,
     )
 
     if _tf_gpu_memory_limit is not None:
@@ -91,6 +105,7 @@ class TFModelTesterMixin:
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
+    test_mismatched_shapes = True
     test_resize_embeddings = True
     test_head_masking = True
     is_encoder_decoder = False
@@ -315,7 +330,7 @@ class TFModelTesterMixin:
 
             self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
 
-    @require_onnx
+    @require_keras2onnx
     @slow
     def test_onnx_runtime_optimize(self):
         if not self.test_onnx:
@@ -445,6 +460,8 @@ class TFModelTesterMixin:
             for name, key in self._prepare_for_class(inputs_dict, model_class).items():
                 if type(key) == bool:
                     pt_inputs_dict[name] = key
+                elif name == "input_values":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
 
@@ -455,6 +472,7 @@ class TFModelTesterMixin:
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
             tfo = tf_model(self._prepare_for_class(inputs_dict, model_class), training=False)
+
             tf_hidden_states = tfo[0].numpy()
             pt_hidden_states = pto[0].numpy()
 
@@ -486,6 +504,8 @@ class TFModelTesterMixin:
                 if type(key) == bool:
                     key = np.array(key, dtype=bool)
                     pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
+                elif name == "input_values":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
             # need to rename encoder-decoder "inputs" for PyTorch
@@ -1061,7 +1081,7 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
+        input_ids = inputs_dict.get("input_ids", None)
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
@@ -1095,9 +1115,40 @@ class TFModelTesterMixin:
             generated_ids = output_tokens[:, input_ids.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
 
+    def test_lm_head_model_no_beam_search_generate_dict_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict.get("input_ids", None)
+
+        # iterate over all generative models
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            output_greedy = model.generate(
+                input_ids,
+                do_sample=False,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+            output_sample = model.generate(
+                input_ids,
+                do_sample=True,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_greedy, TFGreedySearchEncoderDecoderOutput)
+                self.assertIsInstance(output_sample, TFSampleEncoderDecoderOutput)
+            else:
+                self.assertIsInstance(output_greedy, TFGreedySearchDecoderOnlyOutput)
+                self.assertIsInstance(output_sample, TFSampleDecoderOnlyOutput)
+
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
+        input_ids = inputs_dict.get("input_ids", None)
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
@@ -1134,6 +1185,39 @@ class TFModelTesterMixin:
             # only count generated tokens
             generated_ids = output_tokens[:, input_ids.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
+
+    def test_lm_head_model_beam_search_generate_dict_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict.get("input_ids", None)
+
+        # iterate over all generative models
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            output_beam_search = model.generate(
+                input_ids,
+                num_beams=2,
+                do_sample=False,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+            output_beam_sample = model.generate(
+                input_ids,
+                num_beams=2,
+                do_sample=True,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_beam_search, TFBeamSearchEncoderDecoderOutput)
+                self.assertIsInstance(output_beam_sample, TFBeamSampleEncoderDecoderOutput)
+            else:
+                self.assertIsInstance(output_beam_search, TFBeamSearchDecoderOnlyOutput)
+                self.assertIsInstance(output_beam_sample, TFBeamSampleDecoderOnlyOutput)
 
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1195,6 +1279,86 @@ class TFModelTesterMixin:
 
                 self.assertEqual(loss.shape, [loss_size])
 
+    def test_generate_with_headmasking(self):
+        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+
+            # We want to test only encoder-decoder models
+            if not config.is_encoder_decoder:
+                continue
+
+            head_masking = {
+                "head_mask": tf.zeros((config.encoder_layers, config.encoder_attention_heads)),
+                "decoder_head_mask": tf.zeros((config.decoder_layers, config.decoder_attention_heads)),
+                "cross_attn_head_mask": tf.zeros((config.decoder_layers, config.decoder_attention_heads)),
+            }
+
+            signature = inspect.signature(model.call)
+            if set(head_masking.keys()) < set([*signature.parameters.keys()]):
+                continue
+
+            for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
+                out = model.generate(
+                    inputs_dict["input_ids"],
+                    num_beams=1,
+                    max_length=inputs_dict["input_ids"] + 5,
+                    output_attentions=True,
+                    return_dict_in_generate=True,
+                    **{name: mask},
+                )
+                # We check the state of decoder_attentions and cross_attentions just from the last step
+                attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
+                self.assertEqual(sum([tf.reduce_sum(w).numpy() for w in attn_weights]), 0.0)
+
+    def test_load_with_mismatched_shapes(self):
+        if not self.test_mismatched_shapes:
+            return
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class not in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+                continue
+
+            with self.subTest(msg=f"Testing {model_class}"):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    model = model_class(config)
+                    inputs = self._prepare_for_class(inputs_dict, model_class)
+                    _ = model(**inputs)
+                    model.save_pretrained(tmp_dir)
+
+                    # Fails when we don't set ignore_mismatched_sizes=True
+                    with self.assertRaises(ValueError):
+                        new_model = TFAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                    with self.assertRaises(ValueError):
+                        new_model_without_prefix = TFAutoModel.from_pretrained(tmp_dir, vocab_size=10)
+
+                    logger = logging.get_logger("transformers.modeling_tf_utils")
+                    with CaptureLogger(logger) as cl:
+                        new_model = TFAutoModelForSequenceClassification.from_pretrained(
+                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True
+                        )
+                    self.assertIn("the shapes did not match", cl.out)
+
+                    logits = new_model(**inputs).logits
+                    self.assertEqual(logits.shape[1], 42)
+
+                    with CaptureLogger(logger) as cl:
+                        new_model_without_prefix = TFAutoModel.from_pretrained(
+                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
+                        )
+                    self.assertIn("the shapes did not match", cl.out)
+
+                    # Although Tf models always have a prefix pointing to `MainLayer`,
+                    # we still add this "without prefix" test to keep a consistency between tf and pt tests.
+                    input_ids = ids_tensor((2, 8), 10)
+                    if self.is_encoder_decoder:
+                        new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
+                    else:
+                        new_model_without_prefix(input_ids)
+
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens
         special_tokens = []
@@ -1247,6 +1411,22 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     output = tf.constant(values, shape=shape, dtype=dtype if dtype is not None else tf.int32)
 
     return output
+
+
+def floats_tensor(shape, scale=1.0, rng=None, name=None, dtype=None):
+    """Creates a random float32 tensor"""
+    if rng is None:
+        rng = random.Random()
+
+    total_dims = 1
+    for dim in shape:
+        total_dims *= dim
+
+    values = []
+    for _ in range(total_dims):
+        values.append(rng.random() * scale)
+
+    return tf.reshape(tf.constant(values, dtype=dtype if dtype is not None else tf.float32), shape=shape)
 
 
 @require_tf
@@ -1374,7 +1554,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         # Make sure model is properly initialized
         _ = model(model.dummy_inputs)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model-tf", use_auth_token=self._token)
+            model.save_pretrained(os.path.join(tmp_dir, "test-model-tf"), push_to_hub=True, use_auth_token=self._token)
 
             new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
             models_equal = True
@@ -1390,9 +1570,8 @@ class TFModelPushToHubTester(unittest.TestCase):
         model = TFBertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(
-                tmp_dir,
+                os.path.join(tmp_dir, "test-model-tf-org"),
                 push_to_hub=True,
-                repo_name="test-model-tf-org",
                 use_auth_token=self._token,
                 organization="valid_org",
             )

@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import inspect
 import unittest
 
 from transformers import is_torch_available
@@ -23,7 +24,13 @@ from transformers.testing_utils import require_torch, slow, torch_device
 if is_torch_available():
     import torch
 
-    from transformers import BartForConditionalGeneration, BartTokenizer, top_k_top_p_filtering
+    from transformers import (
+        BartForConditionalGeneration,
+        BartTokenizer,
+        GPT2LMHeadModel,
+        GPT2Tokenizer,
+        top_k_top_p_filtering,
+    )
     from transformers.generation_beam_search import BeamSearchScorer
     from transformers.generation_logits_process import (
         ForcedBOSTokenLogitsProcessor,
@@ -1072,6 +1079,45 @@ class GenerationTesterMixin:
                     output, input_ids, model.config, num_return_sequences=num_return_sequences * beam_scorer.num_beams
                 )
 
+    def test_generate_with_head_masking(self):
+        """Test designed for encoder-decoder models to ensure the attention head masking is used."""
+        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            model = model_class(config).to(torch_device)
+            # We want to test only encoder-decoder models
+            if not config.is_encoder_decoder:
+                continue
+
+            head_masking = {
+                "head_mask": torch.zeros(config.encoder_layers, config.encoder_attention_heads, device=torch_device),
+                "decoder_head_mask": torch.zeros(
+                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
+                ),
+                "cross_attn_head_mask": torch.zeros(
+                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
+                ),
+            }
+
+            signature = inspect.signature(model.forward)
+            # We want to test only models where encoder/decoder head masking is implemented
+            if not set(head_masking.keys()) < set([*signature.parameters.keys()]):
+                continue
+
+            for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
+                out = model.generate(
+                    input_ids,
+                    attention_mask=attention_mask,
+                    num_beams=1,
+                    output_attentions=True,
+                    return_dict_in_generate=True,
+                    remove_invalid_values=True,
+                    **{name: mask},
+                )
+                # We check the state of decoder_attentions and cross_attentions just from the last step
+                attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
+                self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
+
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
         num_sequences_in_output = batch_size * num_return_sequences
@@ -1576,3 +1622,61 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # BeamSearchScorer max_length should not influence "real" max_length
         self.assertEqual(generated_ids.tolist(), generated_ids_no_max_len.tolist())
+
+    def test_max_new_tokens_encoder_decoder(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 15])
+
+        max_new_tokens = 3
+        bart_model.config.max_length = 20
+
+        # Encoder decoder call
+        outputs = bart_model.generate(input_ids, max_new_tokens=max_new_tokens)
+        # 1 BOS + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 4])
+
+        # Decoder only call
+        outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=max_new_tokens)
+        # 15 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 18])
+
+        # Encoder decoder call > 20
+        outputs = bart_model.generate(max_new_tokens=max_new_tokens + 20)
+
+        # 1 BOS + 20 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 24])
+
+        # max_new_tokens and max_length serve the same purpose and should not be used together.
+        with self.assertWarns(UserWarning):
+            bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)
+
+    def test_max_new_tokens_decoder_only(self):
+        article = """Justin Timberlake."""
+        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        gpt2_model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 9])
+
+        max_new_tokens = 3
+        gpt2_model.config.max_length = 20
+
+        # call < 20
+        outputs = gpt2_model.generate(input_ids, max_new_tokens=max_new_tokens)
+
+        # 9 input_ids + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 12])
+
+        # call > 20
+        outputs = gpt2_model.generate(max_new_tokens=max_new_tokens + 20)
+
+        # 1 BOS token + 23 new tokens
+        self.assertEqual(list(outputs.shape), [1, 24])
+
+        # max_new_tokens and max_length serve the same purpose and should not be used together.
+        with self.assertWarns(UserWarning):
+            gpt2_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)

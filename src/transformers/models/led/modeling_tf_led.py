@@ -56,9 +56,8 @@ LARGE_NEGATIVE = -1e8
 
 
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    shifted_input_ids = tf.roll(input_ids, 1, axis=-1)
-    start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
-    shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
+    start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
+    shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids = tf.where(
         shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
@@ -1603,7 +1602,9 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.layerdrop = config.encoder_layerdrop
+        if config.encoder_layerdrop > 0:
+            logger.warning("Layerdrop is currently disabled in TFLED models.")
+        self.layerdrop = 0.0
         self.padding_idx = config.pad_token_id
 
         if isinstance(config.attention_window, int):
@@ -1868,7 +1869,9 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         self.config = config
         self.padding_idx = config.pad_token_id
         self.embed_tokens = embed_tokens
-        self.layerdrop = config.decoder_layerdrop
+        if config.decoder_layerdrop > 0:
+            logger.warning("Layerdrop is currently disabled in TFLED models.")
+        self.layerdrop = 0.0
         self.embed_positions = TFLEDLearnedPositionalEmbedding(
             config.max_decoder_position_embeddings,
             config.d_model,
@@ -2227,7 +2230,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLEDSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2452,7 +2455,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             past_key_values=outputs.past_key_values,  # index 1 of d outputs
             decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
             decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
-            encoder_last_hidden_state=outputs.last_hidden_state,  # index 0 of encoder outputs
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,  # index 0 of encoder outputs
             encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
             encoder_global_attentions=outputs.encoder_global_attentions,
@@ -2477,7 +2480,15 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             encoder_global_attentions=enc_g_attns,
         )
 
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs) -> Dict:
+    def prepare_inputs_for_generation(
+        self,
+        decoder_input_ids,
+        past,
+        attention_mask,
+        head_mask=None,
+        use_cache=None,
+        **kwargs,
+    ) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
         if len(past) == 1:
             assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
@@ -2510,8 +2521,12 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
+            "head_mask": head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
+
+    def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
     def _reorder_cache(past, beam_idx):

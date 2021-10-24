@@ -175,9 +175,9 @@ class TrainerCallback:
             The optimizer used for the training steps.
         lr_scheduler (:obj:`torch.optim.lr_scheduler.LambdaLR`):
             The scheduler used for setting the learning rate.
-        train_dataloader (:obj:`torch.utils.data.dataloader.DataLoader`, `optional`):
+        train_dataloader (:obj:`torch.utils.data.DataLoader`, `optional`):
             The current dataloader used for training.
-        eval_dataloader (:obj:`torch.utils.data.dataloader.DataLoader`, `optional`):
+        eval_dataloader (:obj:`torch.utils.data.DataLoader`, `optional`):
             The current dataloader used for training.
         metrics (:obj:`Dict[str, float]`):
             The metrics computed by the last evaluation phase.
@@ -239,6 +239,12 @@ class TrainerCallback:
         """
         Event called at the beginning of a training step. If using gradient accumulation, one training step might take
         several inputs.
+        """
+        pass
+
+    def on_substep_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called at the end of an substep during gradient accumulation.
         """
         pass
 
@@ -355,6 +361,9 @@ class CallbackHandler(TrainerCallback):
         control.should_save = False
         return self.call_event("on_step_begin", args, state, control)
 
+    def on_substep_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
+        return self.call_event("on_substep_end", args, state, control)
+
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_step_end", args, state, control)
 
@@ -403,23 +412,16 @@ class DefaultFlowCallback(TrainerCallback):
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
-        if (
-            args.logging_strategy == IntervalStrategy.STEPS
-            and args.logging_steps > 0
-            and state.global_step % args.logging_steps == 0
-        ):
+        if args.logging_strategy == IntervalStrategy.STEPS and state.global_step % args.logging_steps == 0:
             control.should_log = True
 
         # Evaluate
         if args.evaluation_strategy == IntervalStrategy.STEPS and state.global_step % args.eval_steps == 0:
             control.should_evaluate = True
-            if args.load_best_model_at_end:
-                control.should_save = True
 
         # Save
         if (
-            not args.load_best_model_at_end
-            and args.save_strategy == IntervalStrategy.STEPS
+            args.save_strategy == IntervalStrategy.STEPS
             and args.save_steps > 0
             and state.global_step % args.save_steps == 0
         ):
@@ -439,8 +441,6 @@ class DefaultFlowCallback(TrainerCallback):
         # Evaluate
         if args.evaluation_strategy == IntervalStrategy.EPOCH:
             control.should_evaluate = True
-            if args.load_best_model_at_end:
-                control.should_save = True
 
         # Save
         if args.save_strategy == IntervalStrategy.EPOCH:

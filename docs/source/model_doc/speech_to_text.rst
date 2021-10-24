@@ -42,8 +42,8 @@ features. The :class:`~transformers.Speech2TextProcessor` wraps :class:`~transfo
 predicted token ids.
 
 The feature extractor depends on :obj:`torchaudio` and the tokenizer depends on :obj:`sentencepiece` so be sure to
-install those packages before running the examples. You could either install those as extra speech dependancies with
-``pip install transformers"[speech, sentencepiece]"`` or install the packages seperatly with ``pip install torchaudio
+install those packages before running the examples. You could either install those as extra speech dependencies with
+``pip install transformers"[speech, sentencepiece]"`` or install the packages seperately with ``pip install torchaudio
 sentencepiece``. Also ``torchaudio`` requires the development version of the `libsndfile
 <http://www.mega-nerd.com/libsndfile/>`__ package which can be installed via a system package manager. On Ubuntu it can
 be installed as follows: ``apt install libsndfile1-dev``
@@ -66,7 +66,7 @@ be installed as follows: ``apt install libsndfile1-dev``
         ...     batch["speech"] = speech
         ...     return batch
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
@@ -98,7 +98,7 @@ be installed as follows: ``apt install libsndfile1-dev``
         ...     batch["speech"] = speech
         ...     return batch
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")

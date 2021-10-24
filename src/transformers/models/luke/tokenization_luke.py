@@ -85,7 +85,9 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
             return_overflowing_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to return overflowing token sequences.
+                Whether or not to return overflowing token sequences. If a pair of sequences of input ids (or a batch
+                of pairs) is provided with :obj:`truncation_strategy = longest_first` or :obj:`True`, an error is
+                raised instead of returning overflowing tokens.
             return_special_tokens_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return special tokens mask information.
             return_offsets_mapping (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -210,8 +212,8 @@ class LukeTokenizer(RobertaTokenizer):
             if isinstance(entity_token_2, str)
             else entity_token_2
         )
-        kwargs["additional_special_tokens"] = [entity_token_1, entity_token_2]
-        kwargs["additional_special_tokens"] += kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] += [entity_token_1, entity_token_2]
 
         super().__init__(
             vocab_file=vocab_file,
@@ -517,9 +519,9 @@ class LukeTokenizer(RobertaTokenizer):
 
         if return_offsets_mapping:
             raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers."
+                "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
-                "transformers.PreTrainedTokenizerFast."
+                "transformers.PreTrainedTokenizerFast. "
                 "More information on available tokenizers at "
                 "https://github.com/huggingface/transformers/pull/2674"
             )
@@ -681,7 +683,7 @@ class LukeTokenizer(RobertaTokenizer):
     ) -> BatchEncoding:
         if return_offsets_mapping:
             raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers."
+                "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
@@ -1037,8 +1039,9 @@ class LukeTokenizer(RobertaTokenizer):
         Prepares a sequence of input id, entity id and entity span, or a pair of sequences of inputs ids, entity ids,
         entity spans so that it can be used by the model. It adds special tokens, truncates sequences if overflowing
         while taking into account the special tokens and manages a moving window (with user defined stride) for
-        overflowing tokens
-
+        overflowing tokens. Please Note, for `pair_ids` different than `None` and `truncation_strategy = longest_first`
+        or `True`, it is not possible to return overflowing tokens. Such a combination of arguments will raise an
+        error.
 
         Args:
             ids (:obj:`List[int]`):
@@ -1077,6 +1080,16 @@ class LukeTokenizer(RobertaTokenizer):
                 "Asking to return token_type_ids while setting add_special_tokens to False "
                 "results in an undefined behavior. Please set add_special_tokens to True or "
                 "set return_token_type_ids to None."
+            )
+        if (
+            return_overflowing_tokens
+            and truncation_strategy == TruncationStrategy.LONGEST_FIRST
+            and pair_ids is not None
+        ):
+            raise ValueError(
+                "Not possible to return overflowing tokens for pair of sequences with the "
+                "`longest_first`. Please select another truncation strategy than `longest_first`, "
+                "for instance `only_second` or `only_first`."
             )
 
         # Load from model defaults
@@ -1295,7 +1308,7 @@ class LukeTokenizer(RobertaTokenizer):
         # The model's main input name, usually `input_ids`, has be passed for padding
         if self.model_input_names[0] not in encoded_inputs:
             raise ValueError(
-                "You should supply an encoding or a list of encodings to this method"
+                "You should supply an encoding or a list of encodings to this method "
                 f"that includes {self.model_input_names[0]}, but you provided {list(encoded_inputs.keys())}"
             )
 
@@ -1447,17 +1460,23 @@ class LukeTokenizer(RobertaTokenizer):
             or (entities_provided and len(encoded_inputs["entity_ids"]) != max_entity_length)
         )
 
+        # Initialize attention mask if not present.
+        if return_attention_mask and "attention_mask" not in encoded_inputs:
+            encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
+        if entities_provided and return_attention_mask and "entity_attention_mask" not in encoded_inputs:
+            encoded_inputs["entity_attention_mask"] = [1] * len(encoded_inputs["entity_ids"])
+
         if needs_to_be_padded:
             difference = max_length - len(encoded_inputs["input_ids"])
             if entities_provided:
                 entity_difference = max_entity_length - len(encoded_inputs["entity_ids"])
             if self.padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"]) + [0] * difference
+                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                     if entities_provided:
-                        encoded_inputs["entity_attention_mask"] = [1] * len(encoded_inputs["entity_ids"]) + [
-                            0
-                        ] * entity_difference
+                        encoded_inputs["entity_attention_mask"] = (
+                            encoded_inputs["entity_attention_mask"] + [0] * entity_difference
+                        )
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = encoded_inputs["token_type_ids"] + [0] * difference
                     if entities_provided:
@@ -1482,11 +1501,11 @@ class LukeTokenizer(RobertaTokenizer):
 
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + [1] * len(encoded_inputs["input_ids"])
+                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
                     if entities_provided:
-                        encoded_inputs["entity_attention_mask"] = [0] * entity_difference + [1] * len(
-                            encoded_inputs["entity_ids"]
-                        )
+                        encoded_inputs["entity_attention_mask"] = [0] * entity_difference + encoded_inputs[
+                            "entity_attention_mask"
+                        ]
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = [0] * difference + encoded_inputs["token_type_ids"]
                     if entities_provided:
@@ -1510,11 +1529,6 @@ class LukeTokenizer(RobertaTokenizer):
                         ]
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        else:
-            if return_attention_mask:
-                encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
-                if entities_provided:
-                    encoded_inputs["entity_attention_mask"] = [1] * len(encoded_inputs["entity_ids"])
 
         return encoded_inputs
 

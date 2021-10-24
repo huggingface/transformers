@@ -20,8 +20,8 @@ RetriBERT model
 import math
 
 import torch
-import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
+from torch import nn
 
 from ...file_utils import add_start_docstrings
 from ...modeling_utils import PreTrainedModel

@@ -27,7 +27,7 @@ from .file_utils import (
     _is_torch,
     is_tf_available,
     is_torch_available,
-    to_py_obj,
+    to_numpy,
 )
 from .utils import logging
 
@@ -69,6 +69,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         ],
         padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
+        truncation: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -107,6 +108,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                   different lengths).
             max_length (:obj:`int`, `optional`):
                 Maximum length of the returned list and optionally padding length (see above).
+            truncation (:obj:`bool`):
+                Activates truncation to cut input sequences longer than :obj:`max_length` to :obj:`max_length`.
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value.
 
@@ -134,7 +137,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # The model's main input name, usually `input_values`, has be passed for padding
         if self.model_input_names[0] not in processed_features:
             raise ValueError(
-                "You should supply an instance of :class:`~transformers.BatchFeature` or list of :class:`~transformers.BatchFeature` to this method"
+                "You should supply an instance of :class:`~transformers.BatchFeature` or list of :class:`~transformers.BatchFeature` to this method "
                 f"that includes {self.model_input_names[0]}, but you provided {list(processed_features.keys())}"
             )
 
@@ -148,7 +151,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 processed_features["attention_mask"] = []
             return processed_features
 
-        # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
+        # If we have PyTorch/TF tensors or lists as inputs, we cast them as Numpy arrays
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
@@ -160,51 +163,57 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 index += 1
             if index < len(required_input):
                 first_element = required_input[index][0]
-        # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
-        if not isinstance(first_element, (float, int, list, tuple)):
+
+        if return_tensors is None:
             if is_tf_available() and _is_tensorflow(first_element):
-                return_tensors = "tf" if return_tensors is None else return_tensors
+                return_tensors = "tf"
             elif is_torch_available() and _is_torch(first_element):
-                return_tensors = "pt" if return_tensors is None else return_tensors
-            elif isinstance(first_element, np.ndarray):
-                return_tensors = "np" if return_tensors is None else return_tensors
+                return_tensors = "pt"
+            elif isinstance(first_element, (int, float, list, tuple, np.ndarray)):
+                return_tensors = "np"
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
                     f"Should be one of a python, numpy, pytorch or tensorflow object."
                 )
 
-            for key, value in processed_features.items():
-                processed_features[key] = to_py_obj(value)
+        for key, value in processed_features.items():
+            if isinstance(value[0], (int, float)):
+                processed_features[key] = to_numpy(value)
+            else:
+                processed_features[key] = [to_numpy(v) for v in value]
 
         # Convert padding_strategy in PaddingStrategy
-        padding_strategy, max_length, _ = self._get_padding_strategies(padding=padding, max_length=max_length)
+        padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
 
         required_input = processed_features[self.model_input_names[0]]
-        if required_input and not isinstance(required_input[0], (list, tuple)):
-            processed_features = self._pad(
-                processed_features,
-                max_length=max_length,
-                padding_strategy=padding_strategy,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-            )
-            return BatchFeature(processed_features, tensor_type=return_tensors)
 
         batch_size = len(required_input)
-        assert all(
-            len(v) == batch_size for v in processed_features.values()
-        ), "Some items in the output dictionary have a different batch size than others."
+        if not all(len(v) == batch_size for v in processed_features.values()):
+            raise ValueError("Some items in the output dictionary have a different batch size than others.")
+
+        truncated_inputs = []
+        for i in range(batch_size):
+            inputs = dict((k, v[i]) for k, v in processed_features.items())
+            # truncation
+            inputs_slice = self._truncate(
+                inputs,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                truncation=truncation,
+            )
+            truncated_inputs.append(inputs_slice)
 
         if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = max(len(inputs) for inputs in required_input)
+            # make sure that `max_length` cannot be longer than the longest truncated length
+            max_length = max(len(input_slice[self.model_input_names[0]]) for input_slice in truncated_inputs)
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in processed_features.items())
+            # padding
             outputs = self._pad(
-                inputs,
+                truncated_inputs[i],
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
@@ -214,13 +223,15 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             for key, value in outputs.items():
                 if key not in batch_outputs:
                     batch_outputs[key] = []
+                if value.dtype is np.dtype(np.float64):
+                    value = value.astype(np.float32)
                 batch_outputs[key].append(value)
 
         return BatchFeature(batch_outputs, tensor_type=return_tensors)
 
     def _pad(
         self,
-        processed_features: Union[Dict[str, List[float]], BatchFeature],
+        processed_features: Union[Dict[str, np.ndarray], BatchFeature],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
@@ -230,7 +241,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            processed_features: Dictionary of input values (`List[float]`) / input vectors (`List[List[float]]`) or batch of inputs values (`List[List[int]]`) / input vectors (`List[List[List[int]]]`)
+            processed_features: Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
             max_length: maximum length of the returned list and optionally padding length (see below)
             padding_strategy: PaddingStrategy to use for padding.
 
@@ -254,31 +265,75 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
-        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
+        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) < max_length
+
+        if return_attention_mask and "attention_mask" not in processed_features:
+            processed_features["attention_mask"] = np.ones(len(required_input), dtype=np.int32)
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            padding_vector = self.feature_size * [self.padding_value] if self.feature_size > 1 else self.padding_value
             if self.padding_side == "right":
                 if return_attention_mask:
-                    processed_features["attention_mask"] = [1] * len(required_input) + [0] * difference
-                processed_features[self.model_input_names[0]] = required_input + [
-                    padding_vector for _ in range(difference)
-                ]
+                    processed_features["attention_mask"] = np.pad(
+                        processed_features["attention_mask"], (0, difference)
+                    )
+                padding_shape = ((0, difference), (0, 0)) if self.feature_size > 1 else (0, difference)
+                processed_features[self.model_input_names[0]] = np.pad(
+                    required_input, padding_shape, "constant", constant_values=self.padding_value
+                )
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    processed_features["attention_mask"] = [0] * difference + [1] * len(required_input)
-                processed_features[self.model_input_names[0]] = [
-                    padding_vector for _ in range(difference)
-                ] + required_input
+                    processed_features["attention_mask"] = np.pad(
+                        processed_features["attention_mask"], (difference, 0)
+                    )
+                padding_shape = ((difference, 0), (0, 0)) if self.feature_size > 1 else (difference, 0)
+                processed_features[self.model_input_names[0]] = np.pad(
+                    required_input, padding_shape, "constant", constant_values=self.padding_value
+                )
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        elif return_attention_mask and "attention_mask" not in processed_features:
-            processed_features["attention_mask"] = [1] * len(required_input)
 
         return processed_features
 
-    def _get_padding_strategies(self, padding=False, max_length=None, pad_to_multiple_of=None, **kwargs):
+    def _truncate(
+        self,
+        processed_features: Union[Dict[str, np.ndarray], BatchFeature],
+        max_length: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        truncation: Optional[bool] = None,
+    ):
+        """
+        Truncate inputs to predefined length or max length in the batch
+
+        Args:
+            processed_features: Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
+            max_length: maximum length of the returned list and optionally padding length (see below)
+            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
+                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
+                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+            truncation: (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+        """
+        if not truncation:
+            return processed_features
+        elif truncation and max_length is None:
+            raise ValueError("When setting ``truncation=True``, make sure that ``max_length`` is defined.")
+
+        required_input = processed_features[self.model_input_names[0]]
+
+        # find `max_length` that fits `pad_to_multiple_of`
+        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+
+        needs_to_be_truncated = len(required_input) > max_length
+
+        if needs_to_be_truncated:
+            processed_features[self.model_input_names[0]] = processed_features[self.model_input_names[0]][:max_length]
+            if "attention_mask" in processed_features:
+                processed_features["attention_mask"] = processed_features["attention_mask"][:max_length]
+
+        return processed_features
+
+    def _get_padding_strategies(self, padding=False, max_length=None):
         """
         Find the correct padding strategy
         """
@@ -308,4 +363,4 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 "Please select a value to use as `padding_value`. For example: `feature_extractor.padding_value = 0.0`."
             )
 
-        return padding_strategy, max_length, kwargs
+        return padding_strategy

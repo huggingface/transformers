@@ -236,7 +236,7 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -675,7 +675,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             # encoder attention (for decoder only)
             # if self.is_decoder and src_enc is not None:
             #     attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
-            #     attn = F.dropout(attn, p=self.dropout, training=self.training)
+            #     attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
             #     tensor = tensor + attn
             #     tensor = self.layer_norm15[i](tensor)
 
@@ -820,7 +820,7 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFFlaubertWithLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -19,7 +19,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import BigBirdPegasusConfig, is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -31,7 +31,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BigBirdPegasusConfig,
         BigBirdPegasusForCausalLM,
         BigBirdPegasusForConditionalGeneration,
         BigBirdPegasusForQuestionAnswering,
@@ -69,7 +68,6 @@ def prepare_bigbird_pegasus_inputs_dict(
     return input_dict
 
 
-@require_torch
 class BigBirdPegasusModelTester:
     def __init__(
         self,
@@ -129,7 +127,12 @@ class BigBirdPegasusModelTester:
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = BigBirdPegasusConfig(
+        config = self.get_config()
+        inputs_dict = prepare_bigbird_pegasus_inputs_dict(config, input_ids, decoder_input_ids)
+        return config, inputs_dict
+
+    def get_config(self):
+        return BigBirdPegasusConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -150,8 +153,6 @@ class BigBirdPegasusModelTester:
             num_random_blocks=self.num_random_blocks,
             scale_embedding=self.scale_embedding,
         )
-        inputs_dict = prepare_bigbird_pegasus_inputs_dict(config, input_ids, decoder_input_ids)
-        return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
@@ -361,24 +362,33 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         model.generate(**input_dict)
         model.generate(**input_dict, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    @slow
     def test_batched_forward_original_full(self):
         self._check_batched_forward(attn_type="original_full")
 
+    @slow
     def test_batched_forward_block_sparse(self):
         self._check_batched_forward(attn_type="block_sparse", tolerance=1e-1)
 
     def _check_batched_forward(self, attn_type, tolerance=1e-3):
-        config = BigBirdPegasusConfig(block_size=16, attention_type=attn_type)
+        config, _ = self.model_tester.prepare_config_and_inputs()
+        config.max_position_embeddings = 128
+        config.block_size = 16
+        config.attention_type = attn_type
         model = BigBirdPegasusForConditionalGeneration(config).to(torch_device)
         model.eval()
 
-        sample_with_padding = [3, 8, 11] * 128 + [0] * 128
-        sample_without_padding = [4, 7, 9, 13] * 128
+        chunk_length = 32
+
+        sample_with_padding = [3, 8, 11] * chunk_length + [0] * chunk_length
+        sample_without_padding = [4, 7, 9, 13] * chunk_length
         target_ids_without_padding = [2, 3] * 8
         target_ids_with_padding = [7, 8] * 6 + 4 * [-100]
 
         attention_mask = torch.tensor(
-            [[1] * 3 * 128 + [0] * 128, [1] * 4 * 128], device=torch_device, dtype=torch.long
+            [[1] * 3 * chunk_length + [0] * chunk_length, [1] * 4 * chunk_length],
+            device=torch_device,
+            dtype=torch.long,
         )
 
         input_ids = torch.tensor([sample_with_padding, sample_without_padding], device=torch_device, dtype=torch.long)
@@ -390,7 +400,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             logits_batched = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).logits
 
         with torch.no_grad():
-            logits_single_first = model(input_ids=input_ids[:1, :-128], labels=labels[:1]).logits
+            logits_single_first = model(input_ids=input_ids[:1, :-chunk_length], labels=labels[:1]).logits
 
         self.assertTrue(torch.allclose(logits_batched[0, -3:], logits_single_first[0, -3:], atol=tolerance))
 

@@ -63,9 +63,10 @@ LARGE_NEGATIVE = -1e8
 
 # Copied from transformers.models.bart.modeling_tf_bart.shift_tokens_right
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    shifted_input_ids = tf.roll(input_ids, 1, axis=-1)
-    start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
-    shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
+    pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
+    decoder_start_token_id = tf.cast(decoder_start_token_id, input_ids.dtype)
+    start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
+    shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids = tf.where(
         shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
@@ -73,7 +74,7 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
 
     if tf.executing_eagerly():
         # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0))
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
 
         # Make sure the assertion op is called by wrapping the result in an identity no-op
         with tf.control_dependencies([assert_gte0]):
@@ -152,11 +153,12 @@ class TFMarianSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
+        table = np.zeros_like(position_enc)
         # index 0 is all zero
-        position_enc[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
-        position_enc[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
+        table[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
+        table[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
         # convert to tensor
-        table = tf.convert_to_tensor(position_enc)
+        table = tf.convert_to_tensor(table)
         tf.stop_gradient(table)
         return table
 
@@ -1222,7 +1224,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1407,7 +1409,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         if inputs["labels"] is not None:
             inputs["labels"] = tf.where(
                 inputs["labels"] == self.config.pad_token_id,
-                tf.fill(shape_list(inputs["labels"]), -100),
+                tf.fill(shape_list(inputs["labels"]), tf.cast(-100, inputs["labels"].dtype)),
                 inputs["labels"],
             )
             inputs["use_cache"] = False
@@ -1480,6 +1482,8 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         past,
         attention_mask,
         head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
         use_cache=None,
         **kwargs,
     ) -> Dict:
@@ -1515,8 +1519,13 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
+
+    def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reorder_cache

@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -141,10 +140,6 @@ def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):
     return model
 
 
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
 class NoNorm(nn.Module):
     def __init__(self, feat_size, eps=None):
         super().__init__()
@@ -155,7 +150,7 @@ class NoNorm(nn.Module):
         return input_tensor * self.weight + self.bias
 
 
-NORM2FN = {"layer_norm": torch.nn.LayerNorm, "no_norm": NoNorm}
+NORM2FN = {"layer_norm": nn.LayerNorm, "no_norm": NoNorm}
 
 
 class MobileBertEmbeddings(nn.Module):
@@ -207,9 +202,9 @@ class MobileBertEmbeddings(nn.Module):
             # dimensional output.
             inputs_embeds = torch.cat(
                 [
-                    F.pad(inputs_embeds[:, 1:], [0, 0, 0, 1, 0, 0], value=0),
+                    nn.functional.pad(inputs_embeds[:, 1:], [0, 0, 0, 1, 0, 0], value=0),
                     inputs_embeds,
-                    F.pad(inputs_embeds[:, :-1], [0, 0, 1, 0, 0, 0], value=0),
+                    nn.functional.pad(inputs_embeds[:, :-1], [0, 0, 1, 0, 0, 0], value=0),
                 ],
                 dim=2,
             )
@@ -822,7 +817,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -920,7 +915,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddigs):
         self.cls.predictions.decoder = new_embeddigs
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         # resize dense output embedings at first
         self.cls.predictions.dense = self._get_resized_lm_head(
             self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
@@ -969,7 +964,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
             >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             >>> outputs = model(input_ids)
 
-            >>> prediction_logits = outptus.prediction_logits
+            >>> prediction_logits = outputs.prediction_logits
             >>> seq_relationship_logits = outputs.seq_relationship_logits
 
         """
@@ -1028,7 +1023,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddigs):
         self.cls.predictions.decoder = new_embeddigs
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         # resize dense output embedings at first
         self.cls.predictions.dense = self._get_resized_lm_head(
             self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
@@ -1037,7 +1032,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1217,14 +1212,17 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         self.config = config
 
         self.mobilebert = MobileBertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1279,7 +1277,10 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels)
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
@@ -1321,7 +1322,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1368,8 +1369,8 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -1380,8 +1381,8 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)
@@ -1414,7 +1415,10 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
         super().__init__(config)
 
         self.mobilebert = MobileBertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
@@ -1423,7 +1427,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
         MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1512,14 +1516,17 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

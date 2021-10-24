@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -41,6 +41,7 @@ if is_torch_available():
         "FunnelForSequenceClassification",
         "FunnelForTokenClassification",
         "FunnelModel",
+        "FunnelPreTrainedModel",
         "load_tf_weights_in_funnel",
     ]
 
@@ -55,6 +56,7 @@ if is_tf_available():
         "TFFunnelForSequenceClassification",
         "TFFunnelForTokenClassification",
         "TFFunnelModel",
+        "TFFunnelPreTrainedModel",
     ]
 
 
@@ -76,6 +78,7 @@ if TYPE_CHECKING:
             FunnelForSequenceClassification,
             FunnelForTokenClassification,
             FunnelModel,
+            FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
         )
 
@@ -90,22 +93,10 @@ if TYPE_CHECKING:
             TFFunnelForSequenceClassification,
             TFFunnelForTokenClassification,
             TFFunnelModel,
+            TFFunnelPreTrainedModel,
         )
 
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)

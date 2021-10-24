@@ -21,8 +21,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...file_utils import (
@@ -344,7 +343,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
                     attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], -1e30).type_as(attn_score)
 
         # [qlen x klen x bsz x n_head]
-        attn_prob = F.softmax(attn_score, dim=1)
+        attn_prob = nn.functional.softmax(attn_score, dim=1)
         attn_prob = self.dropatt(attn_prob)
 
         # Mask heads if we want to
@@ -434,7 +433,7 @@ class AdaptiveEmbedding(nn.Module):
         if self.div_val == 1:
             embed = self.emb_layers[0](inp)
             if self.d_proj != self.d_embed:
-                embed = F.linear(embed, self.emb_projs[0])
+                embed = nn.functional.linear(embed, self.emb_projs[0])
         else:
             param = next(self.parameters())
             inp_flat = inp.view(-1)
@@ -450,7 +449,7 @@ class AdaptiveEmbedding(nn.Module):
 
                 inp_i = inp_flat.index_select(0, indices_i) - l_idx
                 emb_i = self.emb_layers[i](inp_i)
-                emb_i = F.linear(emb_i, self.emb_projs[i])
+                emb_i = nn.functional.linear(emb_i, self.emb_projs[i])
 
                 emb_flat.index_copy_(0, indices_i, emb_i)
 
@@ -872,7 +871,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1053,7 +1052,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1175,7 +1174,7 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,

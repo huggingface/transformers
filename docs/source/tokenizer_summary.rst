@@ -13,12 +13,20 @@
 Summary of the tokenizers
 -----------------------------------------------------------------------------------------------------------------------
 
-On this page, we will have a closer look at tokenization. As we saw in :doc:`the preprocessing tutorial
-<preprocessing>`, tokenizing a text is splitting it into words or subwords, which then are converted to ids through a
-look-up table. Converting words or subwords to ids is straightforward, so in this summary, we will focus on splitting a
-text into words or subwords (i.e. tokenizing a text). More specifically, we will look at the three main types of
-tokenizers used in 🤗 Transformers: :ref:`Byte-Pair Encoding (BPE) <byte-pair-encoding>`, :ref:`WordPiece <wordpiece>`,
-and :ref:`SentencePiece <sentencepiece>`, and show examples of which tokenizer type is used by which model.
+On this page, we will have a closer look at tokenization.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/VFp38yj8h3A" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
+As we saw in :doc:`the preprocessing tutorial <preprocessing>`, tokenizing a text is splitting it into words or
+subwords, which then are converted to ids through a look-up table. Converting words or subwords to ids is
+straightforward, so in this summary, we will focus on splitting a text into words or subwords (i.e. tokenizing a text).
+More specifically, we will look at the three main types of tokenizers used in 🤗 Transformers: :ref:`Byte-Pair Encoding
+(BPE) <byte-pair-encoding>`, :ref:`WordPiece <wordpiece>`, and :ref:`SentencePiece <sentencepiece>`, and show examples
+of which tokenizer type is used by which model.
 
 Note that on each model page, you can look at the documentation of the associated tokenizer to know which tokenizer
 type was used by the pretrained model. For instance, if we look at :class:`~transformers.BertTokenizer`, we can see
@@ -28,8 +36,15 @@ Introduction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Splitting a text into smaller chunks is a task that is harder than it looks, and there are multiple ways of doing so.
-For instance, let's look at the sentence ``"Don't you love 🤗 Transformers? We sure do."`` A simple way of tokenizing
-this text is to split it by spaces, which would give:
+For instance, let's look at the sentence ``"Don't you love 🤗 Transformers? We sure do."``
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/nhJxYji1aho" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
+A simple way of tokenizing this text is to split it by spaces, which would give:
 
 .. code-block::
 
@@ -69,15 +84,29 @@ Such a big vocabulary size forces the model to have an enormous embedding matrix
 causes both an increased memory and time complexity. In general, transformers models rarely have a vocabulary size
 greater than 50,000, especially if they are pretrained only on a single language.
 
-So if simple space and punctuation tokenization is unsatisfactory, why not simply tokenize on characters? While
-character tokenization is very simple and would greatly reduce memory and time complexity it makes it much harder for
-the model to learn meaningful input representations. *E.g.* learning a meaningful context-independent representation
-for the letter ``"t"`` is much harder than learning a context-independent representation for the word ``"today"``.
-Therefore, character tokenization is often accompanied by a loss of performance. So to get the best of both worlds,
-transformers models use a hybrid between word-level and character-level tokenization called **subword** tokenization.
+So if simple space and punctuation tokenization is unsatisfactory, why not simply tokenize on characters?
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/ssLq_EK2jLE" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
+While character tokenization is very simple and would greatly reduce memory and time complexity it makes it much harder
+for the model to learn meaningful input representations. *E.g.* learning a meaningful context-independent
+representation for the letter ``"t"`` is much harder than learning a context-independent representation for the word
+``"today"``. Therefore, character tokenization is often accompanied by a loss of performance. So to get the best of
+both worlds, transformers models use a hybrid between word-level and character-level tokenization called **subword**
+tokenization.
 
 Subword tokenization
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/zHvTiHr506c" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
 
 Subword tokenization algorithms rely on the principle that frequently used words should not be split into smaller
 subwords, but rare words should be decomposed into meaningful subwords. For instance ``"annoyingly"`` might be

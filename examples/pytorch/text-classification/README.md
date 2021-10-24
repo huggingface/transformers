@@ -22,8 +22,8 @@ Based on the script [`run_glue.py`](https://github.com/huggingface/transformers/
 
 Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding
 Evaluation](https://gluebenchmark.com/). This script can fine-tune any of the models on the [hub](https://huggingface.co/models)
-and can also be used for your own data in a csv or a JSON file (the script might need some tweaks in that case, refer
-to the comments inside for help).
+and can also be used for a dataset hosted on our [hub](https://huggingface.co/datasets) or your own data in a csv or a JSON file 
+(the script might need some tweaks in that case, refer to the comments inside for help).
 
 GLUE is made up of a total of 9 different tasks. Here is how to run the script on one of them:
 
@@ -45,16 +45,16 @@ python run_glue.py \
 where task name can be one of cola, sst2, mrpc, stsb, qqp, mnli, qnli, rte, wnli.
 
 We get the following results on the dev set of the benchmark with the previous commands (with an exception for MRPC and
-WNLI which are tiny and where we used 5 epochs isntead of 3). Trainings are seeded so you should obtain the same
+WNLI which are tiny and where we used 5 epochs instead of 3). Trainings are seeded so you should obtain the same
 results with PyTorch 1.6.0 (and close results with different versions), training times are given for information (a
 single Titan RTX was used):
 
 | Task  | Metric                       | Result      | Training time |
 |-------|------------------------------|-------------|---------------|
-| CoLA  | Matthew's corr               | 56.53       | 3:17          |
+| CoLA  | Matthews corr                | 56.53       | 3:17          |
 | SST-2 | Accuracy                     | 92.32       | 26:06         |
 | MRPC  | F1/Accuracy                  | 88.85/84.07 | 2:21          |
-| STS-B | Person/Spearman corr.        | 88.64/88.48 | 2:13          |
+| STS-B | Pearson/Spearman corr.       | 88.64/88.48 | 2:13          |
 | QQP   | Accuracy/F1                  | 90.71/87.49 | 2:22:26       |
 | MNLI  | Matched acc./Mismatched acc. | 83.91/84.10 | 2:35:23       |
 | QNLI  | Accuracy                     | 90.66       | 40:57         |
@@ -63,6 +63,22 @@ single Titan RTX was used):
 
 Some of these results are significantly different from the ones reported on the test set of GLUE benchmark on the
 website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the website.
+
+The following example fine-tunes BERT on the `imdb` dataset hosted on our [hub](https://huggingface.co/datasets):
+
+```bash
+python run_glue.py \
+  --model_name_or_path bert-base-cased \
+  --dataset_name imdb  \
+  --do_train \
+  --do_predict \
+  --max_seq_length 128 \
+  --per_device_train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3 \
+  --output_dir /tmp/imdb/
+```
+
 
 ### Mixed precision training
 
@@ -74,10 +90,10 @@ Using mixed precision training usually results in 2x-speedup for training with t
 
 | Task  | Metric                       | Result      | Training time | Result (FP16) | Training time (FP16) |
 |-------|------------------------------|-------------|---------------|---------------|----------------------|
-| CoLA  | Matthew's corr               | 56.53       | 3:17          | 56.78         | 1:41                 |
+| CoLA  | Matthews corr                | 56.53       | 3:17          | 56.78         | 1:41                 |
 | SST-2 | Accuracy                     | 92.32       | 26:06         | 91.74         | 13:11                |
 | MRPC  | F1/Accuracy                  | 88.85/84.07 | 2:21          | 88.12/83.58   | 1:10                 |
-| STS-B | Person/Spearman corr.        | 88.64/88.48 | 2:13          | 88.71/88.55   | 1:08                 |
+| STS-B | Pearson/Spearman corr.       | 88.64/88.48 | 2:13          | 88.71/88.55   | 1:08                 |
 | QQP   | Accuracy/F1                  | 90.71/87.49 | 2:22:26       | 90.67/87.43   | 1:11:54              |
 | MNLI  | Matched acc./Mismatched acc. | 83.91/84.10 | 2:35:23       | 84.04/84.06   | 1:17:06              |
 | QNLI  | Accuracy                     | 90.66       | 40:57         | 90.96         | 20:16                |

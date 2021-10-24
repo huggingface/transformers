@@ -294,6 +294,7 @@ class BertForSequenceClassificationWithPabee(BertPreTrainedModel):
 
             from transformers import BertTokenizer, BertForSequenceClassification
             from pabee import BertForSequenceClassificationWithPabee
+            from torch import nn
             import torch
 
             tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')

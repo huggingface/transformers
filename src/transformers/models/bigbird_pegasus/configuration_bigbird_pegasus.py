@@ -57,9 +57,9 @@ class BigBirdPegasusConfig(PretrainedConfig):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_fast"`):
+        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"`, :obj:`"gelu_fast"` and :obj:`"gelu_new"` are supported.
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
@@ -94,8 +94,6 @@ class BigBirdPegasusConfig(PretrainedConfig):
             "block_sparse"`.
         scale_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`)
             Whether to rescale embeddings with (hidden_size ** 0.5).
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
         Example::
 
@@ -112,6 +110,11 @@ class BigBirdPegasusConfig(PretrainedConfig):
     """
     model_type = "bigbird_pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "attention_probs_dropout_prob": "attention_dropout",
+    }
 
     def __init__(
         self,
@@ -127,7 +130,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         decoder_layerdrop=0.0,
         use_cache=True,
         is_encoder_decoder=True,
-        activation_function="gelu_fast",
+        activation_function="gelu_new",
         d_model=1024,
         dropout=0.1,
         attention_dropout=0.0,
@@ -136,7 +139,6 @@ class BigBirdPegasusConfig(PretrainedConfig):
         decoder_start_token_id=2,
         classifier_dropout=0.0,
         scale_embedding=True,
-        gradient_checkpointing=False,
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=1,
@@ -146,15 +148,6 @@ class BigBirdPegasusConfig(PretrainedConfig):
         use_bias=False,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
-
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
@@ -174,7 +167,6 @@ class BigBirdPegasusConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         # extra config
@@ -183,14 +175,11 @@ class BigBirdPegasusConfig(PretrainedConfig):
         self.num_random_blocks = num_random_blocks
         self.use_bias = use_bias
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def attention_probs_dropout_prob(self) -> float:
-        return self.attention_dropout
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )

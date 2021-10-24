@@ -93,28 +93,43 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
     @staticmethod
     def utterance_cmvn(
-        x: np.ndarray, normalize_means: Optional[bool] = True, normalize_vars: Optional[bool] = True
+        x: np.ndarray,
+        input_length: int,
+        normalize_means: Optional[bool] = True,
+        normalize_vars: Optional[bool] = True,
+        padding_value: float = 0.0,
     ) -> np.ndarray:
-        mean = x.mean(axis=0)
-        square_sums = (x ** 2).sum(axis=0)
-
+        # make sure we normalize float32 arrays
         if normalize_means:
+            mean = x[:input_length].mean(axis=0)
             x = np.subtract(x, mean)
         if normalize_vars:
-            var = square_sums / x.shape[0] - mean ** 2
-            std = np.sqrt(np.maximum(var, 1e-10))
+            std = x[:input_length].std(axis=0)
             x = np.divide(x, std)
+
+        if input_length < x.shape[0]:
+            x[input_length:] = padding_value
+
+        # make sure array is in float32
+        x = x.astype(np.float32)
 
         return x
 
-    def normalize(self, input_values: List[np.ndarray]) -> List[np.ndarray]:
-        return [self.utterance_cmvn(x, self.normalize_means, self.normalize_vars) for x in input_values]
+    def normalize(
+        self, input_features: List[np.ndarray], attention_mask: Optional[np.ndarray] = None
+    ) -> List[np.ndarray]:
+        lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
+        return [
+            self.utterance_cmvn(x, n, self.normalize_means, self.normalize_vars, self.padding_value)
+            for x, n in zip(input_features, lengths)
+        ]
 
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
+        truncation: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
@@ -140,6 +155,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                   different lengths).
             max_length (:obj:`int`, `optional`):
                 Maximum length of the returned list and optionally padding length (see above).
+            truncation (:obj:`bool`):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value.
 
@@ -172,12 +189,12 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}."
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}. "
                     f"Please make sure that the provided `raw_speech` input was sampled with {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function."
+                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -186,11 +203,12 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
         )
 
-        # make sure input is in list format
-        if is_batched and not isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [np.asarray(speech) for speech in raw_speech]
+        if is_batched:
+            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech)
+            raw_speech = np.asarray(raw_speech, dtype=np.float32)
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
+            raw_speech = raw_speech.astype(np.float32)
 
         # always return batch
         if not is_batched:
@@ -199,10 +217,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         # extract fbank features
         features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
 
-        # Utterance-level cepstral mean and variance normalization
-        if self.do_ceptral_normalize:
-            features = self.normalize(features)
-
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
 
@@ -210,10 +224,33 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             encoded_inputs,
             padding=padding,
             max_length=max_length,
+            truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
-            return_tensors=return_tensors,
             **kwargs,
         )
+
+        # make sure list is in array format
+        input_features = padded_inputs.get("input_features")
+        if isinstance(input_features[0], list):
+            padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+
+        attention_mask = padded_inputs.get("attention_mask")
+        if attention_mask is not None:
+            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+
+        # Utterance-level cepstral mean and variance normalization
+        if self.do_ceptral_normalize:
+            attention_mask = (
+                np.array(attention_mask, dtype=np.int32)
+                if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
+                else None
+            )
+            padded_inputs["input_features"] = self.normalize(
+                padded_inputs["input_features"], attention_mask=attention_mask
+            )
+
+        if return_tensors is not None:
+            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs

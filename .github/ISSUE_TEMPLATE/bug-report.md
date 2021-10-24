@@ -27,30 +27,38 @@ assignees: ''
 
 Models:
 
-- albert, bert, xlm: @LysandreJik
-- blenderbot, bart, marian, pegasus, encoderdecoder,  t5: @patrickvonplaten, @patil-suraj
-- longformer, reformer, transfoxl, xlnet: @patrickvonplaten
-- fsmt: @stas00
-- funnel: @sgugger
-- gpt2: @patrickvonplaten, @LysandreJik
-- rag: @patrickvonplaten, @lhoestq
-- tensorflow: @Rocketknight1
+- ALBERT, BERT, XLM, DeBERTa, DeBERTa-v2, ELECTRA, MobileBert, SqueezeBert: @LysandreJik
+- encoder-decoder models (For example, BlenderBot, BART, Marian, Pegasus, T5, ByT5): @patrickvonplaten, @patil-suraj
+- Longformer, Reformer, TransfoXL, XLNet, FNet: @patrickvonplaten
+- FSMT: @stas00
+- Funnel: @sgugger
+- GPT-2, GPT: @patrickvonplaten, @LysandreJik
+- RAG, DPR: @patrickvonplaten, @lhoestq
+- TensorFlow: @Rocketknight1
+- JAX/Flax: @patil-suraj @patrickvonplaten 
+- TAPAS, LayoutLM, LayoutLMv2, LUKE, ViT, BEiT, DEiT, DETR, CANINE: @NielsRogge
+- GPT-Neo, GPT-J, CLIP: @patil-suraj
+- Wav2Vec2, HuBERT, SpeechEncoderDecoder: @patrickvonplaten, @anton-l
+
+If the model isn't in the list, ping @LysandreJik who will redirect you to the correct contributor.
 
 Library:
 
-- benchmarks: @patrickvonplaten
-- deepspeed: @stas00
-- ray/raytune: @richardliaw, @amogkam
-- text generation: @patrickvonplaten
-- tokenizers: @LysandreJik
-- trainer: @sgugger
-- pipelines: @LysandreJik
+- Benchmarks: @patrickvonplaten
+- Deepspeed: @stas00
+- Ray/raytune: @richardliaw, @amogkam
+- Text generation: @patrickvonplaten
+- Tokenizers: @LysandreJik
+- Trainer: @sgugger
+- Pipelines: @Narsil
+- Speech: @patrickvonplaten, @anton-l
+- Vision: @NielsRogge, @sgugger
 
 Documentation: @sgugger
 
 Model hub:
 
-- for issues with a model report at https://discuss.huggingface.co/ and tag the model's creator.
+- for issues with a model, report at https://discuss.huggingface.co/ and tag the model's creator.
 
 HF projects:
 
@@ -60,6 +68,9 @@ HF projects:
 Examples:
 
 - maintained examples (not research project or legacy): @sgugger, @patil-suraj
+
+For research projetcs, please ping the contributor directly. For example, on the following projects:
+
 - research_projects/bert-loses-patience: @JetRunner
 - research_projects/distillation: @VictorSanh
 
