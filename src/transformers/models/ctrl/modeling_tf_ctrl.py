@@ -342,9 +342,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # head_mask has shape n_layer x batch x n_heads x N x N
-        if inputs["head_mask"] is not None:
-            raise NotImplementedError
-        else:
+        if inputs["head_mask"] is None:
             inputs["head_mask"] = [None] * self.num_layers
 
         if inputs["token_type_ids"] is not None:

@@ -1451,16 +1451,24 @@ class ModelTesterMixin:
             tf_model = tf_model_class(config)
             pt_model = model_class(config)
 
+            # make sure only tf inputs are forward that actually exist in function args
+            tf_input_keys = set(inspect.signature(tf_model.call).parameters.keys())
+            tf_input_keys.discard("head_mask")
+
+            pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+            pt_inputs = {k: v for k, v in pt_inputs.items() if k in tf_input_keys}
+
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
             tf_inputs_dict = {}
-            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
-                if type(key) == bool:
-                    tf_inputs_dict[name] = key
-                elif name == "input_values":
-                    tf_inputs_dict[name] = tf.convert_to_tensor(key.numpy(), dtype=tf.float32)
+            for key, tensor in pt_inputs.items():
+                # skip key that does not exist in tf
+                if type(tensor) == bool:
+                    tf_inputs_dict[key] = tensor
+                elif key == "input_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
                 else:
-                    tf_inputs_dict[name] = tf.convert_to_tensor(key.numpy(), dtype=tf.int32)
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
 
             # Check we can load pt model in tf and vice-versa with model => model functions
             tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
@@ -1471,7 +1479,7 @@ class ModelTesterMixin:
             #                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
             with torch.no_grad():
-                pto = pt_model(**self._prepare_for_class(inputs_dict, model_class))
+                pto = pt_model(**pt_inputs)
             tfo = tf_model(tf_inputs_dict, training=False)
 
             tf_hidden_states = tfo[0].numpy()
@@ -1501,21 +1509,22 @@ class ModelTesterMixin:
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
             tf_inputs_dict = {}
-            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
-                if type(key) == bool:
-                    key = np.array(key, dtype=bool)
-                    tf_inputs_dict[name] = tf.convert_to_tensor(key, dtype=tf.int32)
-                elif name == "input_values":
-                    tf_inputs_dict[name] = tf.convert_to_tensor(key.numpy(), dtype=tf.float32)
+            for key, tensor in pt_inputs.items():
+                # skip key that does not exist in tf
+                if type(tensor) == bool:
+                    tensor = np.array(tensor, dtype=bool)
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor, dtype=tf.int32)
+                elif key == "input_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
                 else:
-                    tf_inputs_dict[name] = tf.convert_to_tensor(key.numpy(), dtype=tf.int32)
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
 
             # need to rename encoder-decoder "inputs" for PyTorch
             #            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
             #                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
             with torch.no_grad():
-                pto = pt_model(**self._prepare_for_class(inputs_dict, model_class))
+                pto = pt_model(**pt_inputs)
 
             tfo = tf_model(tf_inputs_dict)
             tfo = tfo[0].numpy()
