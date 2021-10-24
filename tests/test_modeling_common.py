@@ -1453,6 +1453,8 @@ class ModelTesterMixin:
 
             # make sure only tf inputs are forward that actually exist in function args
             tf_input_keys = set(inspect.signature(tf_model.call).parameters.keys())
+
+            # remove all head masks
             tf_input_keys.discard("head_mask")
             tf_input_keys.discard("cross_attn_head_mask")
             tf_input_keys.discard("decoder_head_mask")

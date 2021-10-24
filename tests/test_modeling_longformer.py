@@ -243,6 +243,8 @@ class LongformerModelTester:
             choice_labels,
         ) = config_and_inputs
         global_attention_mask = torch.zeros_like(input_ids)
+        global_attention_mask[:, -1] = 1
+
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
