@@ -72,7 +72,7 @@ class LongformerModelTester:
         # because its local attention only attends to `self.attention_window + 1` locations
         # (assuming no token with global attention, otherwise the last dimension of attentions
         # is x + self.attention_window + 1, where x is the number of tokens with global attention)
-        self.key_length = self.attention_window + 1
+        self.key_length = self.attention_window + 2
 
         # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
         # the `test_attention_outputs` and `test_hidden_states_output` tests
