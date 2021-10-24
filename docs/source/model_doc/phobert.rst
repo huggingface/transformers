@@ -50,7 +50,8 @@ Example of use:
     >>> # phobert = TFAutoModel.from_pretrained("vinai/phobert-base")
 
 
-    This model was contributed by `dqnguyen <https://huggingface.co/dqnguyen>`__. The original code can be found `here <https://github.com/VinAIResearch/PhoBERT>`__.
+This model was contributed by `dqnguyen <https://huggingface.co/dqnguyen>`__. The original code can be found `here
+<https://github.com/VinAIResearch/PhoBERT>`__.
 
 PhobertTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

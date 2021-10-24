@@ -180,6 +180,7 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = True
+    test_mismatched_shapes = False
 
     def check_cutoffs_and_n_token(
         self, copied_cutoffs, layer, model_embed, model, model_class, resized_value, vocab_size
