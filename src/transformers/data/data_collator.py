@@ -948,8 +948,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
                 covered_indexes.add(index)
                 masked_lms.append(index)
 
-        if len(covered_indexes) == len(masked_lms):
-            raise ValueError("length of covered_indexes is not equal to length of masked_lms.")
+        if len(covered_indexes) != len(masked_lms):
+            raise ValueError("Length of covered_indexes is not equal to length of masked_lms.")
         mask_labels = [1 if i in covered_indexes else 0 for i in range(len(input_tokens))]
         return mask_labels
 
