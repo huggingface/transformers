@@ -27,12 +27,12 @@ import transformers
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import (
+    is_flax_available,
+    is_pt_flax_cross_test,
     require_torch,
     require_vision,
     slow,
     torch_device,
-    is_pt_flax_cross_test,
-    is_flax_available,
 )
 
 from .test_configuration_common import ConfigTester
