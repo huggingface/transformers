@@ -17,17 +17,16 @@
 
 import collections.abc
 import math
+from dataclasses import dataclass
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
-from dataclasses import dataclass
-from typing import Optional, Tuple
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings, ModelOutput
-from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_beit import BeitConfig
@@ -89,7 +88,7 @@ class DropPath(nn.Module):
 
 
 @dataclass
-class BeitModelOutputWithPooling(ModelOutput):
+class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
     """
     Base class for model's outputs that also contains a pooling of the last hidden states.
 
@@ -110,11 +109,6 @@ class BeitModelOutputWithPooling(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
-
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Based on timm implementation, which can be found here:
