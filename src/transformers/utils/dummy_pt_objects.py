@@ -1631,24 +1631,6 @@ class ESMForMaskedLM:
         requires_backends(cls, ["torch"])
 
 
-class ESMForMultipleChoice:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class ESMForQuestionAnswering:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
 class ESMForSequenceClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

@@ -6,7 +6,6 @@ from collections import OrderedDict
 
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
-        ("ESMConfig", "ESMForQuestionAnswering"),
         ("CanineConfig", "CanineForQuestionAnswering"),
         ("RoFormerConfig", "RoFormerForQuestionAnswering"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForQuestionAnswering"),
@@ -116,7 +115,6 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
-        ("ESMConfig", "ESMForMultipleChoice"),
         ("CanineConfig", "CanineForMultipleChoice"),
         ("RoFormerConfig", "RoFormerForMultipleChoice"),
         ("BigBirdConfig", "BigBirdForMultipleChoice"),
