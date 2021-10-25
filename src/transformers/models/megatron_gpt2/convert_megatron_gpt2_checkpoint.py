@@ -30,10 +30,7 @@ from transformers import AutoTokenizer, GPT2Config
 
 
 def get_train_args(input_state_dict):
-    if "args" in input_state_dict:
-        return input_state_dict["args"]
-    else:
-        return None
+    return input_state_dict.get("args", None)
 
 
 def recursive_print(name, val, spaces=0):
