@@ -662,7 +662,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
 @require_vision
 @require_torch
 class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
-    # @slow
+    @slow
     def test_inference_coco_en(self):
 
         loc = "ydshieh/vit-gpt2-coco-en"

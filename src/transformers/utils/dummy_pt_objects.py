@@ -355,6 +355,9 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_VISION_2_SEQ_MAPPING = None
+
+
 MODEL_MAPPING = None
 
 
@@ -506,6 +509,15 @@ class AutoModelForTableQuestionAnswering:
 
 
 class AutoModelForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class AutoModelForVision2Seq:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

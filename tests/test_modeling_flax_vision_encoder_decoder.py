@@ -445,12 +445,6 @@ class FlaxVisionEncoderDecoderModelTest(unittest.TestCase):
         assert id(model.decoder.config) == id(model.config.decoder)
         assert id(model.encoder.config) == id(model.config.encoder)
 
-    # TODO: Find a way to access encoder/decoder modules
-    # @slow
-    # def test_configuration_tie(self):
-    #     model = self.get_from_encoderdecoder_pretrained_model()
-    #     self._check_configuration_tie(model)
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
