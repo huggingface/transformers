@@ -30,7 +30,7 @@ jobs:
 
       - name: Are TPUs recognized by our DL frameworks
         env:
-          XRT_TPU_CONFIG: "localservice;0;localhost:51011"
+          XRT_TPU_CONFIG: localservice;0;localhost:51011
         run: |
           python -c "import torch_xla.core.xla_model as xm; print(xm.xla_device())"
 
