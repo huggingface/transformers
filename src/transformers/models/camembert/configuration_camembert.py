@@ -15,8 +15,8 @@
 # limitations under the License.
 """ CamemBERT configuration """
 
-from typing import Mapping
 from collections import OrderedDict
+from typing import Mapping
 
 from ...utils import logging
 from ..roberta.configuration_roberta import RobertaConfig
@@ -38,6 +38,7 @@ class CamembertConfig(RobertaConfig):
     """
 
     model_type = "camembert"
+
 
 class CamembertOnnxConfig(OnnxConfig):
     @property
