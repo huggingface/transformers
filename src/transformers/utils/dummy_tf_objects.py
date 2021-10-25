@@ -245,6 +245,9 @@ TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
+TF_MODEL_FOR_VISION_2_SEQ_MAPPING = None
+
+
 TF_MODEL_MAPPING = None
 
 
@@ -381,6 +384,15 @@ class TFAutoModelForTokenClassification:
 
     def call(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+
+class TFAutoModelForVision2Seq:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFAutoModelWithLMHead:
@@ -2705,6 +2717,15 @@ class TFViTPreTrainedModel:
 
     def call(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+
+class TFVisionEncoderDecoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
