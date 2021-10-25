@@ -57,6 +57,28 @@ f1 = 88.52
 exact_match = 81.22
 ```
 
+### Fine-tuning T5 on SQuAD2.0
+
+This example code fine-tunes T5 on the SQuAD2.0 dataset.
+
+```bash
+python run_seq2seq_qa.py \
+  --model_name_or_path t5-small \
+  --dataset_name squad_v2 \
+  --context_column context \
+  --question_column question \
+  --answer_column answer \
+  --do_train \
+  --do_eval \
+  --per_device_train_batch_size 12 \
+  --learning_rate 3e-5 \
+  --num_train_epochs 2 \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir /tmp/debug_seq2seq_squad/
+```
+
+
 #### Distributed training
 
 Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD1.1:
