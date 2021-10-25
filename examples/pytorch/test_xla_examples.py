@@ -24,7 +24,6 @@ from unittest.mock import patch
 from transformers.testing_utils import TestCasePlus, require_torch_tpu
 
 
-# See: https://github.com/pytorch/pytorch/issues/37377
 
 logging.basicConfig(level=logging.DEBUG)
 
