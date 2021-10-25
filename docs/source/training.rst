@@ -335,7 +335,7 @@ scheduler. The default optimizer used by the :class:`~transformers.Trainer` is :
 
     optimizer = AdamW(model.parameters(), lr=5e-5)
 
-Finally, the learning rate scheduler used by default it just a linear decay form the maximum value (5e-5 here) to 0:
+Finally, the learning rate scheduler used by default is just a linear decay from the maximum value (5e-5 here) to 0:
 
 .. code-block:: python
 
