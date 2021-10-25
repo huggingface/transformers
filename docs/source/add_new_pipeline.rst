@@ -13,9 +13,9 @@ How to add a pipeline to 🤗 Transformers?
 =======================================================================================================================
 
 First and foremost, you need to decide the raw entries the pipeline will be able to take. It can be strings, raw bytes,
-dictionaries or whatever seems to be the most likely desired input. Try to keep these inputs as pure Python as
-possible as it makes compatibility easier (even through other languages via JSON). Those will be the :obj:`inputs` of
-the pipeline (:obj:`preprocess`).
+dictionaries or whatever seems to be the most likely desired input. Try to keep these inputs as pure Python as possible
+as it makes compatibility easier (even through other languages via JSON). Those will be the :obj:`inputs` of the
+pipeline (:obj:`preprocess`).
 
 Then define the :obj:`outputs`. Same policy as the :obj:`inputs`. The simpler, the better. Those will be the outputs of
 :obj:`postprocess` method.

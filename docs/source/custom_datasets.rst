@@ -74,8 +74,8 @@ read this in.
     train_texts, train_labels = read_imdb_split('aclImdb/train')
     test_texts, test_labels = read_imdb_split('aclImdb/test')
 
-We now have a train and test dataset, but let's also create a validation set which we can use for for evaluation
-and tuning without tainting our test set results. Sklearn has a convenient utility for creating such splits:
+We now have a train and test dataset, but let's also create a validation set which we can use for for evaluation and
+tuning without tainting our test set results. Sklearn has a convenient utility for creating such splits:
 
 .. code-block:: python
 
@@ -91,8 +91,8 @@ pre-trained DistilBert, so let's use the DistilBert tokenizer.
     tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
 
 Now we can simply pass our texts to the tokenizer. We'll pass ``truncation=True`` and ``padding=True``, which will
-ensure that all of our sequences are padded to the same length and are truncated to be no longer than model's maximum input
-length. This will allow us to feed batches of sequences into the model at the same time.
+ensure that all of our sequences are padded to the same length and are truncated to be no longer than model's maximum
+input length. This will allow us to feed batches of sequences into the model at the same time.
 
 .. code-block:: python
 
