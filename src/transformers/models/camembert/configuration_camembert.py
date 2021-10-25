@@ -15,7 +15,8 @@
 # limitations under the License.
 """ CamemBERT configuration """
 
-from typing import Mapping, OrderedDict
+from collections import OrderedDict
+from typing import Mapping
 
 from ...onnx import OnnxConfig
 from ...utils import logging
