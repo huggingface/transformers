@@ -29,10 +29,6 @@ from transformers import AutoTokenizer, GPT2Config
 ####################################################################################################
 
 
-def get_train_args(input_state_dict):
-    return input_state_dict.get("args", None)
-
-
 def recursive_print(name, val, spaces=0):
     # Format the message.
     if name is None:
@@ -84,7 +80,7 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     output_state_dict = {}
 
     # old versions did not store training args
-    ds_args = get_train_args(input_state_dict)
+    ds_args = input_state_dict.get("args", None)
     if ds_args is not None:
         # do not make the user write a config file when the exact dimensions/sizes are already in the checkpoint
         # from pprint import pprint
@@ -258,7 +254,7 @@ def main():
     else:
         input_state_dict = torch.load(args.path_to_checkpoint, map_location="cpu")
 
-    ds_args = get_train_args(input_state_dict)
+    ds_args = input_state_dict.get("args", None)
 
     # Read the config, or default to the model released by NVIDIA.
     if args.config_file == "":
