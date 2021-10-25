@@ -18,6 +18,7 @@
 from collections import OrderedDict
 from typing import Mapping
 
+from ...onnx import OnnxConfig
 from ...utils import logging
 from ..roberta.configuration_roberta import RobertaConfig
 
