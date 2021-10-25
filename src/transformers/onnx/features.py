@@ -5,6 +5,7 @@ from .. import is_torch_available
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
@@ -60,6 +61,7 @@ class FeaturesManager:
     _SUPPORTED_MODEL_KIND = {
         "albert": supported_features_mapping("default", onnx_config_cls=AlbertOnnxConfig),
         "bart": supported_features_mapping("default", onnx_config_cls=BartOnnxConfig),
+        "camembert": supported_features_mapping("default", onnx_config_cls=CamembertOnnxConfig),
         "mbart": supported_features_mapping("default", onnx_config_cls=MBartOnnxConfig),
         "bert": supported_features_mapping("default", onnx_config_cls=BertOnnxConfig),
         "distilbert": supported_features_mapping("default", onnx_config_cls=DistilBertOnnxConfig),
