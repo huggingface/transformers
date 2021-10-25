@@ -79,9 +79,9 @@ Here is how to quickly install `transformers` from source:
 pip install git+https://github.com/huggingface/transformers
 ```
 
-Note that this will install not the latest released version, but the bleeding edge `master` version, which you may want to use in case a bug has been fixed since the last official release and a new release hasn't  been yet rolled out.
+Note that this will install not the latest released version, but the bleeding edge `master` version, which you may want to use in case a bug has been fixed since the last official release and a new release hasn't been yet rolled out.
 
-While we strive to keep `master` operational at all times, if you notice some issues, they usually get fixed within a few hours or a day and and you're more than welcome to help us detect any problems by opening an [Issue](https://github.com/huggingface/transformers/issues) and this way, things will get fixed even sooner.
+While we strive to keep `master` operational at all times, if you notice some issues, they usually get fixed within a few hours or a day and you're more than welcome to help us detect any problems by opening an [Issue](https://github.com/huggingface/transformers/issues) and this way, things will get fixed even sooner.
 
 Again, you can run:
 
