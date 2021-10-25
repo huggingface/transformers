@@ -17,7 +17,7 @@ Fine-tuning with custom datasets
 
     The datasets used in this tutorial are available and can be more easily accessed using the `🤗 Datasets library
     <https://github.com/huggingface/datasets>`_. We do not use this library to access the datasets here since this
-    tutorial meant to illustrate how to work with your own data. A brief of introduction can be found at the end of the
+    tutorial meant to illustrate how to work with your own data. A brief introduction can be found at the end of the
     tutorial in the section ":ref:`datasetslib`".
 
 This tutorial will take you through several examples of using 🤗 Transformers models with your own datasets. The guide
@@ -74,8 +74,8 @@ read this in.
     train_texts, train_labels = read_imdb_split('aclImdb/train')
     test_texts, test_labels = read_imdb_split('aclImdb/test')
 
-We now have a train and test dataset, but let's also also create a validation set which we can use for for evaluation
-and tuning without tainting our test set results. Sklearn has a convenient utility for creating such splits:
+We now have a train and test dataset, but let's also create a validation set which we can use for for evaluation and
+tuning without tainting our test set results. Sklearn has a convenient utility for creating such splits:
 
 .. code-block:: python
 
@@ -91,8 +91,8 @@ pre-trained DistilBert, so let's use the DistilBert tokenizer.
     tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
 
 Now we can simply pass our texts to the tokenizer. We'll pass ``truncation=True`` and ``padding=True``, which will
-ensure that all of our sequences are padded to the same length and are truncated to be no longer model's maximum input
-length. This will allow us to feed batches of sequences into the model at the same time.
+ensure that all of our sequences are padded to the same length and are truncated to be no longer than model's maximum
+input length. This will allow us to feed batches of sequences into the model at the same time.
 
 .. code-block:: python
 
@@ -213,7 +213,7 @@ instantiate a :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer`.
 Fine-tuning with native PyTorch/TensorFlow
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We can also train use native PyTorch or TensorFlow:
+We can also train using native PyTorch or TensorFlow:
 
 .. code-block:: python
 
