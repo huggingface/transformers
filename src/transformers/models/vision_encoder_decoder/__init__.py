@@ -29,7 +29,7 @@ if is_torch_available():
     _import_structure["modeling_vision_encoder_decoder"] = ["VisionEncoderDecoderModel"]
 
 if is_tf_available():
-    _import_structure["modeling_vision_encoder_decoder"] = ["TFVisionEncoderDecoderModel"]
+    _import_structure["modeling_tf_vision_encoder_decoder"] = ["TFVisionEncoderDecoderModel"]
 
 if is_flax_available():
     _import_structure["modeling_flax_vision_encoder_decoder"] = ["FlaxVisionEncoderDecoderModel"]
