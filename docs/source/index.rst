@@ -620,6 +620,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/dpr
     model_doc/electra
     model_doc/encoderdecoder
+    model_doc/esm
     model_doc/flaubert
     model_doc/fnet
     model_doc/fsmt
