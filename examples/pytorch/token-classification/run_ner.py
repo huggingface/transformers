@@ -61,7 +61,7 @@ class ModelArguments:
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
     distill_teacher: Optional[str] = field(
-        default=None, metadata={"help": "Teacher model which needs to be a trained QA model"}
+        default=None, metadata={"help": "Teacher model which needs to be a trained NER model"}
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}

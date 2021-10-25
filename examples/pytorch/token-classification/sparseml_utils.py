@@ -8,7 +8,7 @@ from transformers.modeling_outputs import TokenClassifierOutput
 
 class TokenClassificationModuleExporter(ModuleExporter):
     """
-    Module exporter class for Question Answering
+    Module exporter class for Token Classification
     """
 
     @classmethod
