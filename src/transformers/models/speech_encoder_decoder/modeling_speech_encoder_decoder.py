@@ -513,11 +513,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             loss = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            return (
-                (loss,) + decoder_outputs[1:] + encoder_outputs
-                if loss is not None
-                else decoder_outputs + encoder_outputs
-            )
+            if loss is not None:
+                return (loss,) + decoder_outputs + encoder_outputs
+            else:
+                return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
             loss=loss,

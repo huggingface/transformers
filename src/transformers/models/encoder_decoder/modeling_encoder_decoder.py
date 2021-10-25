@@ -465,7 +465,6 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
@@ -482,11 +481,10 @@ class EncoderDecoderModel(PreTrainedModel):
             loss = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            return (
-                (loss,) + decoder_outputs[1:] + encoder_outputs
-                if loss is not None
-                else decoder_outputs + encoder_outputs
-            )
+            if loss is not None:
+                return (loss,) + decoder_outputs + encoder_outputs
+            else:
+                return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
             loss=loss,
