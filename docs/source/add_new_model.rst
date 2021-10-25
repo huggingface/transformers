@@ -76,7 +76,7 @@ Let's take a look:
 
 As you can see, we do make use of inheritance in 🤗 Transformers, but we keep the level of abstraction to an absolute
 minimum. There are never more than two levels of abstraction for any model in the library. :obj:`BrandNewBertModel`
-inherits from :obj:`BrandNewBertPreTrainedModel` which in turn inherits from :class:`~transformres.PreTrainedModel` and
+inherits from :obj:`BrandNewBertPreTrainedModel` which in turn inherits from :class:`~transformers.PreTrainedModel` and
 that's it. As a general rule, we want to make sure that a new model only depends on
 :class:`~transformers.PreTrainedModel`. The important functionalities that are automatically provided to every new
 model are :meth:`~transformers.PreTrainedModel.from_pretrained` and
@@ -271,7 +271,7 @@ logical components from one another and to have faster debugging cycles as inter
 notebooks are often easier to share with other contributors, which might be very helpful if you want to ask the Hugging
 Face team for help. If you are familiar with Jupiter notebooks, we strongly recommend you to work with them.
 
-The obvious disadvantage of Jupyther notebooks is that if you are not used to working with them you will have to spend
+The obvious disadvantage of Jupyter notebooks is that if you are not used to working with them you will have to spend
 some time adjusting to the new programming environment and that you might not be able to use your known debugging tools
 anymore, like ``ipdb``.
 
@@ -674,7 +674,7 @@ the ``input_ids`` (usually the word embeddings) are identical. And then work you
 network. At some point, you will notice a difference between the two implementations, which should point you to the bug
 in the 🤗 Transformers implementation. From our experience, a simple and efficient way is to add many print statements
 in both the original implementation and 🤗 Transformers implementation, at the same positions in the network
-respectively, and to successively remove print statements showing the same values for intermediate presentions.
+respectively, and to successively remove print statements showing the same values for intermediate presentations.
 
 When you're confident that both implementations yield the same output, verifying the outputs with
 ``torch.allclose(original_output, output, atol=1e-3)``, you're done with the most difficult part! Congratulations - the

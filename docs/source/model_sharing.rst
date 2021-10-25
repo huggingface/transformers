@@ -90,7 +90,7 @@ Directly push your model to the hub
    picture-in-picture" allowfullscreen></iframe>
 
 Once you have an API token (either stored in the cache or copied and pasted in your notebook), you can directly push a
-finetuned model you saved in :obj:`save_drectory` by calling:
+finetuned model you saved in :obj:`save_directory` by calling:
 
 .. code-block:: python
 
