@@ -854,7 +854,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
         )
 
 
-class ConvModule(nn.Module):
+class BeitConvModule(nn.Module):
     """
     A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
     layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
@@ -863,7 +863,7 @@ class ConvModule(nn.Module):
     """
 
     def __init__(self, in_channels, out_channels, kernel_size, padding=0, bias=False, dilation=1):
-        super(ConvModule, self).__init__()
+        super().__init__()
         self.conv = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -883,7 +883,7 @@ class ConvModule(nn.Module):
         return output
 
 
-class PPM(nn.ModuleList):
+class BeitPyramidPoolingModule(nn.ModuleList):
     """
     Pyramid Pooling Module (PPM) used in PSPNet.
 
@@ -898,7 +898,7 @@ class PPM(nn.ModuleList):
     """
 
     def __init__(self, pool_scales, in_channels, channels, align_corners):
-        super(PPM, self).__init__()
+        super().__init__()
         self.pool_scales = pool_scales
         self.align_corners = align_corners
         self.in_channels = in_channels
@@ -907,16 +907,11 @@ class PPM(nn.ModuleList):
             self.append(
                 nn.Sequential(
                     nn.AdaptiveAvgPool2d(pool_scale),
-                    ConvModule(
-                        self.in_channels,
-                        self.channels,
-                        1,
-                    ),
+                    BeitConvModule(self.in_channels, self.channels, kernel_size=1),
                 )
             )
 
     def forward(self, x):
-        """Forward function."""
         ppm_outs = []
         for ppm in self:
             ppm_out = ppm(x)
@@ -936,7 +931,7 @@ class BeitUperHead(nn.Module):
     """
 
     def __init__(self, config):
-        super(BeitUperHead, self).__init__()
+        super().__init__()
 
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
         self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
@@ -945,47 +940,35 @@ class BeitUperHead(nn.Module):
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
         # PSP Module
-        self.psp_modules = PPM(
+        self.psp_modules = BeitPyramidPoolingModule(
             self.pool_scales,
             self.in_channels[-1],
             self.channels,
             align_corners=self.align_corners,
         )
-        self.bottleneck = ConvModule(
+        self.bottleneck = BeitConvModule(
             self.in_channels[-1] + len(self.pool_scales) * self.channels,
             self.channels,
-            3,
+            kernel_size=3,
             padding=1,
         )
         # FPN Module
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
         for in_channels in self.in_channels[:-1]:  # skip the top layer
-            l_conv = ConvModule(
-                in_channels,
-                self.channels,
-                1,
-                # inplace=False,
-            )
-            fpn_conv = ConvModule(
-                self.channels,
-                self.channels,
-                3,
-                padding=1,
-                # inplace=False,
-            )
+            l_conv = BeitConvModule(in_channels, self.channels, kernel_size=1)
+            fpn_conv = BeitConvModule(self.channels, self.channels, kernel_size=3, padding=1)
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
 
-        self.fpn_bottleneck = ConvModule(
+        self.fpn_bottleneck = BeitConvModule(
             len(self.in_channels) * self.channels,
             self.channels,
-            3,
+            kernel_size=3,
             padding=1,
         )
 
     def psp_forward(self, inputs):
-        """Forward function of PSP module."""
         x = inputs[-1]
         psp_outs = [x]
         psp_outs.extend(self.psp_modules(x))
@@ -1040,7 +1023,7 @@ class BeitFCNHead(nn.Module):
     """
 
     def __init__(self, config, in_index=2, kernel_size=3, dilation=1):
-        super(BeitFCNHead, self).__init__()
+        super().__init__()
         self.in_channels = config.hidden_size
         self.channels = config.channels
         self.num_convs = config.num_convs
@@ -1050,22 +1033,14 @@ class BeitFCNHead(nn.Module):
         conv_padding = (kernel_size // 2) * dilation
         convs = []
         convs.append(
-            ConvModule(
-                self.in_channels,
-                self.channels,
-                kernel_size=kernel_size,
-                padding=conv_padding,
-                dilation=dilation,
+            BeitConvModule(
+                self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
             )
         )
         for i in range(self.num_convs - 1):
             convs.append(
-                ConvModule(
-                    self.channels,
-                    self.channels,
-                    kernel_size=kernel_size,
-                    padding=conv_padding,
-                    dilation=dilation,
+                BeitConvModule(
+                    self.channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
                 )
             )
         if self.num_convs == 0:
@@ -1073,22 +1048,18 @@ class BeitFCNHead(nn.Module):
         else:
             self.convs = nn.Sequential(*convs)
         if self.concat_input:
-            self.conv_cat = ConvModule(
-                self.in_channels + self.channels,
-                self.channels,
-                kernel_size=kernel_size,
-                padding=kernel_size // 2,
+            self.conv_cat = BeitConvModule(
+                self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
             )
 
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
     def forward(self, encoder_hidden_states):
-        """Forward function."""
         # just take the relevant feature maps
-        x = encoder_hidden_states[self.in_index]
-        output = self.convs(x)
+        hidden_states = encoder_hidden_states[self.in_index]
+        output = self.convs(hidden_states)
         if self.concat_input:
-            output = self.conv_cat(torch.cat([x, output], dim=1))
+            output = self.conv_cat(torch.cat([hidden_states, output], dim=1))
         output = self.classifier(output)
         return output
 
@@ -1136,9 +1107,9 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             )
         # compute weighted loss
         loss_fct = CrossEntropyLoss(ignore_index=255)
-        loss = loss_fct(upsampled_logits, labels) + self.config.loss_weight * loss_fct(
-            upsampled_auxiliary_logits, labels
-        )
+        main_loss = loss_fct(upsampled_logits, labels)
+        auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
+        loss = main_loss + self.config.loss_weight * auxiliary_loss
 
         return loss
 

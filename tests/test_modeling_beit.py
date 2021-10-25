@@ -18,6 +18,8 @@
 import inspect
 import unittest
 
+from datasets import load_dataset
+
 from transformers import BeitConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
@@ -492,13 +494,10 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640").to(
-            torch_device
-        )
+        model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        model = model.to(torch_device)
 
         feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
-
-        from datasets import load_dataset
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])
