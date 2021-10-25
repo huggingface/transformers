@@ -3289,6 +3289,15 @@ class SEWForCTC:
         requires_backends(self, ["torch"])
 
 
+class SEWForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class SEWModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3313,6 +3322,15 @@ SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST = None
 class SEWDForCTC:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+
+class SEWDForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class SEWDModel:

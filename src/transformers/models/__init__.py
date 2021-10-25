@@ -21,6 +21,7 @@ from . import (
     auto,
     bart,
     barthez,
+    bartpho,
     beit,
     bert,
     bert_generation,
