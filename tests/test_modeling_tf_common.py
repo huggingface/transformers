@@ -431,7 +431,6 @@ class TFModelTesterMixin:
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
-
         import torch
 
         import transformers
