@@ -182,7 +182,7 @@ jobs:
           path: reports
 
   run_all_examples_torch_xla_tpu:
-    runs-on: [self-hosted, tpu]
+    runs-on: [self-hosted, docker-tpu-test, tpu-v3-8]
     container:
       image: gcr.io/tpu-pytorch/xla:nightly_3.8_tpuvm
       options: --privileged -v "/lib/libtpu.so:/lib/libtpu.so" -v /mnt/cache/.cache/huggingface:/mnt/cache/ --shm-size 16G
