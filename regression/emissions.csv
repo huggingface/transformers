@@ -1,0 +1,8 @@
+timestamp,experiment_id,project_name,duration,emissions,energy_consumed,country_name,country_iso_code,region,on_cloud,cloud_provider,cloud_region
+2021-10-25T16:18:45,c40329d3-f883-46c9-a35b-ef7c2b922d9c,codecarbon,3.22414231300354,0.0,0.0,France,FRA,brittany,N,,
+2021-10-25T16:18:49,00383a16-b9bd-4b2b-a2e7-b6f3c17ad60f,codecarbon,3.2382335662841797,0.0,0.0,France,FRA,brittany,N,,
+2021-10-25T16:18:54,4a91b654-df62-42e6-9846-e2e09f37945e,codecarbon,3.229618787765503,0.0,0.0,France,FRA,brittany,N,,
+2021-10-25T16:18:59,e0bee12d-67e7-4a79-a86d-96aa14c0e8fb,codecarbon,3.2511134147644043,0.0,0.0,France,FRA,brittany,N,,
+2021-10-25T16:19:03,590e02fe-b31f-4f56-8ae5-6c4b47db9e74,codecarbon,3.347187042236328,0.0,0.0,France,FRA,brittany,N,,
+2021-10-25T16:19:06,3b804366-fc74-4faf-a5fa-453b94d4665c,codecarbon,3.2350943088531494,0.0,0.0,France,FRA,brittany,N,,
+2021-10-25T16:19:40,3f4157a0-94a5-40a6-b493-5afaa7f47a7a,codecarbon,3.2336323261260986,0.0,0.0,France,FRA,brittany,N,,
