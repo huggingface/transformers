@@ -1,0 +1,1 @@
+Pull request to add a LayoutLMv2ForMaskedLM, which adds a language modeling head on top of the base model in order to replicate the first pre-training objective of the model. https://github.com/huggingface/transformers/issues/14160#issuecomment-952024460
