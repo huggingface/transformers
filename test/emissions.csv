@@ -1,3 +1,0 @@
-timestamp,experiment_id,project_name,duration,emissions,energy_consumed,country_name,country_iso_code,region,on_cloud,cloud_provider,cloud_region
-2021-10-25T16:19:19,25007a82-c71d-4804-ac79-0580cb5c1643,codecarbon,5.613269329071045,0.0,0.0,France,FRA,brittany,N,,
-2021-10-25T16:19:24,e05698dc-b68f-470e-9a58-71c252e8f492,codecarbon,4.62658953666687,0.0,0.0,France,FRA,brittany,N,,
