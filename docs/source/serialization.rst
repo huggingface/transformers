@@ -43,6 +43,7 @@ Ready-made configurations include the following models:
 - ALBERT
 - BART
 - BERT
+- CamemBERT
 - DistilBERT
 - GPT Neo
 - LayoutLM
