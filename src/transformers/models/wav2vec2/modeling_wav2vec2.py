@@ -871,9 +871,6 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         # can be decayed for training
         self.temperature = 2
 
-    def set_temperature(self, temperature: int):
-        self.temperature = temperature
-
     @staticmethod
     def _compute_perplexity(probs, mask=None):
         if mask is not None:
@@ -1200,7 +1197,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         """
         Set the Gumbel softmax temperature to a given value. Only necessary for training
         """
-        return self.quantizer.set_temperature(temperature)
+        self.quantizer.temperature = temperature
 
     def freeze_feature_extractor(self):
         """
