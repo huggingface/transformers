@@ -113,6 +113,21 @@ class XSoftmax(torch.autograd.Function):
         inputGrad = _softmax_backward_data(grad_output, output, self.dim, output)
         return inputGrad, None, None
 
+    @staticmethod
+    def symbolic(g, self, mask, dim):
+        import torch.onnx.symbolic_helper as sym_help
+        from torch.onnx.symbolic_opset9 import masked_fill, softmax
+
+        mask_cast_value = g.op("Cast", mask, to_i=sym_help.cast_pytorch_to_onnx["Long"])
+        r_mask = g.op(
+            "Cast",
+            g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
+            to_i=sym_help.cast_pytorch_to_onnx["Byte"],
+        )
+        output = masked_fill(g, self, r_mask, g.op("Constant", value_t=torch.tensor(float("-inf"))))
+        output = softmax(g, output, dim)
+        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.uint8)))
+
 
 class DropoutContext(object):
     def __init__(self):
@@ -1178,10 +1193,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
         else:
             return SequenceClassifierOutput(
-                loss=loss,
-                logits=logits,
-                hidden_states=outputs.hidden_states,
-                attentions=outputs.attentions,
+                loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
             )
 
 
@@ -1266,10 +1278,7 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
 
