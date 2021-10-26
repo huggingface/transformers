@@ -22,8 +22,8 @@ import torch
 
 from transformers import (  # UniSpeechSatCTCTokenizer,; UniSpeechSatFeatureExtractor,; UniSpeechSatProcessor,
     UniSpeechSatConfig,
-    UniSpeechSatForPreTraining,
     UniSpeechSatForCTC,
+    UniSpeechSatForPreTraining,
     logging,
 )
 
@@ -177,7 +177,9 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 
 @torch.no_grad()
-def convert_unispeech_sat_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True):
+def convert_unispeech_sat_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True
+):
     """
     Copy/paste/tweak model's weights to transformers design.
     """

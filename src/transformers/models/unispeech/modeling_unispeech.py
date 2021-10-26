@@ -425,9 +425,12 @@ class UniSpeechAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -839,11 +842,8 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
         # can be decayed for training
         self.temperature = 2
 
-    def set_temperature(self, temperature: int):
-        self.temperature = temperature
-
     @staticmethod
-    def _compute_perplexity(probs, mask=None):
+    def _compute_perplexity(probs):
         marginal_probs = probs.mean(dim=0)
         perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
@@ -880,11 +880,8 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
         codevector_probs = codevector_probs.view(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
         codevectors_per_group = codevector_probs.unsqueeze(-1) * self.codevectors
-        codevectors = (
-            codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
-            .sum(-2)
-            .view(batch_size, sequence_length, -1)
-        )
+        codevectors = codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
+        codevectors = codevectors.sum(-2).view(batch_size, sequence_length, -1)
 
         return codevectors, perplexity
 
@@ -1082,9 +1079,8 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)[
-                :, None
-            ].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
+            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states
@@ -1177,54 +1173,6 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         self.unispeech.feature_extractor._freeze_parameters()
 
     @staticmethod
-    def _sample_negatives(
-        features: torch.FloatTensor, num_negatives: int, attention_mask: Optional[torch.LongTensor] = None
-    ):
-        """
-        Sample `num_negatives` vectors from feature vectors.
-        """
-        batch_size, sequence_length, hidden_size = features.shape
-        if sequence_length <= 1:
-            raise ValueError(
-                f"`features should have `sequence_length` > 1, but are of shape (batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
-            )
-
-        features = features.view(-1, hidden_size)  # BTC => (BxT)C
-
-        with torch.no_grad():
-            # get `num_negatives` random vector indices from the same utterance
-            sampled_negative_indices = []
-            for batch_idx in range(batch_size):
-                high = attention_mask[batch_idx].sum() - 1 if attention_mask is not None else sequence_length - 1
-                sampled_indices_slice = torch.randint(
-                    0, high, size=(num_negatives * sequence_length,), device=features.device
-                )
-                sampled_negative_indices.append(sampled_indices_slice)
-
-            sampled_negative_indices = torch.stack(sampled_negative_indices)
-
-            # generate indices of the positive vectors themselves, repeat them `num_negatives` times
-            feature_indices = (
-                torch.arange(sequence_length, device=features.device)[:, None]
-                .expand(sequence_length, num_negatives)
-                .flatten()
-            )
-
-            # avoid sampling the same positive vector, but keep the distribution uniform
-            sampled_negative_indices[sampled_negative_indices >= feature_indices] += 1
-
-        # correct for batch size
-        for batch_idx in range(1, batch_size):
-            sampled_negative_indices[batch_idx] += batch_idx * sequence_length
-
-        # take negative vectors from sampled indices
-        sampled_negatives = features[sampled_negative_indices.view(-1)]
-        sampled_negatives = sampled_negatives.view(batch_size, sequence_length, num_negatives, hidden_size)
-        sampled_negatives = sampled_negatives.permute(2, 0, 1, 3)
-
-        return sampled_negatives
-
-    @staticmethod
     def compute_contrastive_logits(
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
@@ -1233,7 +1181,8 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
-        :obj:`[positive_feature, negative_features]` and :obj:`[predicted_features]`. Additionally, temperature can be applied.
+        :obj:`[positive_feature, negative_features]` and :obj:`[predicted_features]`. Additionally, temperature can be
+        applied.
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
@@ -1335,7 +1284,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         sampled_replace_matrix = sampled_replace_matrix.transpose(0, 1)
         sampled_replace_matrix = sampled_replace_matrix.unsqueeze(-1)
         logits = transformer_features.masked_fill(sampled_replace_matrix, 0.0) + (
-            quantized_features.masked_fill(~sampled_replace_matrix, 0.0
+            quantized_features.masked_fill(~sampled_replace_matrix, 0.0)
         )
 
         # project to ctc units

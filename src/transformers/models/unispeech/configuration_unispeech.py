@@ -40,10 +40,9 @@ class UniSpeechConfig(PretrainedConfig):
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 32):
             Vocabulary size of the UniSpeech model. Defines the number of different tokens that can be represented by
-            the :obj:`inputs_ids` passed when calling :class:`~transformers.UniSpeechModel` or
-            :class:`~transformers.TFUniSpeechModel`. Vocabulary size of the model. Defines the different tokens that
-            can be represented by the `inputs_ids` passed to the forward method of
-            :class:`~transformers.UniSpeechModel`.
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.UniSpeechModel`. Vocabulary size of the
+            model. Defines the different tokens that can be represented by the `inputs_ids` passed to the forward
+            method of :class:`~transformers.UniSpeechModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):

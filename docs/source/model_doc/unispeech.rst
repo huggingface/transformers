@@ -39,7 +39,8 @@ Tips:
 - UniSpeech model can be fine-tuned using connectionist temporal classification (CTC) so the model output has to be
   decoded using :class:`~transformers.Wav2Vec2CTCTokenizer`.
 
-This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__.
+This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__. The Authors' code can be
+found `here <https://github.com/microsoft/UniSpeech/tree/main/UniSpeech>`__.
 
 
 UniSpeechConfig

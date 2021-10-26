@@ -426,9 +426,12 @@ class UniSpeechSatAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -840,9 +843,6 @@ class UniSpeechSatGumbelVectorQuantizer(nn.Module):
         # can be decayed for training
         self.temperature = 2
 
-    def set_temperature(self, temperature: int):
-        self.temperature = temperature
-
     @staticmethod
     def _compute_perplexity(probs, mask=None):
         marginal_probs = probs.mean(dim=0)
@@ -881,11 +881,8 @@ class UniSpeechSatGumbelVectorQuantizer(nn.Module):
         codevector_probs = codevector_probs.view(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
         codevectors_per_group = codevector_probs.unsqueeze(-1) * self.codevectors
-        codevectors = (
-            codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
-            .sum(-2)
-            .view(batch_size, sequence_length, -1)
-        )
+        codevectors = codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
+        codevectors = codevectors.sum(-2).view(batch_size, sequence_length, -1)
 
         return codevectors, perplexity
 
@@ -1083,9 +1080,8 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)[
-                :, None
-            ].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
+            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states
@@ -1172,7 +1168,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         """
         Set the Gumbel softmax temperature to a given value. Only necessary for training
         """
-        return self.quantizer.set_temperature(temperature)
+        self.quantizer.temperature = temperature
 
     def freeze_feature_extractor(self):
         """
@@ -1180,54 +1176,6 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         will not be updated during training.
         """
         self.unispeech_sat.feature_extractor._freeze_parameters()
-
-    @staticmethod
-    def _sample_negatives(
-        features: torch.FloatTensor, num_negatives: int, attention_mask: Optional[torch.LongTensor] = None
-    ):
-        """
-        Sample `num_negatives` vectors from feature vectors.
-        """
-        batch_size, sequence_length, hidden_size = features.shape
-        if sequence_length <= 1:
-            raise ValueError(
-                f"`features should have `sequence_length` > 1, but are of shape (batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
-            )
-
-        features = features.view(-1, hidden_size)  # BTC => (BxT)C
-
-        with torch.no_grad():
-            # get `num_negatives` random vector indices from the same utterance
-            sampled_negative_indices = []
-            for batch_idx in range(batch_size):
-                high = attention_mask[batch_idx].sum() - 1 if attention_mask is not None else sequence_length - 1
-                sampled_indices_slice = torch.randint(
-                    0, high, size=(num_negatives * sequence_length,), device=features.device
-                )
-                sampled_negative_indices.append(sampled_indices_slice)
-
-            sampled_negative_indices = torch.stack(sampled_negative_indices)
-
-            # generate indices of the positive vectors themselves, repeat them `num_negatives` times
-            feature_indices = (
-                torch.arange(sequence_length, device=features.device)[:, None]
-                .expand(sequence_length, num_negatives)
-                .flatten()
-            )
-
-            # avoid sampling the same positive vector, but keep the distribution uniform
-            sampled_negative_indices[sampled_negative_indices >= feature_indices] += 1
-
-        # correct for batch size
-        for batch_idx in range(1, batch_size):
-            sampled_negative_indices[batch_idx] += batch_idx * sequence_length
-
-        # take negative vectors from sampled indices
-        sampled_negatives = features[sampled_negative_indices.view(-1)]
-        sampled_negatives = sampled_negatives.view(batch_size, sequence_length, num_negatives, hidden_size)
-        sampled_negatives = sampled_negatives.permute(2, 0, 1, 3)
-
-        return sampled_negatives
 
     @staticmethod
     def compute_contrastive_logits(

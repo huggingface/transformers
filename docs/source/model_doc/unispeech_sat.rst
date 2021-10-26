@@ -43,7 +43,8 @@ Tips:
   decoded using :class:`~transformers.Wav2Vec2CTCTokenizer`.
 - UniSpeechSat performs especially well on speaker verification, speaker identification, and speaker diarization tasks.
 
-This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__.
+This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__. The Authors' code can be
+found `here <https://github.com/microsoft/UniSpeech/tree/main/UniSpeech-SAT>`__.
 
 
 UniSpeechSatConfig

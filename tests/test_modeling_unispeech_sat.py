@@ -19,6 +19,7 @@ import unittest
 
 import numpy as np
 import pytest
+from datasets import load_dataset
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import UniSpeechSatConfig, is_torch_available
@@ -723,8 +724,6 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class UniSpeechSatModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
         import soundfile as sf
 
         ids = [f"1272-141231-000{i}" for i in range(num_samples)]
@@ -742,8 +741,6 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         return ds["speech"][:num_samples]
 
     def _load_superb(self, task, num_samples):
-        from datasets import load_dataset
-
         ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]

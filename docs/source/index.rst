@@ -314,13 +314,14 @@ Supported models
     with the paper `TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models
     <https://arxiv.org/abs/2109.10282>`__ by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
     Zhoujun Li, Furu Wei.
-72. :doc:`UniSpeech <model_doc/unispeech>` (from Microsoft Research) released with the paper `UniSpeech: Unified Speech
-    Representation Learning with Labeled and Unlabeled Data <https://arxiv.org/abs/2101.07597>`__ by Chengyi Wang, Yu
-    Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei, Michael Zeng, Xuedong Huang.
-73. :doc:`UniSpeechSat <model_doc/unispeech_sat>` (from Microsoft Research) released with the paper `UNISPEECH-SAT:
-    UNIVERSAL SPEECH REPRESENTATION LEARNING WITH SPEAKER AWARE PRE-TRAINING <https://arxiv.org/abs/2110.05752>`__ by
-    Sanyuan Chen, Yu Wu, Chengyi Wang, Zhengyang Chen, Zhuo Chen, Shujie Liu, Jian Wu, Yao Qian, Furu Wei, Jinyu Li,
-    Xiangzhan Yu.
+72. `UniSpeech <https://huggingface.co/transformers/master/model_doc/unispeech.html>`__ (from Microsoft Research)
+    released with the paper `UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled Data
+    <https://arxiv.org/abs/2101.07597>`__ by Chengyi Wang, Yu Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei,
+    Michael Zeng, Xuedong Huang.
+73. `UniSpeechSat <https://huggingface.co/transformers/master/model_doc/unispeech_sat.html>`__ (from Microsoft
+    Research) released with the paper `UNISPEECH-SAT: UNIVERSAL SPEECH REPRESENTATION LEARNING WITH SPEAKER AWARE
+    PRE-TRAINING <https://arxiv.org/abs/2110.05752>`__ by Sanyuan Chen, Yu Wu, Chengyi Wang, Zhengyang Chen, Zhuo Chen,
+    Shujie Liu, Jian Wu, Yao Qian, Furu Wei, Jinyu Li, Xiangzhan Yu.
 74. :doc:`Vision Transformer (ViT) <model_doc/vit>` (from Google AI) released with the paper `An Image is Worth 16x16
     Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`__ by Alexey Dosovitskiy,
     Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias
