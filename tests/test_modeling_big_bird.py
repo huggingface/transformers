@@ -59,7 +59,7 @@ class BigBirdModelTester:
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
-        hidden_act="gelu_fast",
+        hidden_act="gelu_new",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=256,
