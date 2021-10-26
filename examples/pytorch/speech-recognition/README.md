@@ -118,6 +118,7 @@ It has been verified that the script works for the following datasets:
 
 - [Common Voice](https://huggingface.co/datasets/common_voice)
 - [Librispeech](https://huggingface.co/datasets/librispeech_asr)
+- [TIMIT](https://huggingface.co/datasets/timit_asr)
 
 | Dataset | Dataset Config | Pretrained Model | Word error rate on eval | GPU setup | Training time | Fine-tuned Model & Logs |
 |-------|------------------------------|-------------|---------------|---------------|----------------------|-------------|
@@ -125,3 +126,6 @@ It has been verified that the script works for the following datasets:
 | [Librispeech](https://huggingface.co/datasets/librispeech_asr)| `"clean"` - `"train.100"` |  [facebook/hubert-large-ll60k](https://huggingface.co/facebook/hubert-large-ll60k) | 0.088 | 8 GPU V100 | 1h30min  | [here](https://huggingface.co/patrickvonplaten/hubert-librispeech-clean-100h-demo-dist) |
 | [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53)  | 0.36     | 8 GPU V100   |  18min                 | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo-dist)      |  
 | [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) | 0.35 | 1 GPU V100   |  1h20min                      | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo)  | 
+| [TIMIT](https://huggingface.co/datasets/timit_asr)| -  | [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) | 0.21 | 1 GPU TITAN RTX |  32min                      | [here](https://huggingface.co/patrickvonplaten/wav2vec2-base-timit-fine-tuned)  | 
+| [TIMIT](https://huggingface.co/datasets/timit_asr)| -  | [unispeech-large-1500h-cv](https://huggingface.co/microsoft/unispeech-large-1500h-cv) | 0.22 | 1 GPU TITAN RTX |  35min                      | [here](https://huggingface.co/patrickvonplaten/unispeech-large-1500h-cv-timit)  | 
+| [TIMIT](https://huggingface.co/datasets/timit_asr)| -  | [unispeech-sat-base](https://huggingface.co/microsoft/unispeech-sat-base) | 0.41 | 1 GPU TITAN RTX |  32min                      | [here](https://huggingface.co/patrickvonplaten/unispeech-sat-base-timit-ft)  | 
