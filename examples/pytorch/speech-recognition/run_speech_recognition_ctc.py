@@ -397,8 +397,9 @@ def main():
     # make sure all processes wait until vocab is created
     vocab_file = os.path.join(training_args.output_dir, "vocab.json")
 
-    if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
-        os.remove(vocab_file)
+    with training_args.main_process_first():
+        if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
+            os.remove(vocab_file)
 
     with training_args.main_process_first(desc="dataset map vocabulary creation"):
         if not os.path.isfile(vocab_file):
