@@ -395,20 +395,20 @@ def main():
     # the training and evaluation datasets
     # We need to make sure that only first rank saves vocabulary
     # make sure all processes wait until vocab is created
+    vocab_file = os.path.join(training_args.output_dir, "vocab.json")
 
-    with training_args.main_process_first(desc="dataset map vocabulary creation"):
-        vocab_dict = create_vocabulary_from_data(raw_datasets)
-
-        vocab_file = os.path.join(training_args.output_dir, "vocab.json")
-
-        # save vocab dict to be loaded into tokenizer
-        os.makedirs(training_args.output_dir, exist_ok=True)
+    with training_args.main_process_first():
         if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
             os.remove(vocab_file)
 
+    with training_args.main_process_first(desc="dataset map vocabulary creation"):
         if not os.path.isfile(vocab_file):
-            with open(vocab_file, "w") as vocab_file:
-                json.dump(vocab_dict, vocab_file)
+            os.makedirs(training_args.output_dir, exist_ok=True)
+            vocab_dict = create_vocabulary_from_data(raw_datasets)
+
+            # save vocab dict to be loaded into tokenizer
+            with open(vocab_file, "w") as file:
+                json.dump(vocab_dict, file)
 
     # 4. Now we can instantiate the configuration, feature extractor, tokenizer and model
     # Note for distributed training, the .from_pretrained methods guarantee that only
