@@ -89,6 +89,7 @@ from . import (
     t5,
     tapas,
     transfo_xl,
+    vision_encoder_decoder,
     visual_bert,
     vit,
     wav2vec2,
