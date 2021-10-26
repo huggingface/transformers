@@ -53,9 +53,15 @@ logger = logging.get_logger(__name__)
 tf_logger = tf.get_logger()
 
 TFModelInputType = Union[
-    List[tf.Tensor], List[np.ndarray], List[KerasTensor],
-    Dict[str, tf.Tensor], Dict[str, np.ndarray], Dict[str, KerasTensor],
-    tf.Tensor, np.ndarray, KerasTensor
+    List[tf.Tensor],
+    List[np.ndarray],
+    List[KerasTensor],
+    Dict[str, tf.Tensor],
+    Dict[str, np.ndarray],
+    Dict[str, KerasTensor],
+    tf.Tensor,
+    np.ndarray,
+    KerasTensor,
 ]
 
 
