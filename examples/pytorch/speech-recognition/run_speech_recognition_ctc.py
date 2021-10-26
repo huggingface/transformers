@@ -356,7 +356,7 @@ def main():
 
     if data_args.text_column_name not in raw_datasets["train"].column_names:
         raise ValueError(
-            f"--text_column_name {data_args.audio_column_name} not found in dataset '{data_args.dataset_name}'. "
+            f"--text_column_name {data_args.text_column_name} not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--text_column_name` to the correct text column - one of "
             f"{', '.join(raw_datasets['train'].column_names)}."
         )
