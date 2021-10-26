@@ -1224,9 +1224,8 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
 
         # take negative vectors from sampled indices
         sampled_negatives = features[sampled_negative_indices.view(-1)]
-        sampled_negatives = sampled_negatives.view(batch_size, sequence_length, num_negatives, hidden_size).permute(
-            2, 0, 1, 3
-        )
+        sampled_negatives = sampled_negatives.view(batch_size, sequence_length, num_negatives, hidden_size)
+        sampled_negatives = sampled_negatives.permute(2, 0, 1, 3)
 
         return sampled_negatives
 
@@ -1243,9 +1242,8 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
-        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1).type_as(
-            target_features
-        )
+        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1)
+        logits = logits.type_as(target_features)
 
         # apply temperature
         logits = logits / temperature

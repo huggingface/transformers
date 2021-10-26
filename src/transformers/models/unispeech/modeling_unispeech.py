@@ -1167,7 +1167,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         """
         Set the Gumbel softmax temperature to a given value. Only necessary for training
         """
-        return self.quantizer.set_temperature(temperature)
+        self.quantizer.temperature = temperature
 
     def freeze_feature_extractor(self):
         """
@@ -1219,9 +1219,8 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
         # take negative vectors from sampled indices
         sampled_negatives = features[sampled_negative_indices.view(-1)]
-        sampled_negatives = sampled_negatives.view(batch_size, sequence_length, num_negatives, hidden_size).permute(
-            2, 0, 1, 3
-        )
+        sampled_negatives = sampled_negatives.view(batch_size, sequence_length, num_negatives, hidden_size)
+        sampled_negatives = sampled_negatives.permute(2, 0, 1, 3)
 
         return sampled_negatives
 
@@ -1234,13 +1233,12 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
-        `[positive_feature, negative_features]` and `[predicted_features]`. Additionally, temperature can be applied.
+        :obj:`[positive_feature, negative_features]` and :obj:`[predicted_features]`. Additionally, temperature can be applied.
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
-        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1).type_as(
-            target_features
-        )
+        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1)
+        logits = logits.type_as(target_features)
 
         # apply temperature
         logits = logits / temperature
@@ -1336,8 +1334,8 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool().to(transformer_features.device)
         sampled_replace_matrix = sampled_replace_matrix.transpose(0, 1)
         sampled_replace_matrix = sampled_replace_matrix.unsqueeze(-1)
-        logits = transformer_features.masked_fill(sampled_replace_matrix, 0.0) + quantized_features.masked_fill(
-            ~sampled_replace_matrix, 0.0
+        logits = transformer_features.masked_fill(sampled_replace_matrix, 0.0) + (
+            quantized_features.masked_fill(~sampled_replace_matrix, 0.0
         )
 
         # project to ctc units
