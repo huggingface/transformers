@@ -25,6 +25,8 @@ from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
+from packaging import version
+
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
@@ -866,7 +868,12 @@ class Pipeline(_ScikitCompat):
                 model_inputs["training"] = False
                 model_outputs = self._forward(model_inputs, **forward_params)
             elif self.framework == "pt":
-                with torch.no_grad():
+                inference_context = (
+                    torch.inference_mode
+                    if version.parse(torch.__version__) >= version.parse("1.9.0")
+                    else torch.no_grad
+                )
+                with inference_context():
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                     model_outputs = self._forward(model_inputs, **forward_params)
                     model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
