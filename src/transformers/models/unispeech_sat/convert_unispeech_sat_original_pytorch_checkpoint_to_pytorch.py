@@ -23,6 +23,7 @@ import torch
 from transformers import (  # UniSpeechSatCTCTokenizer,; UniSpeechSatFeatureExtractor,; UniSpeechSatProcessor,
     UniSpeechSatConfig,
     UniSpeechSatForPreTraining,
+    UniSpeechSatForCTC,
     logging,
 )
 
@@ -176,7 +177,7 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 
 @torch.no_grad()
-def convert_unispeech_sat_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None):
+def convert_unispeech_sat_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
@@ -187,7 +188,10 @@ def convert_unispeech_sat_checkpoint(checkpoint_path, pytorch_dump_folder_path, 
 
     dict_path = ""
 
-    hf_wav2vec = UniSpeechSatForPreTraining(config)
+    if is_finetuned:
+        hf_wav2vec = UniSpeechSatForCTC(config)
+    else:
+        hf_wav2vec = UniSpeechSatForPreTraining(config)
 
     model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
         [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
@@ -205,7 +209,10 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument(
+        "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
+    )
     args = parser.parse_args()
     convert_unispeech_sat_checkpoint(
-        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path
+        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, not args.not_finetuned
     )
