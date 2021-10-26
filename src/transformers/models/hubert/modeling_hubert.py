@@ -43,7 +43,7 @@ _CONFIG_FOR_DOC = "HubertConfig"
 _CHECKPOINT_FOR_DOC = "facebook/hubert-base-ls960"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
-_SEQ_CLASS_CHECKPOINT = ("superb/hubert-base-superb-ks",)
+_SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
 _SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 1
@@ -354,9 +354,12 @@ class HubertAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -929,9 +932,8 @@ class HubertModel(HubertPreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)[
-                :, None
-            ].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
+            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states
