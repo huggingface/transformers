@@ -164,9 +164,13 @@ class Seq2SeqTrainer(Trainer):
             "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
         }
 
+        if self.tokenizer is not None:
+            generation_inputs = {k: v for k, v in inputs.items() if k in self.tokenizer.model_input_names}
+        else:
+            generation_inputs = inputs["input_ids"]
+
         generated_tokens = self.model.generate(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
+            **generation_inputs,
             **gen_kwargs,
         )
         # in case the batch is shorter than max length, the output should be padded
