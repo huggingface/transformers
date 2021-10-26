@@ -12,10 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Wav2Vec2 model. """
+""" PyTorch UniSpeechSat model. """
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -34,37 +33,33 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, MaskedLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_wav2vec2 import Wav2Vec2Config
+from .configuration_unispeech_sat import UniSpeechSatConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "Wav2Vec2Config"
-_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
-_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
+_CONFIG_FOR_DOC = "UniSpeechSatConfig"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+_CHECKPOINT_FOR_DOC = "microsoft/unispeech-sat-base-plus"
+
+_SEQ_CLASS_CHECKPOINT = "microsoft/unispeech-sat-base-plus"
 _SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 2
 
-
-WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-base-960h",
-    "facebook/wav2vec2-large-960h",
-    "facebook/wav2vec2-large-960h-lv60",
-    "facebook/wav2vec2-large-960h-lv60-self",
-    # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
+UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    # See all UniSpeechSat models at https://huggingface.co/models?filter=unispeech_sat
 ]
 
 
 @dataclass
-class Wav2Vec2BaseModelOutput(ModelOutput):
+class UniSpeechSatBaseModelOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.Wav2Vec2BaseModelOutput`, with potential hidden states and attentions.
+    Output type of :class:`~transformers.UniSpeechSatBaseModelOutput`, with potential hidden states and attentions.
 
     Args:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
@@ -91,12 +86,13 @@ class Wav2Vec2BaseModelOutput(ModelOutput):
 
 
 @dataclass
-class Wav2Vec2ForPreTrainingOutput(ModelOutput):
+class UniSpeechSatForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.Wav2Vec2ForPreTrainingOutput`, with potential hidden states and attentions.
+    Output type of :class:`~transformers.UniSpeechSatForPreTrainingOutput`, with potential hidden states and
+    attentions.
 
     Args:
-        loss (`optional`, returned when :obj:`sample_negative_indices` are passed, ``torch.FloatTensor`` of shape :obj:`(1,)`):
+        loss (`optional`, returned when model is in train mode, ``torch.FloatTensor`` of shape :obj:`(1,)`):
             Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the `official
             paper <https://arxiv.org/pdf/2006.11477.pdf>`__ . (classification) loss.
         projected_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
@@ -116,22 +112,18 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        contrastive_loss (`optional`, returned when :obj:`sample_negative_indices` are passed, ``torch.FloatTensor`` of shape :obj:`(1,)`):
-            The contrastive loss (L_m) as stated in the `official paper <https://arxiv.org/pdf/2006.11477.pdf>`__ .
-        diversity_loss (`optional`, returned when :obj:`sample_negative_indices` are passed, ``torch.FloatTensor`` of shape :obj:`(1,)`):
-            The diversity loss (L_d) as stated in the `official paper <https://arxiv.org/pdf/2006.11477.pdf>`__ .
     """
 
     loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
     projected_states: torch.FloatTensor = None
     projected_quantized_states: torch.FloatTensor = None
     codevector_perplexity: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    contrastive_loss: Optional[torch.FloatTensor] = None
-    diversity_loss: Optional[torch.FloatTensor] = None
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
 def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
@@ -225,43 +217,8 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _sample_negative_indices(
-    features_shape: Tuple, num_negatives: int, mask_time_indices: Optional[np.ndarray] = None
-):
-    """
-    Sample `num_negatives` vectors from feature vectors.
-    """
-    batch_size, sequence_length = features_shape
-
-    # generate indices of the positive vectors themselves, repeat them `num_negatives` times
-    sequence_length_range = np.arange(sequence_length)
-
-    # get `num_negatives` random vector indices from the same utterance
-    sampled_negative_indices = np.zeros(shape=(batch_size, sequence_length, num_negatives), dtype=np.int32)
-
-    mask_time_indices = (
-        mask_time_indices.astype(np.bool) if mask_time_indices is not None else np.ones(features_shape, dtype=np.bool)
-    )
-
-    for batch_idx in range(batch_size):
-        high = mask_time_indices[batch_idx].sum() - 1
-        mapped_masked_indices = sequence_length_range[mask_time_indices[batch_idx]]
-
-        feature_indices = np.broadcast_to(np.arange(high + 1)[:, None], (high + 1, num_negatives))
-        sampled_indices = np.random.randint(0, high, size=(high + 1, num_negatives))
-        # avoid sampling the same positive vector, but keep the distribution uniform
-        sampled_indices[sampled_indices >= feature_indices] += 1
-
-        # remap to actual indices
-        sampled_negative_indices[batch_idx][mask_time_indices[batch_idx]] = mapped_masked_indices[sampled_indices]
-
-        # correct for batch size
-        sampled_negative_indices[batch_idx] += batch_idx * sequence_length
-
-    return sampled_negative_indices
-
-
-class Wav2Vec2NoLayerNormConvLayer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->UniSpeechSat
+class UniSpeechSatNoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -282,7 +239,8 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2LayerNormConvLayer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->UniSpeechSat
+class UniSpeechSatLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -309,7 +267,8 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2GroupNormConvLayer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->UniSpeechSat
+class UniSpeechSatGroupNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -333,7 +292,8 @@ class Wav2Vec2GroupNormConvLayer(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2PositionalConvEmbedding(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->UniSpeechSat
+class UniSpeechSatPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv = nn.Conv1d(
@@ -354,7 +314,7 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
         else:
             self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
 
-        self.padding = Wav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
+        self.padding = UniSpeechSatSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
     def forward(self, hidden_states):
@@ -368,7 +328,8 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2SamePadLayer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->UniSpeechSat
+class UniSpeechSatSamePadLayer(nn.Module):
     def __init__(self, num_conv_pos_embeddings):
         super().__init__()
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
@@ -379,19 +340,21 @@ class Wav2Vec2SamePadLayer(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2FeatureExtractor(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->UniSpeechSat
+class UniSpeechSatFeatureExtractor(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
         super().__init__()
 
         if config.feat_extract_norm == "group":
-            conv_layers = [Wav2Vec2GroupNormConvLayer(config, layer_id=0)] + [
-                Wav2Vec2NoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
+            conv_layers = [UniSpeechSatGroupNormConvLayer(config, layer_id=0)] + [
+                UniSpeechSatNoLayerNormConvLayer(config, layer_id=i + 1)
+                for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
             conv_layers = [
-                Wav2Vec2LayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
+                UniSpeechSatLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
             ]
         else:
             raise ValueError(
@@ -430,7 +393,8 @@ class Wav2Vec2FeatureExtractor(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2FeatureProjection(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->UniSpeechSat
+class UniSpeechSatFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
@@ -445,8 +409,8 @@ class Wav2Vec2FeatureProjection(nn.Module):
         return hidden_states, norm_hidden_states
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Wav2Vec2
-class Wav2Vec2Attention(nn.Module):
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->UniSpeechSat
+class UniSpeechSatAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -586,7 +550,8 @@ class Wav2Vec2Attention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class Wav2Vec2FeedForward(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->UniSpeechSat
+class UniSpeechSatFeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
@@ -610,10 +575,11 @@ class Wav2Vec2FeedForward(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2EncoderLayer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->UniSpeechSat
+class UniSpeechSatEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = Wav2Vec2Attention(
+        self.attention = UniSpeechSatAttention(
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
@@ -621,7 +587,7 @@ class Wav2Vec2EncoderLayer(nn.Module):
         )
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = Wav2Vec2FeedForward(config)
+        self.feed_forward = UniSpeechSatFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
@@ -644,10 +610,11 @@ class Wav2Vec2EncoderLayer(nn.Module):
         return outputs
 
 
-class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->UniSpeechSat
+class UniSpeechSatEncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = Wav2Vec2Attention(
+        self.attention = UniSpeechSatAttention(
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
@@ -655,7 +622,7 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         )
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = Wav2Vec2FeedForward(config)
+        self.feed_forward = UniSpeechSatFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
@@ -676,14 +643,15 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         return outputs
 
 
-class Wav2Vec2Encoder(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->UniSpeechSat
+class UniSpeechSatEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
+        self.pos_conv_embed = UniSpeechSatPositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([UniSpeechSatEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -761,15 +729,16 @@ class Wav2Vec2Encoder(nn.Module):
         )
 
 
-class Wav2Vec2EncoderStableLayerNorm(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderStableLayerNorm with Wav2Vec2->UniSpeechSat
+class UniSpeechSatEncoderStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
+        self.pos_conv_embed = UniSpeechSatPositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList(
-            [Wav2Vec2EncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
+            [UniSpeechSatEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
 
@@ -850,7 +819,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         )
 
 
-class Wav2Vec2GumbelVectorQuantizer(nn.Module):
+class UniSpeechSatGumbelVectorQuantizer(nn.Module):
     """
     Vector quantization using gumbel softmax. See `CATEGORICAL REPARAMETERIZATION WITH GUMBEL-SOFTMAX
     <https://arxiv.org/pdf/1611.01144.pdf>`__ for more information.
@@ -861,34 +830,26 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         self.num_groups = config.num_codevector_groups
         self.num_vars = config.num_codevectors_per_group
 
-        if config.codevector_dim % self.num_groups != 0:
-            raise ValueError(
-                f"`config.codevector_dim {config.codevector_dim} must be divisible "
-                f"by `config.num_codevector_groups` {self.num_groups} for concatenation"
-            )
+        assert (
+            config.codevector_dim % self.num_groups == 0
+        ), f"`config.codevector_dim {config.codevector_dim} must be divisible by `config.num_codevector_groups` {self.num_groups} for concatenation"
 
         # storage for codebook variables (codewords)
         self.codevectors = nn.Parameter(
             torch.FloatTensor(1, self.num_groups * self.num_vars, config.codevector_dim // self.num_groups)
         )
-        self.weight_proj = nn.Linear(config.conv_dim[-1], self.num_groups * self.num_vars)
+        self.weight_proj = nn.Linear(config.hidden_size, self.num_groups * self.num_vars)
 
         # can be decayed for training
         self.temperature = 2
 
     @staticmethod
     def _compute_perplexity(probs, mask=None):
-        if mask is not None:
-            mask_extended = mask.flatten()[:, None, None].expand(probs.shape)
-            probs = torch.where(mask_extended, probs, torch.zeros_like(probs))
-            marginal_probs = probs.sum(dim=0) / mask.sum()
-        else:
-            marginal_probs = probs.mean(dim=0)
-
+        marginal_probs = probs.mean(dim=0)
         perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
 
-    def forward(self, hidden_states, mask_time_indices=None):
+    def forward(self, hidden_states):
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
         # project to codevector dim
@@ -905,7 +866,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
             codevector_soft_dist = torch.softmax(
                 hidden_states.view(batch_size * sequence_length, self.num_groups, -1).float(), dim=-1
             )
-            perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
+            perplexity = self._compute_perplexity(codevector_soft_dist)
         else:
             # take argmax in non-differentiable way
             # comptute hard codevector distribution (one hot)
@@ -915,46 +876,44 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
             )
             codevector_probs = codevector_probs.view(batch_size * sequence_length, self.num_groups, -1)
 
-            perplexity = self._compute_perplexity(codevector_probs, mask_time_indices)
+            perplexity = self._compute_perplexity(codevector_probs)
 
         codevector_probs = codevector_probs.view(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
         codevectors_per_group = codevector_probs.unsqueeze(-1) * self.codevectors
-        codevectors = (
-            codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
-            .sum(-2)
-            .view(batch_size, sequence_length, -1)
-        )
+        codevectors = codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
+        codevectors = codevectors.sum(-2).view(batch_size, sequence_length, -1)
 
         return codevectors, perplexity
 
 
-class Wav2Vec2PreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat
+class UniSpeechSatPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = Wav2Vec2Config
-    base_model_prefix = "wav2vec2"
+    config_class = UniSpeechSatConfig
+    base_model_prefix = "unispeech_sat"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
         # gumbel softmax requires special init
-        if isinstance(module, Wav2Vec2GumbelVectorQuantizer):
+        if isinstance(module, UniSpeechSatGumbelVectorQuantizer):
             module.weight_proj.weight.data.normal_(mean=0.0, std=1)
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
-        elif isinstance(module, Wav2Vec2PositionalConvEmbedding):
+        elif isinstance(module, UniSpeechSatPositionalConvEmbedding):
             nn.init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             nn.init.constant_(module.conv.bias, 0)
-        elif isinstance(module, Wav2Vec2FeatureProjection):
+        elif isinstance(module, UniSpeechSatFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
@@ -1001,12 +960,12 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Wav2Vec2Encoder, Wav2Vec2EncoderStableLayerNorm, Wav2Vec2FeatureExtractor)):
+        if isinstance(module, (UniSpeechSatEncoder, UniSpeechSatEncoderStableLayerNorm, UniSpeechSatFeatureExtractor)):
             module.gradient_checkpointing = value
 
 
-WAV_2_VEC_2_START_DOCSTRING = r"""
-    Wav2Vec2 was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
+UNISPEECH_SAT_START_DOCSTRING = r"""
+    UniSpeechSat was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
     <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
@@ -1017,21 +976,21 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config (:class:`~transformers.Wav2Vec2Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.UniSpeechSatConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
 """
 
 
-WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
+UNISPEECH_SAT_INPUTS_DOCSTRING = r"""
     Args:
         input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Processor` should
-            be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-            :meth:`transformers.Wav2Vec2Processor.__call__` for details.
+            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.UniSpeechSatProcessor`
+            should be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
+            :meth:`transformers.UniSpeechSatProcessor.__call__` for details.
         attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
             1]``:
@@ -1044,11 +1003,11 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
             .. warning::
                 :obj:`attention_mask` should only be passed if the corresponding processor has
                 ``config.return_attention_mask == True``. For all models whose processor has
-                ``config.return_attention_mask == False``, such as `wav2vec2-base
-                <https://huggingface.co/facebook/wav2vec2-base-960h>`__, :obj:`attention_mask` should **not** be passed
-                to avoid degraded performance when doing batched inference. For such models :obj:`input_values` should
-                simply be padded with 0 and passed without :obj:`attention_mask`. Be aware that these models also yield
-                slightly different results depending on whether :obj:`input_values` is padded or not.
+                ``config.return_attention_mask == False``, such as `unispeech_sat-base
+                <https://huggingface.co/facebook/unispeech_sat-base-960h>`__, :obj:`attention_mask` should **not** be
+                passed to avoid degraded performance when doing batched inference. For such models :obj:`input_values`
+                should simply be padded with 0 and passed without :obj:`attention_mask`. Be aware that these models
+                also yield slightly different results depending on whether :obj:`input_values` is padded or not.
 
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
@@ -1062,22 +1021,23 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Wav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
-    WAV_2_VEC_2_START_DOCSTRING,
+    "The bare UniSpeechSat Model transformer outputting raw hidden-states without any specific head on top.",
+    UNISPEECH_SAT_START_DOCSTRING,
 )
-class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
-    def __init__(self, config: Wav2Vec2Config):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat, WAV_2_VEC_2->UNISPEECH_SAT
+class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = Wav2Vec2FeatureExtractor(config)
-        self.feature_projection = Wav2Vec2FeatureProjection(config)
+        self.feature_extractor = UniSpeechSatFeatureExtractor(config)
+        self.feature_projection = UniSpeechSatFeatureProjection(config)
 
         self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
-            self.encoder = Wav2Vec2EncoderStableLayerNorm(config)
+            self.encoder = UniSpeechSatEncoderStableLayerNorm(config)
         else:
-            self.encoder = Wav2Vec2Encoder(config)
+            self.encoder = UniSpeechSatEncoder(config)
 
         self.init_weights()
 
@@ -1126,11 +1086,11 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         return hidden_states
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Wav2Vec2BaseModelOutput,
+        output_type=UniSpeechSatBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
@@ -1174,7 +1134,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
 
-        return Wav2Vec2BaseModelOutput(
+        return UniSpeechSatBaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
@@ -1182,20 +1142,27 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         )
 
 
-@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top. """, WAV_2_VEC_2_START_DOCSTRING)
-class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
-    def __init__(self, config: Wav2Vec2Config):
+@add_start_docstrings("""UniSpeechSat Model with a quantizer and `VQ` head on top. """, UNISPEECH_SAT_START_DOCSTRING)
+class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
-        self.wav2vec2 = Wav2Vec2Model(config)
+        self.unispeech_sat = UniSpeechSatModel(config)
         self.dropout_features = nn.Dropout(config.feat_quantizer_dropout)
 
-        self.quantizer = Wav2Vec2GumbelVectorQuantizer(config)
+        self.quantizer = UniSpeechSatGumbelVectorQuantizer(config)
+        self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
+        self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
+
+        self.dropout = nn.Dropout(config.final_dropout)
+
+        self.speaker_proj = nn.Linear(config.hidden_size, config.codevector_dim)
+        self.label_embeddings_concat = nn.Parameter(torch.FloatTensor(config.num_clusters, config.codevector_dim))
+
+        self.layer_norm_for_extract = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        if self.config.do_stable_layer_norm:
+            self.layer_norm_for_extract.requires_grad = False
 
         self.init_weights()
-
-        # make sure that project_hid & project_q are initialized like normal linear layers
-        self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
-        self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
 
     def set_gumbel_temperature(self, temperature: int):
         """
@@ -1208,14 +1175,14 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         Calling this function will disable the gradient computation for the feature extractor so that its parameters
         will not be updated during training.
         """
-        self.wav2vec2.feature_extractor._freeze_parameters()
+        self.unispeech_sat.feature_extractor._freeze_parameters()
 
     @staticmethod
     def compute_contrastive_logits(
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
         predicted_features: torch.FloatTensor,
-        temperature: int = 0.1,
+        temperature: int = 1,
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
@@ -1223,46 +1190,36 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
-        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1).type_as(
-            target_features
-        )
+        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1)
+        logits = logits.type_as(target_features)
 
         # apply temperature
         logits = logits / temperature
         return logits
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Wav2Vec2ForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=UniSpeechSatForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values,
         attention_mask=None,
-        mask_time_indices=None,
-        sampled_negative_indices=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
         r"""
-        mask_time_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
-            masked extracted features in `config.proj_codevector_dim` space.
-        sampled_negative_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length, num_negatives)`, `optional`):
-            Indices indicating which quantized target vectors are used as negative sampled vectors in contrastive loss.
-            Required input for pre-training.
-
         Returns:
 
         Example::
 
             >>> import torch
-            >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForPreTraining
-            >>> from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
+            >>> from transformers import UniSpeechSatFeatureExtractor, UniSpeechSatForPreTraining
+            >>> from transformers.models.unispeech_sat.modeling_unispeech_sat import _compute_mask_indices
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base")
-            >>> model = Wav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base")
+            >>> feature_extractor = UniSpeechSatFeatureExtractor.from_pretrained("patrickvonplaten/unispeech_sat-base")
+            >>> model = UniSpeechSatForPreTraining.from_pretrained("patrickvonplaten/unispeech_sat-base")
 
 
             >>> def map_to_array(batch):
@@ -1271,7 +1228,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             ...     return batch
 
 
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
             >>> input_values = feature_extractor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
@@ -1299,186 +1256,62 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if mask_time_indices is not None:
-            mask_time_indices = mask_time_indices.to(torch.bool)
-
-        outputs = self.wav2vec2(
+        outputs = self.unispeech_sat(
             input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            mask_time_indices=mask_time_indices,
             return_dict=return_dict,
         )
+        transformer_features = outputs[0]
 
-        # 1. project all transformed features (including masked) to final vq dim
-        transformer_features = self.project_hid(outputs[0])
-
-        # 2. quantize all (unmasked) extracted features and project to final vq dim
+        # quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1])
 
-        if attention_mask is not None:
-            # compute reduced attention_mask correponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
+        # layer normalization (has no effect when `config.do_stable_layer_norm == False`)
+        extract_features = self.layer_norm_for_extract(extract_features)
+        quantized_features, codevector_perplexity = self.quantizer(extract_features)
 
-        quantized_features, codevector_perplexity = self.quantizer(
-            extract_features, mask_time_indices=mask_time_indices
-        )
+        # project quantized features twice
         quantized_features = self.project_q(quantized_features)
+        quantized_features = self.project_hid(quantized_features)
 
-        loss = contrastive_loss = diversity_loss = None
-        if sampled_negative_indices is not None:
-            batch_size, sequence_length, hidden_size = quantized_features.shape
-
-            # for training, we sample negatives
-            # 3. sample K negatives (distractors) quantized states for contrastive loss
-            # if attention_mask is passed, make sure that padded feature vectors cannot be sampled
-            # sample negative quantized vectors BTC => (BxT)C
-            negative_quantized_features = quantized_features.view(-1, hidden_size)[
-                sampled_negative_indices.long().view(-1)
-            ]
-            negative_quantized_features = negative_quantized_features.view(
-                batch_size, sequence_length, -1, hidden_size
-            ).permute(2, 0, 1, 3)
-
-            # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
-            # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
-            logits = self.compute_contrastive_logits(
-                quantized_features[None, :],
-                negative_quantized_features,
-                transformer_features,
-                self.config.contrastive_logits_temperature,
-            )
-
-            # 5. if a negative vector is identical to the positive (i.e. when codebook utilization is low),
-            # its cosine similarity will be masked
-            neg_is_pos = (quantized_features == negative_quantized_features).all(-1)
-
-            if neg_is_pos.any():
-                logits[1:][neg_is_pos] = float("-inf")
-
-            # 6. compute contrastive loss \mathbf{L}_m = cross_entropy(logs) =
-            # -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))
-            logits = logits.transpose(0, 2).reshape(-1, logits.size(0))
-            target = ((1 - mask_time_indices.long()) * -100).transpose(0, 1).flatten()
-
-            contrastive_loss = nn.functional.cross_entropy(logits.float(), target, reduction="sum")
-            # 7. compute diversity loss: \mathbf{L}_d
-            num_codevectors = self.config.num_codevectors_per_group * self.config.num_codevector_groups
-            diversity_loss = ((num_codevectors - codevector_perplexity) / num_codevectors) * mask_time_indices.sum()
-
-            # 8. \mathbf{L} = \mathbf{L}_m + \alpha * \mathbf{L}_d
-            loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
-
+        # TODO(PVP) - add pretraining logic and add to tests
+        loss = None
+        logits = None
         if not return_dict:
             if loss is not None:
                 return (loss, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
             return (transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
 
-        return Wav2Vec2ForPreTrainingOutput(
+        return UniSpeechSatForPreTrainingOutput(
             loss=loss,
+            logits=logits,
             projected_states=transformer_features,
             projected_quantized_states=quantized_features,
             codevector_perplexity=codevector_perplexity,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            contrastive_loss=contrastive_loss,
-            diversity_loss=diversity_loss,
         )
-
-
-@add_start_docstrings("""Wav2Vec2 Model with a `language modeling` head on top. """, WAV_2_VEC_2_START_DOCSTRING)
-class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        warnings.warn(
-            "The class `Wav2Vec2ForMaskedLM` is deprecated. Please use `Wav2Vec2ForCTC` instead.", FutureWarning
-        )
-
-        self.wav2vec2 = Wav2Vec2Model(config)
-        self.dropout = nn.Dropout(config.final_dropout)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
-
-        self.init_weights()
-
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Wav2Vec2BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            TODO(PVP): Fill out when adding training
-
-        Returns:
-
-        Example::
-
-            >>> from transformers import Wav2Vec2Processor, Wav2Vec2Model
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            >>> model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
-
-            >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
-
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> logits = model(input_values).logits
-
-            >>> predicted_ids = torch.argmax(logits, dim=-1)
-            >>> transcription = processor.decode(predicted_ids[0])
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.wav2vec2(
-            input_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs[0]
-        hidden_states = self.dropout(hidden_states)
-        logits = self.lm_head(hidden_states)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return output
-
-        return MaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
 
 @add_start_docstrings(
-    """Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
-    WAV_2_VEC_2_START_DOCSTRING,
+    """UniSpeechSat Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
+    UNISPEECH_SAT_START_DOCSTRING,
 )
-class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat, WAV_2_VEC_2->UNISPEECH_SAT
+class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.wav2vec2 = Wav2Vec2Model(config)
+        self.unispeech_sat = UniSpeechSatModel(config)
         self.dropout = nn.Dropout(config.final_dropout)
 
         if config.vocab_size is None:
             raise ValueError(
                 f"You are trying to instantiate {self.__class__} with a configuration that "
                 "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `Wav2Vec2ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "instantiate the model as follows: `UniSpeechSatForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
@@ -1490,9 +1323,9 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         Calling this function will disable the gradient computation for the feature extractor so that its parameter
         will not be updated during training.
         """
-        self.wav2vec2.feature_extractor._freeze_parameters()
+        self.unispeech_sat.feature_extractor._freeze_parameters()
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1518,7 +1351,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.wav2vec2(
+        outputs = self.unispeech_sat(
             input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -1574,16 +1407,17 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    Wav2Vec2 Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
+    UniSpeechSat Model with a sequence classification head on top (a linear layer over the pooled output) for tasks
+    like SUPERB Keyword Spotting.
     """,
-    WAV_2_VEC_2_START_DOCSTRING,
+    UNISPEECH_SAT_START_DOCSTRING,
 )
-class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat, WAV_2_VEC_2->UNISPEECH_SAT
+class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.wav2vec2 = Wav2Vec2Model(config)
+        self.unispeech_sat = UniSpeechSatModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
@@ -1597,17 +1431,17 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         Calling this function will disable the gradient computation for the feature extractor so that its parameters
         will not be updated during training.
         """
-        self.wav2vec2.feature_extractor._freeze_parameters()
+        self.unispeech_sat.feature_extractor._freeze_parameters()
 
     def freeze_base_model(self):
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
         be updated during training. Only the classification head will be updated.
         """
-        for param in self.wav2vec2.parameters():
+        for param in self.unispeech_sat.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
@@ -1634,7 +1468,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
-        outputs = self.wav2vec2(
+        outputs = self.unispeech_sat(
             input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
