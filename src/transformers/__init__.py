@@ -280,6 +280,14 @@ _import_structure = {
         "TrOCRConfig",
         "TrOCRProcessor",
     ],
+    "models.unispeech": [
+        "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UniSpeechConfig",
+    ],
+    "models.unispeech_sat": [
+        "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UniSpeechSatConfig",
+    ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
@@ -1213,6 +1221,26 @@ if is_torch_available():
     _import_structure["models.trocr"].extend(
         ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
     )
+    _import_structure["models.unispeech"].extend(
+        [
+            "UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UniSpeechForCTC",
+            "UniSpeechForPreTraining",
+            "UniSpeechForSequenceClassification",
+            "UniSpeechModel",
+            "UniSpeechPreTrainedModel",
+        ]
+    )
+    _import_structure["models.unispeech_sat"].extend(
+        [
+            "UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UniSpeechSatForCTC",
+            "UniSpeechSatForPreTraining",
+            "UniSpeechSatForSequenceClassification",
+            "UniSpeechSatModel",
+            "UniSpeechSatPreTrainedModel",
+        ]
+    )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
     _import_structure["models.visual_bert"].extend(
         [
@@ -2138,6 +2166,8 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
+    from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
+    from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
@@ -2918,6 +2948,22 @@ if TYPE_CHECKING:
             load_tf_weights_in_transfo_xl,
         )
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
+        from .models.unispeech import (
+            UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechForCTC,
+            UniSpeechForPreTraining,
+            UniSpeechForSequenceClassification,
+            UniSpeechModel,
+            UniSpeechPreTrainedModel,
+        )
+        from .models.unispeech_sat import (
+            UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechSatForCTC,
+            UniSpeechSatForPreTraining,
+            UniSpeechSatForSequenceClassification,
+            UniSpeechSatModel,
+            UniSpeechSatPreTrainedModel,
+        )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
