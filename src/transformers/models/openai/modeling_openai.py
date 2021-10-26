@@ -148,7 +148,9 @@ class Attention(nn.Module):
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implementation]
         assert n_state % config.n_head == 0
-        self.register_buffer("bias", torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions))
+        self.register_buffer(
+            "bias", torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions)
+        )
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
