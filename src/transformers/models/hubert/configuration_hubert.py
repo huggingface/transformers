@@ -70,6 +70,8 @@ class HubertConfig(PretrainedConfig):
             convolutional layers.
         feat_proj_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout probability for output of the feature extractor.
+        feat_proj_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to apply LayerNorm to the output of the feature extractor.
         feat_extract_activation (:obj:`str, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
@@ -149,6 +151,7 @@ class HubertConfig(PretrainedConfig):
         hidden_dropout=0.1,
         activation_dropout=0.1,
         attention_dropout=0.1,
+        feat_proj_layer_norm=True,
         feat_proj_dropout=0.0,
         final_dropout=0.1,
         layerdrop=0.1,
@@ -195,6 +198,7 @@ class HubertConfig(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
+        self.feat_proj_layer_norm = feat_proj_layer_norm
         self.feat_proj_dropout = feat_proj_dropout
         self.final_dropout = final_dropout
         self.layerdrop = layerdrop
