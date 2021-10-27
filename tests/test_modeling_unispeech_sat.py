@@ -34,6 +34,7 @@ if is_torch_available():
 
     from transformers import (
         UniSpeechSatForCTC,
+        UniSpeechSatForPreTraining,
         UniSpeechSatForSequenceClassification,
         UniSpeechSatModel,
         Wav2Vec2FeatureExtractor,
@@ -293,7 +294,9 @@ class UniSpeechSatModelTester:
 @require_torch
 class UniSpeechSatModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (UniSpeechSatForCTC, UniSpeechSatModel, UniSpeechSatForSequenceClassification) if is_torch_available() else ()
+        (UniSpeechSatForCTC, UniSpeechSatForPreTraining, UniSpeechSatModel, UniSpeechSatForSequenceClassification)
+        if is_torch_available()
+        else ()
     )
     test_pruning = False
     test_headmasking = False
@@ -490,7 +493,9 @@ class UniSpeechSatModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (UniSpeechSatForCTC, UniSpeechSatModel, UniSpeechSatForSequenceClassification) if is_torch_available() else ()
+        (UniSpeechSatForCTC, UniSpeechSatForPreTraining, UniSpeechSatModel, UniSpeechSatForSequenceClassification)
+        if is_torch_available()
+        else ()
     )
     test_pruning = False
     test_headmasking = False

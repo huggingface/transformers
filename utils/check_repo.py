@@ -77,7 +77,6 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
     "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
-    "UniSpeechSatForPreTraining",  # TODO: add a reason
     "SeparableConv1D",  # Building part of bigger (tested) model.
 ]
 
