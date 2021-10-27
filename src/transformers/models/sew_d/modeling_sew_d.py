@@ -27,12 +27,7 @@ from torch.nn import CrossEntropyLoss, LayerNorm
 from transformers.deepspeed import is_deepspeed_zero3_enabled
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -1291,13 +1286,17 @@ SEWD_INPUTS_DOCSTRING = r"""
     "The bare SEW-D Model transformer outputting raw hidden-states without any specific head on top.",
     SEWD_START_DOCSTRING,
 )
+# Copied from transformers.models.sew.modeling_sew.SEWModel with SEW->SEWD
 class SEWDModel(SEWDPreTrainedModel):
     def __init__(self, config: SEWDConfig):
         super().__init__(config)
         self.config = config
         self.feature_extractor = SEWDFeatureExtractor(config)
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
-        self.feature_projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
+
+        self.project_features = config.conv_dim[-1] != config.hidden_size
+        if self.project_features:
+            self.feature_projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.feature_dropout = nn.Dropout(config.feat_proj_dropout)
 
         self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
@@ -1353,7 +1352,13 @@ class SEWDModel(SEWDPreTrainedModel):
         return hidden_states
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_PROCESSOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+    )
     def forward(
         self,
         input_values,
@@ -1363,30 +1368,6 @@ class SEWDModel(SEWDPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        """
-
-        Returns:
-
-        Example::
-
-            >>> from transformers import Wav2Vec2Processor, SEWDModel
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> processor = Wav2Vec2Processor.from_pretrained("asapp/sew-tiny-100k")
-            >>> model = SEWDModel.from_pretrained("asapp/sew-tiny-100k")
-
-            >>> def map_to_array(batch):
-            ...     speech, _ = sf.read(batch["file"])
-            ...     batch["speech"] = speech
-            ...     return batch
-
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> hidden_states = model(input_values).last_hidden_state
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1397,12 +1378,13 @@ class SEWDModel(SEWDPreTrainedModel):
         extract_features = extract_features.transpose(1, 2)
         extract_features = self.layer_norm(extract_features)
 
+        if self.project_features:
+            extract_features = self.feature_projection(extract_features)
+        hidden_states = self.feature_dropout(extract_features)
+
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
-
-        hidden_states = self.feature_projection(extract_features)
-        hidden_states = self.feature_dropout(hidden_states)
+            attention_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
 
         hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 
