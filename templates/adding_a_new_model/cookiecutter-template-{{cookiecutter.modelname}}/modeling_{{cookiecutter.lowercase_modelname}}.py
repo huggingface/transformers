@@ -1576,7 +1576,7 @@ from typing import Optional, Tuple
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
