@@ -325,8 +325,8 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                 The image to pad. Can be a 2D or 3D image. In case the image is 3D, shape should be (num_channels,
                 height, width). In case the image is 2D, shape should be (height, width).
             size (:obj:`int` or :obj:`List[int, int] or Tuple[int, int]`):
-                The size to which to pad the image. If it's an integer, image will be padded to (size, size). If it's
-                a list or tuple, it should be (height, width).
+                The size to which to pad the image. If it's an integer, image will be padded to (size, size). If it's a
+                list or tuple, it should be (height, width).
             padding_value (:obj:`int`):
                 The padding value to use.
         """
@@ -450,7 +450,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                     map[map == 0] = 255
                     map = map - 1
                     map[map == 254] = 255
-                    segmentation_maps[idx] = Image.fromarray(map.astype(np.int64))
+                    segmentation_maps[idx] = Image.fromarray(map.astype(np.uint8))
 
         # transformations (resizing, random cropping, normalization)
         if self.do_resize and self.image_scale is not None:
@@ -485,7 +485,8 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         data = {"pixel_values": images}
 
         if segmentation_maps is not None:
-            data["labels"] = segmentation_maps
+            # cast to np.int64
+            data["labels"] = [map.astype(np.int64) for map in segmentation_maps]
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
