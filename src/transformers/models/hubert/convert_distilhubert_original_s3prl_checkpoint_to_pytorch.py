@@ -41,7 +41,6 @@ MAPPING = {
     "fc2": "encoder.layers.*.feed_forward.output_dense",
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
-    "w2v_model.layer_norm": "feature_projection.layer_norm",
     "mask_emb": "masked_spec_embed",
 }
 
@@ -78,8 +77,6 @@ def recursively_load_weights(fairseq_model, hf_model):
     fairseq_dict = fairseq_model.state_dict()
 
     feature_extractor = hf_model.feature_extractor
-
-    key_set = set()
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -169,6 +166,7 @@ def convert_config(model):
     config.conv_stride = [x[2] for x in conv_layers]
     config.feat_extract_activation = "gelu"
     config.feat_extract_norm = "layer" if fs_config.extractor_mode == "layer_norm" else "group"
+    config.feat_proj_layer_norm = False
     config.feat_proj_dropout = 0.0
     config.final_dropout = 0.0
     config.hidden_act = fs_config.activation_fn
