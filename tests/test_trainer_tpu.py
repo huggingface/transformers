@@ -99,7 +99,7 @@ def main():
 
         p = trainer.predict(dataset)
         logger.info(p.metrics)
-        if p.metrics["eval_success"] is not True:
+        if p.metrics["test_success"] is not True:
             logger.error(p.metrics)
             exit(1)
 
@@ -113,7 +113,7 @@ def main():
 
         p = trainer.predict(dataset)
         logger.info(p.metrics)
-        if p.metrics["eval_success"] is not True:
+        if p.metrics["test_success"] is not True:
             logger.error(p.metrics)
             exit(1)
 
