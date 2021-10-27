@@ -661,7 +661,7 @@ class DisentangledSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        return_att=False,
+        output_attentions=False,
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
@@ -679,7 +679,7 @@ class DisentangledSelfAttention(nn.Module):
                 sequence length in which element [i,j] = `1` means the `i` th token in the input can attend to the `j`
                 th token.
 
-            return_att (:obj:`bool`, optional):
+            output_attentions (:obj:`bool`, optional):
                 Whether return the attention matrix.
 
             query_states (:obj:`torch.FloatTensor`, optional):
@@ -738,7 +738,7 @@ class DisentangledSelfAttention(nn.Module):
         )
         new_context_layer_shape = context_layer.size()[:-2] + (-1,)
         context_layer = context_layer.view(*new_context_layer_shape)
-        if return_att:
+        if output_attentions:
             return (context_layer, attention_probs)
         else:
             return context_layer
@@ -1007,6 +1007,7 @@ class SEWDTransformerEncoder(nn.Module):
             self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps, elementwise_affine=True)
 
         self.conv = ConvLayer(config) if getattr(config, "conv_kernel_size", 0) > 0 else None
+        self.gradient_checkpointing = False
 
     def get_rel_embedding(self):
         rel_embeddings = self.rel_embeddings.weight if self.relative_attention else None
@@ -1063,14 +1064,32 @@ class SEWDTransformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 
-            output_states = layer_module(
-                next_kv,
-                attention_mask,
-                output_attentions,
-                query_states=query_states,
-                relative_pos=relative_pos,
-                rel_embeddings=rel_embeddings,
-            )
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                output_states = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
+                    next_kv,
+                    attention_mask,
+                    query_states,
+                    relative_pos,
+                    rel_embeddings,
+                )
+            else:
+                output_states = layer_module(
+                    next_kv,
+                    attention_mask,
+                    query_states=query_states,
+                    relative_pos=relative_pos,
+                    rel_embeddings=rel_embeddings,
+                    output_attentions=output_attentions,
+                )
+
             if output_attentions:
                 output_states, att_m = output_states
 
