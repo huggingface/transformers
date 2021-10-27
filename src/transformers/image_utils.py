@@ -222,3 +222,37 @@ class ImageFeatureExtractionMixin:
         return new_image[
             ..., max(0, top) : min(new_image.shape[-2], bottom), max(0, left) : min(new_image.shape[-1], right)
         ]
+
+    def pad(self, image, size, padding_value=0):
+        """
+        Pads :obj:`image` to the given size with padding value using np.pad.
+
+        Args:
+            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+                The image to pad.
+            size (:obj:`int` or :obj:`Tuple[int, int]`):
+                The size to which to pad the image.
+            padding_value (:obj:`int`):
+                The padding value to use.
+        """
+        # convert image to array of shape (num_channels, height, width)
+        image = self.to_numpy_array(image, rescale=False)
+        if isinstance(size, int):
+            h = w = size
+        elif isinstance(size, (list, tuple)):
+            h, w = tuple(size)
+
+        top_pad = np.floor((h - image.shape[1]) / 2).astype(np.uint16)
+        bottom_pad = np.ceil((h - image.shape[1]) / 2).astype(np.uint16)
+        right_pad = np.ceil((w - image.shape[2]) / 2).astype(np.uint16)
+        left_pad = np.floor((w - image.shape[2]) / 2).astype(np.uint16)
+        padded_image = np.copy(
+            np.pad(
+                image,
+                ((0, 0), (top_pad, bottom_pad), (left_pad, right_pad)),
+                mode="constant",
+                constant_values=padding_value,
+            )
+        )
+
+        return padded_image

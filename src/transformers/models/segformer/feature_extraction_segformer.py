@@ -21,7 +21,7 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_torch_available
+from ...file_utils import TensorType
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -33,10 +33,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_torch_available():
-    from torch import nn
 
 
 # 2 functions below taken from https://github.com/open-mmlab/mmcv/blob/master/mmcv/utils/misc.py
@@ -174,7 +170,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             Whether or not to pad the input to :obj:`crop_size`.
         padding_value (:obj:`int`, `optional`, defaults to 0):
             Fill value for padding images.
-        segmentation_padding_value (:obj:`int`, `optional`, defaults to -100):
+        segmentation_padding_value (:obj:`int`, `optional`, defaults to 255):
             Fill value for padding segmentation maps. One must make sure the :obj:`ignore_index` of the
             :obj:`CrossEntropyLoss` is set equal to this value.
         reduce_zero_label (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -198,7 +194,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         image_std=None,
         do_pad=True,
         padding_value=0,
-        segmentation_padding_value=-100,
+        segmentation_padding_value=255,
         reduce_zero_label=False,
         **kwargs
     ):
@@ -320,20 +316,6 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         return image
 
-    def pad_images(self, images):
-        """Pad images to ``self.crop_size``."""
-        padded_images = nn.functional.pad(images, pad=self.crop_size, value=self.padding_value)
-
-        return padded_images
-
-    def pad_segmentation_maps(self, segmentation_maps):
-        """Pad masks to ``self.crop_size``."""
-        padded_segmentation_maps = nn.functional.pad(
-            segmentation_maps, pad=self.crop_size, value=self.segmentation_padding_value
-        )
-
-        return padded_segmentation_maps
-
     def __call__(
         self,
         images: ImageInput,
@@ -447,6 +429,14 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
+        if self.do_pad:
+            images = [self.pad(image, size=self.crop_size, padding_value=self.padding_value) for image in images]
+            if segmentation_maps is not None:
+                segmentation_maps = [
+                    self.pad(map, size=self.crop_size, padding_value=self.segmentation_padding_value)
+                    for map in segmentation_maps
+                ]
+
         # return as BatchFeature
         data = {"pixel_values": images}
 
@@ -454,11 +444,5 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             data["labels"] = segmentation_maps
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-
-        # # TODO make padding not depend on PyTorch
-        # if self.do_pad:
-        #     encoded_inputs["pixel_values"] = self.pad_images(encoded_inputs["pixel_values"])
-        #     if segmentation_maps is not None:
-        #         encoded_inputs["labels"] = self.pad_segmentation_maps(encoded_inputs["labels"])
 
         return encoded_inputs
