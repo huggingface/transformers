@@ -98,6 +98,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("splinter", "SplinterConfig"),
         ("sew-d", "SEWDConfig"),
         ("sew", "SEWConfig"),
+        ("unispeech-sat", "UniSpeechSatConfig"),
+        ("unispeech", "UniSpeechConfig"),
     ]
 )
 
@@ -166,6 +168,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
@@ -252,6 +256,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("splinter", "Splinter"),
         ("sew-d", "SEW-D"),
         ("sew", "SEW"),
+        ("unispeech-sat", "UniSpeechSat"),
+        ("unispeech", "UniSpeech"),
     ]
 )
 

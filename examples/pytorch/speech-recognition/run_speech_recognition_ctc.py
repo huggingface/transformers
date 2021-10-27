@@ -187,6 +187,13 @@ class DataTrainingArguments:
             "so that the cached datasets can consequently be loaded in distributed training"
         },
     )
+    use_auth_token: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "If :obj:`True`, will use the token generated when running"
+            ":obj:`transformers-cli logiin as HTTP bearer authorization for remote files."
+        },
+    )
 
 
 @dataclass
@@ -349,7 +356,7 @@ def main():
 
     if data_args.text_column_name not in raw_datasets["train"].column_names:
         raise ValueError(
-            f"--text_column_name {data_args.audio_column_name} not found in dataset '{data_args.dataset_name}'. "
+            f"--text_column_name {data_args.text_column_name} not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--text_column_name` to the correct text column - one of "
             f"{', '.join(raw_datasets['train'].column_names)}."
         )
@@ -388,27 +395,29 @@ def main():
     # the training and evaluation datasets
     # We need to make sure that only first rank saves vocabulary
     # make sure all processes wait until vocab is created
+    vocab_file = os.path.join(training_args.output_dir, "vocab.json")
 
-    with training_args.main_process_first(desc="dataset map vocabulary creation"):
-        vocab_dict = create_vocabulary_from_data(raw_datasets)
-
-        vocab_file = os.path.join(training_args.output_dir, "vocab.json")
-
-        # save vocab dict to be loaded into tokenizer
-        os.makedirs(training_args.output_dir, exist_ok=True)
+    with training_args.main_process_first():
         if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
             os.remove(vocab_file)
 
+    with training_args.main_process_first(desc="dataset map vocabulary creation"):
         if not os.path.isfile(vocab_file):
-            with open(vocab_file, "w") as vocab_file:
-                json.dump(vocab_dict, vocab_file)
+            os.makedirs(training_args.output_dir, exist_ok=True)
+            vocab_dict = create_vocabulary_from_data(raw_datasets)
+
+            # save vocab dict to be loaded into tokenizer
+            with open(vocab_file, "w") as file:
+                json.dump(vocab_dict, file)
 
     # 4. Now we can instantiate the configuration, feature extractor, tokenizer and model
     # Note for distributed training, the .from_pretrained methods guarantee that only
     # one local process can concurrently download model & vocab.
 
     # load config
-    config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+    config = AutoConfig.from_pretrained(
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+    )
 
     # tokenizer is defined by `tokenizer_class` if present in config else by `model_type`
     config_for_tokenizer = config if config.tokenizer_class is not None else None
@@ -422,9 +431,10 @@ def main():
         unk_token="[UNK]",
         pad_token="[PAD]",
         word_delimiter_token="|",
+        use_auth_token=data_args.use_auth_token,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
     )
     processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -447,7 +457,10 @@ def main():
 
     # create model
     model = AutoModelForCTC.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, config=config
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        config=config,
+        use_auth_token=data_args.use_auth_token,
     )
 
     # freeze encoder

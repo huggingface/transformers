@@ -446,7 +446,7 @@ class TrainingSummary:
             if "task" in result and "dataset" in result and "metrics" in result:
                 model_index["results"].append(result)
             else:
-                logger.info(f"Dropping the following result as it does not have all the necessary field:\n{result}")
+                logger.info(f"Dropping the following result as it does not have all the necessary fields:\n{result}")
 
         return [model_index]
 

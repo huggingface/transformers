@@ -76,7 +76,7 @@ Transformers:
 It will store your access token in the Hugging Face cache folder (by default :obj:`~/.cache/`).
 
 If you don't have an easy access to a terminal (for instance in a Colab session), you can find a token linked to your
-acount by going on `huggingface.co <https://huggingface.co/>`, click on your avatar on the top left corner, then on
+account by going on `huggingface.co <https://huggingface.co/>`, click on your avatar on the top left corner, then on
 `Edit profile` on the left, just beneath your profile picture. In the submenu `API Tokens`, you will find your API
 token that you can just copy.
 
@@ -90,7 +90,7 @@ Directly push your model to the hub
    picture-in-picture" allowfullscreen></iframe>
 
 Once you have an API token (either stored in the cache or copied and pasted in your notebook), you can directly push a
-finetuned model you saved in :obj:`save_drectory` by calling:
+finetuned model you saved in :obj:`save_directory` by calling:
 
 .. code-block:: python
 

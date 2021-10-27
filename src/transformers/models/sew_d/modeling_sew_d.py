@@ -489,6 +489,21 @@ class XSoftmax(torch.autograd.Function):
         inputGrad = _softmax_backward_data(grad_output, output, self.dim, output)
         return inputGrad, None, None
 
+    @staticmethod
+    def symbolic(g, self, mask, dim):
+        import torch.onnx.symbolic_helper as sym_help
+        from torch.onnx.symbolic_opset9 import masked_fill, softmax
+
+        mask_cast_value = g.op("Cast", mask, to_i=sym_help.cast_pytorch_to_onnx["Long"])
+        r_mask = g.op(
+            "Cast",
+            g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
+            to_i=sym_help.cast_pytorch_to_onnx["Byte"],
+        )
+        output = masked_fill(g, self, r_mask, g.op("Constant", value_t=torch.tensor(float("-inf"))))
+        output = softmax(g, output, dim)
+        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.uint8)))
+
 
 # Copied from transformers.models.deberta.modeling_deberta.DropoutContext
 class DropoutContext(object):
@@ -1330,9 +1345,8 @@ class SEWDModel(SEWDPreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)[
-                :, None
-            ].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
+            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states

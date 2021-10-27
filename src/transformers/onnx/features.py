@@ -5,6 +5,7 @@ from .. import is_torch_available
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
@@ -62,6 +63,14 @@ class FeaturesManager:
         "bart": supported_features_mapping("default", onnx_config_cls=BartOnnxConfig),
         "mbart": supported_features_mapping("default", onnx_config_cls=MBartOnnxConfig),
         "bert": supported_features_mapping("default", onnx_config_cls=BertOnnxConfig),
+        "camembert": supported_features_mapping(
+            "default",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=CamembertOnnxConfig,
+        ),
         "distilbert": supported_features_mapping("default", onnx_config_cls=DistilBertOnnxConfig),
         "gpt2": supported_features_mapping("default", onnx_config_cls=GPT2OnnxConfig),
         "longformer": supported_features_mapping("default", onnx_config_cls=LongformerOnnxConfig),
