@@ -601,7 +601,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
-    test_sequence_classification_problem_types = True
 
     def setUp(self):
         self.model_tester = ReformerModelTester(self)
