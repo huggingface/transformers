@@ -239,11 +239,9 @@ class ImageFeatureExtractionMixin:
         print("Shape of image before padding:", image.shape)
         image = self.to_numpy_array(image, rescale=False, channel_first=False)
         print("Shape of image after converting to numpy array:", image.shape)
-        # set channels as first dimension
+        # add dummy channel dimension if image is 2D
         is_2d = False
-        if image.ndim == 3:
-            image = image.transpose(2, 0, 1)
-        elif image.ndim == 2:
+        if image.ndim == 2:
             is_2d = True
             image = image[np.newaxis, ...]
 
