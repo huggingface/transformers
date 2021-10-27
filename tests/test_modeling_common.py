@@ -1877,7 +1877,11 @@ class ModelTesterMixin:
                     # See https://github.com/huggingface/transformers/issues/11780
                     with warnings.catch_warnings(record=True) as warning_list:
                         loss = model(**inputs).loss
-                    self.assertListEqual(warning_list, [])
+                    for w in warning_list:
+                        if "Using a target size that is different to the input size" in str(w.message):
+                            raise ValueError(
+                                f"Something is going wrong in the regression problem: intercepted {w.message}"
+                            )
 
                     loss.backward()
 

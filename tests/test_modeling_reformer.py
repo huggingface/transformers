@@ -692,7 +692,7 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, Generation
         self.model_tester = ReformerModelTester(
             self,
             batch_size=13,
-            seq_length=13,
+            seq_length=32,
             use_input_mask=True,
             use_labels=True,
             is_training=False,
