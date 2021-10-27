@@ -16,10 +16,7 @@
 
 
 import argparse
-import json
-import os
 
-import fairseq
 import torch
 
 from s3prl.hub import distilhubert
