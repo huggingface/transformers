@@ -189,7 +189,7 @@ class SEWDConfig(PretrainedConfig):
         mask_time_length=10,
         mask_feature_prob=0.0,
         mask_feature_length=10,
-        ctc_loss_reduction="sum",
+        ctc_loss_reduction="mean",
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
         classifier_proj_size=256,
