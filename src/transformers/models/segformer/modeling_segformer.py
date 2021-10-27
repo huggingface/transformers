@@ -322,7 +322,7 @@ class SegformerEncoder(nn.Module):
                     image_size=config.image_size // config.downsampling_rates[i],
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
-                    num_channels=config.hidden_sizes[i - 1] if i != 0 else config.num_channels,
+                    num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
                     hidden_size=config.hidden_sizes[i],
                 )
             )
@@ -406,7 +406,6 @@ class SegformerPreTrainedModel(PreTrainedModel):
 
     config_class = SegformerConfig
     base_model_prefix = "segformer"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
