@@ -167,7 +167,8 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
             ImageNet std.
         do_pad (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to pad the input to :obj:`crop_size`.
+            Whether or not to pad the input to :obj:`crop_size`. Note that padding should only be applied in
+            combination with random cropping.
         padding_value (:obj:`int`, `optional`, defaults to 0):
             Fill value for padding images.
         segmentation_padding_value (:obj:`int`, `optional`, defaults to 255):
