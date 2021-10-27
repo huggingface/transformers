@@ -236,12 +236,18 @@ class ImageFeatureExtractionMixin:
                 The padding value to use.
         """
         # convert image to array of shape (height, width, num_channels)
+        print("Shape of image before padding:", image.shape)
         image = self.to_numpy_array(image, rescale=False, channel_first=False)
+        print("Shape of image after converting to numpy array:", image.shape)
         # set channels as first dimension
+        is_2d = False
         if image.ndim == 3:
             image = image.transpose(2, 0, 1)
         elif image.ndim == 2:
+            is_2d = True
             image = image[np.newaxis, ...]
+
+        print("Shape of image after moving axes:", image.shape)
 
         if isinstance(size, int):
             h = w = size
@@ -262,4 +268,8 @@ class ImageFeatureExtractionMixin:
             )
         )
 
-        return padded_image[0] if image.ndim == 2 else padded_image
+        result = padded_image[0] if is_2d else padded_image
+        
+        print("Shape of padded image:", result.shape)
+        
+        return result
