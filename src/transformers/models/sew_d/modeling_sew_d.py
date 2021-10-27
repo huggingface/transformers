@@ -918,10 +918,10 @@ class SEWDLayer(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        output_attentions=False,
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
+        output_attentions=False,
     ):
         attention_output = self.attention(
             hidden_states,
