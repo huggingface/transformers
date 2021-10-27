@@ -21,6 +21,7 @@ import logging
 import os
 
 import torch
+from torch.utils.data import DataLoader
 
 import quant_trainer
 from transformers import Trainer, is_torch_tpu_available
@@ -40,26 +41,49 @@ class QuestionAnsweringTrainer(Trainer):
         self.eval_examples = eval_examples
         self.post_process_function = post_process_function
         self.quant_trainer_args = quant_trainer_args
+        self.calib_num = 128 # default number of calibration samples
 
-    def calibrate(self, eval_dataset=None):
-        eval_dataset = self.eval_dataset if eval_dataset is None else eval_dataset
-        eval_dataloader = self.get_eval_dataloader(eval_dataset)
+    def get_calib_dataloader(self, calib_dataset = None):
+        """
+        Returns the calibration dataloader :class:`~torch.utils.data.DataLoader`.
+
+        Args:
+            calib_dataset (:obj:`torch.utils.data.Dataset`, `optional`)
+        """
+        if calib_dataset is None and self.calib_dataset is None:
+            raise ValueError("Trainer: calibration requires an calib_dataset.")
+        calib_dataset = calib_dataset if calib_dataset is not None else self.calib_dataset
+
+        calib_dataset = self._remove_unused_columns(calib_dataset, description="Calibration")
+
+        return DataLoader(
+            calib_dataset,
+            batch_size=self.args.eval_batch_size,
+            collate_fn=self.data_collator,
+            drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
+            pin_memory=self.args.dataloader_pin_memory,
+            shuffle=True,
+        )
+
+    def calibrate(self, calib_dataset=None):
+        calib_dataset = self.train_dataset if calib_dataset is None else calib_dataset
+        calib_dataloader = self.get_calib_dataloader(calib_dataset)
 
         model = self.model
         quant_trainer.configure_model(model, self.quant_trainer_args, calib=True)
         model.eval()
         quant_trainer.enable_calibration(model)
-        # if args.seed is not None:
-        #     set_seed(args.seed)  # Added here for reproductibility (even between python 2 and 3)
-
+        
         logger.info("***** Running calibration *****")
-        logger.info(f"  Num examples = {len(eval_dataset)}")
-        logger.info(f"  Batch size = {eval_dataloader.batch_size}")
+        logger.info(f"  Num examples = {self.calib_num}")
+        logger.info(f"  Batch size = {calib_dataloader.batch_size}")
 
-        for step, inputs in enumerate(eval_dataloader):
+        for step, inputs in enumerate(calib_dataloader):
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only=True)
-            break
+            if (step+1) * calib_dataloader.batch_size >= self.calib_num:
+                break
 
         quant_trainer.finish_calibration(model, self.quant_trainer_args)
         self.model = model

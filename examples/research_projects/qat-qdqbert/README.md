@@ -56,8 +56,7 @@ python3 run_qat_qa.py \
   --output_dir calib/bert-base-uncased \
   --do_calib \
   --calibrator percentile \
-  --percentile 99.99 \
-  --fp16
+  --percentile 99.99
 ```
 
 ```
@@ -73,8 +72,7 @@ python3 run_qat_qa.py \
   --doc_stride 32 \
   --output_dir finetuned_int8/bert-base-uncased \
   --tokenizer_name bert-base-uncased \
-  --save_steps 0 \
-  --fp16
+  --save_steps 0
 ```
 
 ### Export QAT model to ONNX
@@ -90,8 +88,7 @@ python3 run_qat_qa.py \
   --max_seq_length 128 \
   --doc_stride 32 \
   --dataset_name squad \
-  --tokenizer_name bert-base-uncased \
-  --fp16
+  --tokenizer_name bert-base-uncased
 ```
 
 Use `--recalibrate-weights` to calibrate the weight ranges according to the quantizer axis. Use `--quant-per-tensor` for per tensor quantization (default is per channel).
@@ -100,7 +97,7 @@ Recalibrating will affect the accuracy of the model, but the change should be mi
 ### Benchmark the INT8 QAT ONNX model inference with TensorRT using dummy input
 
 ```
-trtexec --onnx=model.onnx --explicitBatch --workspace=16384 --int8 --fp16 --shapes=input_ids:64x128,attention_mask:64x128,token_type_ids:64x128 --verbose
+trtexec --onnx=model.onnx --explicitBatch --workspace=16384 --int8 --shapes=input_ids:64x128,attention_mask:64x128,token_type_ids:64x128 --verbose
 ```
 
 ### Evaluate the INT8 QAT ONNX model inference with TensorRT
@@ -114,7 +111,6 @@ python3 evaluate-hf-trt-qa.py \
   --doc_stride 32 \
   --dataset_name squad \
   --tokenizer_name bert-base-uncased \
-  --fp16 \
   --int8 \
   --seed 42
 ```
@@ -153,8 +149,7 @@ python3 run_qat_qa.py \
   --output_dir ./calib/bert-base-uncased \
   --save_steps 0 \
   --do_calib \
-  --do_eval \
-  --fp16
+  --do_eval
 ```
 
 ### Export the INT8 PTQ model to ONNX
@@ -168,8 +163,7 @@ python3 run_qat_qa.py \
   --max_seq_length 128 \
   --doc_stride 32 \
   --dataset_name squad \
-  --tokenizer_name bert-base-uncased \
-  --fp16
+  --tokenizer_name bert-base-uncased
 ```
 
 ### Evaluate the INT8 PTQ ONNX model inference with TensorRT
@@ -183,7 +177,6 @@ python3 evaluate-hf-trt-qa.py \
   --doc_stride 32 \
   --dataset_name squad \
   --tokenizer_name bert-base-uncased \
-  --fp16 \
   --int8 \
   --seed 42
 ```

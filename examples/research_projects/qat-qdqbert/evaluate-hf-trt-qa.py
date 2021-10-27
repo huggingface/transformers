@@ -201,7 +201,7 @@ with trt.Builder(TRT_LOGGER) as builder, builder.create_network(EXPLICIT_BATCH) 
     input_names = [_input.name for _input in network_inputs]  # ex: ["actual_input1"]
 
     with builder.create_builder_config() as config:
-        config.max_workspace_size = 1 << 30
+        config.max_workspace_size = 1 << 50
         if STRICT_TYPES:
             config.set_flag(trt.BuilderFlag.STRICT_TYPES)
         if FP16_ENGINE:
@@ -256,7 +256,6 @@ logging.basicConfig(
     datefmt="%m/%d/%Y %H:%M:%S",
     level=logging.INFO,
 )
-logger.info(accelerator.state)
 
 # Setup logging, we only want one process per machine to log things on the screen.
 # accelerator.is_local_main_process is only True for one process per machine.

@@ -43,7 +43,7 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
+from transformers.trainer_utils import get_last_checkpoint, SchedulerType
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 from utils_qa import postprocess_qa_predictions
@@ -223,6 +223,9 @@ def main():
 
     model_args, data_args, training_args, quant_trainer_args = parser.parse_args_into_dataclasses()
 
+    # setup QAT training args for scheduler (default to use cosine annealing learning rate schedule)
+    training_args.lr_scheduler_type = SchedulerType.COSINE
+
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -332,9 +335,9 @@ def main():
 
     # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
-    if training_args.do_train:
+    if training_args.do_train or model_args.do_calib:
         column_names = raw_datasets["train"].column_names
-    elif training_args.do_eval or model_args.do_calib or model_args.save_onnx:
+    elif training_args.do_eval or model_args.save_onnx:
         column_names = raw_datasets["validation"].column_names
     else:
         column_names = raw_datasets["test"].column_names
@@ -425,7 +428,7 @@ def main():
 
         return tokenized_examples
 
-    if training_args.do_train:
+    if training_args.do_train or model_args.do_calib:
         if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = raw_datasets["train"]
@@ -488,7 +491,7 @@ def main():
 
         return tokenized_examples
 
-    if training_args.do_eval or model_args.do_calib or model_args.save_onnx:
+    if training_args.do_eval or model_args.save_onnx:
         if "validation" not in raw_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         eval_examples = raw_datasets["validation"]
@@ -574,9 +577,9 @@ def main():
     trainer = QuestionAnsweringTrainer(
         model=model,
         args=training_args,
-        train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=eval_dataset if training_args.do_eval or model_args.do_calib or model_args.save_onnx else None,
-        eval_examples=eval_examples if training_args.do_eval or model_args.do_calib or model_args.save_onnx else None,
+        train_dataset=train_dataset if training_args.do_train or model_args.do_calib else None,
+        eval_dataset=eval_dataset if training_args.do_eval or model_args.save_onnx else None,
+        eval_examples=eval_examples if training_args.do_eval or model_args.save_onnx else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
         post_process_function=post_processing_function,
@@ -616,6 +619,7 @@ def main():
     # Evaluation
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
+        quant_trainer.configure_model(trainer.model, quant_trainer_args, eval=True)
         metrics = trainer.evaluate()
 
         max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
