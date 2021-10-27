@@ -51,6 +51,7 @@ class SegformerFeatureExtractionTester(unittest.TestCase):
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
+        do_pad=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -67,6 +68,7 @@ class SegformerFeatureExtractionTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.do_pad = do_pad
 
     def prepare_feat_extract_dict(self):
         return {
@@ -80,6 +82,7 @@ class SegformerFeatureExtractionTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
+            "do_pad": self.do_pad,
         }
 
 
@@ -108,6 +111,7 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
         self.assertTrue(hasattr(feature_extractor, "image_std"))
+        self.assertTrue(hasattr(feature_extractor, "do_pad"))
 
     def test_batch_feature(self):
         pass
@@ -202,10 +206,11 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             ),
         )
 
-    @require_torch
     def test_resize(self):
         # Initialize feature_extractor: version 1 (no align, keep_ratio=True)
-        feature_extractor = SegformerFeatureExtractor(image_scale=(1333, 800), align=False, do_random_crop=False)
+        feature_extractor = SegformerFeatureExtractor(
+            image_scale=(1333, 800), align=False, do_random_crop=False, do_pad=False
+        )
 
         # Create random PyTorch tensor
         image = torch.randn((3, 288, 512))
@@ -217,7 +222,7 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
 
         # Initialize feature_extractor: version 2 (keep_ratio=False)
         feature_extractor = SegformerFeatureExtractor(
-            image_scale=(1280, 800), align=False, keep_ratio=False, do_random_crop=False
+            image_scale=(1280, 800), align=False, keep_ratio=False, do_random_crop=False, do_pad=False
         )
 
         # Verify shape
@@ -225,10 +230,9 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         expected_shape = (1, 3, 800, 1280)
         self.assertEqual(encoded_images.shape, expected_shape)
 
-    @require_torch
     def test_aligned_resize(self):
         # Initialize feature_extractor: version 1
-        feature_extractor = SegformerFeatureExtractor(do_random_crop=False)
+        feature_extractor = SegformerFeatureExtractor(do_random_crop=False, do_pad=False)
         # Create random PyTorch tensor
         image = torch.randn((3, 256, 304))
 
@@ -238,7 +242,7 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         self.assertEqual(encoded_images.shape, expected_shape)
 
         # Initialize feature_extractor: version 2
-        feature_extractor = SegformerFeatureExtractor(image_scale=(1024, 2048), do_random_crop=False)
+        feature_extractor = SegformerFeatureExtractor(image_scale=(1024, 2048), do_random_crop=False, do_pad=False)
         # create random PyTorch tensor
         image = torch.randn((3, 1024, 2048))
 
@@ -247,7 +251,6 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         expected_shape = (1, 3, 1024, 2048)
         self.assertEqual(encoded_images.shape, expected_shape)
 
-    @require_torch
     def test_random_crop(self):
         from datasets import load_dataset
 
@@ -259,7 +262,7 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         w, h = image.size
 
         # Initialize feature_extractor
-        feature_extractor = SegformerFeatureExtractor(crop_size=[w - 20, h - 20])
+        feature_extractor = SegformerFeatureExtractor(crop_size=[w - 20, h - 20], do_pad=False)
 
         # Encode image + segmentation map
         encoded_images = feature_extractor(images=image, segmentation_maps=segmentation_map, return_tensors="pt")
@@ -270,7 +273,34 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         # Verify shape of labels
         self.assertEqual(encoded_images.labels.shape[-2:], (h - 20, w - 20))
 
-    @require_torch
     def test_pad(self):
-        # TODO, based on test_pad of the original implementation
-        pass
+        # Initialize feature_extractor (note that padding should only be applied when random cropping)
+        feature_extractor = SegformerFeatureExtractor(
+            align=False, do_random_crop=True, crop_size=self.feature_extract_tester.crop_size, do_pad=True
+        )
+        # create random PyTorch tensors
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor)
+
+        # Test not batched input
+        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                *self.feature_extract_tester.crop_size[::-1],
+            ),
+        )
+
+        # Test batched
+        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                *self.feature_extract_tester.crop_size[::-1],
+            ),
+        )
