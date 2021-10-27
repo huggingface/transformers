@@ -7,6 +7,8 @@ from transformers import (  # LongformerConfig,; T5Config,
     AlbertConfig,
     AutoTokenizer,
     BartConfig,
+    BigBirdConfig,
+    BigBirdPegasusConfig,
     DistilBertConfig,
     GPT2Config,
     GPTNeoConfig,
@@ -19,6 +21,8 @@ from transformers import (  # LongformerConfig,; T5Config,
 from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.bart import BartOnnxConfig
 from transformers.models.bert.configuration_bert import BertConfig, BertOnnxConfig
+from transformers.models.big_bird.configuration_big_bird import BigBirdOnnxConfig
+from transformers.models.bigbird_pegasus.configuration_bigbird_pegasus import BigBirdPegasusOnnxConfig
 from transformers.models.distilbert import DistilBertOnnxConfig
 
 # from transformers.models.longformer import LongformerOnnxConfig
@@ -192,6 +196,8 @@ if is_torch_available():
         AlbertModel,
         BartModel,
         BertModel,
+        BigBirdModel,
+        BigBirdPegasusModel,
         DistilBertModel,
         GPT2Model,
         GPTNeoModel,
@@ -205,6 +211,14 @@ if is_torch_available():
         ("ALBERT", "hf-internal-testing/tiny-albert", AlbertModel, AlbertConfig, AlbertOnnxConfig),
         ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
         ("BERT", "bert-base-cased", BertModel, BertConfig, BertOnnxConfig),
+        ("Big-Bird", "google/bigbird-roberta-base", BigBirdModel, BigBirdConfig, BigBirdOnnxConfig),
+        (
+            "BigBird-Pegasus",
+            "google/bigbird-roberta-base",
+            BigBirdPegasusModel,
+            BigBirdPegasusConfig,
+            BigBirdPegasusOnnxConfig,
+        ),
         ("DistilBERT", "distilbert-base-cased", DistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
         ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
         ("GPT-Neo", "EleutherAI/gpt-neo-125M", GPTNeoModel, GPTNeoConfig, GPTNeoOnnxConfig),

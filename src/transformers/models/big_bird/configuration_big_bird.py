@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ BigBird model configuration """
+from collections import OrderedDict
+from typing import Mapping
+
+from transformers.onnx import OnnxConfigWithPast
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -157,3 +161,33 @@ class BigBirdConfig(PretrainedConfig):
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
         self.classifier_dropout = classifier_dropout
+
+
+class BigBirdOnnxConfig(OnnxConfigWithPast):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
+        if self.use_past:
+            for i in range(self._config.encoder_layers * 2):
+                common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "past_sequence"}
+                common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "past_sequence"}
+
+            common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
+        else:
+            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
+        # common_inputs["labels"] = {0: "batch", 1: "sequence"}
+        return common_inputs
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        # print("bigbird class",self._config.__class__.__name__," decoder?",self._config.is_decoder)
+        if self._config.is_decoder:
+            common_outputs = OrderedDict([("logits", {0: "batch", 1: "sequence", 2: "vocab_size"})])
+        else:
+            common_outputs = OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}})
+        if self.use_past:
+            for i in range(self._config.num_hidden_layers * 2):
+                common_outputs[f"present.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
+                common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+
+        return common_outputs

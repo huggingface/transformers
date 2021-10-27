@@ -5,6 +5,8 @@ from .. import is_torch_available
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.big_bird import BigBirdOnnxConfig
+from ..models.bigbird_pegasus import BigBirdPegasusOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
@@ -22,6 +24,7 @@ if is_torch_available():
     from transformers.models.auto import (
         AutoModel,
         AutoModelForCausalLM,
+        AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
@@ -55,6 +58,7 @@ class FeaturesManager:
         "token-classification": AutoModelForTokenClassification,
         "multiple-choice": AutoModelForMultipleChoice,
         "question-answering": AutoModelForQuestionAnswering,
+        "masked-lm": AutoModelForMaskedLM,
     }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
@@ -70,6 +74,36 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls=CamembertOnnxConfig,
+        ),
+        "big-bird": supported_features_mapping(
+            "default",
+            "causal-lm",
+            "seq2seq-lm",
+            "masked-lm",
+            "sequence-classification",
+            "token-classification",
+            "multiple-choice",
+            "question-answering",
+            "default-with-past",
+            "causal-lm-with-past",
+            "seq2seq-lm-with-past",
+            "masked-lm-with-past",
+            "sequence-classification-with-past",
+            "token-classification-with-past",
+            "multiple-choice-with-past",
+            "question-answering-with-past",
+            onnx_config_cls=BigBirdOnnxConfig,
+        ),
+        "bigbird-pegasus": supported_features_mapping(
+            "default",
+            "causal-lm",
+            "sequence-classification",
+            "question-answering",
+            "default-with-past",
+            "causal-lm-with-past",
+            "sequence-classification-with-past",
+            "question-answering-with-past",
+            onnx_config_cls=BigBirdPegasusOnnxConfig,
         ),
         "distilbert": supported_features_mapping("default", onnx_config_cls=DistilBertOnnxConfig),
         "gpt2": supported_features_mapping("default", onnx_config_cls=GPT2OnnxConfig),
