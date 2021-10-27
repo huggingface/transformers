@@ -29,10 +29,10 @@ jobs:
           pip install .[testing]
 
       - name: Are TPUs recognized by our DL frameworks
-#        env:
-#          XRT_TPU_CONFIG: localservice;0;localhost:51011
+        env:
+          XRT_TPU_CONFIG: localservice;0;localhost:51011
         run: |
-          XRT_TPU_CONFIG="localservice;0;localhost:51011" python -c "import torch_xla.core.xla_model as xm; print(xm.xla_device())"
+          python -c "import torch_xla.core.xla_model as xm; print(xm.xla_device())"
 
       - name: Run example tests on TPU
         env:
@@ -44,7 +44,7 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_torch_xla_tpu.txt
+        run: cat reports/tests_torch_xla_tpu_failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
