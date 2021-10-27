@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning a 🤗 Transformers model on question answering.
+Fine-tuning XLNet for question answering with beam search using 🤗 Accelerate.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
