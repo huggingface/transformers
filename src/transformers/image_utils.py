@@ -235,8 +235,14 @@ class ImageFeatureExtractionMixin:
             padding_value (:obj:`int`):
                 The padding value to use.
         """
-        # convert image to array of shape (num_channels, height, width)
-        image = self.to_numpy_array(image, rescale=False)
+        # convert image to array of shape (height, width, num_channels)
+        image = self.to_numpy_array(image, rescale=False, channel_first=False)
+        # set channels as first dimension
+        if image.ndim == 3:
+            image = image.transpose(2, 0, 1)
+        elif image.ndim == 2:
+            image = image[np.newaxis, ...]
+
         if isinstance(size, int):
             h = w = size
         elif isinstance(size, (list, tuple)):
@@ -246,13 +252,14 @@ class ImageFeatureExtractionMixin:
         bottom_pad = np.ceil((h - image.shape[1]) / 2).astype(np.uint16)
         right_pad = np.ceil((w - image.shape[2]) / 2).astype(np.uint16)
         left_pad = np.floor((w - image.shape[2]) / 2).astype(np.uint16)
+
         padded_image = np.copy(
             np.pad(
                 image,
-                ((0, 0), (top_pad, bottom_pad), (left_pad, right_pad)),
+                pad_width=((0, 0), (top_pad, bottom_pad), (left_pad, right_pad)),
                 mode="constant",
                 constant_values=padding_value,
             )
         )
 
-        return padded_image
+        return padded_image[0] if image.ndim == 2 else padded_image
