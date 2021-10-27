@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Classes to support Encoder-Decoder architectures """
 
-
+import warnings
 from typing import Optional
 
 import torch
@@ -31,6 +31,13 @@ from .configuration_encoder_decoder import EncoderDecoderConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "EncoderDecoderConfig"
+
+DEPRECATION_WARNING = (
+    "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss inside the "
+    "encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if fine-tuning "
+    "a model trained with versions anterior to 4.12.0. The decoder_input_ids are now created based on the labels, no "
+    "need to pass them yourself anymore."
+)
 
 ENCODER_DECODER_START_DOCSTRING = r"""
     This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
@@ -145,10 +152,12 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     """
     shifted_input_ids = input_ids.new_zeros(input_ids.shape)
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    if decoder_start_token_id is None:
+        raise ValueError("Make sure to set the decoder_start_token_id attribute of the model's configuration.")
     shifted_input_ids[:, 0] = decoder_start_token_id
 
     if pad_token_id is None:
-        raise ValueError("self.model.config.pad_token_id has to be defined.")
+        raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -477,6 +486,7 @@ class EncoderDecoderModel(PreTrainedModel):
         # Compute loss independent from decoder (as some shift the logits inside them)
         loss = None
         if labels is not None:
+            warnings.warn(DEPRECATION_WARNING, FutureWarning)
             logits = decoder_outputs.logits if return_dict else decoder_outputs[1]
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
