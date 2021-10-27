@@ -450,7 +450,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                     map[map == 0] = 255
                     map = map - 1
                     map[map == 254] = 255
-                    segmentation_maps[idx] = Image.fromarray(map.astype(np.uint8))
+                    segmentation_maps[idx] = Image.fromarray(map.astype(np.int64))
 
         # transformations (resizing, random cropping, normalization)
         if self.do_resize and self.image_scale is not None:
