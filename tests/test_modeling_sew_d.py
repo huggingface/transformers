@@ -545,8 +545,8 @@ class SEWDModelIntegrationTest(unittest.TestCase):
         self.assertTrue(abs(outputs.sum() - expected_output_sum) < 5)
 
     def test_inference_ctc_batched(self):
-        model = SEWDForCTC.from_pretrained("anton-l/sew-d-tiny-100k-ft-ls100h").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("anton-l/sew-d-tiny-100k-ft-ls100h", do_lower_case=True)
+        model = SEWDForCTC.from_pretrained("asapp/sew-d-tiny-100k-ft-ls100h").to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained("asapp/sew-d-tiny-100k-ft-ls100h", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
