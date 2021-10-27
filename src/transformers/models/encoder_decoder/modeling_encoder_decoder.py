@@ -489,7 +489,7 @@ class EncoderDecoderModel(PreTrainedModel):
             warnings.warn(DEPRECATION_WARNING, FutureWarning)
             logits = decoder_outputs.logits if return_dict else decoder_outputs[1]
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.decoder.config.vocab_size), labels.view(-1))
+            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             if loss is not None:
