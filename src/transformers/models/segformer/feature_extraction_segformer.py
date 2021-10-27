@@ -316,6 +316,50 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         return image
 
+    def pad(self, image, size, padding_value=0):
+        """
+        Pads :obj:`image` to the given :obj:`size` with :obj:`padding_value` using np.pad.
+
+        Args:
+            image (:obj:`np.ndarray`):
+                The image to pad. Can be a 2D or 3D image. In case the image is 3D, shape should be (num_channels,
+                height, width). In case the image is 2D, shape should be (height, width).
+            size (:obj:`int` or :obj:`List[int, int] or Tuple[int, int]`):
+                The size to which to pad the image. If it's an integer, image will be padded to (size, size). If it's
+                a list or tuple, it should be (height, width).
+            padding_value (:obj:`int`):
+                The padding value to use.
+        """
+
+        # add dummy channel dimension if image is 2D
+        is_2d = False
+        if image.ndim == 2:
+            is_2d = True
+            image = image[np.newaxis, ...]
+
+        if isinstance(size, int):
+            h = w = size
+        elif isinstance(size, (list, tuple)):
+            h, w = tuple(size)
+
+        top_pad = np.floor((h - image.shape[1]) / 2).astype(np.uint16)
+        bottom_pad = np.ceil((h - image.shape[1]) / 2).astype(np.uint16)
+        right_pad = np.ceil((w - image.shape[2]) / 2).astype(np.uint16)
+        left_pad = np.floor((w - image.shape[2]) / 2).astype(np.uint16)
+
+        padded_image = np.copy(
+            np.pad(
+                image,
+                pad_width=((0, 0), (top_pad, bottom_pad), (left_pad, right_pad)),
+                mode="constant",
+                constant_values=padding_value,
+            )
+        )
+
+        result = padded_image[0] if is_2d else padded_image
+
+        return result
+
     def __call__(
         self,
         images: ImageInput,

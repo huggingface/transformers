@@ -107,7 +107,7 @@ class ImageFeatureExtractionMixin:
         if rescale:
             image = image.astype(np.float32) / 255.0
 
-        if channel_first:
+        if channel_first and image.ndim == 3:
             image = image.transpose(2, 0, 1)
 
         return image
@@ -222,52 +222,3 @@ class ImageFeatureExtractionMixin:
         return new_image[
             ..., max(0, top) : min(new_image.shape[-2], bottom), max(0, left) : min(new_image.shape[-1], right)
         ]
-
-    def pad(self, image, size, padding_value=0):
-        """
-        Pads :obj:`image` to the given size with padding value using np.pad.
-
-        Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
-                The image to pad.
-            size (:obj:`int` or :obj:`Tuple[int, int]`):
-                The size to which to pad the image.
-            padding_value (:obj:`int`):
-                The padding value to use.
-        """
-        # convert image to array of shape (height, width, num_channels)
-        print("Shape of image before padding:", image.shape)
-        image = self.to_numpy_array(image, rescale=False, channel_first=False)
-        print("Shape of image after converting to numpy array:", image.shape)
-        # add dummy channel dimension if image is 2D
-        is_2d = False
-        if image.ndim == 2:
-            is_2d = True
-            image = image[np.newaxis, ...]
-
-        print("Shape of image after moving axes:", image.shape)
-
-        if isinstance(size, int):
-            h = w = size
-        elif isinstance(size, (list, tuple)):
-            h, w = tuple(size)
-
-        top_pad = np.floor((h - image.shape[1]) / 2).astype(np.uint16)
-        bottom_pad = np.ceil((h - image.shape[1]) / 2).astype(np.uint16)
-        right_pad = np.ceil((w - image.shape[2]) / 2).astype(np.uint16)
-        left_pad = np.floor((w - image.shape[2]) / 2).astype(np.uint16)
-
-        padded_image = np.copy(
-            np.pad(
-                image,
-                pad_width=((0, 0), (top_pad, bottom_pad), (left_pad, right_pad)),
-                mode="constant",
-                constant_values=padding_value,
-            )
-        )
-
-        result = padded_image[0] if is_2d else padded_image
-        
-        print("Shape of padded image:", result.shape)
-        
-        return result
