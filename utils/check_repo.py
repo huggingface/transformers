@@ -72,9 +72,12 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "DPREncoder",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
+    "Speech2Text2DecoderWrapper",  # Building part of bigger (tested) model.
     "TFDPREncoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
+    "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
+    "UniSpeechSatForPreTraining",  # TODO: add a reason
     "SeparableConv1D",  # Building part of bigger (tested) model.
 ]
 
@@ -160,6 +163,7 @@ def get_model_modules():
         "modeling_flax_auto",
         "modeling_flax_encoder_decoder",
         "modeling_flax_utils",
+        "modeling_speech_encoder_decoder",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
         "modeling_tf_encoder_decoder",
