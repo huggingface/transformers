@@ -410,6 +410,7 @@ class UniSpeechSatModelTest(ModelTesterMixin, unittest.TestCase):
                     "project_q.bias",
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",
+                    "label_embeddings_concat",
                 ]
                 if param.requires_grad:
                     if any([x in name for x in uniform_init_parms]):
@@ -615,6 +616,7 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
                     "project_q.bias",
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",
+                    "label_embeddings_concat",
                 ]
                 if param.requires_grad:
                     if any([x in name for x in uniform_init_parms]):
