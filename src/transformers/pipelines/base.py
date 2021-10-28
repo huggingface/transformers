@@ -702,7 +702,7 @@ if is_torch_available():
                     yield infer(item, **params)
 
             Arguments:
-                loader (:obj:`~torch.utils.data.DataLoader` or any iterator):
+                loader (:obj:`torch.utils.data.DataLoader` or any iterator):
                     The iterator that will be used to apply :obj:`infer` on.
                 infer (any function):
                     The function to apply of each element of :obj:`loader`.
