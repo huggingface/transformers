@@ -658,11 +658,10 @@ class T5Block(nn.Module):
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
-        # XXX: disabled this for now - perhaps it's no longer needed?
         # clamp inf values to enable fp16 training
-        # if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-        #    clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-        #    hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
