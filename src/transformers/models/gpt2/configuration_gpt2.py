@@ -192,14 +192,6 @@ class GPT2Config(PretrainedConfig):
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
-    @property
-    def n_ctx(self):
-        return self.n_positions
-
-    @n_ctx.setter
-    def n_ctx(self, value):
-        self.n_positions = value
-
 
 class GPT2OnnxConfig(OnnxConfigWithPast):
     @property

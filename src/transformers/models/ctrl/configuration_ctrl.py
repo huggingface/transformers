@@ -127,11 +127,3 @@ class CTRLConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         super().__init__(**kwargs)
-
-    @property
-    def n_ctx(self):
-        return self.n_positions
-
-    @n_ctx.setter
-    def n_ctx(self, value):
-        self.n_positions = value

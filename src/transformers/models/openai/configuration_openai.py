@@ -159,11 +159,3 @@ class OpenAIGPTConfig(PretrainedConfig):
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
         super().__init__(**kwargs)
-
-    @property
-    def n_ctx(self):
-        return self.n_positions
-
-    @n_ctx.setter
-    def n_ctx(self, value):
-        self.n_positions = value
