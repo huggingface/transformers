@@ -24,7 +24,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
-def _gelu_python(x):
+def gelu_python(x):
     """
     Original Implementation of the GELU activation function in Google BERT repo when initially created. For
     information: OpenAI GPT's GELU is slightly different (and gives slightly different results): 0.5 * x * (1 +
@@ -43,7 +43,7 @@ def gelu_new(x):
 
 
 if version.parse(torch.__version__) < version.parse("1.4"):
-    gelu = _gelu_python
+    gelu = gelu_python
 else:
     gelu = nn.functional.gelu
 
@@ -97,6 +97,7 @@ ACT2FN = {
     "swish": silu,
     "gelu": gelu,
     "tanh": torch.tanh,
+    "gelu_python": gelu_python,
     "gelu_new": gelu_new,
     "gelu_fast": gelu_fast,
     "quick_gelu": quick_gelu,
