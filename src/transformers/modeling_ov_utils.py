@@ -1,24 +1,15 @@
 import os
 
 import numpy as np
+import torch
 
 from openvino.inference_engine import IECore
 
-from transformers import (
-    AutoModel,
-    TFAutoModel,
-)
-from .file_utils import (
-    OV_WEIGHTS_NAME,
-    cached_path,
-    hf_bucket_url,
-)
+from .file_utils import OV_WEIGHTS_NAME, ModelOutput, cached_path, hf_bucket_url
 from .generation_utils import GenerationMixin
-from .utils import logging
-from .file_utils import ModelOutput
 from .modeling_outputs import QuestionAnsweringModelOutput
+from .utils import logging
 
-import torch
 
 logger = logging.get_logger(__name__)
 
@@ -48,8 +39,8 @@ def load_ov_model_from_pytorch(model):
 
 
 def load_ov_model_from_tf(model):
-    import sys
     import subprocess
+    import sys
 
     model.save("keras_model", signatures=model.serving)
     subprocess.run(
@@ -83,6 +74,9 @@ def load_ov_model_from_ir(xml_path, bin_path):
 
 
 class OVPreTrainedModel(GenerationMixin):
+    _pt_auto_model = None
+    _tf_auto_model = None
+
     def __init__(self, net, config=None):
         super().__init__()
         self.net = net
@@ -109,10 +103,10 @@ class OVPreTrainedModel(GenerationMixin):
         from_auto_class = kwargs.pop("_from_auto", False)
 
         if from_pt:
-            model = AutoModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+            model = cls._pt_auto_model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
             return load_ov_model_from_pytorch(model)
         elif from_tf:
-            model = TFAutoModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+            model = cls._tf_auto_model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
             return load_ov_model_from_tf(model)
 
         user_agent = {"file_type": "model", "framework": "openvino", "from_auto_class": from_auto_class}
@@ -130,8 +124,7 @@ class OVPreTrainedModel(GenerationMixin):
                 ):
                     # Load from an OpenVINO IR
                     archive_files = [
-                        os.path.join(pretrained_model_name_or_path, name)
-                        for name in [OV_WEIGHTS_NAME, OV_BIN_NAME]
+                        os.path.join(pretrained_model_name_or_path, name) for name in [OV_WEIGHTS_NAME, OV_BIN_NAME]
                     ]
                 else:
                     raise EnvironmentError(
@@ -194,16 +187,18 @@ class OVPreTrainedModel(GenerationMixin):
     def _load_network(self):
         self.exec_net = ie.load_network(self.net, self.ov_device, self.ov_config)
 
-    def __call__(self,
-                 input_ids=None,
-                 past_key_values=None,
-                 attention_mask=None,
-                 token_type_ids=None,
-                 position_ids=None,
-                 use_cache=False,
-                 return_dict=False,
-                 output_attentions=False,
-                 output_hidden_states=False):
+    def __call__(
+        self,
+        input_ids=None,
+        past_key_values=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        use_cache=False,
+        return_dict=False,
+        output_attentions=False,
+        output_hidden_states=False,
+    ):
         if attention_mask is None:
             attention_mask = np.ones_like(input_ids)
 

@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available, is_ov_available
+from ...file_utils import _LazyModule, is_flax_available, is_ov_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -123,8 +123,8 @@ if is_ov_available():
     _import_structure["modeling_ov_auto"] = [
         "OVAutoModel",
         "OVAutoModelForMaskedLM",
-        "OVAutoModelWithLMHead",
         "OVAutoModelForQuestionAnswering",
+        "OVAutoModelWithLMHead",
     ]
 
 if TYPE_CHECKING:
@@ -228,8 +228,8 @@ if TYPE_CHECKING:
         from .modeling_ov_auto import (
             OVAutoModel,
             OVAutoModelForMaskedLM,
-            OVAutoModelWithLMHead,
             OVAutoModelForQuestionAnswering,
+            OVAutoModelWithLMHead,
         )
 
 else:

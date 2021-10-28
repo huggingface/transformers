@@ -1,16 +1,19 @@
 import unittest
 
-from transformers.testing_utils import require_ov, require_tf, require_torch, slow
+import numpy as np
+
 from transformers import is_ov_available
+from transformers.testing_utils import require_ov, require_tf, require_torch, slow
+
 
 if is_ov_available():
     from transformers import (
+        GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoTokenizer,
         OVAutoModel,
-        OVAutoModelWithLMHead,
         OVAutoModelForMaskedLM,
         OVAutoModelForQuestionAnswering,
-        GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
+        OVAutoModelWithLMHead,
     )
 
 
@@ -23,7 +26,9 @@ class OVAutoModelIntegrationTest(unittest.TestCase):
 class OVBertSQuADTest(unittest.TestCase):
     def test_inference_no_head_absolute_embedding(self):
         tok = AutoTokenizer.from_pretrained("dkurt/bert-large-uncased-whole-word-masking-squad-int8-0001")
-        model = OVAutoModelForQuestionAnswering.from_pretrained("dkurt/bert-large-uncased-whole-word-masking-squad-int8-0001")
+        model = OVAutoModelForQuestionAnswering.from_pretrained(
+            "dkurt/bert-large-uncased-whole-word-masking-squad-int8-0001"
+        )
 
         context = """
         Soon her eye fell on a little glass box that
@@ -214,7 +219,7 @@ class OVDistilBertModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head_absolute_embedding(self):
         model = OVAutoModel.from_pretrained("distilbert-base-uncased", from_pt=True)
         model.to(device="CPU")
-        model.set_config(config={'CPU_BIND_THREAD': 'YES'})
+        model.set_config(config={"CPU_BIND_THREAD": "YES"})
 
         input_ids = np.array([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = np.array([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])

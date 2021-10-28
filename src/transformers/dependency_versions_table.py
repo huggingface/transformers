@@ -26,6 +26,7 @@ deps = {
     "jaxlib": "jaxlib>=0.1.65",
     "jieba": "jieba",
     "keras2onnx": "keras2onnx",
+    "openvino": "openvino==2021.4.1",
     "nltk": "nltk",
     "numpy": "numpy>=1.17",
     "onnxconverter-common": "onnxconverter-common",
