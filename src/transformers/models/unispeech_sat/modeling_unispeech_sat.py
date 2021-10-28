@@ -1157,6 +1157,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
 
         self.speaker_proj = nn.Linear(config.hidden_size, config.codevector_dim)
         self.label_embeddings_concat = nn.Parameter(torch.FloatTensor(config.num_clusters, config.codevector_dim))
+        self.label_embeddings_concat.data.zero_()
 
         self.layer_norm_for_extract = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         if self.config.do_stable_layer_norm:
