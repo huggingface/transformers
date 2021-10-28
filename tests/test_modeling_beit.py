@@ -170,8 +170,6 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    maxDiff = None
-
     all_model_classes = (
         (BeitModel, BeitForImageClassification, BeitForMaskedImageModeling, BeitForSemanticSegmentation)
         if is_torch_available()

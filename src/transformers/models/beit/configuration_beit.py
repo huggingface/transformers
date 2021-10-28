@@ -84,13 +84,13 @@ class BeitConfig(PretrainedConfig):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.
         use_auxiliary_head (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to use an auxiliary head during training.
-        loss_weight (:obj:`float`, `optional`, defaults to 0.4):
+        auxiliary_loss_weight (:obj:`float`, `optional`, defaults to 0.4):
             Weight of the cross-entropy loss of the auxiliary head.
-        channels (:obj:`int`, `optional`, defaults to 256):
+        auxiliary_channels (:obj:`int`, `optional`, defaults to 256):
             Number of channels to use in the auxiliary head.
-        num_convs (:obj:`int`, `optional`, defaults to 1):
+        auxiliary_num_convs (:obj:`int`, `optional`, defaults to 1):
             Number of convolutional layers to use in the auxiliary head.
-        concat_input (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        auxiliary_concat_input (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to concatenate the output of the auxiliary head with the input before the classification layer.
 
     Example::
@@ -134,10 +134,10 @@ class BeitConfig(PretrainedConfig):
         out_indices=[3, 5, 7, 11],
         pool_scales=[1, 2, 3, 6],
         use_auxiliary_head=True,
-        loss_weight=0.4,
-        channels=256,
-        num_convs=1,
-        concat_input=False,
+        auxiliary_loss_weight=0.4,
+        auxiliary_channels=256,
+        auxiliary_num_convs=1,
+        auxiliary_concat_input=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -168,7 +168,7 @@ class BeitConfig(PretrainedConfig):
         self.pool_scales = pool_scales
         # auxiliary head attributes (semantic segmentation)
         self.use_auxiliary_head = use_auxiliary_head
-        self.loss_weight = loss_weight
-        self.channels = channels
-        self.num_convs = num_convs
-        self.concat_input = concat_input
+        self.auxiliary_loss_weight = auxiliary_loss_weight
+        self.auxiliary_channels = auxiliary_channels
+        self.auxiliary_num_convs = auxiliary_num_convs
+        self.auxiliary_concat_input = auxiliary_concat_input

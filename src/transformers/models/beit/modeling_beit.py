@@ -1025,9 +1025,9 @@ class BeitFCNHead(nn.Module):
     def __init__(self, config, in_index=2, kernel_size=3, dilation=1):
         super().__init__()
         self.in_channels = config.hidden_size
-        self.channels = config.channels
-        self.num_convs = config.num_convs
-        self.concat_input = config.concat_input
+        self.channels = config.auxiliary_channels
+        self.num_convs = config.auxiliary_num_convs
+        self.concat_input = config.auxiliary_concat_input
         self.in_index = in_index
 
         conv_padding = (kernel_size // 2) * dilation
@@ -1109,7 +1109,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         loss_fct = CrossEntropyLoss(ignore_index=255)
         main_loss = loss_fct(upsampled_logits, labels)
         auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
-        loss = main_loss + self.config.loss_weight * auxiliary_loss
+        loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
 
         return loss
 
