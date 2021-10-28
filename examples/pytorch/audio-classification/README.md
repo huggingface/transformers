@@ -33,7 +33,7 @@ python run_audio_classification.py \
     --model_name_or_path facebook/wav2vec2-base \
     --dataset_name superb \
     --dataset_config_name ks \
-    --output_dir wav2vec2-base-keyword-spotting \
+    --output_dir wav2vec2-base-ft-keyword-spotting \
     --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
@@ -41,6 +41,7 @@ python run_audio_classification.py \
     --fp16 \
     --learning_rate 3e-5 \
     --max_length_seconds 1 \
+    --attention_mask False \
     --warmup_ratio 0.1 \
     --num_train_epochs 5 \
     --per_device_train_batch_size 32 \
@@ -52,14 +53,15 @@ python run_audio_classification.py \
     --evaluation_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
+    --metric_for_best_model accuracy \
     --save_total_limit 3 \
     --seed 0 \
     --push_to_hub
 ```
 
-On a single V100 GPU (16GB), this script should run in ~10 minutes and yield accuracy of **98.4%**.
+On a single V100 GPU (16GB), this script should run in ~14 minutes and yield accuracy of **98.26%**.
 
-👀 See the results here: [anton-l/wav2vec2-base-keyword-spotting](https://huggingface.co/anton-l/wav2vec2-base-keyword-spotting)
+👀 See the results here: [anton-l/wav2vec2-base-ft-keyword-spotting](https://huggingface.co/anton-l/wav2vec2-base-ft-keyword-spotting)
 
 ## Multi-GPU 
 
@@ -69,7 +71,7 @@ The following command shows how to fine-tune [wav2vec2-base](https://huggingface
 python run_audio_classification.py \
     --model_name_or_path facebook/wav2vec2-base \
     --dataset_name common_language \
-    --audio_column_name path \
+    --audio_column_name audio \
     --label_column_name language \
     --output_dir wav2vec2-base-lang-id \
     --overwrite_output_dir \
@@ -91,6 +93,7 @@ python run_audio_classification.py \
     --evaluation_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
+    --metric_for_best_model accuracy \
     --save_total_limit 3 \
     --seed 0 \
     --push_to_hub
@@ -125,3 +128,20 @@ python run_audio_classification.py \
     --hub_model_id <username/model_id> \
     ...
 ```
+
+### Examples
+
+The following table shows a couple of demonstration fine-tuning runs.
+It has been verified that the script works for the following datasets:
+
+- [SUPERB Keyword Spotting](https://huggingface.co/datasets/superb#ks)
+- [Common Language](https://huggingface.co/datasets/common_language)
+
+| Dataset | Pretrained Model | # transformer layers | Accuracy on eval | GPU setup | Training time | Fine-tuned Model & Logs |
+|---------|------------------|----------------------|------------------|-----------|---------------|--------------------------|
+| Keyword Spotting | [ntu-spml/distilhubert](https://huggingface.co/ntu-spml/distilhubert) | 2 | 0.9706 | 1 V100 GPU | 11min  | [here](https://huggingface.co/anton-l/distilhubert-ft-keyword-spotting) | 
+| Keyword Spotting | [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) | 12 | 0.9826 | 1 V100 GPU | 14min  | [here](https://huggingface.co/anton-l/wav2vec2-base-ft-keyword-spotting) |
+| Keyword Spotting | [facebook/hubert-base-ls960](https://huggingface.co/facebook/hubert-base-ls960) | 12 | 0.9819 | 1 V100 GPU | 14min  | [here](https://huggingface.co/anton-l/hubert-base-ft-keyword-spotting) |
+| Keyword Spotting | [asapp/sew-mid-100k](https://huggingface.co/asapp/sew-mid-100k) | 24 | 0.9757 | 1 V100 GPU | 15min  | [here](https://huggingface.co/anton-l/sew-mid-100k-ft-keyword-spotting) |
+| Common Language | [ntu-spml/distilhubert](https://huggingface.co/ntu-spml/distilhubert) | 2 | 0.2797 | 4 V100 GPUs | 38min  | [here](https://huggingface.co/anton-l/distilhubert-ft-common-language) |
+| Common Language | [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) | 12 | 0.7945 | 4 V100 GPUs | 1h10m  | [here](https://huggingface.co/anton-l/wav2vec2-base-lang-id) |
