@@ -1969,6 +1969,7 @@ if is_ov_available():
             "OVAutoModel",
             "OVAutoModelForMaskedLM",
             "OVAutoModelWithLMHead",
+            "OVAutoModelForQuestionAnswering",
         ]
     )
 
@@ -3592,6 +3593,7 @@ if TYPE_CHECKING:
             OVAutoModel,
             OVAutoModelForMaskedLM,
             OVAutoModelWithLMHead,
+            OVAutoModelForQuestionAnswering,
         )
 
 else:

@@ -16,6 +16,7 @@ from .file_utils import (
 from .generation_utils import GenerationMixin
 from .utils import logging
 from .file_utils import ModelOutput
+from .modeling_outputs import QuestionAnsweringModelOutput
 
 import torch
 
@@ -129,7 +130,7 @@ class OVPreTrainedModel(GenerationMixin):
                 ):
                     # Load from an OpenVINO IR
                     archive_files = [
-                        os.path.join(pretrained_model_name_or_path, OV_WEIGHTS_NAME)
+                        os.path.join(pretrained_model_name_or_path, name)
                         for name in [OV_WEIGHTS_NAME, OV_BIN_NAME]
                     ]
                 else:
@@ -214,12 +215,8 @@ class OVPreTrainedModel(GenerationMixin):
 
         inputs_info = self.net.input_info
         if list(inputs_info["input_ids"].input_data.shape) != list(input_ids.shape):
-            self.net.reshape(
-                {
-                    "input_ids": input_ids.shape,
-                    "attention_mask": attention_mask.shape,
-                }
-            )
+            shapes = {key: input_ids.shape for key in inputs_info}
+            self.net.reshape(shapes)
             self.exec_net = None
 
         if self.exec_net is None:
@@ -241,6 +238,10 @@ class OVPreTrainedModel(GenerationMixin):
         if return_dict:
             result = ModelOutput()
             result["logits"] = torch.tensor(logits)
+        elif "output_s" in outs and "output_e" in outs:
+            result = QuestionAnsweringModelOutput()
+            result["start_logits"] = outs["output_s"]
+            result["end_logits"] = outs["output_e"]
         else:
             result = [logits]
         return result
