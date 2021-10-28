@@ -17,7 +17,9 @@
 
 from typing import Optional
 
+import torch
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -147,6 +149,25 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             - Without a prefix which will be input as ``**encoder_kwargs`` for the encoder forward function.
             - With a `decoder_` prefix which will be input as ``**decoder_kwargs`` for the decoder forward function.
 """
+
+
+# Copied from transformers.models.encoder_decoder.modeling_encoder_decoder.shift_tokens_right
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    if decoder_start_token_id is None:
+        raise ValueError("Make sure to set the decoder_start_token_id attribute of the model's configuration.")
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
 
 
 @add_start_docstrings(SPEECH_ENCODER_DECODER_START_DOCSTRING)
@@ -467,6 +488,11 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         else:
             encoder_attention_mask = None
 
+        if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
+            decoder_input_ids = shift_tokens_right(
+                labels, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -482,19 +508,33 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             **kwargs_decoder,
         )
 
+        # Compute loss independent from decoder (as some shift the logits inside them)
+        loss = None
+        if labels is not None:
+            logits = decoder_outputs.logits if return_dict else decoder_outputs[1]
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
+
         if not return_dict:
-            return decoder_outputs + encoder_outputs
+            if loss is not None:
+                return (loss,) + decoder_outputs + encoder_outputs
+            else:
+                return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
+            loss=loss,
             logits=decoder_outputs.logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_hidden_states,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     def prepare_inputs_for_generation(
         self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
