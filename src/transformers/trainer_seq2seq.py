@@ -164,9 +164,15 @@ class Seq2SeqTrainer(Trainer):
             "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
         }
 
+        if self.tokenizer is not None:
+            generation_inputs = {k: v for k, v in inputs.items() if k in self.tokenizer.model_input_names}
+            # very ugly hack to make it work
+            generation_inputs["input_ids"] = generation_inputs.pop(self.tokenizer.model_input_names[0])
+        else:
+            generation_inputs = inputs["input_ids"]
+
         generated_tokens = self.model.generate(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
+            **generation_inputs,
             **gen_kwargs,
         )
         # in case the batch is shorter than max length, the output should be padded
@@ -197,15 +203,16 @@ class Seq2SeqTrainer(Trainer):
         return (loss, generated_tokens, labels)
 
     def _pad_tensors_to_max_len(self, tensor, max_length):
-        if self.tokenizer is None:
-            raise ValueError(
-                f"Tensor need to be padded to `max_length={max_length}` but no tokenizer was passed when creating "
-                "this `Trainer`. Make sure to create your `Trainer` with the appropriate tokenizer."
+        if self.tokenizer is not None and hasattr(self.tokenizer, "pad_token_id"):
+            # If PAD token is not defined at least EOS token has to be defined
+            pad_token_id = (
+                self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
             )
-        # If PAD token is not defined at least EOS token has to be defined
-        pad_token_id = (
-            self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
-        )
+        else:
+            if self.model.config.pad_token_id is not None:
+                pad_token_id = self.model.config.pad_token_id
+            else:
+                raise ValueError("Pad_token_id must be set in the configuration of the model, in order to pad tensors")
 
         padded_tensor = pad_token_id * torch.ones(
             (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device
