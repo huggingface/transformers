@@ -95,8 +95,6 @@ FAIRSEQ_LANGUAGE_CODES = [
 ]
 
 
-
-
 class PLBartTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" MBART tokenizer for mBART-50 (backed by HuggingFace's `tokenizers` library). Based on `BPE
@@ -194,9 +192,9 @@ class PLBartTokenizerFast(PreTrainedTokenizerFast):
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }
 
-        self._src_lang = src_lang if src_lang is not None else "en_XX"
+        self._src_lang = src_lang
         self.tgt_lang = tgt_lang
-        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang] if self._src_lang is not None else None
         self.set_src_lang_special_tokens(self._src_lang)
 
     @property

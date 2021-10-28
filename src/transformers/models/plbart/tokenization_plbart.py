@@ -203,7 +203,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
         self._src_lang = src_lang
-        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang] if self._src_lang is not None else None
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
@@ -368,12 +368,12 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
     def set_src_lang_special_tokens(self, src_lang: str) -> None:
         """Reset the special tokens to the source lang setting. prefix=[src_lang_code] and suffix=[eos]."""
-        self.cur_lang_code_id = self.lang_code_to_id[src_lang]
-        self.prefix_tokens = [self.cur_lang_code_id]
+        self.cur_lang_code_id = self.lang_code_to_id[src_lang] if src_lang is not None else None
+        self.prefix_tokens = [self.cur_lang_code_id] if self.cur_lang_code_id is not None else []
         self.suffix_tokens = [self.eos_token_id]
 
     def set_tgt_lang_special_tokens(self, tgt_lang: str) -> None:
         """Reset the special tokens to the target language setting. prefix=[tgt_lang_code] and suffix=[eos]."""
-        self.cur_lang_code_id = self.lang_code_to_id[tgt_lang]
-        self.prefix_tokens = [self.cur_lang_code_id]
+        self.cur_lang_code_id = self.lang_code_to_id[tgt_lang] if tgt_lang is not None else None
+        self.prefix_tokens = [self.cur_lang_code_id] if self.cur_lang_code_id is not None else []
         self.suffix_tokens = [self.eos_token_id]

@@ -127,7 +127,6 @@ FAIRSEQ_LANGUAGE_CODES = [
 ]
 
 
-
 class PLBartTokenizer(PreTrainedTokenizer):
     """
     Construct a PLBart tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.

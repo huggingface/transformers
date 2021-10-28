@@ -173,10 +173,11 @@ FAIRSEQ_LANGUAGE_CODES = [
     "go",
 ]
 
+
 class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" PLBART tokenizer for PLBART-Multilingual (backed by HuggingFace's `tokenizers` library). Based on `BPE
-    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
+    Construct a "fast" PLBART tokenizer for PLBART-Multilingual (backed by HuggingFace's `tokenizers` library). Based
+    on `BPE <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
