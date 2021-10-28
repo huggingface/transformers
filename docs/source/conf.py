@@ -27,7 +27,8 @@ author = "huggingface"
 # The short X.Y version
 version = ""
 # The full version, including alpha/beta/rc tags
-release = "4.12.0.dev0"
+release = "4.12.0"
+
 
 
 
