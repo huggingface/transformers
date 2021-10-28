@@ -67,9 +67,9 @@ class SEWDConfig(PretrainedConfig):
             :obj:`("p2c")`, :obj:`("p2c", "c2p")`, :obj:`("p2c", "c2p", 'p2p")`.
         norm_rel_ebd (:obj:`str`, `optional`, defaults to :obj:`"layer_norm"`):
             Whether to use layer norm in relative embedding (:obj:`"layer_norm"` if yes)
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
+        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_python"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"`, :obj:`"gelu_python"` and :obj:`"gelu_new"` are supported.
         hidden_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
@@ -78,8 +78,10 @@ class SEWDConfig(PretrainedConfig):
             The dropout probability for the final projection layer of :class:`SEWDForCTC`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
+        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-7):
+            The epsilon used by the layer normalization layers in the transformer encoder.
+        feature_layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-5):
+            The epsilon used by the layer normalization after the feature extractor.
         feat_extract_norm (:obj:`str`, `optional`, defaults to :obj:`"group"`):
             The norm to be applied to 1D convolutional layers in feature extractor. One of :obj:`"group"` for group
             normalization of only the first 1D convolutional layer or :obj:`"layer"` for layer normalization of all 1D
@@ -167,7 +169,7 @@ class SEWDConfig(PretrainedConfig):
         position_biased_input=False,
         pos_att_type=("p2c", "c2p"),
         norm_rel_ebd="layer_norm",
-        hidden_act="gelu",
+        hidden_act="gelu_python",
         hidden_dropout=0.1,
         activation_dropout=0.1,
         attention_dropout=0.1,
@@ -175,7 +177,8 @@ class SEWDConfig(PretrainedConfig):
         final_dropout=0.1,
         layerdrop=0.1,
         initializer_range=0.02,
-        layer_norm_eps=1e-5,
+        layer_norm_eps=1e-7,
+        feature_layer_norm_eps=1e-5,
         feat_extract_norm="group",
         feat_extract_activation="gelu",
         conv_dim=(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512),
@@ -228,6 +231,7 @@ class SEWDConfig(PretrainedConfig):
         self.final_dropout = final_dropout
         self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
+        self.feature_layer_norm_eps = feature_layer_norm_eps
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
 

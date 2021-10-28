@@ -1310,13 +1310,13 @@ SEWD_INPUTS_DOCSTRING = r"""
     "The bare SEW-D Model transformer outputting raw hidden-states without any specific head on top.",
     SEWD_START_DOCSTRING,
 )
-# Copied from transformers.models.sew.modeling_sew.SEWModel with SEW->SEWD
+# Copied from transformers.models.sew.modeling_sew.SEWModel with SEW->SEWD, layer_norm_eps->feature_layer_norm_eps
 class SEWDModel(SEWDPreTrainedModel):
     def __init__(self, config: SEWDConfig):
         super().__init__(config)
         self.config = config
         self.feature_extractor = SEWDFeatureExtractor(config)
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.feature_layer_norm_eps)
 
         self.project_features = config.conv_dim[-1] != config.hidden_size
         if self.project_features:
