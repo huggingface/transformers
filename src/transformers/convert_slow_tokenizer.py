@@ -909,7 +909,6 @@ class BlenderbotConverter(Converter):
 
         return tokenizer
 
-
 class XGLMConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
